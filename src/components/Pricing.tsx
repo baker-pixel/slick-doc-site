@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { Check, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
 
 const tiers = [
   {
@@ -219,8 +220,9 @@ export function Pricing() {
                     ? "bg-primary hover:bg-orange-dark text-primary-foreground"
                     : "bg-secondary hover:bg-muted text-foreground"
                 )}
+                asChild
               >
-                Get Started
+                <Link to="/schedule">Get Started</Link>
               </Button>
             </motion.div>
           ))}
