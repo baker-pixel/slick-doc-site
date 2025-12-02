@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 export function Hero() {
   return (
@@ -57,13 +58,15 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4"
           >
-            <Button
-              size="lg"
-              className="bg-primary hover:bg-orange-dark text-primary-foreground text-lg px-8 py-6 shadow-glow hover:shadow-xl transition-all"
-            >
-              Get Your Free Gap Analysis
-              <ArrowRight className="ml-2" size={20} />
-            </Button>
+            <Link to="/gap-analysis">
+              <Button
+                size="lg"
+                className="bg-primary hover:bg-orange-dark text-primary-foreground text-lg px-8 py-6 shadow-glow hover:shadow-xl transition-all"
+              >
+                Get Your Free Gap Analysis
+                <ArrowRight className="ml-2" size={20} />
+              </Button>
+            </Link>
             <Button
               size="lg"
               variant="outline"
