@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { format } from "date-fns";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -8,10 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
+import { cn } from "@/lib/utils";
 
 interface ContactSubmission {
   id: string;
@@ -121,8 +125,12 @@ const Admin = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
   const [contactStatusFilter, setContactStatusFilter] = useState("all");
+  const [contactDateFrom, setContactDateFrom] = useState<Date | undefined>();
+  const [contactDateTo, setContactDateTo] = useState<Date | undefined>();
   const [gapSearch, setGapSearch] = useState("");
   const [gapStatusFilter, setGapStatusFilter] = useState("all");
+  const [gapDateFrom, setGapDateFrom] = useState<Date | undefined>();
+  const [gapDateTo, setGapDateTo] = useState<Date | undefined>();
 
   const filteredContacts = useMemo(() => {
     return contacts.filter(contact => {
@@ -131,9 +139,12 @@ const Admin = () => {
         contact.email.toLowerCase().includes(contactSearch.toLowerCase()) ||
         contact.business_name.toLowerCase().includes(contactSearch.toLowerCase());
       const matchesStatus = contactStatusFilter === "all" || contact.status === contactStatusFilter;
-      return matchesSearch && matchesStatus;
+      const contactDate = new Date(contact.created_at);
+      const matchesDateFrom = !contactDateFrom || contactDate >= contactDateFrom;
+      const matchesDateTo = !contactDateTo || contactDate <= new Date(contactDateTo.getTime() + 86400000);
+      return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-  }, [contacts, contactSearch, contactStatusFilter]);
+  }, [contacts, contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
 
   const filteredGapAnalyses = useMemo(() => {
     return gapAnalyses.filter(gap => {
@@ -142,9 +153,12 @@ const Admin = () => {
         gap.email.toLowerCase().includes(gapSearch.toLowerCase()) ||
         gap.business_name.toLowerCase().includes(gapSearch.toLowerCase());
       const matchesStatus = gapStatusFilter === "all" || gap.status === gapStatusFilter;
-      return matchesSearch && matchesStatus;
+      const gapDate = new Date(gap.created_at);
+      const matchesDateFrom = !gapDateFrom || gapDate >= gapDateFrom;
+      const matchesDateTo = !gapDateTo || gapDate <= new Date(gapDateTo.getTime() + 86400000);
+      return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-  }, [gapAnalyses, gapSearch, gapStatusFilter]);
+  }, [gapAnalyses, gapSearch, gapStatusFilter, gapDateFrom, gapDateTo]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -342,20 +356,26 @@ const Admin = () => {
 
             <TabsContent value="contacts">
               <Card>
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
-                  <CardTitle className="text-lg">Contact Submissions</CardTitle>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                <CardHeader className="flex flex-col gap-4 pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <CardTitle className="text-lg">Contact Submissions</CardTitle>
+                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredContacts, "contact_submissions")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         placeholder="Search name, email, business..."
                         value={contactSearch}
                         onChange={(e) => setContactSearch(e.target.value)}
-                        className="pl-9 w-full sm:w-64"
+                        className="pl-9 w-full sm:w-56"
                       />
                     </div>
                     <Select value={contactStatusFilter} onValueChange={setContactStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-36">
+                      <SelectTrigger className="w-full sm:w-32">
                         <SelectValue placeholder="All statuses" />
                       </SelectTrigger>
                       <SelectContent>
@@ -366,10 +386,33 @@ const Admin = () => {
                         <SelectItem value="converted">Converted</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredContacts, "contact_submissions")}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !contactDateFrom && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {contactDateFrom ? format(contactDateFrom, "MMM d, yyyy") : "From"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={contactDateFrom} onSelect={setContactDateFrom} initialFocus className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !contactDateTo && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {contactDateTo ? format(contactDateTo, "MMM d, yyyy") : "To"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={contactDateTo} onSelect={setContactDateTo} initialFocus className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    {(contactDateFrom || contactDateTo) && (
+                      <Button variant="ghost" size="icon" onClick={() => { setContactDateFrom(undefined); setContactDateTo(undefined); }}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -454,20 +497,26 @@ const Admin = () => {
 
             <TabsContent value="gap-analysis">
               <Card>
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
-                  <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                <CardHeader className="flex flex-col gap-4 pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
+                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredGapAnalyses, "gap_analysis_submissions")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         placeholder="Search name, email, business..."
                         value={gapSearch}
                         onChange={(e) => setGapSearch(e.target.value)}
-                        className="pl-9 w-full sm:w-64"
+                        className="pl-9 w-full sm:w-56"
                       />
                     </div>
                     <Select value={gapStatusFilter} onValueChange={setGapStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-36">
+                      <SelectTrigger className="w-full sm:w-32">
                         <SelectValue placeholder="All statuses" />
                       </SelectTrigger>
                       <SelectContent>
@@ -477,10 +526,33 @@ const Admin = () => {
                         <SelectItem value="completed">Completed</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredGapAnalyses, "gap_analysis_submissions")}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !gapDateFrom && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {gapDateFrom ? format(gapDateFrom, "MMM d, yyyy") : "From"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={gapDateFrom} onSelect={setGapDateFrom} initialFocus className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !gapDateTo && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {gapDateTo ? format(gapDateTo, "MMM d, yyyy") : "To"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={gapDateTo} onSelect={setGapDateTo} initialFocus className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    {(gapDateFrom || gapDateTo) && (
+                      <Button variant="ghost" size="icon" onClick={() => { setGapDateFrom(undefined); setGapDateTo(undefined); }}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
