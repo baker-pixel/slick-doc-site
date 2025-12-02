@@ -178,7 +178,7 @@ const handler = async (req: Request): Promise<Response> => {
             <!-- Footer -->
             <div style="background: #f9fafb; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
               <p style="color: #6b7280; font-size: 14px; margin: 0;">
-                Orange Door Marketing<br>
+                Orange Door Consultants<br>
                 East Tennessee's Growth Partner for SMBs
               </p>
             </div>
@@ -188,7 +188,7 @@ const handler = async (req: Request): Promise<Response> => {
     `;
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door <reports@orangedoormarketing.com>",
+      from: "Orange Door Consultants <reports@orangedoormarketing.com>",
       to: [email],
       subject: `Your SYSTEM Gap Report for ${businessName}`,
       html: emailHtml,
