@@ -6,7 +6,7 @@ import { Link, useLocation } from "react-router-dom";
 import logo from "@/assets/logo.png";
 
 const navLinks = [
-  { href: "#about", label: "About" },
+  { href: "/about", label: "About", isRoute: true },
   { href: "/system", label: "The SYSTEM", isRoute: true },
   { href: "/pricing", label: "Pricing", isRoute: true },
   { href: "/schedule", label: "Schedule Call", isRoute: true },
