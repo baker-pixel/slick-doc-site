@@ -6,12 +6,12 @@ export function BackButton() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <Button
         variant="ghost"
         size="sm"
         onClick={() => navigate(-1)}
-        className="gap-2 text-muted-foreground hover:text-foreground"
+        className="gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full px-4"
       >
         <ArrowLeft size={16} />
         Back
@@ -20,7 +20,7 @@ export function BackButton() {
         variant="ghost"
         size="sm"
         asChild
-        className="gap-2 text-muted-foreground hover:text-foreground"
+        className="gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full px-4"
       >
         <Link to="/">
           <Home size={16} />
