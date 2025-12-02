@@ -88,6 +88,22 @@ export default function ScheduleCall() {
 
       if (error) throw error;
 
+      // Send confirmation email
+      const { error: emailError } = await supabase.functions.invoke("send-booking-confirmation", {
+        body: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          businessName: formData.businessName,
+          date: format(date, "EEEE, MMMM d, yyyy"),
+          time: time,
+        },
+      });
+
+      if (emailError) {
+        console.error("Failed to send confirmation email:", emailError);
+      }
+
       setIsSubmitted(true);
       toast({
         title: "Request submitted!",
