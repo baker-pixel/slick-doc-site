@@ -25,8 +25,8 @@ export function Header() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-effect border-b border-border/50">
-      <nav className="container-wide mx-auto section-padding py-4">
-        <div className="flex items-center justify-between">
+      <nav className="container-wide mx-auto px-4 md:px-8 py-3">
+        <div className="flex items-center justify-between gap-8">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3">
             <img src={logo} alt="Orange Door Consultants" className="h-14 w-[200px] object-contain" />
