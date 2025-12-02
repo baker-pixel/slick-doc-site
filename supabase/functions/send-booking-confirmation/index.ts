@@ -120,6 +120,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const emailResponse = await resend.emails.send({
       from: "Orange Door Marketing <onboarding@resend.dev>",
+      reply_to: "hello@orangedoor.com",
       to: [email],
       subject: "Your Strategy Call is Booked! 🎯",
       attachments: [
