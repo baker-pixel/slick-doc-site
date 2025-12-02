@@ -12,6 +12,7 @@ import ScheduleCall from "./pages/ScheduleCall";
 import Admin from "./pages/Admin";
 import System from "./pages/System";
 import Report from "./pages/Report";
+import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ function AnimatedRoutes() {
         <Route path="/quick-assessment" element={<PageTransition><QuickAssessment /></PageTransition>} />
         <Route path="/schedule" element={<PageTransition><ScheduleCall /></PageTransition>} />
         <Route path="/system" element={<PageTransition><System /></PageTransition>} />
+        <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />
         <Route path="/admin" element={<PageTransition><Admin /></PageTransition>} />
         <Route path="/report/:id" element={<PageTransition><Report /></PageTransition>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
