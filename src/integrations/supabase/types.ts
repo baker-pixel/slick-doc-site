@@ -61,6 +61,7 @@ export type Database = {
           additional_notes: string | null
           ads_match_customer_intent: boolean | null
           ads_use_landing_pages: boolean | null
+          ai_analysis: Json | null
           analytics_review_frequency: string | null
           asks_for_reviews: boolean | null
           automation_wishlist: string | null
@@ -156,6 +157,7 @@ export type Database = {
           additional_notes?: string | null
           ads_match_customer_intent?: boolean | null
           ads_use_landing_pages?: boolean | null
+          ai_analysis?: Json | null
           analytics_review_frequency?: string | null
           asks_for_reviews?: boolean | null
           automation_wishlist?: string | null
@@ -251,6 +253,7 @@ export type Database = {
           additional_notes?: string | null
           ads_match_customer_intent?: boolean | null
           ads_use_landing_pages?: boolean | null
+          ai_analysis?: Json | null
           analytics_review_frequency?: string | null
           asks_for_reviews?: boolean | null
           automation_wishlist?: string | null
