@@ -67,13 +67,15 @@ export function Hero() {
                 <ArrowRight className="ml-2" size={20} />
               </Button>
             </Link>
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-border hover:bg-secondary text-foreground text-lg px-8 py-6"
-            >
-              Learn About the SYSTEM
-            </Button>
+            <a href="#system">
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-border hover:bg-secondary text-foreground text-lg px-8 py-6"
+              >
+                Learn About the SYSTEM
+              </Button>
+            </a>
           </motion.div>
 
           {/* Social Proof */}
