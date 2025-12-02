@@ -78,6 +78,22 @@ export function Hero() {
             </a>
           </motion.div>
 
+          {/* Quick Assessment Link */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="text-sm text-muted-foreground mt-4"
+          >
+            Short on time?{" "}
+            <Link
+              to="/quick-assessment"
+              className="text-primary hover:text-orange-dark underline underline-offset-2 transition-colors"
+            >
+              Take our 2-minute Quick Assessment
+            </Link>
+          </motion.p>
+
           {/* Social Proof */}
           <motion.div
             initial={{ opacity: 0 }}
