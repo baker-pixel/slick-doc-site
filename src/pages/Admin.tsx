@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -134,6 +135,9 @@ const Admin = () => {
   const [contactPage, setContactPage] = useState(1);
   const [gapPage, setGapPage] = useState(1);
   const pageSize = 10;
+  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
+  const [selectedGaps, setSelectedGaps] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const filteredContacts = useMemo(() => {
     return contacts.filter(contact => {
@@ -238,6 +242,62 @@ const Admin = () => {
       fetchData(storedPassword);
     } catch (error: any) {
       toast({ title: "Error deleting record", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const bulkDelete = async (table: string, ids: string[]) => {
+    setIsBulkDeleting(true);
+    try {
+      await Promise.all(ids.map(id => 
+        supabase.functions.invoke("admin", {
+          body: { action: "delete", table, id, password: storedPassword },
+        })
+      ));
+      toast({ title: `${ids.length} records deleted` });
+      if (table === "contact_submissions") {
+        setSelectedContacts(new Set());
+      } else {
+        setSelectedGaps(new Set());
+      }
+      fetchData(storedPassword);
+    } catch (error: any) {
+      toast({ title: "Error deleting records", description: error.message, variant: "destructive" });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const toggleContactSelection = (id: string) => {
+    setSelectedContacts(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleGapSelection = (id: string) => {
+    setSelectedGaps(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllContacts = () => {
+    if (selectedContacts.size === paginatedContacts.length) {
+      setSelectedContacts(new Set());
+    } else {
+      setSelectedContacts(new Set(paginatedContacts.map(c => c.id)));
+    }
+  };
+
+  const toggleAllGaps = () => {
+    if (selectedGaps.size === paginatedGapAnalyses.length) {
+      setSelectedGaps(new Set());
+    } else {
+      setSelectedGaps(new Set(paginatedGapAnalyses.map(g => g.id)));
     }
   };
 
@@ -370,7 +430,29 @@ const Admin = () => {
               <Card>
                 <CardHeader className="flex flex-col gap-4 pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <CardTitle className="text-lg">Contact Submissions</CardTitle>
+                    <div className="flex items-center gap-4">
+                      <CardTitle className="text-lg">Contact Submissions</CardTitle>
+                      {selectedContacts.size > 0 && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete {selectedContacts.size} selected
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete {selectedContacts.size} submissions?</AlertDialogTitle>
+                              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => bulkDelete("contact_submissions", Array.from(selectedContacts))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                     <Button variant="outline" size="default" onClick={() => exportToCSV(filteredContacts, "contact_submissions")}>
                       <Download className="w-4 h-4 mr-2" />
                       Export
@@ -432,6 +514,9 @@ const Admin = () => {
                     <table className="w-full">
                       <thead className="bg-muted/50">
                         <tr>
+                          <th className="p-4 w-12">
+                            <Checkbox checked={paginatedContacts.length > 0 && selectedContacts.size === paginatedContacts.length} onCheckedChange={toggleAllContacts} />
+                          </th>
                           <th className="text-left p-4 font-medium">Name</th>
                           <th className="text-left p-4 font-medium">Business</th>
                           <th className="text-left p-4 font-medium">Email</th>
@@ -442,7 +527,10 @@ const Admin = () => {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {paginatedContacts.map((contact) => (
-                          <tr key={contact.id} className="hover:bg-muted/30">
+                          <tr key={contact.id} className={cn("hover:bg-muted/30", selectedContacts.has(contact.id) && "bg-muted/20")}>
+                            <td className="p-4">
+                              <Checkbox checked={selectedContacts.has(contact.id)} onCheckedChange={() => toggleContactSelection(contact.id)} />
+                            </td>
                             <td className="p-4">{contact.first_name} {contact.last_name}</td>
                             <td className="p-4">{contact.business_name}</td>
                             <td className="p-4">{contact.email}</td>
@@ -495,7 +583,7 @@ const Admin = () => {
                         ))}
                         {paginatedContacts.length === 0 && (
                           <tr>
-                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                            <td colSpan={7} className="p-8 text-center text-muted-foreground">
                               {contacts.length === 0 ? "No contact submissions yet" : "No results match your search"}
                             </td>
                           </tr>
@@ -527,7 +615,29 @@ const Admin = () => {
               <Card>
                 <CardHeader className="flex flex-col gap-4 pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
+                    <div className="flex items-center gap-4">
+                      <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
+                      {selectedGaps.size > 0 && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete {selectedGaps.size} selected
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete {selectedGaps.size} submissions?</AlertDialogTitle>
+                              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => bulkDelete("gap_analysis_submissions", Array.from(selectedGaps))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                     <Button variant="outline" size="default" onClick={() => exportToCSV(filteredGapAnalyses, "gap_analysis_submissions")}>
                       <Download className="w-4 h-4 mr-2" />
                       Export
@@ -588,6 +698,9 @@ const Admin = () => {
                     <table className="w-full">
                       <thead className="bg-muted/50">
                         <tr>
+                          <th className="p-4 w-12">
+                            <Checkbox checked={paginatedGapAnalyses.length > 0 && selectedGaps.size === paginatedGapAnalyses.length} onCheckedChange={toggleAllGaps} />
+                          </th>
                           <th className="text-left p-4 font-medium">Name</th>
                           <th className="text-left p-4 font-medium">Business</th>
                           <th className="text-left p-4 font-medium">Email</th>
@@ -599,7 +712,10 @@ const Admin = () => {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {paginatedGapAnalyses.map((gap) => (
-                          <tr key={gap.id} className="hover:bg-muted/30">
+                          <tr key={gap.id} className={cn("hover:bg-muted/30", selectedGaps.has(gap.id) && "bg-muted/20")}>
+                            <td className="p-4">
+                              <Checkbox checked={selectedGaps.has(gap.id)} onCheckedChange={() => toggleGapSelection(gap.id)} />
+                            </td>
                             <td className="p-4">{gap.first_name} {gap.last_name}</td>
                             <td className="p-4">{gap.business_name}</td>
                             <td className="p-4">{gap.email}</td>
@@ -664,7 +780,7 @@ const Admin = () => {
                         ))}
                         {paginatedGapAnalyses.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                            <td colSpan={8} className="p-8 text-center text-muted-foreground">
                               {gapAnalyses.length === 0 ? "No gap analysis submissions yet" : "No results match your search"}
                             </td>
                           </tr>
