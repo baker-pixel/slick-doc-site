@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.send-system-pdf]
 verify_jwt = false
+
+[functions.send-gap-report]
+verify_jwt = false
