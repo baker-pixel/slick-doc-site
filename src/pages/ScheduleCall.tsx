@@ -97,6 +97,7 @@ export default function ScheduleCall() {
           businessName: formData.businessName,
           date: format(date, "EEEE, MMMM d, yyyy"),
           time: time,
+          rawDate: date.toISOString(),
         },
       });
 
