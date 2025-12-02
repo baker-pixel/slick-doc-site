@@ -15,7 +15,7 @@ import { RetentionReputationStep } from "./steps/RetentionReputationStep";
 import { AnalyticsMeasurementStep } from "./steps/AnalyticsMeasurementStep";
 import { InternalCapacityStep } from "./steps/InternalCapacityStep";
 import { FinalAlignmentStep } from "./steps/FinalAlignmentStep";
-import { SuccessStep } from "./steps/SuccessStep";
+import { ReportStep } from "./steps/ReportStep";
 
 export type GapAnalysisData = {
   // Contact Info
@@ -366,7 +366,7 @@ export function GapAnalysisForm() {
   };
 
   if (isComplete) {
-    return <SuccessStep businessName={formData.businessName} />;
+    return <ReportStep formData={formData} />;
   }
 
   const CurrentStepComponent = steps[currentStep - 1].component;
