@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye } from "lucide-react";
+import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 
 interface ContactSubmission {
   id: string;
@@ -24,16 +25,89 @@ interface ContactSubmission {
   created_at: string;
 }
 
-interface GapAnalysisSubmission {
+interface GapAnalysisData {
   id: string;
   first_name: string;
   last_name: string;
   business_name: string;
   email: string;
   phone: string | null;
+  website_url: string | null;
   status: string;
   created_at: string;
   completed_at: string | null;
+  top_business_goals?: string | null;
+  primary_customer_sources?: string | null;
+  top_competitors?: string | null;
+  unique_differentiator?: string | null;
+  has_seasonality?: boolean | null;
+  seasonality_details?: string | null;
+  avg_customer_lifetime_value?: string | null;
+  growth_satisfaction?: number | null;
+  website_last_updated?: string | null;
+  tracks_website_conversions?: boolean | null;
+  monthly_website_leads?: number | null;
+  priority_improvement?: string | null;
+  investing_in_seo?: boolean | null;
+  ranking_for_keywords?: boolean | null;
+  knows_organic_traffic?: boolean | null;
+  monthly_organic_traffic?: number | null;
+  tracking_keyword_rankings?: boolean | null;
+  running_paid_ads?: boolean | null;
+  ad_platforms?: string | null;
+  monthly_ad_spend?: string | null;
+  ad_manager?: string | null;
+  ads_match_customer_intent?: boolean | null;
+  satisfied_with_ad_performance?: boolean | null;
+  runs_retargeting?: boolean | null;
+  ads_use_landing_pages?: boolean | null;
+  cost_per_lead?: string | null;
+  ad_performance_notes?: string | null;
+  uses_email_automation?: boolean | null;
+  uses_sms_followups?: boolean | null;
+  has_crm?: boolean | null;
+  crm_name?: string | null;
+  crm_tracks_all_inbound?: boolean | null;
+  has_segmentation_drip?: boolean | null;
+  has_abandoned_followups?: boolean | null;
+  uses_online_scheduling?: boolean | null;
+  lead_response_time?: string | null;
+  avg_time_to_quote?: string | null;
+  close_rate?: string | null;
+  common_objections?: string | null;
+  where_prospects_lost?: string | null;
+  asks_for_reviews?: boolean | null;
+  monthly_new_reviews?: number | null;
+  has_reputation_tool?: boolean | null;
+  reputation_tool_name?: string | null;
+  emails_past_customers?: boolean | null;
+  repeat_customer_rate?: string | null;
+  has_loyalty_referral_program?: boolean | null;
+  has_post_purchase_followup?: boolean | null;
+  uses_google_analytics?: boolean | null;
+  knows_best_lead_sources?: boolean | null;
+  conversion_tracking_method?: string | null;
+  kpis_tracked?: string | null;
+  kpi_tracking_frequency?: string | null;
+  analytics_review_frequency?: string | null;
+  data_accuracy_confidence?: string | null;
+  does_ab_testing?: boolean | null;
+  who_handles_marketing?: string | null;
+  weekly_team_hours?: string | null;
+  monthly_marketing_budget?: string | null;
+  marketing_to_offload?: string | null;
+  automation_wishlist?: string | null;
+  past_marketing_failures?: string | null;
+  reason_seeking_help?: string | null;
+  biggest_marketing_frustration?: string | null;
+  suffering_from_weak_digital?: string | null;
+  biggest_agency_fear?: string | null;
+  fastest_impact?: string | null;
+  what_makes_it_worth_it?: string | null;
+  success_definition_3mo?: string | null;
+  success_definition_6mo?: string | null;
+  success_definition_12mo?: string | null;
+  additional_notes?: string | null;
 }
 
 const Admin = () => {
@@ -42,7 +116,9 @@ const Admin = () => {
   const [storedPassword, setStoredPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [contacts, setContacts] = useState<ContactSubmission[]>([]);
-  const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisSubmission[]>([]);
+  const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisData[]>([]);
+  const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -331,30 +407,42 @@ const Admin = () => {
                               {new Date(gap.created_at).toLocaleDateString()}
                             </td>
                             <td className="p-4">
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="text-destructive">
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete submission?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteRecord("gap_analysis_submissions", gap.id)}
-                                      className="bg-destructive text-destructive-foreground"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setSelectedGapAnalysis(gap);
+                                    setIsDetailModalOpen(true);
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-destructive">
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete submission?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deleteRecord("gap_analysis_submissions", gap.id)}
+                                        className="bg-destructive text-destructive-foreground"
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -373,6 +461,12 @@ const Admin = () => {
             </TabsContent>
           </Tabs>
         </div>
+
+        <GapAnalysisDetailModal
+          data={selectedGapAnalysis}
+          open={isDetailModalOpen}
+          onOpenChange={setIsDetailModalOpen}
+        />
       </main>
       <Footer />
     </div>
