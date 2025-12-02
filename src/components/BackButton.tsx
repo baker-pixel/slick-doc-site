@@ -8,6 +8,7 @@ const routeNames: Record<string, string> = {
   "/gap-analysis": "Gap Analysis",
   "/quick-assessment": "Quick Assessment",
   "/schedule": "Schedule Call",
+  "/pricing": "Pricing",
   "/admin": "Admin Dashboard",
   "/report": "Report",
 };
