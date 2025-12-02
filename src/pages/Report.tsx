@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { calculateSystemScorecard, type SystemScorecard } from "@/lib/systemScorecard";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BackButton } from "@/components/BackButton";
 
 interface AIAnalysis {
   executiveSummary: string;
@@ -186,6 +187,9 @@ export default function Report() {
       <Header />
       
       <main className="container mx-auto px-4 py-12 max-w-4xl">
+        <div className="mb-4">
+          <BackButton />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

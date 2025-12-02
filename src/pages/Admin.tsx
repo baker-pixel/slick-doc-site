@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { format, subDays, subMonths, startOfWeek, startOfMonth } from "date-fns";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -565,6 +566,9 @@ const Admin = () => {
       <Header />
       <main className="pt-20 pb-12">
         <div className="container-wide mx-auto section-padding">
+          <div className="mb-4">
+            <BackButton />
+          </div>
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-display font-semibold">Admin Dashboard</h1>
             <Button variant="outline" onClick={() => fetchData(storedPassword)} disabled={isLoading}>
