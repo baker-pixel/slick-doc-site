@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +131,9 @@ const Admin = () => {
   const [gapStatusFilter, setGapStatusFilter] = useState("all");
   const [gapDateFrom, setGapDateFrom] = useState<Date | undefined>();
   const [gapDateTo, setGapDateTo] = useState<Date | undefined>();
+  const [contactPage, setContactPage] = useState(1);
+  const [gapPage, setGapPage] = useState(1);
+  const pageSize = 10;
 
   const filteredContacts = useMemo(() => {
     return contacts.filter(contact => {
@@ -159,6 +162,15 @@ const Admin = () => {
       return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
   }, [gapAnalyses, gapSearch, gapStatusFilter, gapDateFrom, gapDateTo]);
+
+  // Reset page when filters change
+  useMemo(() => { setContactPage(1); }, [contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
+  useMemo(() => { setGapPage(1); }, [gapSearch, gapStatusFilter, gapDateFrom, gapDateTo]);
+
+  const contactTotalPages = Math.ceil(filteredContacts.length / pageSize);
+  const gapTotalPages = Math.ceil(filteredGapAnalyses.length / pageSize);
+  const paginatedContacts = filteredContacts.slice((contactPage - 1) * pageSize, contactPage * pageSize);
+  const paginatedGapAnalyses = filteredGapAnalyses.slice((gapPage - 1) * pageSize, gapPage * pageSize);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -429,7 +441,7 @@ const Admin = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredContacts.map((contact) => (
+                        {paginatedContacts.map((contact) => (
                           <tr key={contact.id} className="hover:bg-muted/30">
                             <td className="p-4">{contact.first_name} {contact.last_name}</td>
                             <td className="p-4">{contact.business_name}</td>
@@ -481,7 +493,7 @@ const Admin = () => {
                             </td>
                           </tr>
                         ))}
-                        {filteredContacts.length === 0 && (
+                        {paginatedContacts.length === 0 && (
                           <tr>
                             <td colSpan={6} className="p-8 text-center text-muted-foreground">
                               {contacts.length === 0 ? "No contact submissions yet" : "No results match your search"}
@@ -491,6 +503,22 @@ const Admin = () => {
                       </tbody>
                     </table>
                   </div>
+                  {contactTotalPages > 1 && (
+                    <div className="flex items-center justify-between p-4 border-t">
+                      <span className="text-sm text-muted-foreground">
+                        Showing {(contactPage - 1) * pageSize + 1}-{Math.min(contactPage * pageSize, filteredContacts.length)} of {filteredContacts.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="icon" onClick={() => setContactPage(p => Math.max(1, p - 1))} disabled={contactPage === 1}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm">Page {contactPage} of {contactTotalPages}</span>
+                        <Button variant="outline" size="icon" onClick={() => setContactPage(p => Math.min(contactTotalPages, p + 1))} disabled={contactPage === contactTotalPages}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -570,7 +598,7 @@ const Admin = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredGapAnalyses.map((gap) => (
+                        {paginatedGapAnalyses.map((gap) => (
                           <tr key={gap.id} className="hover:bg-muted/30">
                             <td className="p-4">{gap.first_name} {gap.last_name}</td>
                             <td className="p-4">{gap.business_name}</td>
@@ -634,7 +662,7 @@ const Admin = () => {
                             </td>
                           </tr>
                         ))}
-                        {filteredGapAnalyses.length === 0 && (
+                        {paginatedGapAnalyses.length === 0 && (
                           <tr>
                             <td colSpan={7} className="p-8 text-center text-muted-foreground">
                               {gapAnalyses.length === 0 ? "No gap analysis submissions yet" : "No results match your search"}
@@ -644,6 +672,22 @@ const Admin = () => {
                       </tbody>
                     </table>
                   </div>
+                  {gapTotalPages > 1 && (
+                    <div className="flex items-center justify-between p-4 border-t">
+                      <span className="text-sm text-muted-foreground">
+                        Showing {(gapPage - 1) * pageSize + 1}-{Math.min(gapPage * pageSize, filteredGapAnalyses.length)} of {filteredGapAnalyses.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="icon" onClick={() => setGapPage(p => Math.max(1, p - 1))} disabled={gapPage === 1}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm">Page {gapPage} of {gapTotalPages}</span>
+                        <Button variant="outline" size="icon" onClick={() => setGapPage(p => Math.min(gapTotalPages, p + 1))} disabled={gapPage === gapTotalPages}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
