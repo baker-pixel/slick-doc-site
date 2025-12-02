@@ -172,7 +172,7 @@ export default function QuickAssessment() {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <main className="container mx-auto px-4 py-16 max-w-2xl">
+        <main className="container mx-auto px-4 pt-28 pb-16 max-w-2xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -254,7 +254,7 @@ export default function QuickAssessment() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-16 max-w-2xl">
+      <main className="container mx-auto px-4 pt-28 pb-16 max-w-2xl">
         <div className="mb-4">
           <BackButton />
         </div>
