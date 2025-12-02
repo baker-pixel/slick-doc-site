@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.generate-analysis]
 verify_jwt = false
+
+[functions.send-system-pdf]
+verify_jwt = false

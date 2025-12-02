@@ -10,12 +10,14 @@ import {
   BarChart3,
   CheckCircle2,
   ArrowRight,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { PdfLeadCaptureModal } from "@/components/PdfLeadCaptureModal";
 
 const systemSteps = [
   {
@@ -162,10 +164,12 @@ export default function System() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
   const [activeStep, setActiveStep] = useState(0);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen">
       <Header />
+      <PdfLeadCaptureModal isOpen={isPdfModalOpen} onClose={() => setIsPdfModalOpen(false)} />
       <main>
         {/* Hero Section */}
         <section className="pt-32 pb-16 bg-gradient-to-b from-primary/5 to-background">
@@ -195,8 +199,9 @@ export default function System() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link to="/#contact">Contact Us</Link>
+                <Button size="lg" variant="outline" onClick={() => setIsPdfModalOpen(true)}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Download PDF Brochure
                 </Button>
               </div>
             </motion.div>
