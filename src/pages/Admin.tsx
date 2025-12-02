@@ -14,9 +14,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { cn } from "@/lib/utils";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 
 interface ContactSubmission {
   id: string;
@@ -201,6 +202,46 @@ const Admin = () => {
     if (sort.column !== column) return <ArrowUpDown className="w-4 h-4 ml-1 opacity-50" />;
     return sort.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1" /> : <ArrowDown className="w-4 h-4 ml-1" />;
   };
+
+  // Analytics data
+  const analyticsData = useMemo(() => {
+    const last30Days: { date: string; contacts: number; gaps: number }[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      last30Days.push({ date: dateStr, contacts: 0, gaps: 0 });
+    }
+    
+    contacts.forEach(c => {
+      const dateStr = new Date(c.created_at).toISOString().split('T')[0];
+      const entry = last30Days.find(d => d.date === dateStr);
+      if (entry) entry.contacts++;
+    });
+    
+    gapAnalyses.forEach(g => {
+      const dateStr = new Date(g.created_at).toISOString().split('T')[0];
+      const entry = last30Days.find(d => d.date === dateStr);
+      if (entry) entry.gaps++;
+    });
+
+    return last30Days.map(d => ({ ...d, date: format(new Date(d.date), 'MMM d') }));
+  }, [contacts, gapAnalyses]);
+
+  const contactStatusData = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    contacts.forEach(c => { statusCounts[c.status] = (statusCounts[c.status] || 0) + 1; });
+    return Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+  }, [contacts]);
+
+  const gapStatusData = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    gapAnalyses.forEach(g => { statusCounts[g.status] = (statusCounts[g.status] || 0) + 1; });
+    return Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+  }, [gapAnalyses]);
+
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
   // Reset page when filters change
   useMemo(() => { setContactPage(1); }, [contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
@@ -426,7 +467,7 @@ const Admin = () => {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
@@ -453,13 +494,102 @@ const Admin = () => {
                 </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <BarChart3 className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-semibold">{contacts.length + gapAnalyses.length}</p>
+                    <p className="text-muted-foreground">Total Submissions</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <Tabs defaultValue="contacts" className="space-y-4">
+          <Tabs defaultValue="analytics" className="space-y-4">
             <TabsList>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="contacts">Contact Submissions</TabsTrigger>
               <TabsTrigger value="gap-analysis">Gap Analysis</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="analytics">
+              <div className="grid gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Submissions Over Last 30 Days</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analyticsData}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis dataKey="date" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                          <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                          <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
+                          <Area type="monotone" dataKey="contacts" stackId="1" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.6} name="Contacts" />
+                          <Area type="monotone" dataKey="gaps" stackId="1" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.6} name="Gap Analysis" />
+                          <Legend />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Contact Status Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[250px]">
+                        {contactStatusData.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={contactStatusData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                                {contactStatusData.map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-muted-foreground">No data</div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Gap Analysis Status Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[250px]">
+                        {gapStatusData.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={gapStatusData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                                {gapStatusData.map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-muted-foreground">No data</div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
 
             <TabsContent value="contacts">
               <Card>
