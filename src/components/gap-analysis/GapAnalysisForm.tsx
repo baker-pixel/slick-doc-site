@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -228,14 +228,154 @@ const steps = [
   { id: 11, title: "Final Questions", component: FinalAlignmentStep },
 ];
 
-export function GapAnalysisForm() {
+interface GapAnalysisFormProps {
+  resumeToken?: string | null;
+}
+
+export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<GapAnalysisData>(initialData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(!!resumeToken);
   const [isComplete, setIsComplete] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Load saved progress if resumeToken exists
+  useEffect(() => {
+    if (resumeToken) {
+      loadSavedProgress();
+    }
+  }, [resumeToken]);
+
+  const loadSavedProgress = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("gap_analysis_submissions")
+        .select("*")
+        .eq("resume_token", resumeToken)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        // Map database fields back to form data
+        setFormData({
+          firstName: data.first_name || "",
+          lastName: data.last_name || "",
+          businessName: data.business_name || "",
+          email: data.email || "",
+          phone: data.phone || "",
+          websiteUrl: data.website_url || "",
+          topBusinessGoals: data.top_business_goals || "",
+          growthSatisfaction: data.growth_satisfaction || 50,
+          primaryCustomerSources: data.primary_customer_sources || "",
+          topCompetitors: data.top_competitors || "",
+          uniqueDifferentiator: data.unique_differentiator || "",
+          hasSeasonality: data.has_seasonality,
+          seasonalityDetails: data.seasonality_details || "",
+          avgCustomerLifetimeValue: data.avg_customer_lifetime_value || "",
+          revenueNewCustomersPct: data.revenue_new_customers_pct || 0,
+          revenueRepeatCustomersPct: data.revenue_repeat_customers_pct || 0,
+          revenueReferralsPct: data.revenue_referrals_pct || 0,
+          socialMediaHandles: data.social_media_handles || "",
+          websiteLastUpdated: data.website_last_updated || "",
+          tracksWebsiteConversions: data.tracks_website_conversions,
+          conversionTrackingMethod: data.conversion_tracking_method || "",
+          monthlyWebsiteLeads: data.monthly_website_leads || 0,
+          investingInSeo: data.investing_in_seo,
+          rankingForKeywords: data.ranking_for_keywords,
+          knowsOrganicTraffic: data.knows_organic_traffic,
+          monthlyOrganicTraffic: data.monthly_organic_traffic || 0,
+          trackingKeywordRankings: data.tracking_keyword_rankings,
+          runningPaidAds: data.running_paid_ads,
+          adPlatforms: data.ad_platforms || "",
+          monthlyAdSpend: data.monthly_ad_spend || "",
+          costPerLead: data.cost_per_lead || "",
+          adsMatchCustomerIntent: data.ads_match_customer_intent,
+          adManager: data.ad_manager || "",
+          satisfiedWithAdPerformance: data.satisfied_with_ad_performance,
+          adPerformanceNotes: data.ad_performance_notes || "",
+          costPerAcquisition: data.cost_per_acquisition || "",
+          runsRetargeting: data.runs_retargeting,
+          adsUseLandingPages: data.ads_use_landing_pages,
+          usesEmailAutomation: data.uses_email_automation,
+          usesSmsFollowups: data.uses_sms_followups,
+          hasCrm: data.has_crm,
+          crmName: data.crm_name || "",
+          crmTracksAllInbound: data.crm_tracks_all_inbound,
+          hasSegmentationDrip: data.has_segmentation_drip,
+          hasAbandonedFollowups: data.has_abandoned_followups,
+          leadToCustomerConversionRate: data.lead_to_customer_conversion_rate || "",
+          leadResponseTime: data.lead_response_time || "",
+          closeRate: data.close_rate || "",
+          commonObjections: data.common_objections || "",
+          whereProspectsLost: data.where_prospects_lost || "",
+          usesOnlineScheduling: data.uses_online_scheduling,
+          avgTimeToQuote: data.avg_time_to_quote || "",
+          asksForReviews: data.asks_for_reviews,
+          monthlyNewReviews: data.monthly_new_reviews || 0,
+          emailsPastCustomers: data.emails_past_customers,
+          hasReputationTool: data.has_reputation_tool,
+          reputationToolName: data.reputation_tool_name || "",
+          repeatCustomerRate: data.repeat_customer_rate || "",
+          hasLoyaltyReferralProgram: data.has_loyalty_referral_program,
+          hasPostPurchaseFollowup: data.has_post_purchase_followup,
+          usesGoogleAnalytics: data.uses_google_analytics,
+          knowsBestLeadSources: data.knows_best_lead_sources,
+          kpisTracked: data.kpis_tracked || "",
+          dataAccuracyConfidence: data.data_accuracy_confidence || "",
+          kpiTrackingFrequency: data.kpi_tracking_frequency || "",
+          analyticsReviewFrequency: data.analytics_review_frequency || "",
+          doesAbTesting: data.does_ab_testing,
+          whoHandlesMarketing: data.who_handles_marketing || "",
+          monthlyMarketingBudget: data.monthly_marketing_budget || "",
+          successDefinition3mo: data.success_definition_3mo || "",
+          successDefinition6mo: data.success_definition_6mo || "",
+          successDefinition12mo: data.success_definition_12mo || "",
+          weeklyTeamHours: data.weekly_team_hours || "",
+          pastMarketingFailures: data.past_marketing_failures || "",
+          marketingToOffload: data.marketing_to_offload || "",
+          biggestMarketingFrustration: data.biggest_marketing_frustration || "",
+          sufferingFromWeakDigital: data.suffering_from_weak_digital || "",
+          leastUnderstoodMarketing: data.least_understood_marketing || "",
+          automationWishlist: data.automation_wishlist || "",
+          biggestAgencyFear: data.biggest_agency_fear || "",
+          priorityImprovement: data.priority_improvement || "",
+          reasonSeekingHelp: data.reason_seeking_help || "",
+          fastestImpact: data.fastest_impact || "",
+          whatMakesItWorthIt: data.what_makes_it_worth_it || "",
+          additionalNotes: data.additional_notes || "",
+        });
+        
+        // Set the saved step
+        if (data.current_step) {
+          setCurrentStep(data.current_step);
+        }
+
+        toast({
+          title: "Progress restored!",
+          description: `Welcome back, ${data.first_name}. Continuing from Step ${data.current_step || 1}.`,
+        });
+      } else {
+        toast({
+          title: "Link expired",
+          description: "We couldn't find your saved progress. Please start fresh.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load saved progress:", err);
+      toast({
+        title: "Error loading progress",
+        description: "Please try again or start fresh.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const updateFormData = (updates: Partial<GapAnalysisData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));
@@ -427,6 +567,15 @@ export function GapAnalysisForm() {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="w-full max-w-3xl mx-auto py-16 text-center">
+        <Loader2 className="animate-spin mx-auto mb-4 text-primary" size={40} />
+        <p className="text-muted-foreground">Restoring your progress...</p>
+      </div>
+    );
+  }
 
   if (isComplete) {
     return <ReportStep formData={formData} submissionId={submissionId} />;
