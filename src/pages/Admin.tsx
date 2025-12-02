@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 
 interface ContactSubmission {
@@ -119,6 +119,32 @@ const Admin = () => {
   const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisData[]>([]);
   const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [contactStatusFilter, setContactStatusFilter] = useState("all");
+  const [gapSearch, setGapSearch] = useState("");
+  const [gapStatusFilter, setGapStatusFilter] = useState("all");
+
+  const filteredContacts = useMemo(() => {
+    return contacts.filter(contact => {
+      const matchesSearch = contactSearch === "" || 
+        `${contact.first_name} ${contact.last_name}`.toLowerCase().includes(contactSearch.toLowerCase()) ||
+        contact.email.toLowerCase().includes(contactSearch.toLowerCase()) ||
+        contact.business_name.toLowerCase().includes(contactSearch.toLowerCase());
+      const matchesStatus = contactStatusFilter === "all" || contact.status === contactStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [contacts, contactSearch, contactStatusFilter]);
+
+  const filteredGapAnalyses = useMemo(() => {
+    return gapAnalyses.filter(gap => {
+      const matchesSearch = gapSearch === "" || 
+        `${gap.first_name} ${gap.last_name}`.toLowerCase().includes(gapSearch.toLowerCase()) ||
+        gap.email.toLowerCase().includes(gapSearch.toLowerCase()) ||
+        gap.business_name.toLowerCase().includes(gapSearch.toLowerCase());
+      const matchesStatus = gapStatusFilter === "all" || gap.status === gapStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [gapAnalyses, gapSearch, gapStatusFilter]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,12 +342,35 @@ const Admin = () => {
 
             <TabsContent value="contacts">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
                   <CardTitle className="text-lg">Contact Submissions</CardTitle>
-                  <Button variant="outline" size="sm" onClick={() => exportToCSV(contacts, "contact_submissions")}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Export CSV
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search name, email, business..."
+                        value={contactSearch}
+                        onChange={(e) => setContactSearch(e.target.value)}
+                        className="pl-9 w-full sm:w-64"
+                      />
+                    </div>
+                    <Select value={contactStatusFilter} onValueChange={setContactStatusFilter}>
+                      <SelectTrigger className="w-full sm:w-36">
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="new">New</SelectItem>
+                        <SelectItem value="contacted">Contacted</SelectItem>
+                        <SelectItem value="qualified">Qualified</SelectItem>
+                        <SelectItem value="converted">Converted</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredContacts, "contact_submissions")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -337,7 +386,7 @@ const Admin = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {contacts.map((contact) => (
+                        {filteredContacts.map((contact) => (
                           <tr key={contact.id} className="hover:bg-muted/30">
                             <td className="p-4">{contact.first_name} {contact.last_name}</td>
                             <td className="p-4">{contact.business_name}</td>
@@ -389,10 +438,10 @@ const Admin = () => {
                             </td>
                           </tr>
                         ))}
-                        {contacts.length === 0 && (
+                        {filteredContacts.length === 0 && (
                           <tr>
                             <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                              No contact submissions yet
+                              {contacts.length === 0 ? "No contact submissions yet" : "No results match your search"}
                             </td>
                           </tr>
                         )}
@@ -405,12 +454,34 @@ const Admin = () => {
 
             <TabsContent value="gap-analysis">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
                   <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
-                  <Button variant="outline" size="sm" onClick={() => exportToCSV(gapAnalyses, "gap_analysis_submissions")}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Export CSV
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search name, email, business..."
+                        value={gapSearch}
+                        onChange={(e) => setGapSearch(e.target.value)}
+                        className="pl-9 w-full sm:w-64"
+                      />
+                    </div>
+                    <Select value={gapStatusFilter} onValueChange={setGapStatusFilter}>
+                      <SelectTrigger className="w-full sm:w-36">
+                        <SelectValue placeholder="All statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="submitted">Submitted</SelectItem>
+                        <SelectItem value="reviewed">Reviewed</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredGapAnalyses, "gap_analysis_submissions")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -427,7 +498,7 @@ const Admin = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {gapAnalyses.map((gap) => (
+                        {filteredGapAnalyses.map((gap) => (
                           <tr key={gap.id} className="hover:bg-muted/30">
                             <td className="p-4">{gap.first_name} {gap.last_name}</td>
                             <td className="p-4">{gap.business_name}</td>
@@ -491,10 +562,10 @@ const Admin = () => {
                             </td>
                           </tr>
                         ))}
-                        {gapAnalyses.length === 0 && (
+                        {filteredGapAnalyses.length === 0 && (
                           <tr>
                             <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                              No gap analysis submissions yet
+                              {gapAnalyses.length === 0 ? "No gap analysis submissions yet" : "No results match your search"}
                             </td>
                           </tr>
                         )}
