@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -232,6 +232,7 @@ export function GapAnalysisForm() {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<GapAnalysisData>(initialData);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -251,6 +252,66 @@ export function GapAnalysisForm() {
     if (currentStep > 1) {
       setCurrentStep((prev) => prev - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const saveProgress = async () => {
+    if (!formData.email || !formData.firstName) {
+      toast({
+        title: "Enter contact info first",
+        description: "Please complete Step 1 before saving progress.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data, error } = await supabase.from("gap_analysis_submissions").insert({
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        business_name: formData.businessName,
+        email: formData.email,
+        phone: formData.phone || null,
+        website_url: formData.websiteUrl || null,
+        current_step: currentStep,
+        is_partial: true,
+        status: "in_progress",
+        // Save whatever data we have so far
+        top_business_goals: formData.topBusinessGoals || null,
+        growth_satisfaction: formData.growthSatisfaction || null,
+        investing_in_seo: formData.investingInSeo,
+        uses_email_automation: formData.usesEmailAutomation,
+        asks_for_reviews: formData.asksForReviews,
+        uses_google_analytics: formData.usesGoogleAnalytics,
+      }).select('resume_token').single();
+
+      if (error) throw error;
+
+      // Send resume email
+      await supabase.functions.invoke("send-resume-link", {
+        body: {
+          email: formData.email,
+          firstName: formData.firstName,
+          resumeToken: data.resume_token,
+          currentStep,
+          totalSteps: steps.length,
+        },
+      });
+
+      toast({
+        title: "Progress Saved!",
+        description: `We've emailed you a link to continue from Step ${currentStep}.`,
+      });
+    } catch (err) {
+      console.error("Save progress failed:", err);
+      toast({
+        title: "Couldn't save progress",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -427,42 +488,66 @@ export function GapAnalysisForm() {
       </AnimatePresence>
 
       {/* Navigation */}
-      <div className="flex justify-between mt-8 pt-6 border-t border-border">
-        <Button
-          variant="outline"
-          onClick={prevStep}
-          disabled={currentStep === 1}
-          className="gap-2"
-        >
-          <ArrowLeft size={16} />
-          Previous
-        </Button>
-
-        {currentStep === steps.length ? (
+      <div className="flex flex-col gap-4 mt-8 pt-6 border-t border-border">
+        <div className="flex justify-between">
           <Button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2"
+            variant="outline"
+            onClick={prevStep}
+            disabled={currentStep === 1}
+            className="gap-2"
           >
-            {isSubmitting ? (
+            <ArrowLeft size={16} />
+            Previous
+          </Button>
+
+          {currentStep === steps.length ? (
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="animate-spin" size={16} />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  Submit Gap Analysis
+                  <Check size={16} />
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={nextStep}
+              className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2"
+            >
+              Next
+              <ArrowRight size={16} />
+            </Button>
+          )}
+        </div>
+        
+        {/* Save Progress - only show after step 1 */}
+        {currentStep > 1 && formData.email && (
+          <Button
+            variant="ghost"
+            onClick={saveProgress}
+            disabled={isSaving}
+            className="text-muted-foreground hover:text-foreground gap-2 w-full"
+          >
+            {isSaving ? (
               <>
-                <Loader2 className="animate-spin" size={16} />
-                Submitting...
+                <Loader2 className="animate-spin" size={14} />
+                Saving...
               </>
             ) : (
               <>
-                Submit Gap Analysis
-                <Check size={16} />
+                <Save size={14} />
+                Save Progress & Continue Later
               </>
             )}
-          </Button>
-        ) : (
-          <Button
-            onClick={nextStep}
-            className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2"
-          >
-            Next
-            <ArrowRight size={16} />
           </Button>
         )}
       </div>
