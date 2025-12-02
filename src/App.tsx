@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import GapAnalysis from "./pages/GapAnalysis";
 import Admin from "./pages/Admin";
 import System from "./pages/System";
+import Report from "./pages/Report";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/gap-analysis" element={<GapAnalysis />} />
           <Route path="/system" element={<System />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/report/:id" element={<Report />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

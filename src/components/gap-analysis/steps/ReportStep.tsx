@@ -8,12 +8,16 @@ import {
   AlertTriangle,
   Lightbulb,
   FileText,
-  Mail
+  Mail,
+  Share2,
+  Check,
+  Link as LinkIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateSystemScorecard, type SystemScorecard } from "@/lib/systemScorecard";
 import type { GapAnalysisData } from "../GapAnalysisForm";
@@ -27,14 +31,19 @@ interface AIAnalysis {
 
 interface ReportStepProps {
   formData: GapAnalysisData;
+  submissionId: string | null;
 }
 
-export function ReportStep({ formData }: ReportStepProps) {
+export function ReportStep({ formData, submissionId }: ReportStepProps) {
+  const { toast } = useToast();
   const [scorecard, setScorecard] = useState<SystemScorecard | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(true);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const shareableUrl = submissionId ? `${window.location.origin}/report/${submissionId}` : null;
 
   useEffect(() => {
     // Calculate scorecard immediately
@@ -149,6 +158,13 @@ export function ReportStep({ formData }: ReportStepProps) {
       if (error) throw error;
       if (data?.analysis) {
         setAiAnalysis(data.analysis);
+        // Save AI analysis to database for shareable link
+        if (submissionId) {
+          await supabase
+            .from("gap_analysis_submissions")
+            .update({ ai_analysis: data.analysis })
+            .eq("id", submissionId);
+        }
         // Send email with report after analysis is complete
         sendReportEmail(data.analysis);
       }
@@ -174,6 +190,18 @@ export function ReportStep({ formData }: ReportStepProps) {
       setEmailSent(true);
     } catch (err) {
       console.error("Failed to send report email:", err);
+    }
+  };
+
+  const copyShareLink = () => {
+    if (shareableUrl) {
+      navigator.clipboard.writeText(shareableUrl);
+      setCopied(true);
+      toast({
+        title: "Link copied!",
+        description: "Share this link with your team to view this report.",
+      });
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -212,12 +240,25 @@ export function ReportStep({ formData }: ReportStepProps) {
           Thank you, <span className="font-medium text-foreground">{formData.firstName}</span>! 
           Here&apos;s your instant analysis for <span className="font-medium text-foreground">{formData.businessName}</span>.
         </p>
-        {emailSent && (
-          <p className="text-sm text-primary mt-2 flex items-center justify-center gap-1">
-            <Mail size={14} />
-            A detailed report has been sent to {formData.email}
-          </p>
-        )}
+        <div className="flex flex-col items-center gap-2 mt-3">
+          {emailSent && (
+            <p className="text-sm text-primary flex items-center gap-1">
+              <Mail size={14} />
+              A detailed report has been sent to {formData.email}
+            </p>
+          )}
+          {shareableUrl && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyShareLink}
+              className="gap-2"
+            >
+              {copied ? <Check size={14} /> : <LinkIcon size={14} />}
+              {copied ? "Link Copied!" : "Copy Shareable Link"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* SYSTEM Scorecard */}

@@ -233,6 +233,7 @@ export function GapAnalysisForm() {
   const [formData, setFormData] = useState<GapAnalysisData>(initialData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const updateFormData = (updates: Partial<GapAnalysisData>) => {
@@ -257,7 +258,7 @@ export function GapAnalysisForm() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("gap_analysis_submissions").insert({
+      const { data: insertedData, error } = await supabase.from("gap_analysis_submissions").insert({
         first_name: formData.firstName,
         last_name: formData.lastName,
         business_name: formData.businessName,
@@ -345,10 +346,11 @@ export function GapAnalysisForm() {
         additional_notes: formData.additionalNotes || null,
         status: "submitted",
         completed_at: new Date().toISOString(),
-      });
+      }).select('id').single();
 
       if (error) throw error;
 
+      setSubmissionId(insertedData?.id || null);
       setIsComplete(true);
       toast({
         title: "Gap Analysis Submitted!",
@@ -366,7 +368,7 @@ export function GapAnalysisForm() {
   };
 
   if (isComplete) {
-    return <ReportStep formData={formData} />;
+    return <ReportStep formData={formData} submissionId={submissionId} />;
   }
 
   const CurrentStepComponent = steps[currentStep - 1].component;
