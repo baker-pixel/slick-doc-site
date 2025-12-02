@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "react-router-dom";
 
 const navLinks = [
   { href: "#about", label: "About" },
@@ -12,6 +13,14 @@ const navLinks = [
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const location = useLocation();
+  const isHomePage = location.pathname === "/";
+
+  const handleNavClick = (href: string) => {
+    if (!isHomePage && href.startsWith("#")) {
+      window.location.href = "/" + href;
+    }
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-effect border-b border-border/50">
@@ -32,15 +41,18 @@ export function Header() {
             {navLinks.map((link) => (
               <a
                 key={link.href}
-                href={link.href}
+                href={isHomePage ? link.href : "/" + link.href}
+                onClick={() => handleNavClick(link.href)}
                 className="text-muted-foreground hover:text-foreground transition-colors font-medium"
               >
                 {link.label}
               </a>
             ))}
-            <Button className="bg-primary hover:bg-orange-dark text-primary-foreground">
-              Get Your Gap Analysis
-            </Button>
+            <Link to="/gap-analysis">
+              <Button className="bg-primary hover:bg-orange-dark text-primary-foreground">
+                Get Your Gap Analysis
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -66,16 +78,18 @@ export function Header() {
                 {navLinks.map((link) => (
                   <a
                     key={link.href}
-                    href={link.href}
+                    href={isHomePage ? link.href : "/" + link.href}
                     className="text-muted-foreground hover:text-foreground transition-colors font-medium py-2"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {link.label}
                   </a>
                 ))}
-                <Button className="bg-primary hover:bg-orange-dark text-primary-foreground w-full mt-2">
-                  Get Your Gap Analysis
-                </Button>
+                <Link to="/gap-analysis" onClick={() => setIsMenuOpen(false)}>
+                  <Button className="bg-primary hover:bg-orange-dark text-primary-foreground w-full mt-2">
+                    Get Your Gap Analysis
+                  </Button>
+                </Link>
               </div>
             </motion.div>
           )}

@@ -53,6 +53,302 @@ export type Database = {
         }
         Relationships: []
       }
+      gap_analysis_submissions: {
+        Row: {
+          ad_manager: string | null
+          ad_performance_notes: string | null
+          ad_platforms: string | null
+          additional_notes: string | null
+          ads_match_customer_intent: boolean | null
+          ads_use_landing_pages: boolean | null
+          analytics_review_frequency: string | null
+          asks_for_reviews: boolean | null
+          automation_wishlist: string | null
+          avg_customer_lifetime_value: string | null
+          avg_time_to_quote: string | null
+          biggest_agency_fear: string | null
+          biggest_marketing_frustration: string | null
+          business_name: string
+          close_rate: string | null
+          common_objections: string | null
+          completed_at: string | null
+          contact_submission_id: string | null
+          conversion_tracking_method: string | null
+          cost_per_acquisition: string | null
+          cost_per_lead: string | null
+          created_at: string
+          crm_name: string | null
+          crm_tracks_all_inbound: boolean | null
+          current_step: number | null
+          data_accuracy_confidence: string | null
+          does_ab_testing: boolean | null
+          email: string
+          emails_past_customers: boolean | null
+          fastest_impact: string | null
+          first_name: string
+          growth_satisfaction: number | null
+          has_abandoned_followups: boolean | null
+          has_crm: boolean | null
+          has_dashboards: Json | null
+          has_loyalty_referral_program: boolean | null
+          has_post_purchase_followup: boolean | null
+          has_reputation_tool: boolean | null
+          has_seasonality: boolean | null
+          has_segmentation_drip: boolean | null
+          id: string
+          investing_in_seo: boolean | null
+          knows_best_lead_sources: boolean | null
+          knows_organic_traffic: boolean | null
+          kpi_tracking_frequency: string | null
+          kpis_tracked: string | null
+          last_name: string
+          lead_response_time: string | null
+          lead_to_customer_conversion_rate: string | null
+          least_understood_marketing: string | null
+          marketing_to_offload: string | null
+          monthly_ad_spend: string | null
+          monthly_marketing_budget: string | null
+          monthly_new_reviews: number | null
+          monthly_organic_traffic: number | null
+          monthly_website_leads: number | null
+          past_marketing_failures: string | null
+          phone: string | null
+          primary_customer_sources: string | null
+          priority_improvement: string | null
+          ranking_for_keywords: boolean | null
+          reason_seeking_help: string | null
+          repeat_customer_rate: string | null
+          reputation_tool_name: string | null
+          revenue_new_customers_pct: number | null
+          revenue_referrals_pct: number | null
+          revenue_repeat_customers_pct: number | null
+          running_paid_ads: boolean | null
+          runs_retargeting: boolean | null
+          satisfied_with_ad_performance: boolean | null
+          seasonality_details: string | null
+          social_media_handles: string | null
+          status: string
+          success_definition_12mo: string | null
+          success_definition_3mo: string | null
+          success_definition_6mo: string | null
+          suffering_from_weak_digital: string | null
+          top_business_goals: string | null
+          top_competitors: string | null
+          tracking_keyword_rankings: boolean | null
+          tracks_website_conversions: boolean | null
+          unique_differentiator: string | null
+          updated_at: string
+          uses_email_automation: boolean | null
+          uses_google_analytics: boolean | null
+          uses_online_scheduling: boolean | null
+          uses_sms_followups: boolean | null
+          website_last_updated: string | null
+          website_url: string | null
+          weekly_team_hours: string | null
+          what_makes_it_worth_it: string | null
+          where_prospects_lost: string | null
+          who_handles_marketing: string | null
+        }
+        Insert: {
+          ad_manager?: string | null
+          ad_performance_notes?: string | null
+          ad_platforms?: string | null
+          additional_notes?: string | null
+          ads_match_customer_intent?: boolean | null
+          ads_use_landing_pages?: boolean | null
+          analytics_review_frequency?: string | null
+          asks_for_reviews?: boolean | null
+          automation_wishlist?: string | null
+          avg_customer_lifetime_value?: string | null
+          avg_time_to_quote?: string | null
+          biggest_agency_fear?: string | null
+          biggest_marketing_frustration?: string | null
+          business_name: string
+          close_rate?: string | null
+          common_objections?: string | null
+          completed_at?: string | null
+          contact_submission_id?: string | null
+          conversion_tracking_method?: string | null
+          cost_per_acquisition?: string | null
+          cost_per_lead?: string | null
+          created_at?: string
+          crm_name?: string | null
+          crm_tracks_all_inbound?: boolean | null
+          current_step?: number | null
+          data_accuracy_confidence?: string | null
+          does_ab_testing?: boolean | null
+          email: string
+          emails_past_customers?: boolean | null
+          fastest_impact?: string | null
+          first_name: string
+          growth_satisfaction?: number | null
+          has_abandoned_followups?: boolean | null
+          has_crm?: boolean | null
+          has_dashboards?: Json | null
+          has_loyalty_referral_program?: boolean | null
+          has_post_purchase_followup?: boolean | null
+          has_reputation_tool?: boolean | null
+          has_seasonality?: boolean | null
+          has_segmentation_drip?: boolean | null
+          id?: string
+          investing_in_seo?: boolean | null
+          knows_best_lead_sources?: boolean | null
+          knows_organic_traffic?: boolean | null
+          kpi_tracking_frequency?: string | null
+          kpis_tracked?: string | null
+          last_name: string
+          lead_response_time?: string | null
+          lead_to_customer_conversion_rate?: string | null
+          least_understood_marketing?: string | null
+          marketing_to_offload?: string | null
+          monthly_ad_spend?: string | null
+          monthly_marketing_budget?: string | null
+          monthly_new_reviews?: number | null
+          monthly_organic_traffic?: number | null
+          monthly_website_leads?: number | null
+          past_marketing_failures?: string | null
+          phone?: string | null
+          primary_customer_sources?: string | null
+          priority_improvement?: string | null
+          ranking_for_keywords?: boolean | null
+          reason_seeking_help?: string | null
+          repeat_customer_rate?: string | null
+          reputation_tool_name?: string | null
+          revenue_new_customers_pct?: number | null
+          revenue_referrals_pct?: number | null
+          revenue_repeat_customers_pct?: number | null
+          running_paid_ads?: boolean | null
+          runs_retargeting?: boolean | null
+          satisfied_with_ad_performance?: boolean | null
+          seasonality_details?: string | null
+          social_media_handles?: string | null
+          status?: string
+          success_definition_12mo?: string | null
+          success_definition_3mo?: string | null
+          success_definition_6mo?: string | null
+          suffering_from_weak_digital?: string | null
+          top_business_goals?: string | null
+          top_competitors?: string | null
+          tracking_keyword_rankings?: boolean | null
+          tracks_website_conversions?: boolean | null
+          unique_differentiator?: string | null
+          updated_at?: string
+          uses_email_automation?: boolean | null
+          uses_google_analytics?: boolean | null
+          uses_online_scheduling?: boolean | null
+          uses_sms_followups?: boolean | null
+          website_last_updated?: string | null
+          website_url?: string | null
+          weekly_team_hours?: string | null
+          what_makes_it_worth_it?: string | null
+          where_prospects_lost?: string | null
+          who_handles_marketing?: string | null
+        }
+        Update: {
+          ad_manager?: string | null
+          ad_performance_notes?: string | null
+          ad_platforms?: string | null
+          additional_notes?: string | null
+          ads_match_customer_intent?: boolean | null
+          ads_use_landing_pages?: boolean | null
+          analytics_review_frequency?: string | null
+          asks_for_reviews?: boolean | null
+          automation_wishlist?: string | null
+          avg_customer_lifetime_value?: string | null
+          avg_time_to_quote?: string | null
+          biggest_agency_fear?: string | null
+          biggest_marketing_frustration?: string | null
+          business_name?: string
+          close_rate?: string | null
+          common_objections?: string | null
+          completed_at?: string | null
+          contact_submission_id?: string | null
+          conversion_tracking_method?: string | null
+          cost_per_acquisition?: string | null
+          cost_per_lead?: string | null
+          created_at?: string
+          crm_name?: string | null
+          crm_tracks_all_inbound?: boolean | null
+          current_step?: number | null
+          data_accuracy_confidence?: string | null
+          does_ab_testing?: boolean | null
+          email?: string
+          emails_past_customers?: boolean | null
+          fastest_impact?: string | null
+          first_name?: string
+          growth_satisfaction?: number | null
+          has_abandoned_followups?: boolean | null
+          has_crm?: boolean | null
+          has_dashboards?: Json | null
+          has_loyalty_referral_program?: boolean | null
+          has_post_purchase_followup?: boolean | null
+          has_reputation_tool?: boolean | null
+          has_seasonality?: boolean | null
+          has_segmentation_drip?: boolean | null
+          id?: string
+          investing_in_seo?: boolean | null
+          knows_best_lead_sources?: boolean | null
+          knows_organic_traffic?: boolean | null
+          kpi_tracking_frequency?: string | null
+          kpis_tracked?: string | null
+          last_name?: string
+          lead_response_time?: string | null
+          lead_to_customer_conversion_rate?: string | null
+          least_understood_marketing?: string | null
+          marketing_to_offload?: string | null
+          monthly_ad_spend?: string | null
+          monthly_marketing_budget?: string | null
+          monthly_new_reviews?: number | null
+          monthly_organic_traffic?: number | null
+          monthly_website_leads?: number | null
+          past_marketing_failures?: string | null
+          phone?: string | null
+          primary_customer_sources?: string | null
+          priority_improvement?: string | null
+          ranking_for_keywords?: boolean | null
+          reason_seeking_help?: string | null
+          repeat_customer_rate?: string | null
+          reputation_tool_name?: string | null
+          revenue_new_customers_pct?: number | null
+          revenue_referrals_pct?: number | null
+          revenue_repeat_customers_pct?: number | null
+          running_paid_ads?: boolean | null
+          runs_retargeting?: boolean | null
+          satisfied_with_ad_performance?: boolean | null
+          seasonality_details?: string | null
+          social_media_handles?: string | null
+          status?: string
+          success_definition_12mo?: string | null
+          success_definition_3mo?: string | null
+          success_definition_6mo?: string | null
+          suffering_from_weak_digital?: string | null
+          top_business_goals?: string | null
+          top_competitors?: string | null
+          tracking_keyword_rankings?: boolean | null
+          tracks_website_conversions?: boolean | null
+          unique_differentiator?: string | null
+          updated_at?: string
+          uses_email_automation?: boolean | null
+          uses_google_analytics?: boolean | null
+          uses_online_scheduling?: boolean | null
+          uses_sms_followups?: boolean | null
+          website_last_updated?: string | null
+          website_url?: string | null
+          weekly_team_hours?: string | null
+          what_makes_it_worth_it?: string | null
+          where_prospects_lost?: string | null
+          who_handles_marketing?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gap_analysis_submissions_contact_submission_id_fkey"
+            columns: ["contact_submission_id"]
+            isOneToOne: false
+            referencedRelation: "contact_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
