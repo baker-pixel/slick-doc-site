@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BackButton } from "@/components/BackButton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -165,6 +166,9 @@ export default function ScheduleCall() {
       <Header />
       <main className="pt-32 pb-20">
         <div className="container-wide mx-auto section-padding">
+          <div className="mb-6">
+            <BackButton />
+          </div>
           <div className="grid lg:grid-cols-2 gap-16 items-start">
             {/* Left Column - Info */}
             <motion.div

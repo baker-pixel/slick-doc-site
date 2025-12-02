@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BackButton } from "@/components/BackButton";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -254,6 +255,9 @@ export default function QuickAssessment() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-16 max-w-2xl">
+        <div className="mb-4">
+          <BackButton />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

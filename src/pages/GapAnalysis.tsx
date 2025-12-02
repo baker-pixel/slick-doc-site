@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { BackButton } from "@/components/BackButton";
 import { GapAnalysisForm } from "@/components/gap-analysis/GapAnalysisForm";
 import { motion } from "framer-motion";
 import { Clock, FileText, Target } from "lucide-react";
@@ -17,6 +18,9 @@ const GapAnalysis = () => {
         {/* Hero */}
         <section className="section-padding bg-gradient-to-b from-cream to-background">
           <div className="container-wide mx-auto">
+            <div className="mb-4">
+              <BackButton />
+            </div>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
