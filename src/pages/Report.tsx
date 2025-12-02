@@ -384,7 +384,7 @@ export default function Report() {
           {/* Footer Link */}
           <div className="text-center pt-4">
             <Link to="/" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-              ← Return to Orange Door Marketing
+              ← Return to Orange Door Consultants
             </Link>
           </div>
         </motion.div>

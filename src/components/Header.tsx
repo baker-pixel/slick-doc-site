@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
+import logo from "@/assets/logo.png";
 
 const navLinks = [
   { href: "#about", label: "About" },
@@ -27,14 +28,9 @@ export function Header() {
       <nav className="container-wide mx-auto section-padding py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xl">O</span>
-            </div>
-            <span className="font-display font-semibold text-xl text-foreground">
-              Orange Door
-            </span>
-          </a>
+          <Link to="/" className="flex items-center gap-3">
+            <img src={logo} alt="Orange Door Consultants" className="h-10 w-auto" />
+          </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">

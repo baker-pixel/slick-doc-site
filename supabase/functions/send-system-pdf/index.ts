@@ -95,7 +95,7 @@ async function generateSystemPDF(): Promise<Uint8Array> {
   });
   
   // Footer
-  page1.drawText("Orange Door Marketing | East Tennessee", {
+  page1.drawText("Orange Door Consultants | East Tennessee", {
     x: 50, y: 40,
     size: 10, font: helvetica, color: mediumGray
   });
@@ -212,7 +212,7 @@ async function generateSystemPDF(): Promise<Uint8Array> {
   });
   
   // Footer
-  page2.drawText("Orange Door Marketing | East Tennessee", {
+  page2.drawText("Orange Door Consultants | East Tennessee", {
     x: 50, y: 40,
     size: 10, font: helvetica, color: mediumGray
   });
@@ -276,7 +276,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email with PDF attachment
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Marketing <onboarding@resend.dev>",
+      from: "Orange Door Consultants <onboarding@resend.dev>",
       to: [email],
       subject: "Your SYSTEM Methodology Brochure is Ready!",
       attachments: [
@@ -297,7 +297,7 @@ const handler = async (req: Request): Promise<Response> => {
             <div style="background: linear-gradient(135deg, #f97316, #ea580c); width: 60px; height: 60px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
               <span style="color: white; font-weight: bold; font-size: 28px;">O</span>
             </div>
-            <h1 style="color: #1a1a1a; margin: 0; font-size: 24px;">Orange Door Marketing</h1>
+            <h1 style="color: #1a1a1a; margin: 0; font-size: 24px;">Orange Door Consultants</h1>
           </div>
 
           <h2 style="color: #1a1a1a; margin-bottom: 16px;">Hi${firstName ? ` ${firstName}` : ''},</h2>
