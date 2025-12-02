@@ -10,59 +10,69 @@ import { Badge } from "@/components/ui/badge";
 
 const plans = [
   {
-    name: "Starter",
-    description: "Perfect for small businesses just getting started with digital marketing",
-    price: 1497,
+    name: "SYSTEM Foundation",
+    level: "Level I",
+    description: "For businesses with light-to-moderate gaps that need structure and optimization.",
+    price: 249,
+    priceSuffix: "",
     period: "/month",
+    scoreRange: "65-100",
     icon: Zap,
     features: [
-      "SYSTEM Gap Analysis",
-      "Monthly strategy call",
-      "Basic SEO optimization",
-      "Google Business Profile setup",
-      "Email marketing setup",
-      "Monthly performance report",
+      "Website Conversion Tune-Up",
+      "Local Visibility Upgrade",
+      "Basic SEO Cleanup",
+      "Review Generation Setup",
+      "Analytics & KPI Setup",
+      "Monthly GBP Posts",
+      "1 Blog Article/Month",
+      "Quarterly SEO Tuning",
     ],
     cta: "Get Started",
     popular: false,
   },
   {
-    name: "Growth",
-    description: "For businesses ready to scale their marketing and generate consistent leads",
-    price: 2997,
+    name: "SYSTEM Growth",
+    level: "Level II",
+    description: "For SMBs with moderate gaps who need activation across multiple channels.",
+    price: 449,
+    priceSuffix: "–549",
     period: "/month",
+    scoreRange: "40-64",
     icon: Star,
     features: [
-      "Everything in Starter, plus:",
-      "Bi-weekly strategy calls",
-      "Advanced SEO & content strategy",
-      "Paid ads management (up to $3k/mo spend)",
-      "CRM setup & automation",
-      "Lead nurture sequences",
-      "Review generation system",
-      "Weekly performance reports",
+      "Everything in Level I",
+      "Landing Page Pack (3-5 pages)",
+      "Email & SMS Automation",
+      "Retargeting Ads Setup",
+      "CRM Pipeline Optimization",
+      "2 Blogs/Month",
+      "Monthly SEO Optimization",
+      "Monthly Strategy Call",
     ],
-    cta: "Scale Your Business",
+    cta: "Get Started",
     popular: true,
   },
   {
-    name: "Enterprise",
-    description: "Full-service marketing partnership for established businesses",
-    price: 5997,
+    name: "SYSTEM Transformation",
+    level: "Level III",
+    description: "For businesses requiring a full rebuild of their digital infrastructure.",
+    price: 799,
+    priceSuffix: "–999",
     period: "/month",
+    scoreRange: "0-39",
     icon: Crown,
     features: [
-      "Everything in Growth, plus:",
-      "Weekly strategy calls",
-      "Full funnel optimization",
-      "Unlimited paid ads management",
-      "Custom integrations",
-      "Dedicated account manager",
-      "Priority support",
-      "Quarterly business reviews",
-      "Custom reporting dashboard",
+      "Everything in Level II",
+      "Full Website Rebuild",
+      "Advanced SEO Program",
+      "Lead Magnet Development",
+      "Full Funnel Buildout",
+      "Sales Enablement System",
+      "Retention Engine Setup",
+      "Full Analytics Suite",
     ],
-    cta: "Contact Sales",
+    cta: "Get Started",
     popular: false,
   },
 ];
@@ -138,6 +148,9 @@ export default function Pricing() {
                     : "border-border hover:border-primary/50"
                 }`}>
                   <CardHeader className="text-center pb-4">
+                    <Badge variant="outline" className="w-fit mx-auto mb-3">
+                      {plan.level}
+                    </Badge>
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
                       plan.popular ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
                     }`}>
@@ -147,10 +160,16 @@ export default function Pricing() {
                     <CardDescription className="min-h-[48px]">{plan.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col">
-                    <div className="text-center mb-6">
-                      <span className="text-4xl font-bold text-foreground">${plan.price.toLocaleString()}</span>
+                    <div className="text-center mb-2">
+                      <span className="text-4xl font-bold text-foreground">${plan.price}</span>
+                      {plan.priceSuffix && (
+                        <span className="text-2xl font-display text-muted-foreground">{plan.priceSuffix}</span>
+                      )}
                       <span className="text-muted-foreground">{plan.period}</span>
                     </div>
+                    <p className="text-xs text-muted-foreground text-center mb-6">
+                      SYSTEM Score: {plan.scoreRange}
+                    </p>
                     
                     <ul className="space-y-3 mb-8 flex-1">
                       {plan.features.map((feature, i) => (
@@ -188,13 +207,8 @@ export default function Pricing() {
             transition={{ delay: 0.4 }}
             className="text-center mb-20"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary border border-border mb-4">
-              <Check className="h-4 w-4 text-primary" />
-              <span className="text-sm text-muted-foreground">30-day money-back guarantee</span>
-            </div>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Not satisfied? We'll refund your first month, no questions asked. 
-              We're confident our SYSTEM will deliver results for your business.
+            <p className="text-muted-foreground">
+              All plans include a 12-month commitment. $0 upfront cost.
             </p>
           </motion.div>
 
