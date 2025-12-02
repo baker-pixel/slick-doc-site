@@ -8,6 +8,7 @@ import { PageTransition } from "@/components/PageTransition";
 import Index from "./pages/Index";
 import GapAnalysis from "./pages/GapAnalysis";
 import QuickAssessment from "./pages/QuickAssessment";
+import QuickAnalysis from "./pages/QuickAnalysis";
 import ScheduleCall from "./pages/ScheduleCall";
 import Admin from "./pages/Admin";
 import System from "./pages/System";
@@ -26,6 +27,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<PageTransition><Index /></PageTransition>} />
         <Route path="/gap-analysis" element={<PageTransition><GapAnalysis /></PageTransition>} />
         <Route path="/quick-assessment" element={<PageTransition><QuickAssessment /></PageTransition>} />
+        <Route path="/quick-analysis" element={<PageTransition><QuickAnalysis /></PageTransition>} />
         <Route path="/schedule" element={<PageTransition><ScheduleCall /></PageTransition>} />
         <Route path="/system" element={<PageTransition><System /></PageTransition>} />
         <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />
