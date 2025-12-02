@@ -32,7 +32,7 @@ export function Header() {
             <img 
               src={logo} 
               alt="Orange Door Consultants" 
-              className="h-20 w-[280px] object-contain drop-shadow-md brightness-105 contrast-105" 
+              className="h-28 w-[320px] object-contain drop-shadow-md brightness-105 contrast-105 -my-4" 
             />
           </Link>
 
