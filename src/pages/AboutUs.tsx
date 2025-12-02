@@ -56,19 +56,6 @@ const principles = [
   },
 ];
 
-const team = [
-  {
-    name: "Co-Founder",
-    role: "Strategy & Growth",
-    bio: "UT Haslam graduate with a passion for helping local businesses compete in the digital landscape. Specializes in marketing strategy and business development.",
-  },
-  {
-    name: "Co-Founder",
-    role: "Operations & Analytics",
-    bio: "UT Haslam graduate focused on building systems that scale. Expert in marketing analytics, automation, and turning data into actionable insights.",
-  },
-];
-
 const AboutUs = () => {
   return (
     <div className="min-h-screen bg-background">
@@ -235,45 +222,6 @@ const AboutUs = () => {
                     <h4 className="font-semibold text-foreground mb-1">{principle.title}</h4>
                     <p className="text-muted-foreground">{principle.description}</p>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Team */}
-        <section className="section-padding bg-muted/30">
-          <div className="container-wide mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="text-center mb-12"
-            >
-              <h2 className="text-3xl sm:text-4xl font-display font-semibold text-foreground mb-4">
-                Meet the Founders
-              </h2>
-              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Two UT Haslam graduates with a shared mission to help local businesses thrive.
-              </p>
-            </motion.div>
-
-            <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-              {team.map((member, index) => (
-                <motion.div
-                  key={member.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className="bg-card border border-border rounded-xl p-6 text-center"
-                >
-                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <Users className="text-primary" size={32} />
-                  </div>
-                  <h4 className="font-semibold text-xl text-foreground mb-1">{member.name}</h4>
-                  <p className="text-primary font-medium text-sm mb-3">{member.role}</p>
-                  <p className="text-muted-foreground text-sm">{member.bio}</p>
                 </motion.div>
               ))}
             </div>
