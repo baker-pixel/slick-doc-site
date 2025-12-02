@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.send-gap-report]
 verify_jwt = false
+
+[functions.send-resume-link]
+verify_jwt = false

@@ -98,6 +98,7 @@ export type Database = {
           has_segmentation_drip: boolean | null
           id: string
           investing_in_seo: boolean | null
+          is_partial: boolean | null
           knows_best_lead_sources: boolean | null
           knows_organic_traffic: boolean | null
           kpi_tracking_frequency: string | null
@@ -120,6 +121,7 @@ export type Database = {
           reason_seeking_help: string | null
           repeat_customer_rate: string | null
           reputation_tool_name: string | null
+          resume_token: string | null
           revenue_new_customers_pct: number | null
           revenue_referrals_pct: number | null
           revenue_repeat_customers_pct: number | null
@@ -194,6 +196,7 @@ export type Database = {
           has_segmentation_drip?: boolean | null
           id?: string
           investing_in_seo?: boolean | null
+          is_partial?: boolean | null
           knows_best_lead_sources?: boolean | null
           knows_organic_traffic?: boolean | null
           kpi_tracking_frequency?: string | null
@@ -216,6 +219,7 @@ export type Database = {
           reason_seeking_help?: string | null
           repeat_customer_rate?: string | null
           reputation_tool_name?: string | null
+          resume_token?: string | null
           revenue_new_customers_pct?: number | null
           revenue_referrals_pct?: number | null
           revenue_repeat_customers_pct?: number | null
@@ -290,6 +294,7 @@ export type Database = {
           has_segmentation_drip?: boolean | null
           id?: string
           investing_in_seo?: boolean | null
+          is_partial?: boolean | null
           knows_best_lead_sources?: boolean | null
           knows_organic_traffic?: boolean | null
           kpi_tracking_frequency?: string | null
@@ -312,6 +317,7 @@ export type Database = {
           reason_seeking_help?: string | null
           repeat_customer_rate?: string | null
           reputation_tool_name?: string | null
+          resume_token?: string | null
           revenue_new_customers_pct?: number | null
           revenue_referrals_pct?: number | null
           revenue_repeat_customers_pct?: number | null
