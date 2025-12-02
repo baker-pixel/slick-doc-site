@@ -134,7 +134,7 @@ export default function Pricing() {
                 )}
                 <Card className={`h-full flex flex-col transition-all duration-300 hover:shadow-xl ${
                   plan.popular 
-                    ? "border-primary shadow-lg scale-105" 
+                    ? "border-primary shadow-lg" 
                     : "border-border hover:border-primary/50"
                 }`}>
                   <CardHeader className="text-center pb-4">
