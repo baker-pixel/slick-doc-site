@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { cn } from "@/lib/utils";
 
@@ -138,9 +138,11 @@ const Admin = () => {
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [selectedGaps, setSelectedGaps] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [contactSort, setContactSort] = useState<{ column: string; direction: 'asc' | 'desc' }>({ column: 'created_at', direction: 'desc' });
+  const [gapSort, setGapSort] = useState<{ column: string; direction: 'asc' | 'desc' }>({ column: 'created_at', direction: 'desc' });
 
   const filteredContacts = useMemo(() => {
-    return contacts.filter(contact => {
+    const filtered = contacts.filter(contact => {
       const matchesSearch = contactSearch === "" || 
         `${contact.first_name} ${contact.last_name}`.toLowerCase().includes(contactSearch.toLowerCase()) ||
         contact.email.toLowerCase().includes(contactSearch.toLowerCase()) ||
@@ -151,10 +153,17 @@ const Admin = () => {
       const matchesDateTo = !contactDateTo || contactDate <= new Date(contactDateTo.getTime() + 86400000);
       return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-  }, [contacts, contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
+    return filtered.sort((a, b) => {
+      const col = contactSort.column;
+      let aVal: string = col === 'name' ? `${a.first_name} ${a.last_name}` : String(a[col as keyof ContactSubmission] ?? '');
+      let bVal: string = col === 'name' ? `${b.first_name} ${b.last_name}` : String(b[col as keyof ContactSubmission] ?? '');
+      const comparison = aVal.localeCompare(bVal);
+      return contactSort.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [contacts, contactSearch, contactStatusFilter, contactDateFrom, contactDateTo, contactSort]);
 
   const filteredGapAnalyses = useMemo(() => {
-    return gapAnalyses.filter(gap => {
+    const filtered = gapAnalyses.filter(gap => {
       const matchesSearch = gapSearch === "" || 
         `${gap.first_name} ${gap.last_name}`.toLowerCase().includes(gapSearch.toLowerCase()) ||
         gap.email.toLowerCase().includes(gapSearch.toLowerCase()) ||
@@ -165,7 +174,33 @@ const Admin = () => {
       const matchesDateTo = !gapDateTo || gapDate <= new Date(gapDateTo.getTime() + 86400000);
       return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-  }, [gapAnalyses, gapSearch, gapStatusFilter, gapDateFrom, gapDateTo]);
+    return filtered.sort((a, b) => {
+      const col = gapSort.column;
+      let aVal: string = col === 'name' ? `${a.first_name} ${a.last_name}` : String(a[col as keyof GapAnalysisData] ?? '');
+      let bVal: string = col === 'name' ? `${b.first_name} ${b.last_name}` : String(b[col as keyof GapAnalysisData] ?? '');
+      const comparison = aVal.localeCompare(bVal);
+      return gapSort.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [gapAnalyses, gapSearch, gapStatusFilter, gapDateFrom, gapDateTo, gapSort]);
+
+  const handleContactSort = (column: string) => {
+    setContactSort(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const handleGapSort = (column: string) => {
+    setGapSort(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const SortIcon = ({ column, sort }: { column: string; sort: { column: string; direction: 'asc' | 'desc' } }) => {
+    if (sort.column !== column) return <ArrowUpDown className="w-4 h-4 ml-1 opacity-50" />;
+    return sort.direction === 'asc' ? <ArrowUp className="w-4 h-4 ml-1" /> : <ArrowDown className="w-4 h-4 ml-1" />;
+  };
 
   // Reset page when filters change
   useMemo(() => { setContactPage(1); }, [contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
@@ -517,11 +552,21 @@ const Admin = () => {
                           <th className="p-4 w-12">
                             <Checkbox checked={paginatedContacts.length > 0 && selectedContacts.size === paginatedContacts.length} onCheckedChange={toggleAllContacts} />
                           </th>
-                          <th className="text-left p-4 font-medium">Name</th>
-                          <th className="text-left p-4 font-medium">Business</th>
-                          <th className="text-left p-4 font-medium">Email</th>
-                          <th className="text-left p-4 font-medium">Status</th>
-                          <th className="text-left p-4 font-medium">Date</th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('name')}>
+                            <div className="flex items-center">Name<SortIcon column="name" sort={contactSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('business_name')}>
+                            <div className="flex items-center">Business<SortIcon column="business_name" sort={contactSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('email')}>
+                            <div className="flex items-center">Email<SortIcon column="email" sort={contactSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('status')}>
+                            <div className="flex items-center">Status<SortIcon column="status" sort={contactSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('created_at')}>
+                            <div className="flex items-center">Date<SortIcon column="created_at" sort={contactSort} /></div>
+                          </th>
                           <th className="text-left p-4 font-medium">Actions</th>
                         </tr>
                       </thead>
@@ -701,12 +746,24 @@ const Admin = () => {
                           <th className="p-4 w-12">
                             <Checkbox checked={paginatedGapAnalyses.length > 0 && selectedGaps.size === paginatedGapAnalyses.length} onCheckedChange={toggleAllGaps} />
                           </th>
-                          <th className="text-left p-4 font-medium">Name</th>
-                          <th className="text-left p-4 font-medium">Business</th>
-                          <th className="text-left p-4 font-medium">Email</th>
-                          <th className="text-left p-4 font-medium">Phone</th>
-                          <th className="text-left p-4 font-medium">Status</th>
-                          <th className="text-left p-4 font-medium">Date</th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('name')}>
+                            <div className="flex items-center">Name<SortIcon column="name" sort={gapSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('business_name')}>
+                            <div className="flex items-center">Business<SortIcon column="business_name" sort={gapSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('email')}>
+                            <div className="flex items-center">Email<SortIcon column="email" sort={gapSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('phone')}>
+                            <div className="flex items-center">Phone<SortIcon column="phone" sort={gapSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('status')}>
+                            <div className="flex items-center">Status<SortIcon column="status" sort={gapSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('created_at')}>
+                            <div className="flex items-center">Date<SortIcon column="created_at" sort={gapSort} /></div>
+                          </th>
                           <th className="text-left p-4 font-medium">Actions</th>
                         </tr>
                       </thead>
