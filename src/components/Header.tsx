@@ -29,7 +29,7 @@ export function Header() {
         <div className="flex items-center justify-between gap-8">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3">
-            <img src={logo} alt="Orange Door Consultants" className="h-14 w-[200px] object-contain" />
+            <img src={logo} alt="Orange Door Consultants" className="h-16 w-[240px] object-contain" />
           </Link>
 
           {/* Desktop Navigation */}
