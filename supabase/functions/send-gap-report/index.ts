@@ -188,7 +188,7 @@ const handler = async (req: Request): Promise<Response> => {
     `;
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Consultants <reports@orangedoormarketing.com>",
+      from: "Orange Door Consultants <onboarding@resend.dev>",
       to: [email],
       subject: `Your SYSTEM Gap Report for ${businessName}`,
       html: emailHtml,
