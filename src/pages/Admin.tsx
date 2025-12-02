@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { format, subDays, subMonths, startOfWeek, startOfMonth } from "date-fns";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -14,10 +14,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ContactSubmission {
   id: string;
@@ -141,6 +143,7 @@ const Admin = () => {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [contactSort, setContactSort] = useState<{ column: string; direction: 'asc' | 'desc' }>({ column: 'created_at', direction: 'desc' });
   const [gapSort, setGapSort] = useState<{ column: string; direction: 'asc' | 'desc' }>({ column: 'created_at', direction: 'desc' });
+  const [reportPeriod, setReportPeriod] = useState<'week' | 'month'>('week');
 
   const filteredContacts = useMemo(() => {
     const filtered = contacts.filter(contact => {
@@ -242,6 +245,109 @@ const Admin = () => {
   }, [gapAnalyses]);
 
   const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
+
+  const generatePDFReport = () => {
+    const today = new Date();
+    const startDate = reportPeriod === 'week' ? subDays(today, 7) : subMonths(today, 1);
+    const periodLabel = reportPeriod === 'week' ? 'Weekly' : 'Monthly';
+    
+    const periodContacts = contacts.filter(c => new Date(c.created_at) >= startDate);
+    const periodGaps = gapAnalyses.filter(g => new Date(g.created_at) >= startDate);
+    
+    const contactsByStatus: Record<string, number> = {};
+    periodContacts.forEach(c => { contactsByStatus[c.status] = (contactsByStatus[c.status] || 0) + 1; });
+    
+    const gapsByStatus: Record<string, number> = {};
+    periodGaps.forEach(g => { gapsByStatus[g.status] = (gapsByStatus[g.status] || 0) + 1; });
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${periodLabel} Summary Report`, pageWidth / 2, 20, { align: 'center' });
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Period: ${format(startDate, 'MMM d, yyyy')} - ${format(today, 'MMM d, yyyy')}`, pageWidth / 2, 30, { align: 'center' });
+    doc.text(`Generated: ${format(today, 'MMM d, yyyy h:mm a')}`, pageWidth / 2, 37, { align: 'center' });
+
+    // Summary Stats
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary Statistics', 14, 52);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total Contact Submissions: ${periodContacts.length}`, 14, 62);
+    doc.text(`Total Gap Analysis Submissions: ${periodGaps.length}`, 14, 70);
+    doc.text(`Combined Total: ${periodContacts.length + periodGaps.length}`, 14, 78);
+
+    // Contact Status Breakdown
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Contact Submissions by Status', 14, 95);
+    
+    const contactStatusRows = Object.entries(contactsByStatus).map(([status, count]) => [status, count.toString()]);
+    if (contactStatusRows.length > 0) {
+      autoTable(doc, {
+        startY: 100,
+        head: [['Status', 'Count']],
+        body: contactStatusRows,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] },
+      });
+    }
+
+    // Gap Analysis Status Breakdown
+    const gapStartY = (doc as any).lastAutoTable?.finalY + 15 || 130;
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Gap Analysis by Status', 14, gapStartY);
+    
+    const gapStatusRows = Object.entries(gapsByStatus).map(([status, count]) => [status, count.toString()]);
+    if (gapStatusRows.length > 0) {
+      autoTable(doc, {
+        startY: gapStartY + 5,
+        head: [['Status', 'Count']],
+        body: gapStatusRows,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] },
+      });
+    }
+
+    // Recent Contacts Table
+    const contactsStartY = (doc as any).lastAutoTable?.finalY + 15 || 180;
+    if (contactsStartY > 240) doc.addPage();
+    
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Recent Contact Submissions', 14, contactsStartY > 240 ? 20 : contactsStartY);
+    
+    const recentContacts = periodContacts.slice(0, 10).map(c => [
+      `${c.first_name} ${c.last_name}`,
+      c.business_name,
+      c.email,
+      c.status,
+      format(new Date(c.created_at), 'MMM d')
+    ]);
+    
+    if (recentContacts.length > 0) {
+      autoTable(doc, {
+        startY: (contactsStartY > 240 ? 25 : contactsStartY + 5),
+        head: [['Name', 'Business', 'Email', 'Status', 'Date']],
+        body: recentContacts,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: { 2: { cellWidth: 50 } },
+      });
+    }
+
+    // Save PDF
+    doc.save(`${periodLabel.toLowerCase()}_report_${format(today, 'yyyy-MM-dd')}.pdf`);
+    toast({ title: `${periodLabel} report downloaded` });
+  };
 
   // Reset page when filters change
   useMemo(() => { setContactPage(1); }, [contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
@@ -588,6 +694,35 @@ const Admin = () => {
                     </CardContent>
                   </Card>
                 </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Generate Summary Report</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Period:</span>
+                        <Select value={reportPeriod} onValueChange={(v: 'week' | 'month') => setReportPeriod(v)}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="week">Last 7 days</SelectItem>
+                            <SelectItem value="month">Last 30 days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button onClick={generatePDFReport}>
+                        <FileDown className="w-4 h-4 mr-2" />
+                        Download PDF Report
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-3">
+                      Generate a comprehensive PDF report including submission statistics, status breakdowns, and recent submissions.
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 
