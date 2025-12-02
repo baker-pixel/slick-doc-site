@@ -88,7 +88,7 @@ const faqs = [
   },
   {
     question: "Is there a contract or commitment?",
-    answer: "We work on a month-to-month basis with no long-term contracts. We believe in earning your business every month through results.",
+    answer: "All plans include a 12-month commitment with $0 upfront cost. This allows us to properly implement and optimize your SYSTEM for lasting results. We're confident you'll see the value within the first few months.",
   },
   {
     question: "What if I need something custom?",
