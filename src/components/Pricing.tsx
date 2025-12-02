@@ -19,7 +19,7 @@ const tiers = [
       "Basic SEO Cleanup",
       "Review Generation Setup",
       "Analytics & KPI Setup",
-      "Monthly GBP Posts",
+      "Monthly Google Business Profile Posts",
       "1 Blog Article/Month",
       "Quarterly SEO Tuning",
     ],
