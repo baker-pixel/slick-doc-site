@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import GapAnalysis from "./pages/GapAnalysis";
 import QuickAssessment from "./pages/QuickAssessment";
+import ScheduleCall from "./pages/ScheduleCall";
 import Admin from "./pages/Admin";
 import System from "./pages/System";
 import Report from "./pages/Report";
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/gap-analysis" element={<GapAnalysis />} />
           <Route path="/quick-assessment" element={<QuickAssessment />} />
+          <Route path="/schedule" element={<ScheduleCall />} />
           <Route path="/system" element={<System />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/report/:id" element={<Report />} />
