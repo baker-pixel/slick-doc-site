@@ -5,11 +5,61 @@ import { Link } from "react-router-dom";
 
 export function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center pt-20 overflow-hidden bg-gradient-to-b from-cream to-background">
-      {/* Background decoration */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 right-0 w-[600px] h-[600px] rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-primary/5 blur-3xl" />
+    <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 overflow-hidden">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-cream via-background to-secondary"
+          animate={{
+            backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
+          }}
+          transition={{
+            duration: 20,
+            repeat: Infinity,
+            ease: "linear",
+          }}
+          style={{ backgroundSize: "400% 400%" }}
+        />
+        
+        {/* Floating orbs */}
+        <motion.div
+          className="absolute top-1/4 right-1/4 w-[500px] h-[500px] rounded-full bg-primary/10 blur-3xl"
+          animate={{
+            x: [0, 100, 0],
+            y: [0, -50, 0],
+            scale: [1, 1.2, 1],
+          }}
+          transition={{
+            duration: 15,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+        <motion.div
+          className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-orange-light/20 blur-3xl"
+          animate={{
+            x: [0, -80, 0],
+            y: [0, 60, 0],
+            scale: [1, 0.9, 1],
+          }}
+          transition={{
+            duration: 12,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+        <motion.div
+          className="absolute top-1/2 left-1/2 w-[300px] h-[300px] rounded-full bg-navy/5 blur-3xl"
+          animate={{
+            x: [0, 50, -50, 0],
+            y: [0, -30, 30, 0],
+          }}
+          transition={{
+            duration: 18,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
       </div>
 
       <div className="container-wide mx-auto section-padding relative z-10">
