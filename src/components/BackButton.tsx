@@ -11,16 +11,16 @@ export function BackButton() {
         variant="ghost"
         size="sm"
         onClick={() => navigate(-1)}
-        className="gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full px-4"
+        className="gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full px-4 transition-all duration-200 hover:scale-105"
       >
-        <ArrowLeft size={16} />
+        <ArrowLeft size={16} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
         Back
       </Button>
       <Button
         variant="ghost"
         size="sm"
         asChild
-        className="gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full px-4"
+        className="gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-full px-4 transition-all duration-200 hover:scale-105"
       >
         <Link to="/">
           <Home size={16} />
