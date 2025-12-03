@@ -50,12 +50,12 @@
     --font-sans: "DM Sans", system-ui, sans-serif;
     --font-display: "Nunito", system-ui, sans-serif;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(220 40% 13% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(220 40% 13% / 0.1), 0 2px 4px -2px hsl(220 40% 13% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(220 40% 13% / 0.1), 0 4px 6px -4px hsl(220 40% 13% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(220 40% 13% / 0.1), 0 8px 10px -6px hsl(220 40% 13% / 0.1);
-    --shadow-glow: 0 0 40px hsl(24 95% 53% / 0.3);
+    /* Shadows - softer */
+    --shadow-sm: 0 1px 2px 0 hsl(220 40% 13% / 0.03);
+    --shadow-md: 0 4px 6px -1px hsl(220 40% 13% / 0.05), 0 2px 4px -2px hsl(220 40% 13% / 0.04);
+    --shadow-lg: 0 10px 15px -3px hsl(220 40% 13% / 0.06), 0 4px 6px -4px hsl(220 40% 13% / 0.04);
+    --shadow-xl: 0 20px 25px -5px hsl(220 40% 13% / 0.06), 0 8px 10px -6px hsl(220 40% 13% / 0.04);
+    --shadow-glow: 0 0 30px hsl(24 95% 53% / 0.15);
 
     /* Gradients */
     --gradient-orange: linear-gradient(135deg, hsl(24 95% 53%), hsl(24 100% 60%));
