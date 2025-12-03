@@ -3,7 +3,8 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
 import { motion } from "framer-motion";
-import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, AlertTriangle, XCircle, Download } from "lucide-react";
+import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,6 +119,100 @@ const QuickAnalysis = () => {
     return <XCircle className="h-5 w-5 text-red-600" />;
   };
 
+  const downloadPDF = () => {
+    if (!result) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let yPos = 20;
+
+    // Title
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("Website Analysis Report", pageWidth / 2, yPos, { align: "center" });
+    yPos += 10;
+
+    // URL
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100);
+    doc.text(url, pageWidth / 2, yPos, { align: "center" });
+    yPos += 15;
+
+    // Overall Score
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
+    doc.text(`Overall Score: ${result.overallScore}/100`, pageWidth / 2, yPos, { align: "center" });
+    yPos += 10;
+
+    // Summary
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    const summaryLines = doc.splitTextToSize(result.summary, pageWidth - 40);
+    doc.text(summaryLines, 20, yPos);
+    yPos += summaryLines.length * 5 + 10;
+
+    // Helper function for sections
+    const addSection = (title: string, score: number, findings: string[], recommendations: string[]) => {
+      if (yPos > 250) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0);
+      doc.text(`${title} - ${score}/100`, 20, yPos);
+      yPos += 8;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Findings:", 20, yPos);
+      yPos += 5;
+
+      doc.setFont("helvetica", "normal");
+      findings.forEach((finding) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        const lines = doc.splitTextToSize(`• ${finding}`, pageWidth - 45);
+        doc.text(lines, 25, yPos);
+        yPos += lines.length * 4 + 2;
+      });
+
+      yPos += 3;
+      doc.setFont("helvetica", "bold");
+      doc.text("Recommendations:", 20, yPos);
+      yPos += 5;
+
+      doc.setFont("helvetica", "normal");
+      recommendations.forEach((rec) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        const lines = doc.splitTextToSize(`→ ${rec}`, pageWidth - 45);
+        doc.text(lines, 25, yPos);
+        yPos += lines.length * 4 + 2;
+      });
+
+      yPos += 10;
+    };
+
+    addSection("SEO & Visibility", result.seo.score, result.seo.findings, result.seo.recommendations);
+    addSection("Conversion Elements", result.conversion.score, result.conversion.findings, result.conversion.recommendations);
+    addSection("Technical Performance", result.technical.score, result.technical.findings, result.technical.recommendations);
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(`Generated on ${new Date().toLocaleDateString()}`, pageWidth / 2, 285, { align: "center" });
+
+    doc.save(`website-analysis-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -222,6 +317,14 @@ const QuickAnalysis = () => {
                     animate={{ opacity: 1, y: 0 }}
                     className="mt-10 space-y-8"
                   >
+                    {/* Download Button */}
+                    <div className="flex justify-end">
+                      <Button onClick={downloadPDF} variant="outline" className="gap-2">
+                        <Download className="h-4 w-4" />
+                        Download PDF
+                      </Button>
+                    </div>
+
                     {/* Overall Score */}
                     <div className="text-center">
                       <h2 className="text-xl font-semibold mb-4">Overall Website Score</h2>
