@@ -104,78 +104,27 @@ const ARPresentation = () => {
     audioContextRef.current = audioContext;
     
     const masterGain = audioContext.createGain();
-    masterGain.gain.value = 0.12;
+    masterGain.gain.value = 0.06; // Very quiet
     masterGain.connect(audioContext.destination);
     gainNodeRef.current = masterGain;
 
-    // Low-pass filter for warmth
-    const filter = audioContext.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 800;
-    filter.Q.value = 0.5;
-    filter.connect(masterGain);
-
-    // Deep, warm pad frequencies (A2, E3, A3 - peaceful open fifth)
-    const frequencies = [110, 164.81, 220]; 
+    // Single elegant pad - just two notes (perfect fifth)
+    const frequencies = [174.61, 261.63]; // F3 and C4 - soft, elegant
     
     frequencies.forEach((freq, i) => {
       const osc = audioContext.createOscillator();
       const oscGain = audioContext.createGain();
       
-      // Triangle waves are softer than sine
-      osc.type = 'triangle';
+      osc.type = 'sine';
       osc.frequency.value = freq;
-      oscGain.gain.value = 0.3 - (i * 0.08);
-      
-      // Very slow breathing LFO
-      const lfo = audioContext.createOscillator();
-      const lfoGain = audioContext.createGain();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.03 + (i * 0.01); // Super slow - like breathing
-      lfoGain.gain.value = 1.5;
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-      lfo.start();
-      
-      // Volume swell
-      const volLfo = audioContext.createOscillator();
-      const volLfoGain = audioContext.createGain();
-      volLfo.type = 'sine';
-      volLfo.frequency.value = 0.05;
-      volLfoGain.gain.value = 0.1;
-      volLfo.connect(volLfoGain);
-      volLfoGain.connect(oscGain.gain);
-      volLfo.start();
+      oscGain.gain.value = i === 0 ? 0.5 : 0.3;
       
       osc.connect(oscGain);
-      oscGain.connect(filter);
+      oscGain.connect(masterGain);
       osc.start();
       
       oscillatorsRef.current.push(osc);
     });
-
-    // Add soft white noise for texture (like ocean)
-    const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 2, audioContext.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < noiseData.length; i++) {
-      noiseData[i] = (Math.random() * 2 - 1) * 0.02;
-    }
-    
-    const noiseSource = audioContext.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
-    noiseSource.loop = true;
-    
-    const noiseFilter = audioContext.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.value = 400;
-    
-    const noiseGain = audioContext.createGain();
-    noiseGain.gain.value = 0.3;
-    
-    noiseSource.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(masterGain);
-    noiseSource.start();
   };
 
   const startPresentation = () => {
