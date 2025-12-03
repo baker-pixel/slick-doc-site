@@ -58,24 +58,31 @@ serve(async (req) => {
 
     const industryContext = industry ? `\nThe business is in the ${industry} industry. Tailor your recommendations to this industry's best practices and customer expectations.` : "";
 
-    const systemPrompt = `You are an expert digital marketing and web development analyst specializing in helping small businesses grow. Analyze the provided website HTML and provide a comprehensive, actionable assessment.${industryContext}
+    const systemPrompt = `You are an expert digital marketing and web development analyst. Analyze the website HTML thoroughly and provide HONEST, VARIED scores based on what you ACTUALLY find.${industryContext}
+
+CRITICAL: Do NOT default to average scores. Each website is different - scores should range from 20-95 based on actual evidence:
+- If meta tags are missing/poor: SEO score should be 30-50
+- If there are no clear CTAs: Conversion score should be 25-45
+- If the site has excellent SEO with proper h1, meta descriptions, schema: Score 80-95
+- If mediocre: 50-65
+- Base EVERY score on specific evidence from the HTML
 
 Return your analysis as a JSON object with this exact structure:
 {
-  "overallScore": <number 0-100>,
+  "overallScore": <number 0-100 - weighted average of sub-scores>,
   "seo": {
-    "score": <number 0-100>,
-    "findings": [<3-4 specific findings about SEO elements>],
+    "score": <number 0-100 based on: title tag quality, meta description, h1 tags, heading hierarchy, image alts, schema markup, canonical tags>,
+    "findings": [<3-4 SPECIFIC findings citing actual HTML elements found or missing>],
     "recommendations": [<2-3 actionable SEO recommendations>]
   },
   "conversion": {
-    "score": <number 0-100>,
-    "findings": [<3-4 specific findings about conversion elements like CTAs, forms, trust signals>],
+    "score": <number 0-100 based on: clear CTAs, form presence, phone numbers visible, trust signals, testimonials, pricing clarity>,
+    "findings": [<3-4 SPECIFIC findings about conversion elements>],
     "recommendations": [<2-3 actionable conversion recommendations>]
   },
   "technical": {
-    "score": <number 0-100>,
-    "findings": [<3-4 specific findings about technical aspects like structure, accessibility, mobile-friendliness indicators>],
+    "score": <number 0-100 based on: clean HTML structure, accessibility attributes, mobile viewport, script/style organization>,
+    "findings": [<3-4 SPECIFIC technical findings>],
     "recommendations": [<2-3 actionable technical recommendations>]
   },
   "quickWins": [
@@ -100,20 +107,17 @@ Return your analysis as a JSON object with this exact structure:
       "tasks": ["<task 1>", "<task 2>"]
     }
   },
-  "summary": "<2-3 sentence overall summary of the website's digital marketing health>"
+  "summary": "<2-3 sentence summary>"
 }
 
-Scoring guidelines:
-- 80-100: Excellent - Well optimized
-- 60-79: Good - Some improvements needed
-- 40-59: Fair - Significant gaps
-- 0-39: Poor - Major issues
+SCORING RUBRIC (be strict):
+- 85-100: ONLY if you find: proper meta tags, schema markup, multiple CTAs, testimonials, proper heading hierarchy
+- 70-84: Good basics present, some optimization needed
+- 50-69: Major elements missing (like no meta description, weak CTAs)
+- 30-49: Significant issues (missing h1, no clear conversion path)
+- 0-29: Critical failures (broken structure, no SEO elements at all)
 
-Quick Wins should be 3 specific things they can fix TODAY or this week that will have immediate impact.
-
-The Action Plan should be a realistic 90-day roadmap prioritized by impact and effort.
-
-Be specific and actionable in your findings and recommendations. Reference actual elements you find (or don't find) in the HTML.`;
+Reference SPECIFIC elements from the HTML to justify each score.`;
 
     const userPrompt = `Analyze this website HTML for SEO, conversion optimization, and technical performance:
 
