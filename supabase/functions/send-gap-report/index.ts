@@ -25,6 +25,7 @@ interface ReportEmailRequest {
   email: string;
   firstName: string;
   businessName: string;
+  resumeToken?: string;
   scorecard: {
     scores: ScoreItem[];
     overallScore: number;
@@ -51,7 +52,11 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, firstName, businessName, scorecard, analysis }: ReportEmailRequest = await req.json();
+    const { email, firstName, businessName, resumeToken, scorecard, analysis }: ReportEmailRequest = await req.json();
+    
+    const dashboardUrl = resumeToken 
+      ? `https://orangedoormarketing.com/dashboard/${resumeToken}` 
+      : null;
 
     console.log("Sending gap report to:", email);
 
@@ -163,9 +168,22 @@ const handler = async (req: Request): Promise<Response> => {
               ${recommendationsList}
               ` : ""}
 
+              ${dashboardUrl ? `
+              <!-- Dashboard Access -->
+              <div style="background: linear-gradient(135deg, #fef7ed 0%, #ffedd5 100%); border: 2px solid #f97316; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+                <h3 style="color: #9a3412; margin: 0 0 8px; font-size: 18px;">📊 Your Personal Dashboard</h3>
+                <p style="color: #c2410c; font-size: 14px; margin: 0 0 16px;">
+                  Access your SYSTEM scores, recommendations, and track your progress anytime.
+                </p>
+                <a href="${dashboardUrl}" style="display: inline-block; background: #f97316; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">
+                  View Your Dashboard →
+                </a>
+              </div>
+              ` : ""}
+
               <!-- CTA -->
               <div style="text-align: center; margin: 32px 0;">
-                <a href="https://orangedoormarketing.com/contact" style="display: inline-block; background: #f97316; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600;">
+                <a href="https://orangedoormarketing.com/contact" style="display: inline-block; background: #111827; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600;">
                   Schedule Your Strategy Call
                 </a>
               </div>

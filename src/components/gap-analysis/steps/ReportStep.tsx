@@ -11,7 +11,8 @@ import {
   Mail,
   Share2,
   Check,
-  Link as LinkIcon
+  Link as LinkIcon,
+  LayoutDashboard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,9 +33,10 @@ interface AIAnalysis {
 interface ReportStepProps {
   formData: GapAnalysisData;
   submissionId: string | null;
+  resumeToken?: string | null;
 }
 
-export function ReportStep({ formData, submissionId }: ReportStepProps) {
+export function ReportStep({ formData, submissionId, resumeToken }: ReportStepProps) {
   const { toast } = useToast();
   const [scorecard, setScorecard] = useState<SystemScorecard | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
@@ -183,6 +185,7 @@ export function ReportStep({ formData, submissionId }: ReportStepProps) {
           email: formData.email,
           firstName: formData.firstName,
           businessName: formData.businessName,
+          resumeToken: resumeToken,
           scorecard: scorecard,
           analysis,
         },
@@ -247,17 +250,31 @@ export function ReportStep({ formData, submissionId }: ReportStepProps) {
               A detailed report has been sent to {formData.email}
             </p>
           )}
-          {shareableUrl && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={copyShareLink}
-              className="gap-2"
-            >
-              {copied ? <Check size={14} /> : <LinkIcon size={14} />}
-              {copied ? "Link Copied!" : "Copy Shareable Link"}
-            </Button>
-          )}
+          <div className="flex flex-wrap justify-center gap-2">
+            {resumeToken && (
+              <Link to={`/dashboard/${resumeToken}`}>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-2 bg-primary hover:bg-orange-dark"
+                >
+                  <LayoutDashboard size={14} />
+                  View Your Dashboard
+                </Button>
+              </Link>
+            )}
+            {shareableUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyShareLink}
+                className="gap-2"
+              >
+                {copied ? <Check size={14} /> : <LinkIcon size={14} />}
+                {copied ? "Link Copied!" : "Copy Shareable Link"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

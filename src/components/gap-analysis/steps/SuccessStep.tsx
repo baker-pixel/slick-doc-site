@@ -1,13 +1,14 @@
 import { motion } from "framer-motion";
-import { CheckCircle, ArrowRight } from "lucide-react";
+import { CheckCircle, ArrowRight, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
 interface SuccessStepProps {
   businessName: string;
+  resumeToken?: string;
 }
 
-export function SuccessStep({ businessName }: SuccessStepProps) {
+export function SuccessStep({ businessName, resumeToken }: SuccessStepProps) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -26,6 +27,24 @@ export function SuccessStep({ businessName }: SuccessStepProps) {
         Thank you, <span className="font-medium text-foreground">{businessName}</span>! 
         We&apos;ve received your intake form and will begin analyzing your digital presence immediately.
       </p>
+
+      {resumeToken && (
+        <div className="bg-primary/10 border border-primary/20 rounded-xl p-6 max-w-lg mx-auto mb-8">
+          <h3 className="font-semibold text-foreground mb-3 flex items-center justify-center gap-2">
+            <LayoutDashboard size={20} className="text-primary" />
+            Your Personal Dashboard
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Access your personalized dashboard anytime to view your SYSTEM scores, recommendations, and track your progress.
+          </p>
+          <Link to={`/dashboard/${resumeToken}`}>
+            <Button className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2">
+              View Your Dashboard
+              <ArrowRight size={16} />
+            </Button>
+          </Link>
+        </div>
+      )}
 
       <div className="bg-secondary/50 rounded-xl p-6 max-w-lg mx-auto mb-8">
         <h3 className="font-semibold text-foreground mb-3">What happens next?</h3>
@@ -50,7 +69,7 @@ export function SuccessStep({ businessName }: SuccessStepProps) {
       </div>
 
       <Link to="/">
-        <Button className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2">
+        <Button variant="outline" className="gap-2">
           Return to Homepage
           <ArrowRight size={16} />
         </Button>
