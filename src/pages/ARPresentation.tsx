@@ -92,26 +92,30 @@ const slides = [
 
 const ARPresentation = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Background music - calm ambient
-  useEffect(() => {
+  const startPresentation = () => {
+    setHasStarted(true);
+    setIsAutoPlaying(true);
     if (audioRef.current) {
       audioRef.current.volume = 0.3;
       audioRef.current.loop = true;
-      if (!isMuted) {
-        audioRef.current.play().catch(() => {});
-      }
+      audioRef.current.play().catch(console.error);
     }
-  }, []);
+  };
 
-  useEffect(() => {
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
     if (audioRef.current) {
-      audioRef.current.muted = isMuted;
+      if (isMuted) {
+        audioRef.current.play().catch(console.error);
+      }
+      audioRef.current.muted = !isMuted;
     }
-  }, [isMuted]);
+  };
 
   useEffect(() => {
     if (!isAutoPlaying) return;
@@ -141,6 +145,45 @@ const ARPresentation = () => {
         src="https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3"
         preload="auto"
       />
+
+      {/* Start Screen - Required for audio to play */}
+      {!hasStarted && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 z-50 flex items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800"
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-center"
+          >
+            <div className="inline-flex gap-1 text-4xl md:text-6xl font-bold mb-6">
+              {["S", "Y", "S", "T", "E", "M"].map((letter, i) => (
+                <motion.span
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 + i * 0.1 }}
+                  className="text-white"
+                >
+                  {letter}
+                </motion.span>
+              ))}
+            </div>
+            <p className="text-white/60 mb-8">Interactive Presentation</p>
+            <Button
+              size="lg"
+              onClick={startPresentation}
+              className="bg-orange-500 hover:bg-orange-600 text-lg px-8 py-6"
+            >
+              <Volume2 className="w-5 h-5 mr-2" />
+              Tap to Start with Sound
+            </Button>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Animated Background */}
       <div className="absolute inset-0">
@@ -226,7 +269,7 @@ const ARPresentation = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsMuted(!isMuted)}
+            onClick={toggleMute}
             className="text-white/70 hover:text-white hover:bg-white/10"
           >
             {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
