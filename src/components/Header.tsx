@@ -28,11 +28,11 @@ export function Header() {
       <nav className="container-wide mx-auto px-4 md:px-8 py-3">
         <div className="flex items-center justify-between gap-8">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3 shrink-0">
             <img 
               src={logo} 
               alt="Orange Door Consultants" 
-              className="h-28 w-[320px] object-contain drop-shadow-md brightness-105 contrast-105 -my-4" 
+              className="h-12 sm:h-16 md:h-24 lg:h-28 w-auto object-contain drop-shadow-md brightness-105 contrast-105 md:-my-3" 
             />
           </Link>
 

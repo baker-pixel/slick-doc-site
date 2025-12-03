@@ -318,8 +318,8 @@ const QuickAnalysis = () => {
                     className="mt-10 space-y-8"
                   >
                     {/* Download Button */}
-                    <div className="flex justify-end">
-                      <Button onClick={downloadPDF} variant="outline" className="gap-2">
+                    <div className="flex justify-center sm:justify-end">
+                      <Button onClick={downloadPDF} variant="outline" className="gap-2 w-full sm:w-auto">
                         <Download className="h-4 w-4" />
                         Download PDF
                       </Button>

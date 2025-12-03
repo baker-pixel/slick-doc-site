@@ -126,27 +126,27 @@ export function SystemSection() {
           transition={{ duration: 0.3 }}
           className="max-w-3xl mx-auto mb-16"
         >
-          <div className="card-elevated p-8 sm:p-10">
-            <div className="flex items-start gap-6">
+          <div className="card-elevated p-6 sm:p-8 md:p-10">
+            <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
               <div
                 className={cn(
-                  "w-16 h-16 rounded-2xl flex items-center justify-center shrink-0",
+                  "w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center shrink-0",
                   systemSteps[activeStep].color
                 )}
               >
                 {(() => {
                   const Icon = systemSteps[activeStep].icon;
-                  return <Icon size={28} />;
+                  return <Icon size={24} className="sm:w-7 sm:h-7" />;
                 })()}
               </div>
               <div>
                 <div className="text-sm font-medium text-primary mb-1">
                   {systemSteps[activeStep].subtitle}
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-display font-semibold text-foreground mb-3">
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-display font-semibold text-foreground mb-3">
                   {systemSteps[activeStep].title}
                 </h3>
-                <p className="text-muted-foreground leading-relaxed">
+                <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
                   {systemSteps[activeStep].description}
                 </p>
               </div>

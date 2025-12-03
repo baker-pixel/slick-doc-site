@@ -133,7 +133,7 @@
 
 @layer components {
   .section-padding {
-    @apply px-4 sm:px-6 lg:px-8 py-16 md:py-24;
+    @apply px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-24;
   }
 
   .container-narrow {

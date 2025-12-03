@@ -127,7 +127,7 @@ export default function ScheduleCall() {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <main className="pt-32 pb-20">
+        <main className="pt-24 sm:pt-28 md:pt-32 pb-20">
           <div className="container-wide mx-auto section-padding">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -164,12 +164,12 @@ export default function ScheduleCall() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="pt-32 pb-20">
+      <main className="pt-24 sm:pt-28 md:pt-32 pb-20">
         <div className="container-wide mx-auto section-padding">
           <div className="mb-6">
             <BackButton />
           </div>
-          <div className="grid lg:grid-cols-2 gap-16 items-start">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-start">
             {/* Left Column - Info */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -183,7 +183,7 @@ export default function ScheduleCall() {
                 </span>
               </div>
 
-              <h1 className="text-4xl lg:text-5xl font-display font-semibold text-foreground mb-6">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-semibold text-foreground mb-6">
                 Schedule Your{" "}
                 <span className="text-gradient">Strategy Call</span>
               </h1>
@@ -228,7 +228,7 @@ export default function ScheduleCall() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              <div className="bg-card border border-border rounded-2xl p-8 shadow-lg">
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-8 shadow-lg">
                 <h2 className="text-xl font-semibold text-foreground mb-6">
                   Pick a Time That Works
                 </h2>

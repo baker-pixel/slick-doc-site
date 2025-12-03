@@ -639,8 +639,8 @@ const Admin = () => {
           <div className="mb-4">
             <BackButton />
           </div>
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-display font-semibold">Admin Dashboard</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <h1 className="text-2xl sm:text-3xl font-display font-semibold">Admin Dashboard</h1>
             <Button variant="outline" onClick={() => fetchData(storedPassword)} disabled={isLoading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
