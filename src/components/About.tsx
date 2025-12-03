@@ -6,27 +6,27 @@ import { MapPin, GraduationCap, Users, Target } from "lucide-react";
 const values = [
   {
     icon: MapPin,
-    title: "Locally Rooted",
+    title: "100% Done-For-You",
     description:
-      "We're not a distant agency. We're part of the East Tennessee community, serving Knox, Blount, Sevier, Anderson, Loudon, Roane, and surrounding counties.",
+      "You don't lift a finger. We handle every aspect of your digital marketing—strategy, execution, optimization, and reporting.",
   },
   {
     icon: GraduationCap,
-    title: "Haslam Educated",
+    title: "Zero Learning Curve",
     description:
-      "Founded by two graduates of the University of Tennessee's Haslam College of Business, bringing academic rigor to practical marketing.",
+      "No training required. No software to learn. No tasks on your plate. We're your complete outsourced marketing department.",
   },
   {
     icon: Users,
-    title: "SMB Focused",
+    title: "Built for Busy Owners",
     description:
-      "We understand limited staff, limited time, and limited budgets. Our system is built for real-world business constraints.",
+      "You're running a business, not learning marketing. We take it completely off your hands so you can focus on what you do best.",
   },
   {
     icon: Target,
-    title: "Results Driven",
+    title: "Full Accountability",
     description:
-      "No fluff. No gimmicks. Just a proven, repeatable system that brings order to the chaos and delivers measurable growth.",
+      "We own the results. Monthly reports show exactly what we're doing and how it's working. You just review the wins.",
   },
 ];
 
@@ -48,26 +48,26 @@ export function About() {
               About Orange Door
             </span>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-semibold text-foreground mb-6">
-              East Tennessee&apos;s Digital Marketing Partner
+              Your Complete Marketing Team—Without the Headache
             </h2>
             <p className="text-muted-foreground text-lg mb-6 leading-relaxed">
-              Running a small or midsize business in East Tennessee means doing
-              more with less. Most owners juggle operations, sales, staffing, and
-              finances—managing marketing only in the leftover hours of the week.
+              <span className="font-semibold text-foreground">You have a business to run.</span>{" "}
+              You shouldn't have to become a marketing expert, manage freelancers, 
+              or figure out which tools to use. That's our job—not yours.
             </p>
             <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-              Orange Door exists to change that. We bring structure and clarity
-              using a proven 6-Step Digital Marketing SYSTEM built specifically
-              for SMBs—not corporations.
+              Orange Door is your fully outsourced marketing department. We handle 
+              everything from strategy to execution to reporting. You simply 
+              watch your business grow while we do all the heavy lifting.
             </p>
 
             <div className="p-6 rounded-xl bg-primary/5 border border-primary/20">
               <h3 className="font-display font-semibold text-xl text-foreground mb-2">
-                Our Mission
+                Our Promise
               </h3>
               <p className="text-muted-foreground italic">
-                &ldquo;Give local SMBs a proven, structured, no-nonsense digital
-                marketing system that finally levels the playing field.&rdquo;
+                &ldquo;You focus on running your business. We handle 100% of your 
+                digital marketing. No tasks. No training. No hassle.&rdquo;
               </p>
             </div>
           </motion.div>

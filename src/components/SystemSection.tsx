@@ -15,54 +15,54 @@ const systemSteps = [
   {
     letter: "S",
     title: "Search & Visibility",
-    subtitle: "Get Found",
+    subtitle: "We Get You Found",
     description:
-      "Make sure customers can find you when they need you. Google search, local SEO, reviews, social visibility, and paid ads.",
+      "We optimize your Google presence, manage your local SEO, run your paid ads, and generate reviews—all without any effort from you.",
     icon: Search,
     color: "bg-primary/10 text-primary",
   },
   {
     letter: "Y",
     title: "Yield Optimization",
-    subtitle: "Convert Visitors",
+    subtitle: "We Convert Your Visitors",
     description:
-      "Turn website visitors into real leads. Clear messaging, fast pages, mobile-friendly design, and effective CTAs.",
+      "We build and optimize your website, write your copy, design your pages, and test your CTAs to turn visitors into leads.",
     icon: TrendingUp,
     color: "bg-emerald-500/10 text-emerald-600",
   },
   {
     letter: "S",
     title: "Sequence & Nurture",
-    subtitle: "Warm Up Leads",
+    subtitle: "We Warm Up Your Leads",
     description:
-      "Automated email sequences, SMS reminders, retargeting ads, and chat follow-ups that convert curious visitors into motivated buyers.",
+      "We create and manage your email sequences, SMS campaigns, and retargeting ads—all running on autopilot while you sleep.",
     icon: Mail,
     color: "bg-blue-500/10 text-blue-600",
   },
   {
     letter: "T",
     title: "Transaction Activation",
-    subtitle: "Close Deals",
+    subtitle: "We Help You Close",
     description:
-      "Speed to lead response, booking systems, quoting process optimization, and follow-up sequences that turn warm leads into customers.",
+      "We set up your booking systems, optimize your quoting process, and build follow-up sequences that turn leads into customers.",
     icon: CreditCard,
     color: "bg-violet-500/10 text-violet-600",
   },
   {
     letter: "E",
     title: "Engagement & Retention",
-    subtitle: "Build Loyalty",
+    subtitle: "We Build Your Loyalty",
     description:
-      "Review generation, post-purchase follow-up, loyalty incentives, and referral programs that turn customers into advocates.",
+      "We run your review campaigns, manage post-purchase follow-ups, and create referral programs—you just watch repeat business grow.",
     icon: Heart,
     color: "bg-rose-500/10 text-rose-600",
   },
   {
     letter: "M",
     title: "Metrics & Improvement",
-    subtitle: "Track & Optimize",
+    subtitle: "We Track & Report",
     description:
-      "GA4 setup, KPI dashboards, attribution tracking, and monthly reporting that creates a continuous improvement loop.",
+      "We set up your analytics, build your dashboards, track your KPIs, and send you monthly reports. You just review the wins.",
     icon: BarChart3,
     color: "bg-amber-500/10 text-amber-600",
   },
@@ -84,14 +84,14 @@ export function SystemSection() {
           className="text-center mb-16"
         >
           <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-            Our Proven Framework
+            We Execute Everything
           </span>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-semibold text-foreground mb-4">
             The 6-Step <span className="text-gradient">SYSTEM</span>
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-            A complete, structured digital marketing engine designed specifically
-            for small and midsize businesses.
+            <span className="font-semibold text-foreground">We handle all 6 steps—you handle zero.</span>{" "}
+            This is the complete done-for-you marketing engine we build and run for you.
           </p>
         </motion.div>
 

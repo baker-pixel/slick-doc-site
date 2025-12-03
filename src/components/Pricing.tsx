@@ -11,17 +11,17 @@ const tiers = [
     name: "SYSTEM Foundation",
     level: "Level I",
     price: "249",
-    description: "For businesses with light-to-moderate gaps that need structure and optimization.",
+    description: "We optimize your existing digital presence. You do nothing—we handle it all.",
     scoreRange: "65-100",
     features: [
-      "Website Conversion Tune-Up",
-      "Local Visibility Upgrade",
-      "Basic SEO Cleanup",
-      "Review Generation Setup",
-      "Analytics & KPI Setup",
-      "Monthly Google Business Profile Posts",
-      "1 Blog Article/Month",
-      "Quarterly SEO Tuning",
+      "We tune up your website for conversions",
+      "We boost your local visibility",
+      "We clean up your SEO",
+      "We set up review generation",
+      "We configure your analytics",
+      "We post to your Google Business Profile",
+      "We write 1 blog article/month",
+      "We optimize SEO quarterly",
     ],
     popular: false,
   },
@@ -30,17 +30,17 @@ const tiers = [
     level: "Level II",
     price: "449",
     priceSuffix: "–549",
-    description: "For SMBs with moderate gaps who need activation across multiple channels.",
+    description: "We build and run multi-channel campaigns. You approve—we execute everything.",
     scoreRange: "40-64",
     features: [
       "Everything in Level I",
-      "Landing Page Pack (3-5 pages)",
-      "Email & SMS Automation",
-      "Retargeting Ads Setup",
-      "CRM Pipeline Optimization",
-      "2 Blogs/Month",
-      "Monthly SEO Optimization",
-      "Monthly Strategy Call",
+      "We build 3-5 landing pages",
+      "We create email & SMS automation",
+      "We run your retargeting ads",
+      "We optimize your CRM pipeline",
+      "We write 2 blogs/month",
+      "We optimize SEO monthly",
+      "We brief you on monthly calls",
     ],
     popular: true,
   },
@@ -49,17 +49,17 @@ const tiers = [
     level: "Level III",
     price: "799",
     priceSuffix: "–999",
-    description: "For businesses requiring a full rebuild of their digital infrastructure.",
+    description: "We rebuild your entire digital infrastructure from scratch. Total hands-off for you.",
     scoreRange: "0-39",
     features: [
       "Everything in Level II",
-      "Full Website Rebuild",
-      "Advanced SEO Program",
-      "Lead Magnet Development",
-      "Full Funnel Buildout",
-      "Sales Enablement System",
-      "Retention Engine Setup",
-      "Full Analytics Suite",
+      "We rebuild your entire website",
+      "We run advanced SEO programs",
+      "We create lead magnets for you",
+      "We build your complete sales funnel",
+      "We set up sales enablement",
+      "We build your retention engine",
+      "We deliver full analytics suite",
     ],
     popular: false,
   },
@@ -80,14 +80,14 @@ export function Pricing() {
           className="text-center mb-16"
         >
           <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-            Marketing as a Service
+            100% Done-For-You
           </span>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-semibold text-foreground mb-4">
-            Simple, Transparent Pricing
+            One Monthly Fee. We Do Everything.
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-            No à-la-carte. No one-off projects. Just complete, outcome-driven systems 
-            that create predictable growth.
+            <span className="font-semibold text-foreground">Zero work on your end.</span>{" "}
+            Choose your level, and we handle strategy, execution, optimization, and reporting—completely hands-off for you.
           </p>
         </motion.div>
 
