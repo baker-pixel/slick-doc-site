@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import heroIllustration from "@/assets/hero-illustration.png";
+import logo from "@/assets/logo.png";
 
 export function Hero() {
   return (
@@ -183,9 +183,9 @@ export function Hero() {
               className="relative"
             >
               <img
-                src={heroIllustration}
-                alt="Digital marketing growth dashboard with analytics and upward trending charts"
-                className="w-full h-auto rounded-2xl shadow-elevated"
+                src={logo}
+                alt="Orange Door Marketing logo"
+                className="w-full max-w-md h-auto"
               />
               {/* Decorative glow behind image */}
               <div className="absolute -inset-4 bg-primary/20 blur-3xl rounded-full -z-10" />
