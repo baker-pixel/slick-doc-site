@@ -1,73 +1,123 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, ChevronLeft, Play, Pause } from "lucide-react";
+import { ChevronRight, ChevronLeft, Play, Pause, Volume2, VolumeX, Search, TrendingUp, Mail, CreditCard, Heart, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const slides = [
+const systemSteps = [
   {
     id: 1,
-    title: "Orange Door Marketing",
-    subtitle: "Your Growth Partner",
-    description: "Full-service digital marketing agency in Knoxville, TN",
-    icon: "🚀",
-    color: "from-primary to-primary/70",
+    letter: "S",
+    title: "Search & Visibility",
+    subtitle: "Get Found",
+    description: "Make sure customers can find you when they need you",
+    icon: Search,
+    color: "from-orange-500 to-orange-600",
+    details: ["SEO Strategy", "Local SEO", "Paid Ads", "Social Presence"],
   },
   {
     id: 2,
-    title: "The SYSTEM",
-    subtitle: "Strategic Framework",
-    description: "Our proven 7-pillar approach to sustainable growth",
-    icon: "⚙️",
-    color: "from-blue-500 to-blue-700",
-    pillars: ["SEO", "Yield Optimization", "Social Media", "Trust Building", "Email Marketing", "Metrics"],
+    letter: "Y",
+    title: "Yield Optimization",
+    subtitle: "Convert Visitors",
+    description: "Turn website visitors into real leads with clear messaging",
+    icon: TrendingUp,
+    color: "from-emerald-500 to-emerald-600",
+    details: ["Conversion Rate", "Mobile Design", "Fast Pages", "Clear CTAs"],
   },
   {
     id: 3,
-    title: "SEO & Visibility",
-    subtitle: "Get Found Online",
-    description: "Dominate search results and attract qualified leads",
-    icon: "🔍",
-    color: "from-green-500 to-green-700",
-    stats: ["300% Traffic Increase", "Top 3 Rankings", "Local SEO Mastery"],
+    letter: "S",
+    title: "Sequence & Nurture",
+    subtitle: "Warm Up Leads",
+    description: "Automated follow-ups that convert curious visitors into buyers",
+    icon: Mail,
+    color: "from-blue-500 to-blue-600",
+    details: ["Email Drips", "SMS Follow-ups", "Retargeting", "Lead Scoring"],
   },
   {
     id: 4,
-    title: "Paid Advertising",
-    subtitle: "Maximize ROI",
-    description: "Strategic ad campaigns that convert browsers to buyers",
-    icon: "📈",
-    color: "from-purple-500 to-purple-700",
-    stats: ["Google Ads", "Social Ads", "Retargeting"],
+    letter: "T",
+    title: "Transaction Activation",
+    subtitle: "Close Deals",
+    description: "Speed to lead and streamlined processes that close deals",
+    icon: CreditCard,
+    color: "from-violet-500 to-violet-600",
+    details: ["Fast Response", "Online Booking", "Easy Quotes", "Sales Tools"],
   },
   {
     id: 5,
-    title: "Website & Conversion",
-    subtitle: "Turn Visitors into Customers",
-    description: "High-converting websites designed for results",
-    icon: "💻",
-    color: "from-cyan-500 to-cyan-700",
-    stats: ["UX Design", "A/B Testing", "Speed Optimization"],
+    letter: "E",
+    title: "Engagement & Retention",
+    subtitle: "Build Loyalty",
+    description: "Turn customers into advocates with reviews and referrals",
+    icon: Heart,
+    color: "from-rose-500 to-rose-600",
+    details: ["Review Requests", "Loyalty Programs", "Referrals", "Win-backs"],
   },
   {
     id: 6,
-    title: "Let's Connect",
-    subtitle: "Start Your Growth Journey",
-    description: "Schedule a free gap analysis today",
-    icon: "🤝",
+    letter: "M",
+    title: "Metrics & Improvement",
+    subtitle: "Track & Optimize",
+    description: "Data-driven decisions with clear dashboards and reporting",
+    icon: BarChart3,
+    color: "from-amber-500 to-amber-600",
+    details: ["Analytics", "KPI Dashboards", "Attribution", "A/B Testing"],
+  },
+];
+
+const slides = [
+  {
+    id: 0,
+    type: "intro",
+    title: "The SYSTEM",
+    subtitle: "6-Step Growth Framework",
+    description: "A complete digital marketing engine designed for small and midsize businesses",
+    color: "from-primary to-primary/70",
+  },
+  ...systemSteps.map((step, index) => ({
+    id: index + 1,
+    type: "system",
+    ...step,
+  })),
+  {
+    id: 7,
+    type: "outro",
+    title: "Ready to Grow?",
+    subtitle: "Start Your Journey",
+    description: "Get your free Gap Analysis and see where you stand across all six SYSTEM areas",
     color: "from-primary to-amber-600",
-    cta: true,
   },
 ];
 
 const ARPresentation = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Background music - calm ambient
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = 0.3;
+      audioRef.current.loop = true;
+      if (!isMuted) {
+        audioRef.current.play().catch(() => {});
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
 
   useEffect(() => {
     if (!isAutoPlaying) return;
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 4000);
+    }, 5000);
     return () => clearInterval(timer);
   }, [isAutoPlaying]);
 
@@ -84,65 +134,103 @@ const ARPresentation = () => {
   const slide = slides[currentSlide];
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden relative">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 overflow-hidden relative">
+      {/* Background Music */}
+      <audio
+        ref={audioRef}
+        src="https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3"
+        preload="auto"
+      />
+
       {/* Animated Background */}
       <div className="absolute inset-0">
         <motion.div
           key={currentSlide}
-          initial={{ opacity: 0, scale: 1.2 }}
-          animate={{ opacity: 0.15, scale: 1 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.2 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.8 }}
+          transition={{ duration: 1 }}
           className={`absolute inset-0 bg-gradient-to-br ${slide.color}`}
         />
-        {[...Array(20)].map((_, i) => (
+        
+        {/* Floating particles */}
+        {[...Array(15)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute w-2 h-2 bg-primary/20 rounded-full"
-            initial={{ 
-              x: Math.random() * window.innerWidth,
-              y: Math.random() * window.innerHeight,
-              scale: 0
+            className="absolute w-1 h-1 bg-white/30 rounded-full"
+            initial={{
+              x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 400),
+              y: typeof window !== 'undefined' ? window.innerHeight + 50 : 500,
             }}
             animate={{
-              y: [null, Math.random() * -200],
-              scale: [0, 1, 0],
-              opacity: [0, 0.5, 0],
+              y: -50,
+              opacity: [0, 0.6, 0],
             }}
             transition={{
-              duration: 3 + Math.random() * 2,
+              duration: 8 + Math.random() * 4,
               repeat: Infinity,
-              delay: Math.random() * 2,
+              delay: Math.random() * 5,
+              ease: "linear",
             }}
           />
         ))}
+
+        {/* Gentle waves */}
+        <svg className="absolute bottom-0 left-0 w-full opacity-10" viewBox="0 0 1440 320">
+          <motion.path
+            fill="currentColor"
+            className="text-white"
+            animate={{
+              d: [
+                "M0,160L48,176C96,192,192,224,288,213.3C384,203,480,149,576,138.7C672,128,768,160,864,181.3C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z",
+                "M0,192L48,181.3C96,171,192,149,288,160C384,171,480,213,576,218.7C672,224,768,192,864,165.3C960,139,1056,117,1152,128C1248,139,1344,181,1392,202.7L1440,224L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z",
+              ],
+            }}
+            transition={{
+              duration: 8,
+              repeat: Infinity,
+              repeatType: "reverse",
+              ease: "easeInOut",
+            }}
+          />
+        </svg>
       </div>
 
       {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Progress Bar */}
-        <div className="flex gap-1 p-4">
-          {slides.map((_, i) => (
-            <motion.div
-              key={i}
-              className="h-1 flex-1 rounded-full bg-muted overflow-hidden cursor-pointer"
-              onClick={() => {
-                setCurrentSlide(i);
-                setIsAutoPlaying(false);
-              }}
-            >
+        {/* Header */}
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex gap-1 flex-1 mr-4">
+            {slides.map((_, i) => (
               <motion.div
-                className="h-full bg-primary"
-                initial={{ width: 0 }}
-                animate={{ 
-                  width: i < currentSlide ? "100%" : i === currentSlide ? "100%" : "0%"
+                key={i}
+                className="h-1 flex-1 rounded-full bg-white/20 overflow-hidden cursor-pointer"
+                onClick={() => {
+                  setCurrentSlide(i);
+                  setIsAutoPlaying(false);
                 }}
-                transition={{ 
-                  duration: i === currentSlide && isAutoPlaying ? 4 : 0.3
-                }}
-              />
-            </motion.div>
-          ))}
+              >
+                <motion.div
+                  className="h-full bg-white"
+                  initial={{ width: 0 }}
+                  animate={{
+                    width: i < currentSlide ? "100%" : i === currentSlide ? "100%" : "0%",
+                  }}
+                  transition={{
+                    duration: i === currentSlide && isAutoPlaying ? 5 : 0.3,
+                  }}
+                />
+              </motion.div>
+            ))}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsMuted(!isMuted)}
+            className="text-white/70 hover:text-white hover:bg-white/10"
+          >
+            {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+          </Button>
         </div>
 
         {/* Main Content */}
@@ -150,115 +238,168 @@ const ARPresentation = () => {
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSlide}
-              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -50, scale: 0.9 }}
-              transition={{ duration: 0.5 }}
+              exit={{ opacity: 0, y: -30, scale: 0.95 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
               className="text-center max-w-lg"
             >
-              {/* Icon */}
-              <motion.div
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                className="text-6xl md:text-8xl mb-6"
-              >
-                {slide.icon}
-              </motion.div>
-
-              {/* Title */}
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="text-3xl md:text-5xl font-bold text-foreground mb-2"
-              >
-                {slide.title}
-              </motion.h1>
-
-              {/* Subtitle */}
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="text-xl md:text-2xl text-primary font-medium mb-4"
-              >
-                {slide.subtitle}
-              </motion.p>
-
-              {/* Description */}
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="text-muted-foreground text-lg mb-8"
-              >
-                {slide.description}
-              </motion.p>
-
-              {/* Pillars */}
-              {slide.pillars && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="flex flex-wrap justify-center gap-2"
-                >
-                  {slide.pillars.map((pillar, i) => (
-                    <motion.span
-                      key={pillar}
-                      initial={{ opacity: 0, scale: 0 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.7 + i * 0.1 }}
-                      className="px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium"
-                    >
-                      {pillar}
-                    </motion.span>
-                  ))}
-                </motion.div>
-              )}
-
-              {/* Stats */}
-              {slide.stats && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="flex flex-wrap justify-center gap-3"
-                >
-                  {slide.stats.map((stat, i) => (
-                    <motion.div
-                      key={stat}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.7 + i * 0.15 }}
-                      className="px-4 py-3 bg-card border border-border rounded-xl"
-                    >
-                      <span className="text-foreground font-semibold">{stat}</span>
-                    </motion.div>
-                  ))}
-                </motion.div>
-              )}
-
-              {/* CTA */}
-              {slide.cta && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="space-y-4"
-                >
-                  <Button
-                    size="lg"
-                    className="text-lg px-8"
-                    onClick={() => window.location.href = "/gap-analysis"}
+              {slide.type === "intro" && (
+                <>
+                  <motion.div
+                    initial={{ scale: 0, rotate: -10 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ delay: 0.2, type: "spring", stiffness: 150 }}
+                    className="mb-8"
                   >
-                    Free Gap Analysis
-                  </Button>
-                  <p className="text-sm text-muted-foreground">
-                    orangedoormarketing.com
-                  </p>
-                </motion.div>
+                    <div className="inline-flex gap-1 text-5xl md:text-7xl font-bold">
+                      {["S", "Y", "S", "T", "E", "M"].map((letter, i) => (
+                        <motion.span
+                          key={i}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.3 + i * 0.1 }}
+                          className="text-white"
+                        >
+                          {letter}
+                        </motion.span>
+                      ))}
+                    </div>
+                  </motion.div>
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.8 }}
+                    className="text-2xl text-orange-400 font-medium mb-4"
+                  >
+                    {slide.subtitle}
+                  </motion.p>
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1 }}
+                    className="text-white/70 text-lg"
+                  >
+                    {slide.description}
+                  </motion.p>
+                </>
+              )}
+
+              {slide.type === "system" && "letter" in slide && (
+                <>
+                  {/* Letter Badge */}
+                  <motion.div
+                    initial={{ scale: 0, rotate: -180 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                    className={`w-24 h-24 md:w-32 md:h-32 rounded-3xl bg-gradient-to-br ${slide.color} mx-auto mb-6 flex items-center justify-center shadow-2xl`}
+                  >
+                    <span className="text-5xl md:text-6xl font-bold text-white">{slide.letter}</span>
+                  </motion.div>
+
+                  {/* Icon */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="mb-4"
+                  >
+                    {slide.icon && <slide.icon className="w-8 h-8 text-white/50 mx-auto" />}
+                  </motion.div>
+
+                  {/* Title */}
+                  <motion.h1
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="text-3xl md:text-4xl font-bold text-white mb-2"
+                  >
+                    {slide.title}
+                  </motion.h1>
+
+                  {/* Subtitle */}
+                  <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-xl text-orange-400 font-medium mb-4"
+                  >
+                    {slide.subtitle}
+                  </motion.p>
+
+                  {/* Description */}
+                  <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                    className="text-white/70 text-lg mb-8"
+                  >
+                    {slide.description}
+                  </motion.p>
+
+                  {/* Details */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.7 }}
+                    className="flex flex-wrap justify-center gap-2"
+                  >
+                    {slide.details?.map((detail, i) => (
+                      <motion.span
+                        key={detail}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.8 + i * 0.1 }}
+                        className="px-4 py-2 bg-white/10 backdrop-blur-sm text-white/90 rounded-full text-sm font-medium border border-white/10"
+                      >
+                        {detail}
+                      </motion.span>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+
+              {slide.type === "outro" && (
+                <>
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring" }}
+                    className="text-6xl mb-6"
+                  >
+                    🚀
+                  </motion.div>
+                  <motion.h1
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-3xl md:text-5xl font-bold text-white mb-4"
+                  >
+                    {slide.title}
+                  </motion.h1>
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-white/70 text-lg mb-8"
+                  >
+                    {slide.description}
+                  </motion.p>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.7 }}
+                  >
+                    <Button
+                      size="lg"
+                      className="text-lg px-8 bg-orange-500 hover:bg-orange-600"
+                      onClick={() => (window.location.href = "/gap-analysis")}
+                    >
+                      Free Gap Analysis
+                    </Button>
+                    <p className="text-sm text-white/50 mt-4">orangedoormarketing.com</p>
+                  </motion.div>
+                </>
               )}
             </motion.div>
           </AnimatePresence>
@@ -270,7 +411,7 @@ const ARPresentation = () => {
             variant="ghost"
             size="icon"
             onClick={prevSlide}
-            className="rounded-full"
+            className="rounded-full text-white/70 hover:text-white hover:bg-white/10"
           >
             <ChevronLeft className="w-6 h-6" />
           </Button>
@@ -279,20 +420,16 @@ const ARPresentation = () => {
             variant="ghost"
             size="icon"
             onClick={() => setIsAutoPlaying(!isAutoPlaying)}
-            className="rounded-full"
+            className="rounded-full text-white/70 hover:text-white hover:bg-white/10"
           >
-            {isAutoPlaying ? (
-              <Pause className="w-5 h-5" />
-            ) : (
-              <Play className="w-5 h-5" />
-            )}
+            {isAutoPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
           </Button>
 
           <Button
             variant="ghost"
             size="icon"
             onClick={nextSlide}
-            className="rounded-full"
+            className="rounded-full text-white/70 hover:text-white hover:bg-white/10"
           >
             <ChevronRight className="w-6 h-6" />
           </Button>
