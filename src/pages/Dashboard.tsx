@@ -307,15 +307,75 @@ const Dashboard = () => {
                   <CardHeader>
                     <CardTitle>AI-Powered Analysis</CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-6">
                     {data.ai_analysis ? (
-                      <div className="prose prose-sm max-w-none">
-                        <p className="text-muted-foreground whitespace-pre-wrap">
-                          {typeof data.ai_analysis === 'string' 
-                            ? data.ai_analysis 
-                            : JSON.stringify(data.ai_analysis, null, 2)}
-                        </p>
-                      </div>
+                      <>
+                        {/* Executive Summary */}
+                        {data.ai_analysis.executiveSummary && (
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2">Executive Summary</h4>
+                            <p className="text-muted-foreground text-sm leading-relaxed">
+                              {data.ai_analysis.executiveSummary}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Key Strengths */}
+                        {data.ai_analysis.strengths?.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              Key Strengths
+                            </h4>
+                            <ul className="space-y-1.5">
+                              {data.ai_analysis.strengths.map((strength: string, idx: number) => (
+                                <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                  <span className="text-emerald-500 mt-1">•</span>
+                                  {strength}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Critical Gaps */}
+                        {data.ai_analysis.gaps?.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 text-orange-500" />
+                              Areas for Improvement
+                            </h4>
+                            <ul className="space-y-1.5">
+                              {data.ai_analysis.gaps.map((gap: string, idx: number) => (
+                                <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
+                                  <span className="text-orange-500 mt-1">•</span>
+                                  {gap}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Top Recommendations */}
+                        {data.ai_analysis.recommendations?.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-3">Top Recommendations</h4>
+                            <div className="space-y-3">
+                              {data.ai_analysis.recommendations.map((rec: { title: string; description: string; priority: string }, idx: number) => (
+                                <div key={idx} className="bg-muted/50 rounded-lg p-3">
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <h5 className="font-medium text-foreground text-sm">{rec.title}</h5>
+                                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                                      {rec.priority}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">{rec.description}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <p className="text-muted-foreground">
                         AI analysis is being generated. Check back soon!
