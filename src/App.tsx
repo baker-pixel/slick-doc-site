@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
+import { ChatWidget } from "@/components/ChatWidget";
 import Index from "./pages/Index";
 import GapAnalysis from "./pages/GapAnalysis";
 import QuickAssessment from "./pages/QuickAssessment";
@@ -51,6 +52,7 @@ const App = () => (
       <BrowserRouter>
         <ScrollToTop />
         <AnimatedRoutes />
+        <ChatWidget />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
