@@ -95,27 +95,73 @@ const ARPresentation = () => {
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const oscillatorsRef = useRef<OscillatorNode[]>([]);
+  const gainNodeRef = useRef<GainNode | null>(null);
+
+  const createAmbientSound = () => {
+    const audioContext = new AudioContext();
+    audioContextRef.current = audioContext;
+    
+    const masterGain = audioContext.createGain();
+    masterGain.gain.value = 0.15;
+    masterGain.connect(audioContext.destination);
+    gainNodeRef.current = masterGain;
+
+    // Create soft ambient drone with multiple oscillators
+    const frequencies = [130.81, 196.00, 261.63, 329.63]; // C3, G3, C4, E4 - calm chord
+    
+    frequencies.forEach((freq, i) => {
+      const osc = audioContext.createOscillator();
+      const oscGain = audioContext.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      oscGain.gain.value = 0.25 - (i * 0.05); // Fade higher frequencies
+      
+      // Add slow LFO for gentle movement
+      const lfo = audioContext.createOscillator();
+      const lfoGain = audioContext.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.1 + (i * 0.05); // Very slow modulation
+      lfoGain.gain.value = 2;
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+      lfo.start();
+      
+      osc.connect(oscGain);
+      oscGain.connect(masterGain);
+      osc.start();
+      
+      oscillatorsRef.current.push(osc);
+    });
+  };
 
   const startPresentation = () => {
     setHasStarted(true);
     setIsAutoPlaying(true);
-    if (audioRef.current) {
-      audioRef.current.volume = 0.3;
-      audioRef.current.loop = true;
-      audioRef.current.play().catch(console.error);
-    }
+    createAmbientSound();
   };
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
-    if (audioRef.current) {
-      if (isMuted) {
-        audioRef.current.play().catch(console.error);
-      }
-      audioRef.current.muted = !isMuted;
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = newMuted ? 0 : 0.15;
     }
   };
+
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount
+      oscillatorsRef.current.forEach(osc => {
+        try { osc.stop(); } catch (e) {}
+      });
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isAutoPlaying) return;
@@ -139,13 +185,6 @@ const ARPresentation = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 overflow-hidden relative">
-      {/* Background Music */}
-      <audio
-        ref={audioRef}
-        src="https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3"
-        preload="auto"
-      />
-
       {/* Start Screen - Required for audio to play */}
       {!hasStarted && (
         <motion.div
