@@ -279,7 +279,7 @@ export function GapAnalysisDetailModal({ data, open, onOpenChange }: Props) {
                       <CardContent>
                         <ul className="list-disc list-inside space-y-1">
                           {aiAnalysis.strengths.map((s, i) => (
-                            <li key={i}>{s}</li>
+                            <li key={i}>{typeof s === 'string' ? s : (s as any)?.description || ''}</li>
                           ))}
                         </ul>
                       </CardContent>
@@ -294,7 +294,7 @@ export function GapAnalysisDetailModal({ data, open, onOpenChange }: Props) {
                       <CardContent>
                         <ul className="list-disc list-inside space-y-1">
                           {aiAnalysis.gaps.map((g, i) => (
-                            <li key={i}>{g}</li>
+                            <li key={i}>{typeof g === 'string' ? g : (g as any)?.description || ''}</li>
                           ))}
                         </ul>
                       </CardContent>
