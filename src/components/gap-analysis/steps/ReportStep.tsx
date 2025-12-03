@@ -366,7 +366,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
                     {aiAnalysis.strengths.map((strength, idx) => (
                       <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                         <span className="text-emerald-500 mt-1">•</span>
-                        {strength}
+                        {typeof strength === 'string' ? strength : (strength as any)?.description || ''}
                       </li>
                     ))}
                   </ul>
@@ -384,7 +384,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
                     {aiAnalysis.gaps.map((gap, idx) => (
                       <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                         <span className="text-orange-500 mt-1">•</span>
-                        {gap}
+                        {typeof gap === 'string' ? gap : (gap as any)?.description || ''}
                       </li>
                     ))}
                   </ul>
