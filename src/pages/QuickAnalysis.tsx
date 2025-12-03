@@ -3,13 +3,27 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
 import { motion } from "framer-motion";
-import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, AlertTriangle, XCircle, Download } from "lucide-react";
+import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, AlertTriangle, XCircle, Download, Sparkles, Calendar, Rocket, Target } from "lucide-react";
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+interface QuickWin {
+  title: string;
+  description: string;
+  impact: "high" | "medium";
+  effort: "low" | "medium";
+}
+
+interface ActionPlan {
+  week1: { title: string; tasks: string[] };
+  week2to4: { title: string; tasks: string[] };
+  month2to3: { title: string; tasks: string[] };
+}
 
 interface AnalysisResult {
   overallScore: number;
@@ -28,11 +42,28 @@ interface AnalysisResult {
     findings: string[];
     recommendations: string[];
   };
+  quickWins?: QuickWin[];
+  actionPlan?: ActionPlan;
   summary: string;
 }
 
+const INDUSTRIES = [
+  "Home Services (HVAC, Plumbing, Electrical)",
+  "Healthcare / Medical",
+  "Legal Services",
+  "Real Estate",
+  "Restaurant / Food Service",
+  "Retail / E-commerce",
+  "Professional Services",
+  "Construction / Contracting",
+  "Automotive",
+  "Fitness / Wellness",
+  "Other",
+];
+
 const QuickAnalysis = () => {
   const [url, setUrl] = useState("");
+  const [industry, setIndustry] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const { toast } = useToast();
@@ -71,7 +102,7 @@ const QuickAnalysis = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke("analyze-website", {
-        body: { url: validUrl },
+        body: { url: validUrl, industry: industry || undefined },
       });
 
       if (error) {
@@ -153,6 +184,31 @@ const QuickAnalysis = () => {
     doc.text(summaryLines, 20, yPos);
     yPos += summaryLines.length * 5 + 10;
 
+    // Quick Wins
+    if (result.quickWins && result.quickWins.length > 0) {
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Quick Wins (Do This Week)", 20, yPos);
+      yPos += 8;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      result.quickWins.forEach((win, i) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        doc.setFont("helvetica", "bold");
+        doc.text(`${i + 1}. ${win.title}`, 20, yPos);
+        yPos += 5;
+        doc.setFont("helvetica", "normal");
+        const descLines = doc.splitTextToSize(win.description, pageWidth - 45);
+        doc.text(descLines, 25, yPos);
+        yPos += descLines.length * 4 + 4;
+      });
+      yPos += 5;
+    }
+
     // Helper function for sections
     const addSection = (title: string, score: number, findings: string[], recommendations: string[]) => {
       if (yPos > 250) {
@@ -205,10 +261,49 @@ const QuickAnalysis = () => {
     addSection("Conversion Elements", result.conversion.score, result.conversion.findings, result.conversion.recommendations);
     addSection("Technical Performance", result.technical.score, result.technical.findings, result.technical.recommendations);
 
+    // Action Plan
+    if (result.actionPlan) {
+      if (yPos > 200) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("90-Day Action Plan", 20, yPos);
+      yPos += 10;
+
+      const phases = [
+        { key: "week1", data: result.actionPlan.week1 },
+        { key: "week2to4", data: result.actionPlan.week2to4 },
+        { key: "month2to3", data: result.actionPlan.month2to3 },
+      ];
+
+      phases.forEach(({ data }) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(data.title, 20, yPos);
+        yPos += 5;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        data.tasks.forEach((task) => {
+          const lines = doc.splitTextToSize(`• ${task}`, pageWidth - 45);
+          doc.text(lines, 25, yPos);
+          yPos += lines.length * 4 + 2;
+        });
+        yPos += 5;
+      });
+    }
+
     // Footer
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(`Generated on ${new Date().toLocaleDateString()}`, pageWidth / 2, 285, { align: "center" });
+    doc.text(`Generated by Orange Door on ${new Date().toLocaleDateString()}`, pageWidth / 2, 285, { align: "center" });
 
     doc.save(`website-analysis-${new Date().toISOString().split('T')[0]}.pdf`);
   };
@@ -230,27 +325,27 @@ const QuickAnalysis = () => {
               className="max-w-3xl mx-auto text-center"
             >
               <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-                Instant Website Analysis
+                AI-Powered Analysis
               </span>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-semibold text-foreground mb-4">
                 Quick Website Health Check
               </h1>
               <p className="text-muted-foreground text-lg mb-8">
-                Enter your website URL and get an instant AI-powered analysis of your SEO, conversion elements, and technical performance.
+                Get an instant AI analysis with personalized Quick Wins and a 90-day action plan tailored to your industry.
               </p>
 
               <div className="flex flex-wrap justify-center gap-6 mb-12">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Search size={18} className="text-primary" />
-                  <span>SEO Analysis</span>
+                  <Sparkles size={18} className="text-primary" />
+                  <span>Quick Wins</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MousePointer size={18} className="text-primary" />
-                  <span>Conversion Review</span>
+                  <Calendar size={18} className="text-primary" />
+                  <span>90-Day Plan</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Gauge size={18} className="text-primary" />
-                  <span>Technical Audit</span>
+                  <Target size={18} className="text-primary" />
+                  <span>Industry Insights</span>
                 </div>
               </div>
             </motion.div>
@@ -263,22 +358,36 @@ const QuickAnalysis = () => {
             <Card className="border-border shadow-lg">
               <CardContent className="p-6 sm:p-10">
                 <form onSubmit={handleAnalyze} className="space-y-6">
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1 relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        placeholder="Enter your website URL (e.g., example.com)"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        className="pl-10 h-12 text-base"
-                        disabled={isAnalyzing}
-                      />
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <div className="flex-1 relative">
+                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input
+                          type="text"
+                          placeholder="Enter your website URL (e.g., example.com)"
+                          value={url}
+                          onChange={(e) => setUrl(e.target.value)}
+                          className="pl-10 h-12 text-base"
+                          disabled={isAnalyzing}
+                        />
+                      </div>
+                      <Select value={industry} onValueChange={setIndustry} disabled={isAnalyzing}>
+                        <SelectTrigger className="w-full sm:w-[240px] h-12">
+                          <SelectValue placeholder="Select industry (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INDUSTRIES.map((ind) => (
+                            <SelectItem key={ind} value={ind}>
+                              {ind}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <Button
                       type="submit"
                       size="lg"
-                      className="h-12 px-8"
+                      className="h-12 w-full sm:w-auto sm:self-center px-12"
                       disabled={isAnalyzing}
                     >
                       {isAnalyzing ? (
@@ -305,7 +414,7 @@ const QuickAnalysis = () => {
                     <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-primary/5">
                       <Loader2 className="h-5 w-5 animate-spin text-primary" />
                       <span className="text-muted-foreground">
-                        Scanning your website... This may take 30-60 seconds.
+                        AI is analyzing your website... This may take 30-60 seconds.
                       </span>
                     </div>
                   </motion.div>
@@ -337,6 +446,35 @@ const QuickAnalysis = () => {
                         {result.summary}
                       </p>
                     </div>
+
+                    {/* Quick Wins */}
+                    {result.quickWins && result.quickWins.length > 0 && (
+                      <Card className="border-primary/20 bg-primary/5">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <Sparkles className="h-5 w-5 text-primary" />
+                            Quick Wins - Do This Week
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid sm:grid-cols-3 gap-4">
+                            {result.quickWins.map((win, i) => (
+                              <div key={i} className="bg-background rounded-lg p-4 border border-border">
+                                <div className="flex items-start justify-between mb-2">
+                                  <h4 className="font-semibold text-sm">{win.title}</h4>
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                    win.impact === "high" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                                  }`}>
+                                    {win.impact} impact
+                                  </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">{win.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {/* Category Scores */}
                     <div className="grid md:grid-cols-3 gap-6">
@@ -461,15 +599,92 @@ const QuickAnalysis = () => {
                       </Card>
                     </div>
 
+                    {/* 90-Day Action Plan */}
+                    {result.actionPlan && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <Rocket className="h-5 w-5 text-primary" />
+                            Your 90-Day Action Plan
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid md:grid-cols-3 gap-6">
+                            {/* Week 1 */}
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold">1</div>
+                                <div>
+                                  <h4 className="font-semibold text-sm">Week 1</h4>
+                                  <p className="text-xs text-muted-foreground">{result.actionPlan.week1.title}</p>
+                                </div>
+                              </div>
+                              <ul className="space-y-2 pl-10">
+                                {result.actionPlan.week1.tasks.map((task, i) => (
+                                  <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                    <span className="text-green-600">✓</span>
+                                    {task}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            {/* Weeks 2-4 */}
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center text-sm font-bold">2</div>
+                                <div>
+                                  <h4 className="font-semibold text-sm">Weeks 2-4</h4>
+                                  <p className="text-xs text-muted-foreground">{result.actionPlan.week2to4.title}</p>
+                                </div>
+                              </div>
+                              <ul className="space-y-2 pl-10">
+                                {result.actionPlan.week2to4.tasks.map((task, i) => (
+                                  <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                    <span className="text-yellow-600">✓</span>
+                                    {task}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            {/* Months 2-3 */}
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">3</div>
+                                <div>
+                                  <h4 className="font-semibold text-sm">Months 2-3</h4>
+                                  <p className="text-xs text-muted-foreground">{result.actionPlan.month2to3.title}</p>
+                                </div>
+                              </div>
+                              <ul className="space-y-2 pl-10">
+                                {result.actionPlan.month2to3.tasks.map((task, i) => (
+                                  <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                    <span className="text-primary">✓</span>
+                                    {task}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {/* CTA */}
                     <div className="text-center pt-6 border-t">
-                      <h3 className="text-lg font-semibold mb-2">Want a deeper analysis?</h3>
+                      <h3 className="text-lg font-semibold mb-2">Want help executing this plan?</h3>
                       <p className="text-muted-foreground mb-4">
-                        Complete our full Gap Analysis for a comprehensive SYSTEM scorecard and personalized recommendations.
+                        Schedule a free strategy call and we'll help you prioritize and implement these improvements.
                       </p>
-                      <Button asChild size="lg">
-                        <a href="/gap-analysis">Get Full Gap Analysis</a>
-                      </Button>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Button asChild size="lg">
+                          <a href="/schedule">Schedule Strategy Call</a>
+                        </Button>
+                        <Button asChild variant="outline" size="lg">
+                          <a href="/gap-analysis">Get Full Gap Analysis</a>
+                        </Button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
