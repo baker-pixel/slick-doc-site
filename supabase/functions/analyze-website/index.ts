@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    const { url, industry } = await req.json();
 
     if (!url) {
       return new Response(
@@ -21,7 +21,7 @@ serve(async (req) => {
       );
     }
 
-    console.log("Analyzing website:", url);
+    console.log("Analyzing website:", url, "Industry:", industry || "not specified");
 
     // Fetch the website HTML
     let htmlContent = "";
@@ -56,7 +56,9 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const systemPrompt = `You are an expert digital marketing and web development analyst. Analyze the provided website HTML and provide a comprehensive assessment.
+    const industryContext = industry ? `\nThe business is in the ${industry} industry. Tailor your recommendations to this industry's best practices and customer expectations.` : "";
+
+    const systemPrompt = `You are an expert digital marketing and web development analyst specializing in helping small businesses grow. Analyze the provided website HTML and provide a comprehensive, actionable assessment.${industryContext}
 
 Return your analysis as a JSON object with this exact structure:
 {
@@ -76,6 +78,28 @@ Return your analysis as a JSON object with this exact structure:
     "findings": [<3-4 specific findings about technical aspects like structure, accessibility, mobile-friendliness indicators>],
     "recommendations": [<2-3 actionable technical recommendations>]
   },
+  "quickWins": [
+    {
+      "title": "<short title>",
+      "description": "<what to do and why it matters>",
+      "impact": "high" | "medium",
+      "effort": "low" | "medium"
+    }
+  ],
+  "actionPlan": {
+    "week1": {
+      "title": "Quick Fixes",
+      "tasks": ["<task 1>", "<task 2>"]
+    },
+    "week2to4": {
+      "title": "Foundation Building", 
+      "tasks": ["<task 1>", "<task 2>"]
+    },
+    "month2to3": {
+      "title": "Growth Acceleration",
+      "tasks": ["<task 1>", "<task 2>"]
+    }
+  },
   "summary": "<2-3 sentence overall summary of the website's digital marketing health>"
 }
 
@@ -85,11 +109,16 @@ Scoring guidelines:
 - 40-59: Fair - Significant gaps
 - 0-39: Poor - Major issues
 
+Quick Wins should be 3 specific things they can fix TODAY or this week that will have immediate impact.
+
+The Action Plan should be a realistic 90-day roadmap prioritized by impact and effort.
+
 Be specific and actionable in your findings and recommendations. Reference actual elements you find (or don't find) in the HTML.`;
 
     const userPrompt = `Analyze this website HTML for SEO, conversion optimization, and technical performance:
 
 URL: ${url}
+${industry ? `Industry: ${industry}` : ""}
 
 HTML Content:
 ${truncatedHtml}
