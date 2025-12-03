@@ -172,7 +172,7 @@ export default function QuickAssessment() {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <main className="container mx-auto px-4 pt-28 pb-16 max-w-2xl">
+        <main className="container mx-auto px-4 pt-24 sm:pt-28 pb-16 max-w-2xl">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -183,7 +183,7 @@ export default function QuickAssessment() {
             </div>
 
             <div>
-              <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
                 Your Quick SYSTEM Score
               </h1>
               <p className="text-muted-foreground">
@@ -254,7 +254,7 @@ export default function QuickAssessment() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 pt-28 pb-16 max-w-2xl">
+      <main className="container mx-auto px-4 pt-24 sm:pt-28 pb-16 max-w-2xl">
         <div className="mb-4">
           <BackButton />
         </div>
@@ -268,7 +268,7 @@ export default function QuickAssessment() {
               <Clock size={14} />
               2-minute assessment
             </div>
-            <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
               Quick SYSTEM Check
             </h1>
             <p className="text-muted-foreground">

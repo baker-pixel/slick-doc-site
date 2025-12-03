@@ -111,20 +111,20 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="flex flex-col sm:flex-row gap-4"
             >
-              <Link to="/gap-analysis">
+              <Link to="/gap-analysis" className="w-full sm:w-auto">
                 <Button
                   size="lg"
-                  className="bg-primary hover:bg-orange-dark text-primary-foreground text-lg px-8 py-6 shadow-glow hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto bg-primary hover:bg-orange-dark text-primary-foreground text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 shadow-glow hover:shadow-xl transition-all"
                 >
                   Get Your Free Gap Analysis
                   <ArrowRight className="ml-2" size={20} />
                 </Button>
               </Link>
-              <a href="#system">
+              <a href="#system" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-border hover:bg-secondary text-foreground text-lg px-8 py-6"
+                  className="w-full sm:w-auto border-border hover:bg-secondary text-foreground text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6"
                 >
                   Learn About the SYSTEM
                 </Button>

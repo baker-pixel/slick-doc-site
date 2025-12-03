@@ -638,12 +638,12 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
 
       {/* Navigation */}
       <div className="flex flex-col gap-4 mt-8 pt-6 border-t border-border">
-        <div className="flex justify-between">
+        <div className="flex flex-col-reverse sm:flex-row justify-between gap-3">
           <Button
             variant="outline"
             onClick={prevStep}
             disabled={currentStep === 1}
-            className="gap-2"
+            className="gap-2 w-full sm:w-auto"
           >
             <ArrowLeft size={16} />
             Previous
@@ -653,7 +653,7 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2"
+              className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2 w-full sm:w-auto"
             >
               {isSubmitting ? (
                 <>
@@ -670,7 +670,7 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
           ) : (
             <Button
               onClick={nextStep}
-              className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2"
+              className="bg-primary hover:bg-orange-dark text-primary-foreground gap-2 w-full sm:w-auto"
             >
               Next
               <ArrowRight size={16} />

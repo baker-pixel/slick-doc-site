@@ -100,9 +100,9 @@ export function Pricing() {
               animate={isInView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: index * 0.15 }}
               className={cn(
-                "relative rounded-2xl p-8 transition-all duration-300",
+                "relative rounded-2xl p-6 sm:p-8 transition-all duration-300",
                 tier.popular
-                  ? "bg-accent text-accent-foreground border-2 border-primary shadow-elevated scale-105"
+                  ? "bg-accent text-accent-foreground border-2 border-primary shadow-elevated lg:scale-105"
                   : "bg-card border border-border hover:border-primary/50"
               )}
             >
