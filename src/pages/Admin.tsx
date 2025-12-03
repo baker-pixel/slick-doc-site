@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail } from "lucide-react";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
@@ -119,6 +119,14 @@ interface GapAnalysisData {
   additional_notes?: string | null;
 }
 
+interface PdfLead {
+  id: string;
+  email: string;
+  first_name: string | null;
+  source: string | null;
+  created_at: string;
+}
+
 const Admin = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -126,6 +134,7 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [contacts, setContacts] = useState<ContactSubmission[]>([]);
   const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisData[]>([]);
+  const [pdfLeads, setPdfLeads] = useState<PdfLead[]>([]);
   const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
@@ -138,7 +147,14 @@ const Admin = () => {
   const [gapDateTo, setGapDateTo] = useState<Date | undefined>();
   const [contactPage, setContactPage] = useState(1);
   const [gapPage, setGapPage] = useState(1);
+  const [pdfPage, setPdfPage] = useState(1);
   const pageSize = 10;
+  const [pdfSearch, setPdfSearch] = useState("");
+  const [pdfSourceFilter, setPdfSourceFilter] = useState("all");
+  const [pdfDateFrom, setPdfDateFrom] = useState<Date | undefined>();
+  const [pdfDateTo, setPdfDateTo] = useState<Date | undefined>();
+  const [selectedPdfLeads, setSelectedPdfLeads] = useState<Set<string>>(new Set());
+  const [pdfSort, setPdfSort] = useState<{ column: string; direction: 'asc' | 'desc' }>({ column: 'created_at', direction: 'desc' });
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [selectedGaps, setSelectedGaps] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -188,6 +204,26 @@ const Admin = () => {
     });
   }, [gapAnalyses, gapSearch, gapStatusFilter, gapDateFrom, gapDateTo, gapSort]);
 
+  const filteredPdfLeads = useMemo(() => {
+    const filtered = pdfLeads.filter(lead => {
+      const matchesSearch = pdfSearch === "" || 
+        (lead.first_name?.toLowerCase() || '').includes(pdfSearch.toLowerCase()) ||
+        lead.email.toLowerCase().includes(pdfSearch.toLowerCase());
+      const matchesSource = pdfSourceFilter === "all" || lead.source === pdfSourceFilter;
+      const leadDate = new Date(lead.created_at);
+      const matchesDateFrom = !pdfDateFrom || leadDate >= pdfDateFrom;
+      const matchesDateTo = !pdfDateTo || leadDate <= new Date(pdfDateTo.getTime() + 86400000);
+      return matchesSearch && matchesSource && matchesDateFrom && matchesDateTo;
+    });
+    return filtered.sort((a, b) => {
+      const col = pdfSort.column;
+      let aVal: string = String(a[col as keyof PdfLead] ?? '');
+      let bVal: string = String(b[col as keyof PdfLead] ?? '');
+      const comparison = aVal.localeCompare(bVal);
+      return pdfSort.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [pdfLeads, pdfSearch, pdfSourceFilter, pdfDateFrom, pdfDateTo, pdfSort]);
+
   const handleContactSort = (column: string) => {
     setContactSort(prev => ({
       column,
@@ -200,6 +236,30 @@ const Admin = () => {
       column,
       direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
+  };
+
+  const handlePdfSort = (column: string) => {
+    setPdfSort(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const togglePdfSelection = (id: string) => {
+    setSelectedPdfLeads(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllPdfLeads = (paginatedLeads: PdfLead[]) => {
+    if (selectedPdfLeads.size === paginatedLeads.length) {
+      setSelectedPdfLeads(new Set());
+    } else {
+      setSelectedPdfLeads(new Set(paginatedLeads.map(l => l.id)));
+    }
   };
 
   const SortIcon = ({ column, sort }: { column: string; sort: { column: string; direction: 'asc' | 'desc' } }) => {
@@ -353,11 +413,14 @@ const Admin = () => {
   // Reset page when filters change
   useMemo(() => { setContactPage(1); }, [contactSearch, contactStatusFilter, contactDateFrom, contactDateTo]);
   useMemo(() => { setGapPage(1); }, [gapSearch, gapStatusFilter, gapDateFrom, gapDateTo]);
+  useMemo(() => { setPdfPage(1); }, [pdfSearch, pdfSourceFilter, pdfDateFrom, pdfDateTo]);
 
   const contactTotalPages = Math.ceil(filteredContacts.length / pageSize);
   const gapTotalPages = Math.ceil(filteredGapAnalyses.length / pageSize);
+  const pdfTotalPages = Math.ceil(filteredPdfLeads.length / pageSize);
   const paginatedContacts = filteredContacts.slice((contactPage - 1) * pageSize, contactPage * pageSize);
   const paginatedGapAnalyses = filteredGapAnalyses.slice((gapPage - 1) * pageSize, gapPage * pageSize);
+  const paginatedPdfLeads = filteredPdfLeads.slice((pdfPage - 1) * pageSize, pdfPage * pageSize);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,19 +432,23 @@ const Admin = () => {
   const fetchData = async (pwd: string) => {
     setIsLoading(true);
     try {
-      const [contactsRes, gapRes] = await Promise.all([
+      const [contactsRes, gapRes, pdfRes] = await Promise.all([
         supabase.functions.invoke("admin", {
           body: { action: "list", table: "contact_submissions", password: pwd },
         }),
         supabase.functions.invoke("admin", {
           body: { action: "list", table: "gap_analysis_submissions", password: pwd },
         }),
+        supabase.functions.invoke("admin", {
+          body: { action: "list", table: "pdf_leads", password: pwd },
+        }),
       ]);
 
       if (contactsRes.error) throw new Error(contactsRes.error.message);
       if (gapRes.error) throw new Error(gapRes.error.message);
+      if (pdfRes.error) throw new Error(pdfRes.error.message);
 
-      if (contactsRes.data?.error === "Unauthorized" || gapRes.data?.error === "Unauthorized") {
+      if (contactsRes.data?.error === "Unauthorized" || gapRes.data?.error === "Unauthorized" || pdfRes.data?.error === "Unauthorized") {
         setIsAuthenticated(false);
         toast({ title: "Invalid password", variant: "destructive" });
         return;
@@ -389,6 +456,7 @@ const Admin = () => {
 
       setContacts(contactsRes.data?.data || []);
       setGapAnalyses(gapRes.data?.data || []);
+      setPdfLeads(pdfRes.data?.data || []);
     } catch (error: any) {
       toast({ title: "Error fetching data", description: error.message, variant: "destructive" });
     } finally {
@@ -439,8 +507,10 @@ const Admin = () => {
       toast({ title: `${ids.length} records deleted` });
       if (table === "contact_submissions") {
         setSelectedContacts(new Set());
-      } else {
+      } else if (table === "gap_analysis_submissions") {
         setSelectedGaps(new Set());
+      } else if (table === "pdf_leads") {
+        setSelectedPdfLeads(new Set());
       }
       fetchData(storedPassword);
     } catch (error: any) {
@@ -577,7 +647,7 @@ const Admin = () => {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
@@ -617,13 +687,27 @@ const Admin = () => {
                 </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Mail className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-semibold">{pdfLeads.length}</p>
+                    <p className="text-muted-foreground">PDF Leads</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <Tabs defaultValue="analytics" className="space-y-4">
             <TabsList>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
-              <TabsTrigger value="contacts">Contact Submissions</TabsTrigger>
+              <TabsTrigger value="contacts">Contacts</TabsTrigger>
               <TabsTrigger value="gap-analysis">Gap Analysis</TabsTrigger>
+              <TabsTrigger value="pdf-leads">PDF Leads</TabsTrigger>
             </TabsList>
 
             <TabsContent value="analytics">
@@ -1125,6 +1209,182 @@ const Admin = () => {
                         </Button>
                         <span className="text-sm">Page {gapPage} of {gapTotalPages}</span>
                         <Button variant="outline" size="icon" onClick={() => setGapPage(p => Math.min(gapTotalPages, p + 1))} disabled={gapPage === gapTotalPages}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="pdf-leads">
+              <Card>
+                <CardHeader className="flex flex-col gap-4 pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <CardTitle className="text-lg">PDF Leads</CardTitle>
+                      {selectedPdfLeads.size > 0 && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete {selectedPdfLeads.size} selected
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete {selectedPdfLeads.size} leads?</AlertDialogTitle>
+                              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => bulkDelete("pdf_leads", Array.from(selectedPdfLeads))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredPdfLeads, "pdf_leads")}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export CSV
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search name, email..."
+                        value={pdfSearch}
+                        onChange={(e) => setPdfSearch(e.target.value)}
+                        className="pl-9 w-full sm:w-56"
+                      />
+                    </div>
+                    <Select value={pdfSourceFilter} onValueChange={setPdfSourceFilter}>
+                      <SelectTrigger className="w-full sm:w-40">
+                        <SelectValue placeholder="All sources" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All sources</SelectItem>
+                        <SelectItem value="system_brochure">System Brochure</SelectItem>
+                        <SelectItem value="homepage">Homepage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !pdfDateFrom && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {pdfDateFrom ? format(pdfDateFrom, "MMM d, yyyy") : "From"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={pdfDateFrom} onSelect={setPdfDateFrom} initialFocus className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !pdfDateTo && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {pdfDateTo ? format(pdfDateTo, "MMM d, yyyy") : "To"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={pdfDateTo} onSelect={setPdfDateTo} initialFocus className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    {(pdfDateFrom || pdfDateTo) && (
+                      <Button variant="ghost" size="icon" onClick={() => { setPdfDateFrom(undefined); setPdfDateTo(undefined); }}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-4 w-12">
+                            <Checkbox checked={paginatedPdfLeads.length > 0 && selectedPdfLeads.size === paginatedPdfLeads.length} onCheckedChange={() => toggleAllPdfLeads(paginatedPdfLeads)} />
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('first_name')}>
+                            <div className="flex items-center">Name<SortIcon column="first_name" sort={pdfSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('email')}>
+                            <div className="flex items-center">Email<SortIcon column="email" sort={pdfSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('source')}>
+                            <div className="flex items-center">Source<SortIcon column="source" sort={pdfSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('created_at')}>
+                            <div className="flex items-center">Date<SortIcon column="created_at" sort={pdfSort} /></div>
+                          </th>
+                          <th className="text-left p-4 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {paginatedPdfLeads.map((lead) => (
+                          <tr key={lead.id} className={cn("hover:bg-muted/30", selectedPdfLeads.has(lead.id) && "bg-muted/20")}>
+                            <td className="p-4">
+                              <Checkbox checked={selectedPdfLeads.has(lead.id)} onCheckedChange={() => togglePdfSelection(lead.id)} />
+                            </td>
+                            <td className="p-4">{lead.first_name || '-'}</td>
+                            <td className="p-4">{lead.email}</td>
+                            <td className="p-4">
+                              <Badge variant="outline">{lead.source || 'unknown'}</Badge>
+                            </td>
+                            <td className="p-4 text-muted-foreground">
+                              {new Date(lead.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-4">
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="text-destructive">
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete lead?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteRecord("pdf_leads", lead.id)}
+                                      className="bg-destructive text-destructive-foreground"
+                                    >
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </td>
+                          </tr>
+                        ))}
+                        {paginatedPdfLeads.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                              {pdfLeads.length === 0 ? "No PDF leads yet" : "No results match your search"}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {pdfTotalPages > 1 && (
+                    <div className="flex items-center justify-between p-4 border-t">
+                      <span className="text-sm text-muted-foreground">
+                        Showing {(pdfPage - 1) * pageSize + 1}-{Math.min(pdfPage * pageSize, filteredPdfLeads.length)} of {filteredPdfLeads.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="icon" onClick={() => setPdfPage(p => Math.max(1, p - 1))} disabled={pdfPage === 1}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="text-sm">Page {pdfPage} of {pdfTotalPages}</span>
+                        <Button variant="outline" size="icon" onClick={() => setPdfPage(p => Math.min(pdfTotalPages, p + 1))} disabled={pdfPage === pdfTotalPages}>
                           <ChevronRight className="w-4 h-4" />
                         </Button>
                       </div>
