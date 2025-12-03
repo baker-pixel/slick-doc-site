@@ -13,6 +13,10 @@ import {
   Calendar, FileText, ArrowRight, CheckCircle2, AlertCircle,
   Loader2
 } from "lucide-react";
+import { 
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
+  Radar, ResponsiveContainer, Tooltip
+} from "recharts";
 
 interface SubmissionData {
   id: string;
@@ -214,7 +218,7 @@ const Dashboard = () => {
             </Card>
           </motion.div>
 
-          {/* SYSTEM Scores Grid */}
+          {/* SYSTEM Scores with Radar Chart */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -224,33 +228,85 @@ const Dashboard = () => {
             <h2 className="text-xl font-semibold text-foreground mb-4">
               SYSTEM Breakdown
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {systemAreas.map((area, index) => (
-                <motion.div
-                  key={area.key}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.3 + index * 0.05 }}
-                >
-                  <Card className="text-center hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className={`w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3 ${area.color}`}>
-                        <span className="text-xl font-bold">{area.letter}</span>
-                      </div>
-                      <h3 className="text-sm font-medium text-foreground mb-2 line-clamp-1">
-                        {area.title}
-                      </h3>
-                      <div className="text-2xl font-bold text-foreground">
-                        {scores[area.key] || 0}%
-                      </div>
-                      <Progress 
-                        value={scores[area.key] || 0} 
-                        className="h-1.5 mt-2" 
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Radar Chart */}
+              <Card className="border-primary/10">
+                <CardContent className="p-6">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart 
+                      data={systemAreas.map(area => ({
+                        area: area.letter,
+                        fullName: area.title,
+                        score: scores[area.key] || 0,
+                        fullMark: 100
+                      }))}
+                      margin={{ top: 20, right: 30, bottom: 20, left: 30 }}
+                    >
+                      <PolarGrid stroke="hsl(var(--border))" />
+                      <PolarAngleAxis 
+                        dataKey="area" 
+                        tick={{ fill: 'hsl(var(--foreground))', fontSize: 14, fontWeight: 600 }}
                       />
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
+                      <PolarRadiusAxis 
+                        angle={90} 
+                        domain={[0, 100]} 
+                        tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                        tickCount={5}
+                      />
+                      <Radar
+                        name="Score"
+                        dataKey="score"
+                        stroke="hsl(var(--primary))"
+                        fill="hsl(var(--primary))"
+                        fillOpacity={0.3}
+                        strokeWidth={2}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        }}
+                        formatter={(value: number, name: string, props: any) => [
+                          `${value}%`, 
+                          props.payload.fullName
+                        ]}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Score Cards Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {systemAreas.map((area, index) => (
+                  <motion.div
+                    key={area.key}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3 + index * 0.05 }}
+                  >
+                    <Card className="text-center hover:shadow-md transition-shadow h-full">
+                      <CardContent className="p-4">
+                        <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center mx-auto mb-2 ${area.color}`}>
+                          <span className="text-lg font-bold">{area.letter}</span>
+                        </div>
+                        <h3 className="text-xs font-medium text-muted-foreground mb-1 line-clamp-1">
+                          {area.title}
+                        </h3>
+                        <div className="text-2xl font-bold text-foreground">
+                          {scores[area.key] || 0}%
+                        </div>
+                        <Progress 
+                          value={scores[area.key] || 0} 
+                          className="h-1.5 mt-2" 
+                        />
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
             </div>
           </motion.div>
 
