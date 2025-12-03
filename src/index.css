@@ -48,7 +48,7 @@
 
     /* Typography */
     --font-sans: "DM Sans", system-ui, sans-serif;
-    --font-display: "Playfair Display", Georgia, serif;
+    --font-display: "Nunito", system-ui, sans-serif;
 
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 hsl(220 40% 13% / 0.05);
