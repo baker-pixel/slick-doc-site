@@ -240,6 +240,7 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
   const [isLoading, setIsLoading] = useState(!!resumeToken);
   const [isComplete, setIsComplete] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [submissionResumeToken, setSubmissionResumeToken] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Load saved progress if resumeToken exists
@@ -547,11 +548,12 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
         additional_notes: formData.additionalNotes || null,
         status: "submitted",
         completed_at: new Date().toISOString(),
-      }).select('id').single();
+      }).select('id, resume_token').single();
 
       if (error) throw error;
 
       setSubmissionId(insertedData?.id || null);
+      setSubmissionResumeToken(insertedData?.resume_token || null);
       setIsComplete(true);
       toast({
         title: "Gap Analysis Submitted!",
@@ -578,7 +580,7 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
   }
 
   if (isComplete) {
-    return <ReportStep formData={formData} submissionId={submissionId} />;
+    return <ReportStep formData={formData} submissionId={submissionId} resumeToken={submissionResumeToken} />;
   }
 
   const CurrentStepComponent = steps[currentStep - 1].component;
