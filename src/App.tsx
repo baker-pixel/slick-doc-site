@@ -7,6 +7,7 @@ import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ChatWidget } from "@/components/ChatWidget";
+import { VoiceNavigation } from "@/components/VoiceNavigation";
 import Index from "./pages/Index";
 import GapAnalysis from "./pages/GapAnalysis";
 import QuickAssessment from "./pages/QuickAssessment";
@@ -53,6 +54,7 @@ const App = () => (
         <ScrollToTop />
         <AnimatedRoutes />
         <ChatWidget />
+        <VoiceNavigation />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
