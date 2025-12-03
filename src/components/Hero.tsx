@@ -87,9 +87,9 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-4xl sm:text-5xl lg:text-5xl xl:text-6xl font-display font-semibold text-foreground leading-tight mb-6"
             >
-              Digital Marketing That{" "}
-              <span className="text-gradient">Finally Works</span> for Small
-              Business
+              We Handle{" "}
+              <span className="text-gradient">Everything</span>. You Focus on
+              Your Business.
             </motion.h1>
 
             {/* Subheadline */}
@@ -99,9 +99,9 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-lg sm:text-xl text-muted-foreground mb-10 leading-relaxed font-sans"
             >
-              Stop guessing. Stop wasting money on random tactics. Orange Door
-              brings a proven 6-Step SYSTEM that transforms your digital presence
-              into a predictable growth engine.
+              <span className="font-semibold text-foreground">You do nothing. We do it all.</span>{" "}
+              Orange Door's done-for-you 6-Step SYSTEM handles every aspect of your
+              digital marketing—so you never have to think about it again.
             </motion.p>
 
             {/* CTAs */}
