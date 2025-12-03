@@ -21,6 +21,7 @@ import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import ARBusinessCard from "./pages/ARBusinessCard";
 import ARPresentation from "./pages/ARPresentation";
+import Dashboard from "./pages/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ function AnimatedRoutes() {
         <Route path="/report/:id" element={<PageTransition><Report /></PageTransition>} />
         <Route path="/ar-card" element={<PageTransition><ARBusinessCard /></PageTransition>} />
         <Route path="/ar-presentation" element={<ARPresentation />} />
+        <Route path="/dashboard/:token" element={<PageTransition><Dashboard /></PageTransition>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
       </Routes>
