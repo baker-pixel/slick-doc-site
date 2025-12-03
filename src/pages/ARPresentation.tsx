@@ -104,27 +104,51 @@ const ARPresentation = () => {
     audioContextRef.current = audioContext;
     
     const masterGain = audioContext.createGain();
-    masterGain.gain.value = 0.06; // Very quiet
+    masterGain.gain.value = 0.08;
     masterGain.connect(audioContext.destination);
     gainNodeRef.current = masterGain;
 
-    // Single elegant pad - just two notes (perfect fifth)
-    const frequencies = [174.61, 261.63]; // F3 and C4 - soft, elegant
-    
-    frequencies.forEach((freq, i) => {
+    // Soft pad for background
+    const padOsc = audioContext.createOscillator();
+    const padGain = audioContext.createGain();
+    padOsc.type = 'sine';
+    padOsc.frequency.value = 130.81; // C3
+    padGain.gain.value = 0.3;
+    padOsc.connect(padGain);
+    padGain.connect(masterGain);
+    padOsc.start();
+    oscillatorsRef.current.push(padOsc);
+
+    // Elevator music melody notes (C major pentatonic - safe and pleasant)
+    const melodyNotes = [261.63, 293.66, 329.63, 392.00, 440.00, 392.00, 329.63, 293.66]; // C4, D4, E4, G4, A4...
+    let noteIndex = 0;
+
+    const playNote = () => {
       const osc = audioContext.createOscillator();
-      const oscGain = audioContext.createGain();
+      const noteGain = audioContext.createGain();
       
       osc.type = 'sine';
-      osc.frequency.value = freq;
-      oscGain.gain.value = i === 0 ? 0.5 : 0.3;
+      osc.frequency.value = melodyNotes[noteIndex];
       
-      osc.connect(oscGain);
-      oscGain.connect(masterGain);
+      // Soft attack and release
+      noteGain.gain.setValueAtTime(0, audioContext.currentTime);
+      noteGain.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.1);
+      noteGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 1.2);
+      
+      osc.connect(noteGain);
+      noteGain.connect(masterGain);
       osc.start();
+      osc.stop(audioContext.currentTime + 1.3);
       
-      oscillatorsRef.current.push(osc);
-    });
+      noteIndex = (noteIndex + 1) % melodyNotes.length;
+    };
+
+    // Play a note every 1.5 seconds
+    playNote();
+    const melodyInterval = setInterval(playNote, 1500);
+    
+    // Store interval for cleanup
+    (audioContextRef.current as any).melodyInterval = melodyInterval;
   };
 
   const startPresentation = () => {
@@ -137,13 +161,16 @@ const ARPresentation = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
     if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = newMuted ? 0 : 0.15;
+      gainNodeRef.current.gain.value = newMuted ? 0 : 0.08;
     }
   };
 
   useEffect(() => {
     return () => {
       // Cleanup on unmount
+      if ((audioContextRef.current as any)?.melodyInterval) {
+        clearInterval((audioContextRef.current as any).melodyInterval);
+      }
       oscillatorsRef.current.forEach(osc => {
         try { osc.stop(); } catch (e) {}
       });
