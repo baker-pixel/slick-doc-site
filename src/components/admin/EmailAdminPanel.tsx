@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
+import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
 
 // Timezone options
 const TIMEZONES = [
@@ -538,7 +539,11 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
         <TabsList className="bg-card/50 border border-border/50">
           <TabsTrigger value="analytics" className="gap-1">
             <BarChart3 className="w-4 h-4" />
-            Analytics
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="deep-analytics" className="gap-1">
+            <TrendingUp className="w-4 h-4" />
+            Deep Analytics
           </TabsTrigger>
           <TabsTrigger value="queue">Email Queue</TabsTrigger>
           <TabsTrigger value="sent">Sent Emails</TabsTrigger>
@@ -776,6 +781,11 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Deep Analytics Tab */}
+        <TabsContent value="deep-analytics" className="space-y-4">
+          <EmailAnalyticsDashboard password={password} />
         </TabsContent>
 
         {/* Email Queue Tab */}
