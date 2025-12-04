@@ -62,6 +62,7 @@ export type Database = {
           sent_at: string
           status: string
           subject: string
+          tracking_id: string | null
         }
         Insert: {
           id?: string
@@ -71,6 +72,7 @@ export type Database = {
           sent_at?: string
           status: string
           subject: string
+          tracking_id?: string | null
         }
         Update: {
           id?: string
@@ -80,6 +82,7 @@ export type Database = {
           sent_at?: string
           status?: string
           subject?: string
+          tracking_id?: string | null
         }
         Relationships: []
       }
@@ -154,6 +157,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      email_tracking_events: {
+        Row: {
+          created_at: string
+          email_log_id: string | null
+          event_type: string
+          id: string
+          ip_address: string | null
+          link_url: string | null
+          metadata: Json | null
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          email_log_id?: string | null
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          link_url?: string | null
+          metadata?: Json | null
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          email_log_id?: string | null
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          link_url?: string | null
+          metadata?: Json | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_tracking_events_email_log_id_fkey"
+            columns: ["email_log_id"]
+            isOneToOne: false
+            referencedRelation: "email_logs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gap_analysis_submissions: {
         Row: {
