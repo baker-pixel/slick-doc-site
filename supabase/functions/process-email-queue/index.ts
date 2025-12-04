@@ -9,6 +9,87 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Common timezones with display names
+const TIMEZONES = [
+  { value: "America/New_York", label: "Eastern (ET)" },
+  { value: "America/Chicago", label: "Central (CT)" },
+  { value: "America/Denver", label: "Mountain (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific (PT)" },
+  { value: "America/Phoenix", label: "Arizona (AZ)" },
+  { value: "America/Anchorage", label: "Alaska (AKT)" },
+  { value: "Pacific/Honolulu", label: "Hawaii (HST)" },
+  { value: "UTC", label: "UTC" },
+];
+
+// Optimal send times based on industry research (in recipient's local time)
+const OPTIMAL_SEND_WINDOWS = {
+  business: { hours: [10, 14], days: [2, 3, 4] }, // Tue-Thu, 10am or 2pm
+  consumer: { hours: [9, 19], days: [2, 4, 6] }, // Tue, Thu, Sat
+  default: { hours: [10], days: [2, 3, 4] }
+};
+
+// Get timezone offset in minutes
+function getTimezoneOffset(timezone: string): number {
+  try {
+    const now = new Date();
+    const utcTime = now.getTime();
+    const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+    return Math.round((localTime.getTime() - utcTime) / 60000);
+  } catch {
+    return -300; // Default to EST (-5 hours)
+  }
+}
+
+// Check if current time is within optimal send window for timezone
+function isOptimalSendTime(timezone: string, emailType: string = "default"): boolean {
+  const now = new Date();
+  const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+  const hour = localTime.getHours();
+  const day = localTime.getDay(); // 0 = Sunday
+
+  const window = OPTIMAL_SEND_WINDOWS[emailType as keyof typeof OPTIMAL_SEND_WINDOWS] || OPTIMAL_SEND_WINDOWS.default;
+  
+  const isOptimalHour = window.hours.some(h => Math.abs(hour - h) <= 1);
+  const isOptimalDay = window.days.includes(day);
+  
+  return isOptimalHour && isOptimalDay;
+}
+
+// Calculate next optimal send time
+function getNextOptimalSendTime(timezone: string, emailType: string = "default"): Date {
+  const window = OPTIMAL_SEND_WINDOWS[emailType as keyof typeof OPTIMAL_SEND_WINDOWS] || OPTIMAL_SEND_WINDOWS.default;
+  const now = new Date();
+  const localNow = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+  
+  // Try to find next optimal slot
+  for (let daysAhead = 0; daysAhead < 7; daysAhead++) {
+    const checkDate = new Date(localNow);
+    checkDate.setDate(checkDate.getDate() + daysAhead);
+    const dayOfWeek = checkDate.getDay();
+    
+    if (window.days.includes(dayOfWeek)) {
+      for (const hour of window.hours) {
+        const potentialTime = new Date(checkDate);
+        potentialTime.setHours(hour, 0, 0, 0);
+        
+        // If this time is in the future, use it
+        if (daysAhead > 0 || potentialTime > localNow) {
+          // Convert back to UTC for storage
+          const offset = getTimezoneOffset(timezone);
+          return new Date(potentialTime.getTime() - offset * 60000);
+        }
+      }
+    }
+  }
+  
+  // Fallback: next day at 10am in recipient's timezone
+  const fallback = new Date(localNow);
+  fallback.setDate(fallback.getDate() + 1);
+  fallback.setHours(10, 0, 0, 0);
+  const offset = getTimezoneOffset(timezone);
+  return new Date(fallback.getTime() - offset * 60000);
+}
+
 // Helper to add tracking pixel to HTML
 function addTrackingPixel(html: string, trackingId: string, supabaseUrl: string): string {
   const pixelUrl = `${supabaseUrl}/functions/v1/track-open?tid=${trackingId}`;

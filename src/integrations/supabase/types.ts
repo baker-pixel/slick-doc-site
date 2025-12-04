@@ -126,8 +126,10 @@ export type Database = {
           html_content: string
           id: string
           metadata: Json | null
+          optimal_send_time: boolean | null
           recipient_email: string
           recipient_name: string | null
+          recipient_timezone: string | null
           scheduled_for: string
           sent_at: string | null
           status: string
@@ -139,8 +141,10 @@ export type Database = {
           html_content: string
           id?: string
           metadata?: Json | null
+          optimal_send_time?: boolean | null
           recipient_email: string
           recipient_name?: string | null
+          recipient_timezone?: string | null
           scheduled_for?: string
           sent_at?: string | null
           status?: string
@@ -152,8 +156,10 @@ export type Database = {
           html_content?: string
           id?: string
           metadata?: Json | null
+          optimal_send_time?: boolean | null
           recipient_email?: string
           recipient_name?: string | null
+          recipient_timezone?: string | null
           scheduled_for?: string
           sent_at?: string | null
           status?: string
@@ -566,7 +572,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_optimal_send_hour: { Args: { p_timezone?: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never
