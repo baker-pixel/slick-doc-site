@@ -18,6 +18,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail, Send } from "lucide-react";
 import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
+import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
+import { SOPManagementPanel } from "@/components/admin/SOPManagementPanel";
+import { AutomationJobsPanel } from "@/components/admin/AutomationJobsPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -713,6 +716,9 @@ const Admin = () => {
                 <Send className="w-4 h-4" />
                 Emails
               </TabsTrigger>
+              <TabsTrigger value="clients">Clients</TabsTrigger>
+              <TabsTrigger value="sops">SOPs</TabsTrigger>
+              <TabsTrigger value="automation">Automation</TabsTrigger>
             </TabsList>
 
             <TabsContent value="analytics">
@@ -1401,6 +1407,18 @@ const Admin = () => {
 
             <TabsContent value="emails">
               <EmailAdminPanel password={storedPassword} />
+            </TabsContent>
+
+            <TabsContent value="clients">
+              <ClientManagementPanel />
+            </TabsContent>
+
+            <TabsContent value="sops">
+              <SOPManagementPanel />
+            </TabsContent>
+
+            <TabsContent value="automation">
+              <AutomationJobsPanel />
             </TabsContent>
           </Tabs>
         </div>

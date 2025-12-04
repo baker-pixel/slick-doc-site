@@ -14,6 +14,165 @@ export type Database = {
   }
   public: {
     Tables: {
+      automation_jobs: {
+        Row: {
+          ai_model_used: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          input_data: Json | null
+          job_type: string
+          output_data: Json | null
+          sop_id: string | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          ai_model_used?: string | null
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          input_data?: Json | null
+          job_type: string
+          output_data?: Json | null
+          sop_id?: string | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          ai_model_used?: string | null
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          input_data?: Json | null
+          job_type?: string
+          output_data?: Json | null
+          sop_id?: string | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_jobs_sop_id_fkey"
+            columns: ["sop_id"]
+            isOneToOne: false
+            referencedRelation: "sop_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_accounts: {
+        Row: {
+          business_name: string
+          created_at: string
+          email: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          onboarded_at: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          business_name: string
+          created_at?: string
+          email: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          onboarded_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          business_name?: string
+          created_at?: string
+          email?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          onboarded_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      client_reports: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          insights: Json | null
+          job_id: string | null
+          metrics: Json | null
+          recommendations: Json | null
+          report_period_end: string
+          report_period_start: string
+          report_type: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          insights?: Json | null
+          job_id?: string | null
+          metrics?: Json | null
+          recommendations?: Json | null
+          report_period_end: string
+          report_period_start: string
+          report_type: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          insights?: Json | null
+          job_id?: string | null
+          metrics?: Json | null
+          recommendations?: Json | null
+          report_period_end?: string
+          report_period_start?: string
+          report_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_reports_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "automation_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_submissions: {
         Row: {
           business_name: string
@@ -567,6 +726,60 @@ export type Database = {
           },
         ]
       }
+      generated_content: {
+        Row: {
+          client_id: string
+          content: string
+          content_type: string
+          created_at: string
+          id: string
+          job_id: string | null
+          metadata: Json | null
+          status: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          content: string
+          content_type: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          metadata?: Json | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          content?: string
+          content_type?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          metadata?: Json | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_content_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_content_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "automation_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pdf_leads: {
         Row: {
           created_at: string
@@ -588,6 +801,48 @@ export type Database = {
           first_name?: string | null
           id?: string
           source?: string | null
+        }
+        Relationships: []
+      }
+      sop_documents: {
+        Row: {
+          action_items: Json | null
+          category: string
+          created_at: string
+          description: string | null
+          file_url: string | null
+          id: string
+          is_active: boolean
+          name: string
+          parsed_content: Json | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          action_items?: Json | null
+          category: string
+          created_at?: string
+          description?: string | null
+          file_url?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          parsed_content?: Json | null
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          action_items?: Json | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          file_url?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          parsed_content?: Json | null
+          tier?: string
+          updated_at?: string
         }
         Relationships: []
       }
