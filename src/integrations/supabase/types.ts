@@ -53,6 +53,30 @@ export type Database = {
         }
         Relationships: []
       }
+      email_cleanup_log: {
+        Row: {
+          cleaned_at: string
+          email: string
+          id: string
+          metadata: Json | null
+          reason: string
+        }
+        Insert: {
+          cleaned_at?: string
+          email: string
+          id?: string
+          metadata?: Json | null
+          reason: string
+        }
+        Update: {
+          cleaned_at?: string
+          email?: string
+          id?: string
+          metadata?: Json | null
+          reason?: string
+        }
+        Relationships: []
+      }
       email_logs: {
         Row: {
           id: string
