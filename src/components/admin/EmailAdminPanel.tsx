@@ -14,10 +14,11 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe } from "lucide-react";
+import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
 import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
+import { EmailDeliverabilityDashboard } from "./EmailDeliverabilityDashboard";
 
 // Timezone options
 const TIMEZONES = [
@@ -536,17 +537,21 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       </div>
 
       <Tabs defaultValue="analytics" className="w-full">
-        <TabsList className="bg-card/50 border border-border/50">
+        <TabsList className="bg-card/50 border border-border/50 flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="analytics" className="gap-1">
             <BarChart3 className="w-4 h-4" />
             Overview
           </TabsTrigger>
           <TabsTrigger value="deep-analytics" className="gap-1">
             <TrendingUp className="w-4 h-4" />
-            Deep Analytics
+            Analytics
           </TabsTrigger>
-          <TabsTrigger value="queue">Email Queue</TabsTrigger>
-          <TabsTrigger value="sent">Sent Emails</TabsTrigger>
+          <TabsTrigger value="deliverability" className="gap-1">
+            <Shield className="w-4 h-4" />
+            Deliverability
+          </TabsTrigger>
+          <TabsTrigger value="queue">Queue</TabsTrigger>
+          <TabsTrigger value="sent">Sent</TabsTrigger>
           <TabsTrigger value="sequences">Sequences</TabsTrigger>
         </TabsList>
 
@@ -786,6 +791,11 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
         {/* Deep Analytics Tab */}
         <TabsContent value="deep-analytics" className="space-y-4">
           <EmailAnalyticsDashboard password={password} />
+        </TabsContent>
+
+        {/* Deliverability Tab */}
+        <TabsContent value="deliverability" className="space-y-4">
+          <EmailDeliverabilityDashboard password={password} />
         </TabsContent>
 
         {/* Email Queue Tab */}
