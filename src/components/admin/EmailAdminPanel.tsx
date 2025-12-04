@@ -37,6 +37,30 @@ interface EmailLog {
   sent_at: string;
   resend_id: string | null;
   metadata: Json;
+  tracking_id?: string;
+}
+
+interface TrackingEvent {
+  id: string;
+  email_log_id: string;
+  event_type: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  link_url: string | null;
+  created_at: string;
+  metadata: Json;
+}
+
+interface TrackingStats {
+  totalSent: number;
+  uniqueOpens: number;
+  uniqueClicks: number;
+  bounces: number;
+  delivered: number;
+  openRate: string;
+  clickRate: string;
+  bounceRate: string;
+  deliveryRate: string;
 }
 
 interface EmailSequence {
@@ -57,6 +81,8 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   const [emailQueue, setEmailQueue] = useState<EmailQueueItem[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [sequences, setSequences] = useState<EmailSequence[]>([]);
+  const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
+  const [trackingStats, setTrackingStats] = useState<TrackingStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [queueSearch, setQueueSearch] = useState("");
   const [queueStatusFilter, setQueueStatusFilter] = useState("all");
@@ -87,6 +113,22 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       });
       if (seqResponse.data?.data) {
         setSequences(seqResponse.data.data);
+      }
+
+      // Fetch tracking events
+      const trackingResponse = await supabase.functions.invoke("admin", {
+        body: { action: "list_tracking_events", password },
+      });
+      if (trackingResponse.data?.data) {
+        setTrackingEvents(trackingResponse.data.data);
+      }
+
+      // Fetch tracking stats
+      const statsResponse = await supabase.functions.invoke("admin", {
+        body: { action: "get_tracking_stats", password },
+      });
+      if (statsResponse.data?.data) {
+        setTrackingStats(statsResponse.data.data);
       }
     } catch (error) {
       console.error("Error fetching email data:", error);
@@ -249,22 +291,43 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     ].filter((d) => d.value > 0);
   }, [emailLogs, emailQueue]);
 
-  // Simulated engagement metrics (since we don't have real tracking)
+  // Real engagement metrics from tracking
   const engagementData = useMemo(() => {
-    const totalSent = emailLogs.filter((l) => l.status === "sent").length;
-    // Simulate typical email engagement rates
-    const openRate = Math.min(95, 25 + Math.random() * 20);
-    const clickRate = Math.min(openRate, 5 + Math.random() * 10);
-    const bounceRate = Math.max(0, 2 + Math.random() * 3);
+    if (trackingStats) {
+      return {
+        totalSent: trackingStats.totalSent,
+        openRate: trackingStats.openRate,
+        clickRate: trackingStats.clickRate,
+        bounceRate: trackingStats.bounceRate,
+        delivered: trackingStats.deliveryRate,
+        uniqueOpens: trackingStats.uniqueOpens,
+        uniqueClicks: trackingStats.uniqueClicks,
+        isReal: true,
+      };
+    }
     
+    // Fallback to basic stats if no tracking data
+    const totalSent = emailLogs.filter((l) => l.status === "sent").length;
     return {
       totalSent,
-      openRate: openRate.toFixed(1),
-      clickRate: clickRate.toFixed(1),
-      bounceRate: bounceRate.toFixed(1),
-      delivered: totalSent > 0 ? ((totalSent - Math.floor(totalSent * bounceRate / 100)) / totalSent * 100).toFixed(1) : "0",
+      openRate: "0",
+      clickRate: "0",
+      bounceRate: "0",
+      delivered: totalSent > 0 ? "100" : "0",
+      uniqueOpens: 0,
+      uniqueClicks: 0,
+      isReal: false,
     };
-  }, [emailLogs]);
+  }, [emailLogs, trackingStats]);
+
+  // Recent tracking activity
+  const recentActivity = useMemo(() => {
+    return trackingEvents.slice(0, 20).map(event => ({
+      ...event,
+      emailSubject: emailLogs.find(log => log.id === event.email_log_id)?.subject || "Unknown",
+      emailRecipient: emailLogs.find(log => log.id === event.email_log_id)?.recipient_email || "Unknown",
+    }));
+  }, [trackingEvents, emailLogs]);
 
   // Email by sequence/trigger type
   const emailsByTrigger = useMemo(() => {
@@ -378,7 +441,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-foreground">{engagementData.openRate}%</p>
-                    <p className="text-sm text-muted-foreground">Open Rate*</p>
+                    <p className="text-sm text-muted-foreground">Open Rate</p>
                   </div>
                 </div>
               </CardContent>
@@ -391,7 +454,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-foreground">{engagementData.clickRate}%</p>
-                    <p className="text-sm text-muted-foreground">Click Rate*</p>
+                    <p className="text-sm text-muted-foreground">Click Rate</p>
                   </div>
                 </div>
               </CardContent>
@@ -404,13 +467,20 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-foreground">{engagementData.bounceRate}%</p>
-                    <p className="text-sm text-muted-foreground">Bounce Rate*</p>
+                    <p className="text-sm text-muted-foreground">Bounce Rate</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
-          <p className="text-xs text-muted-foreground">*Simulated metrics for demonstration</p>
+          {!engagementData.isReal && (
+            <p className="text-xs text-muted-foreground">*No tracking data yet - metrics will appear once emails are opened/clicked</p>
+          )}
+          {engagementData.isReal && (
+            <p className="text-xs text-muted-foreground">
+              {engagementData.uniqueOpens} unique opens, {engagementData.uniqueClicks} unique clicks from {engagementData.totalSent} sent emails
+            </p>
+          )}
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -532,6 +602,49 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Tracking Activity */}
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Recent Tracking Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentActivity.length > 0 ? (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {recentActivity.map((event) => (
+                    <div key={event.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
+                      <div className={`p-1.5 rounded-md ${
+                        event.event_type === "open" ? "bg-blue-500/20" :
+                        event.event_type === "click" ? "bg-green-500/20" :
+                        event.event_type === "delivered" ? "bg-primary/20" :
+                        event.event_type === "bounced" ? "bg-red-500/20" : "bg-muted"
+                      }`}>
+                        {event.event_type === "open" && <Eye className="w-3.5 h-3.5 text-blue-400" />}
+                        {event.event_type === "click" && <Send className="w-3.5 h-3.5 text-green-400" />}
+                        {event.event_type === "delivered" && <CheckCircle className="w-3.5 h-3.5 text-primary" />}
+                        {event.event_type === "bounced" && <XCircle className="w-3.5 h-3.5 text-red-400" />}
+                        {!["open", "click", "delivered", "bounced"].includes(event.event_type) && <Mail className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{event.emailRecipient}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {event.event_type === "click" && event.link_url ? `Clicked: ${event.link_url}` : event.emailSubject}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline" className="text-xs capitalize">{event.event_type}</Badge>
+                        <p className="text-xs text-muted-foreground mt-1">{format(new Date(event.created_at), "MMM d, h:mm a")}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                  No tracking events yet. Events will appear as emails are opened and links are clicked.
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

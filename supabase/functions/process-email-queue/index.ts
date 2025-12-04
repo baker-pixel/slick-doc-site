@@ -9,6 +9,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper to add tracking pixel to HTML
+function addTrackingPixel(html: string, trackingId: string, supabaseUrl: string): string {
+  const pixelUrl = `${supabaseUrl}/functions/v1/track-open?tid=${trackingId}`;
+  const pixel = `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;" />`;
+  
+  // Add pixel before closing body tag or at the end
+  if (html.includes("</body>")) {
+    return html.replace("</body>", `${pixel}</body>`);
+  }
+  return html + pixel;
+}
+
+// Helper to wrap links with tracking
+function wrapLinksWithTracking(html: string, trackingId: string, supabaseUrl: string): string {
+  const trackClickUrl = `${supabaseUrl}/functions/v1/track-click`;
+  
+  // Match href attributes with URLs
+  const linkRegex = /href="(https?:\/\/[^"]+)"/g;
+  
+  return html.replace(linkRegex, (match, url) => {
+    // Don't track unsubscribe links or already tracked links
+    if (url.includes("unsubscribe") || url.includes("track-click")) {
+      return match;
+    }
+    const trackedUrl = `${trackClickUrl}?tid=${trackingId}&url=${encodeURIComponent(url)}`;
+    return `href="${trackedUrl}"`;
+  });
+}
+
 // Email templates
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
   immediate_report: (data) => ({
@@ -209,11 +238,18 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         console.log(`Sending email to ${email.recipient_email}: ${email.subject}`);
 
+        // Generate a tracking ID for this email
+        const trackingId = crypto.randomUUID();
+
+        // Add tracking pixel and wrap links
+        let trackedHtml = addTrackingPixel(email.html_content, trackingId, supabaseUrl);
+        trackedHtml = wrapLinksWithTracking(trackedHtml, trackingId, supabaseUrl);
+
         const emailResponse = await resend.emails.send({
           from: "Orange Door Marketing <hello@orangedoormarketing.com>",
           to: [email.recipient_email],
           subject: email.subject,
-          html: email.html_content,
+          html: trackedHtml,
         });
 
         console.log("Email sent:", emailResponse);
@@ -224,12 +260,13 @@ const handler = async (req: Request): Promise<Response> => {
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", email.id);
 
-        // Log the sent email
+        // Log the sent email with tracking_id
         await supabase.from("email_logs").insert({
           recipient_email: email.recipient_email,
           subject: email.subject,
           status: "sent",
           resend_id: emailResponse.data?.id,
+          tracking_id: trackingId,
           metadata: email.metadata,
         });
 

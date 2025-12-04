@@ -31,14 +31,70 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "list": {
-        const { data: rows, error } = await supabase
-          .from(table)
-          .select("*")
-          .order("created_at", { ascending: false });
+        let query = supabase.from(table).select("*");
+        
+        // For email_logs, also include tracking_id
+        if (table === "email_logs") {
+          query = supabase.from(table).select("*, tracking_id");
+        }
+        
+        const { data: rows, error } = await query.order("created_at", { ascending: false });
         
         if (error) throw error;
         return new Response(
           JSON.stringify({ data: rows }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "list_tracking_events": {
+        const { data: events, error } = await supabase
+          .from("email_tracking_events")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(1000);
+        
+        if (error) throw error;
+        return new Response(
+          JSON.stringify({ data: events }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "get_tracking_stats": {
+        // Get aggregated tracking statistics
+        const { data: events, error } = await supabase
+          .from("email_tracking_events")
+          .select("event_type, email_log_id, created_at");
+        
+        if (error) throw error;
+
+        const { data: logs, error: logsError } = await supabase
+          .from("email_logs")
+          .select("id, status");
+        
+        if (logsError) throw logsError;
+
+        const totalSent = logs?.filter(l => l.status === "sent" || l.status === "delivered").length || 0;
+        const uniqueOpens = new Set(events?.filter(e => e.event_type === "open").map(e => e.email_log_id)).size;
+        const uniqueClicks = new Set(events?.filter(e => e.event_type === "click").map(e => e.email_log_id)).size;
+        const bounces = events?.filter(e => e.event_type === "bounced").length || 0;
+        const delivered = events?.filter(e => e.event_type === "delivered").length || 0;
+
+        return new Response(
+          JSON.stringify({
+            data: {
+              totalSent,
+              uniqueOpens,
+              uniqueClicks,
+              bounces,
+              delivered,
+              openRate: totalSent > 0 ? ((uniqueOpens / totalSent) * 100).toFixed(1) : "0",
+              clickRate: totalSent > 0 ? ((uniqueClicks / totalSent) * 100).toFixed(1) : "0",
+              bounceRate: totalSent > 0 ? ((bounces / totalSent) * 100).toFixed(1) : "0",
+              deliveryRate: totalSent > 0 ? (((totalSent - bounces) / totalSent) * 100).toFixed(1) : "0",
+            }
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.queue-sequence-emails]
 verify_jwt = false
+
+[functions.track-open]
+verify_jwt = false
+
+[functions.track-click]
+verify_jwt = false
+
+[functions.resend-webhook]
+verify_jwt = false
