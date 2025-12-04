@@ -33,18 +33,16 @@ Deno.serve(async (req) => {
       case "list": {
         let query = supabase.from(table).select("*");
         
-        // For email_logs, use sent_at for ordering (not created_at)
+        // Handle different timestamp columns per table
+        let orderColumn = "created_at";
         if (table === "email_logs") {
           query = supabase.from(table).select("*, tracking_id");
-          const { data: rows, error } = await query.order("sent_at", { ascending: false });
-          if (error) throw error;
-          return new Response(
-            JSON.stringify({ data: rows }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          orderColumn = "sent_at";
+        } else if (table === "email_cleanup_log") {
+          orderColumn = "cleaned_at";
         }
         
-        const { data: rows, error } = await query.order("created_at", { ascending: false });
+        const { data: rows, error } = await query.order(orderColumn, { ascending: false });
         
         if (error) throw error;
         return new Response(
