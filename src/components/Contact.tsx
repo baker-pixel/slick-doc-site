@@ -76,6 +76,25 @@ export function Contact() {
 
       if (error) throw error;
 
+      // Queue the contact form email sequence
+      try {
+        await supabase.functions.invoke("queue-sequence-emails", {
+          body: {
+            triggerType: "contact_form",
+            recipientEmail: result.data.email,
+            recipientName: result.data.firstName,
+            data: {
+              businessName: result.data.businessName,
+              websiteUrl: result.data.websiteUrl,
+              marketingChallenge: result.data.marketingChallenge,
+            },
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to queue contact email sequence:", emailError);
+        // Don't fail submission if email queueing fails
+      }
+
       setIsSubmitted(true);
       toast({
         title: "Request Submitted!",
