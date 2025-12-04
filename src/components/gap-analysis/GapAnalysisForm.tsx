@@ -440,6 +440,26 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
         },
       });
 
+      // Queue the partial gap analysis reminder sequence
+      try {
+        await supabase.functions.invoke("queue-sequence-emails", {
+          body: {
+            triggerType: "partial_gap_analysis",
+            recipientEmail: formData.email,
+            recipientName: formData.firstName,
+            data: {
+              businessName: formData.businessName,
+              resumeToken: data.resume_token,
+              currentStep,
+              totalSteps: steps.length,
+            },
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to queue reminder sequence:", emailError);
+        // Don't fail save if email queueing fails
+      }
+
       toast({
         title: "Progress Saved!",
         description: `We've emailed you a link to continue from Step ${currentStep}.`,
@@ -555,6 +575,26 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
       setSubmissionId(insertedData?.id || null);
       setSubmissionResumeToken(insertedData?.resume_token || null);
       setIsComplete(true);
+
+      // Queue the gap analysis completion email sequence
+      try {
+        await supabase.functions.invoke("queue-sequence-emails", {
+          body: {
+            triggerType: "gap_analysis_complete",
+            recipientEmail: formData.email,
+            recipientName: formData.firstName,
+            data: {
+              businessName: formData.businessName,
+              resumeToken: insertedData?.resume_token,
+              submissionId: insertedData?.id,
+            },
+          },
+        });
+      } catch (emailError) {
+        console.error("Failed to queue email sequence:", emailError);
+        // Don't fail the submission if email queueing fails
+      }
+
       toast({
         title: "Gap Analysis Submitted!",
         description: "We'll analyze your responses and prepare your SYSTEM report.",
