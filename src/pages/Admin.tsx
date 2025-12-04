@@ -15,7 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail, Send } from "lucide-react";
+import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
@@ -703,11 +704,15 @@ const Admin = () => {
           </div>
 
           <Tabs defaultValue="analytics" className="space-y-4">
-            <TabsList>
+            <TabsList className="flex-wrap h-auto gap-1">
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="contacts">Contacts</TabsTrigger>
               <TabsTrigger value="gap-analysis">Gap Analysis</TabsTrigger>
               <TabsTrigger value="pdf-leads">PDF Leads</TabsTrigger>
+              <TabsTrigger value="emails" className="gap-1">
+                <Send className="w-4 h-4" />
+                Emails
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="analytics">
@@ -1392,6 +1397,10 @@ const Admin = () => {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="emails">
+              <EmailAdminPanel password={storedPassword} />
             </TabsContent>
           </Tabs>
         </div>
