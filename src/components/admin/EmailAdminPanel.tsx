@@ -14,11 +14,12 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield } from "lucide-react";
+import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield, UserMinus } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
 import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
 import { EmailDeliverabilityDashboard } from "./EmailDeliverabilityDashboard";
+import { EmailListCleaningPanel } from "./EmailListCleaningPanel";
 
 // Timezone options
 const TIMEZONES = [
@@ -550,6 +551,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
             <Shield className="w-4 h-4" />
             Deliverability
           </TabsTrigger>
+          <TabsTrigger value="list-cleaning" className="gap-1">
+            <UserMinus className="w-4 h-4" />
+            List Cleaning
+          </TabsTrigger>
           <TabsTrigger value="queue">Queue</TabsTrigger>
           <TabsTrigger value="sent">Sent</TabsTrigger>
           <TabsTrigger value="sequences">Sequences</TabsTrigger>
@@ -796,6 +801,11 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
         {/* Deliverability Tab */}
         <TabsContent value="deliverability" className="space-y-4">
           <EmailDeliverabilityDashboard password={password} />
+        </TabsContent>
+
+        {/* List Cleaning Tab */}
+        <TabsContent value="list-cleaning" className="space-y-4">
+          <EmailListCleaningPanel adminPassword={password} />
         </TabsContent>
 
         {/* Email Queue Tab */}

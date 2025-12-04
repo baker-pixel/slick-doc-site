@@ -207,6 +207,198 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "get_list_health": {
+        // Get overall list health stats
+        const { data: logs } = await supabase
+          .from("email_logs")
+          .select("id, recipient_email, status");
+
+        const { data: events } = await supabase
+          .from("email_tracking_events")
+          .select("event_type, email_log_id, created_at");
+
+        const { data: cleanupLogs } = await supabase
+          .from("email_cleanup_log")
+          .select("id");
+
+        const uniqueEmails = new Set(logs?.map(l => l.recipient_email) || []);
+        const bouncedEmails = new Set(
+          events?.filter(e => e.event_type === "bounced").map(e => {
+            const log = logs?.find(l => l.id === e.email_log_id);
+            return log?.recipient_email;
+          }).filter(Boolean) || []
+        );
+        const complainedEmails = new Set(
+          events?.filter(e => e.event_type === "complained").map(e => {
+            const log = logs?.find(l => l.id === e.email_log_id);
+            return log?.recipient_email;
+          }).filter(Boolean) || []
+        );
+
+        // Find inactive emails (no opens in last 90 days)
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        
+        const activeEmails = new Set(
+          events?.filter(e => 
+            e.event_type === "open" && 
+            new Date(e.created_at) > ninetyDaysAgo
+          ).map(e => {
+            const log = logs?.find(l => l.id === e.email_log_id);
+            return log?.recipient_email;
+          }).filter(Boolean) || []
+        );
+
+        const inactiveCount = uniqueEmails.size - activeEmails.size - bouncedEmails.size - complainedEmails.size;
+
+        return new Response(
+          JSON.stringify({
+            data: {
+              totalEmails: uniqueEmails.size,
+              bouncedEmails: bouncedEmails.size,
+              complainedEmails: complainedEmails.size,
+              inactiveEmails: Math.max(0, inactiveCount),
+              cleanedTotal: cleanupLogs?.length || 0,
+            }
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "scan_cleanup_candidates": {
+        const { inactiveDays = 90 } = data || {};
+        const candidates: Array<{ email: string; reason: string; bounceCount?: number; complaintCount?: number; lastActivity?: string }> = [];
+
+        // Get all logs with their emails
+        const { data: logs } = await supabase
+          .from("email_logs")
+          .select("id, recipient_email, sent_at");
+
+        const { data: events } = await supabase
+          .from("email_tracking_events")
+          .select("event_type, email_log_id, created_at");
+
+        const { data: existingCleanup } = await supabase
+          .from("email_cleanup_log")
+          .select("email");
+
+        const cleanedEmails = new Set(existingCleanup?.map(c => c.email) || []);
+
+        // Build email activity map
+        const emailActivity: Record<string, { 
+          bounces: number; 
+          complaints: number; 
+          lastOpen?: string;
+          lastSent?: string;
+        }> = {};
+
+        logs?.forEach(log => {
+          if (!emailActivity[log.recipient_email]) {
+            emailActivity[log.recipient_email] = { bounces: 0, complaints: 0 };
+          }
+          if (!emailActivity[log.recipient_email].lastSent || 
+              new Date(log.sent_at) > new Date(emailActivity[log.recipient_email].lastSent!)) {
+            emailActivity[log.recipient_email].lastSent = log.sent_at;
+          }
+        });
+
+        events?.forEach(event => {
+          const log = logs?.find(l => l.id === event.email_log_id);
+          if (!log) return;
+          
+          const email = log.recipient_email;
+          if (!emailActivity[email]) {
+            emailActivity[email] = { bounces: 0, complaints: 0 };
+          }
+
+          if (event.event_type === "bounced") {
+            emailActivity[email].bounces++;
+          } else if (event.event_type === "complained") {
+            emailActivity[email].complaints++;
+          } else if (event.event_type === "open") {
+            if (!emailActivity[email].lastOpen || 
+                new Date(event.created_at) > new Date(emailActivity[email].lastOpen!)) {
+              emailActivity[email].lastOpen = event.created_at;
+            }
+          }
+        });
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+
+        // Find candidates
+        Object.entries(emailActivity).forEach(([email, activity]) => {
+          if (cleanedEmails.has(email)) return;
+
+          if (activity.bounces > 0) {
+            candidates.push({ 
+              email, 
+              reason: "bounced", 
+              bounceCount: activity.bounces 
+            });
+          } else if (activity.complaints > 0) {
+            candidates.push({ 
+              email, 
+              reason: "complained", 
+              complaintCount: activity.complaints 
+            });
+          } else if (!activity.lastOpen && activity.lastSent && new Date(activity.lastSent) < cutoffDate) {
+            candidates.push({ 
+              email, 
+              reason: "inactive", 
+              lastActivity: activity.lastSent 
+            });
+          }
+        });
+
+        console.log(`Found ${candidates.length} cleanup candidates`);
+        return new Response(
+          JSON.stringify({ data: candidates }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "clean_emails": {
+        const { emails } = data || {};
+        if (!emails || !Array.isArray(emails)) {
+          return new Response(
+            JSON.stringify({ error: "No emails provided" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Insert cleanup logs
+        const cleanupRecords = emails.map((item: { email: string; reason: string }) => ({
+          email: item.email,
+          reason: item.reason,
+          metadata: { cleaned_by: "admin", original_reason: item.reason }
+        }));
+
+        const { error: insertError } = await supabase
+          .from("email_cleanup_log")
+          .insert(cleanupRecords);
+
+        if (insertError) throw insertError;
+
+        // Mark emails as unsubscribed in preferences
+        for (const item of emails) {
+          await supabase
+            .from("email_preferences")
+            .upsert({
+              email: item.email,
+              subscribed: false,
+              unsubscribed_at: new Date().toISOString(),
+              unsubscribe_reason: `Automated cleanup: ${item.reason}`,
+            }, { onConflict: "email" });
+        }
+
+        console.log(`Cleaned ${emails.length} emails from list`);
+        return new Response(
+          JSON.stringify({ success: true, cleaned: emails.length }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
