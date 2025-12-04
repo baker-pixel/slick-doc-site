@@ -53,6 +53,108 @@ export type Database = {
         }
         Relationships: []
       }
+      email_logs: {
+        Row: {
+          id: string
+          metadata: Json | null
+          recipient_email: string
+          resend_id: string | null
+          sent_at: string
+          status: string
+          subject: string
+        }
+        Insert: {
+          id?: string
+          metadata?: Json | null
+          recipient_email: string
+          resend_id?: string | null
+          sent_at?: string
+          status: string
+          subject: string
+        }
+        Update: {
+          id?: string
+          metadata?: Json | null
+          recipient_email?: string
+          resend_id?: string | null
+          sent_at?: string
+          status?: string
+          subject?: string
+        }
+        Relationships: []
+      }
+      email_queue: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          html_content: string
+          id: string
+          metadata: Json | null
+          recipient_email: string
+          recipient_name: string | null
+          scheduled_for: string
+          sent_at: string | null
+          status: string
+          subject: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          html_content: string
+          id?: string
+          metadata?: Json | null
+          recipient_email: string
+          recipient_name?: string | null
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+          subject: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          html_content?: string
+          id?: string
+          metadata?: Json | null
+          recipient_email?: string
+          recipient_name?: string | null
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+        }
+        Relationships: []
+      }
+      email_sequences: {
+        Row: {
+          created_at: string
+          emails: Json
+          id: string
+          is_active: boolean
+          name: string
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          emails?: Json
+          id?: string
+          is_active?: boolean
+          name: string
+          trigger_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          emails?: Json
+          id?: string
+          is_active?: boolean
+          name?: string
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gap_analysis_submissions: {
         Row: {
           ad_manager: string | null
