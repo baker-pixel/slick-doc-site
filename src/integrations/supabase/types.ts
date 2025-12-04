@@ -86,6 +86,39 @@ export type Database = {
         }
         Relationships: []
       }
+      email_preferences: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          preferences: Json | null
+          subscribed: boolean
+          unsubscribe_reason: string | null
+          unsubscribed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          preferences?: Json | null
+          subscribed?: boolean
+          unsubscribe_reason?: string | null
+          unsubscribed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          preferences?: Json | null
+          subscribed?: boolean
+          unsubscribe_reason?: string | null
+          unsubscribed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_queue: {
         Row: {
           created_at: string
