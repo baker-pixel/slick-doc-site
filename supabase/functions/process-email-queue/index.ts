@@ -30,12 +30,54 @@ function wrapLinksWithTracking(html: string, trackingId: string, supabaseUrl: st
   
   return html.replace(linkRegex, (match, url) => {
     // Don't track unsubscribe links or already tracked links
-    if (url.includes("unsubscribe") || url.includes("track-click")) {
+    if (url.includes("unsubscribe") || url.includes("track-click") || url.includes("email-preferences")) {
       return match;
     }
     const trackedUrl = `${trackClickUrl}?tid=${trackingId}&url=${encodeURIComponent(url)}`;
     return `href="${trackedUrl}"`;
   });
+}
+
+// Helper to add unsubscribe footer
+function addUnsubscribeFooter(html: string, email: string, supabaseUrl: string): string {
+  const token = btoa(email);
+  const unsubscribeUrl = `${supabaseUrl}/functions/v1/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
+  const preferencesUrl = `https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(email)}&token=${token}`;
+  
+  const footer = `
+    <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af;">
+      <p>You're receiving this email because you interacted with Orange Door Marketing.</p>
+      <p>
+        <a href="${preferencesUrl}" style="color: #6b7280; text-decoration: underline;">Manage Preferences</a>
+        &nbsp;|&nbsp;
+        <a href="${unsubscribeUrl}" style="color: #6b7280; text-decoration: underline;">Unsubscribe</a>
+      </p>
+      <p style="margin-top: 10px;">Orange Door Marketing • Knoxville, TN</p>
+    </div>
+  `;
+  
+  // Add footer before closing body tag or at the end
+  if (html.includes("</body>")) {
+    return html.replace("</body>", `${footer}</body>`);
+  }
+  if (html.includes("</div>")) {
+    // Find the last closing div and add after it
+    const lastDivIndex = html.lastIndexOf("</div>");
+    return html.slice(0, lastDivIndex + 6) + footer + html.slice(lastDivIndex + 6);
+  }
+  return html + footer;
+}
+
+// Helper to check if email is unsubscribed
+async function isUnsubscribed(email: string, supabase: any): Promise<boolean> {
+  const { data } = await supabase
+    .from("email_preferences")
+    .select("subscribed, preferences")
+    .eq("email", email.toLowerCase())
+    .single();
+  
+  if (!data) return false; // No record means subscribed by default
+  return !data.subscribed;
 }
 
 // Email templates
@@ -236,14 +278,27 @@ const handler = async (req: Request): Promise<Response> => {
 
     for (const email of pendingEmails || []) {
       try {
+        // Check if recipient is unsubscribed
+        const unsubscribed = await isUnsubscribed(email.recipient_email, supabase);
+        if (unsubscribed) {
+          console.log(`Skipping email to ${email.recipient_email} - unsubscribed`);
+          await supabase
+            .from("email_queue")
+            .update({ status: "skipped", error_message: "Recipient unsubscribed" })
+            .eq("id", email.id);
+          results.push({ id: email.id, status: "skipped", reason: "unsubscribed" });
+          continue;
+        }
+
         console.log(`Sending email to ${email.recipient_email}: ${email.subject}`);
 
         // Generate a tracking ID for this email
         const trackingId = crypto.randomUUID();
 
-        // Add tracking pixel and wrap links
+        // Add tracking pixel, wrap links, and add unsubscribe footer
         let trackedHtml = addTrackingPixel(email.html_content, trackingId, supabaseUrl);
         trackedHtml = wrapLinksWithTracking(trackedHtml, trackingId, supabaseUrl);
+        trackedHtml = addUnsubscribeFooter(trackedHtml, email.recipient_email, supabaseUrl);
 
         const emailResponse = await resend.emails.send({
           from: "Orange Door Marketing <hello@orangedoormarketing.com>",
