@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.unsubscribe]
 verify_jwt = false
+
+[functions.run-automation]
+verify_jwt = false
+
+[functions.parse-sop]
+verify_jwt = false
