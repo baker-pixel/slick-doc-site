@@ -129,6 +129,84 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "schedule_email": {
+        // Schedule a new email
+        const { recipient_email, recipient_name, subject, html_content, scheduled_for, recipient_timezone, optimal_send_time } = data;
+        
+        if (!recipient_email || !subject || !html_content) {
+          return new Response(
+            JSON.stringify({ error: "Missing required fields" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: newEmail, error } = await supabase
+          .from("email_queue")
+          .insert({
+            recipient_email,
+            recipient_name: recipient_name || null,
+            subject,
+            html_content,
+            scheduled_for: scheduled_for || new Date().toISOString(),
+            status: "pending",
+            recipient_timezone: recipient_timezone || "America/New_York",
+            optimal_send_time: optimal_send_time || false,
+            metadata: { scheduled_via: "admin", optimal_send_time: optimal_send_time || false },
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Scheduled email to ${recipient_email} for ${scheduled_for}`);
+        return new Response(
+          JSON.stringify({ data: newEmail }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "get_optimal_times": {
+        // Get engagement data by hour to recommend optimal send times
+        const { data: events, error } = await supabase
+          .from("email_tracking_events")
+          .select("event_type, created_at")
+          .eq("event_type", "open");
+
+        if (error) throw error;
+
+        const hourCounts: Record<number, number> = {};
+        const dayCounts: Record<number, number> = {};
+
+        events?.forEach(event => {
+          const date = new Date(event.created_at);
+          const hour = date.getHours();
+          const day = date.getDay();
+          hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+          dayCounts[day] = (dayCounts[day] || 0) + 1;
+        });
+
+        // Sort by count and get top hours/days
+        const topHours = Object.entries(hourCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 4)
+          .map(([hour, count]) => ({ hour: parseInt(hour), count }));
+
+        const topDays = Object.entries(dayCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3)
+          .map(([day, count]) => ({ day: parseInt(day), count }));
+
+        return new Response(
+          JSON.stringify({ 
+            data: { 
+              topHours: topHours.length > 0 ? topHours : [{ hour: 10, count: 0 }, { hour: 14, count: 0 }],
+              topDays: topDays.length > 0 ? topDays : [{ day: 2, count: 0 }, { day: 3, count: 0 }],
+              hasData: events?.length > 0
+            } 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),

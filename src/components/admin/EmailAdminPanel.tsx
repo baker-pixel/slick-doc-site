@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { format, subDays } from "date-fns";
+import { format, subDays, addDays, setHours, setMinutes } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,38 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3 } from "lucide-react";
+import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
+
+// Timezone options
+const TIMEZONES = [
+  { value: "America/New_York", label: "Eastern (ET)", offset: -5 },
+  { value: "America/Chicago", label: "Central (CT)", offset: -6 },
+  { value: "America/Denver", label: "Mountain (MT)", offset: -7 },
+  { value: "America/Los_Angeles", label: "Pacific (PT)", offset: -8 },
+  { value: "America/Phoenix", label: "Arizona (AZ)", offset: -7 },
+  { value: "America/Anchorage", label: "Alaska (AKT)", offset: -9 },
+  { value: "Pacific/Honolulu", label: "Hawaii (HST)", offset: -10 },
+  { value: "UTC", label: "UTC", offset: 0 },
+];
+
+// Optimal send time recommendations
+const OPTIMAL_TIMES = [
+  { hour: 10, label: "10:00 AM", reason: "Peak business hours - highest open rates" },
+  { hour: 14, label: "2:00 PM", reason: "Post-lunch engagement spike" },
+  { hour: 9, label: "9:00 AM", reason: "Start of workday - good for B2B" },
+  { hour: 19, label: "7:00 PM", reason: "Evening check - good for B2C" },
+];
+
+const OPTIMAL_DAYS = [
+  { day: 2, label: "Tuesday", reason: "Best overall engagement day" },
+  { day: 3, label: "Wednesday", reason: "Strong mid-week performance" },
+  { day: 4, label: "Thursday", reason: "High click-through rates" },
+];
 
 interface EmailQueueItem {
   id: string;
@@ -27,6 +56,8 @@ interface EmailQueueItem {
   error_message: string | null;
   created_at: string;
   metadata: Json;
+  recipient_timezone?: string;
+  optimal_send_time?: boolean;
 }
 
 interface EmailLog {
@@ -90,6 +121,104 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   const [selectedEmail, setSelectedEmail] = useState<EmailQueueItem | EmailLog | null>(null);
   const [selectedSequence, setSelectedSequence] = useState<EmailSequence | null>(null);
   const [isSequenceDialogOpen, setIsSequenceDialogOpen] = useState(false);
+
+  // Scheduling state
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    recipientEmail: "",
+    recipientName: "",
+    subject: "",
+    htmlContent: "",
+    timezone: "America/New_York",
+    scheduleDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+    scheduleTime: "10:00",
+    useOptimalTime: true,
+  });
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  // Calculate next optimal send time
+  const getNextOptimalTime = (timezone: string) => {
+    const now = new Date();
+    const optimalHour = 10; // 10 AM is generally best
+    const optimalDays = [2, 3, 4]; // Tue, Wed, Thu
+
+    for (let daysAhead = 0; daysAhead < 7; daysAhead++) {
+      const checkDate = addDays(now, daysAhead);
+      const dayOfWeek = checkDate.getDay();
+      
+      if (optimalDays.includes(dayOfWeek)) {
+        const targetDate = setMinutes(setHours(checkDate, optimalHour), 0);
+        if (targetDate > now) {
+          return {
+            date: format(targetDate, "yyyy-MM-dd"),
+            time: "10:00",
+            displayTime: formatInTimeZone(targetDate, timezone, "EEEE, MMM d 'at' h:mm a zzz"),
+          };
+        }
+      }
+    }
+    
+    // Fallback to next day at 10am
+    const fallback = setMinutes(setHours(addDays(now, 1), optimalHour), 0);
+    return {
+      date: format(fallback, "yyyy-MM-dd"),
+      time: "10:00",
+      displayTime: formatInTimeZone(fallback, timezone, "EEEE, MMM d 'at' h:mm a zzz"),
+    };
+  };
+
+  const optimalTime = useMemo(() => getNextOptimalTime(scheduleForm.timezone), [scheduleForm.timezone]);
+
+  const handleScheduleEmail = async () => {
+    if (!scheduleForm.recipientEmail || !scheduleForm.subject || !scheduleForm.htmlContent) {
+      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+
+    setIsScheduling(true);
+    try {
+      const scheduledDate = scheduleForm.useOptimalTime
+        ? `${optimalTime.date}T${optimalTime.time}:00`
+        : `${scheduleForm.scheduleDate}T${scheduleForm.scheduleTime}:00`;
+
+      const response = await supabase.functions.invoke("admin", {
+        body: {
+          action: "schedule_email",
+          password,
+          data: {
+            recipient_email: scheduleForm.recipientEmail,
+            recipient_name: scheduleForm.recipientName,
+            subject: scheduleForm.subject,
+            html_content: scheduleForm.htmlContent,
+            scheduled_for: scheduledDate,
+            recipient_timezone: scheduleForm.timezone,
+            optimal_send_time: scheduleForm.useOptimalTime,
+          },
+        },
+      });
+
+      if (response.error) throw response.error;
+
+      toast({ title: "Success", description: "Email scheduled successfully" });
+      setIsScheduleDialogOpen(false);
+      setScheduleForm({
+        recipientEmail: "",
+        recipientName: "",
+        subject: "",
+        htmlContent: "",
+        timezone: "America/New_York",
+        scheduleDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+        scheduleTime: "10:00",
+        useOptimalTime: true,
+      });
+      fetchEmailData();
+    } catch (error) {
+      console.error("Error scheduling email:", error);
+      toast({ title: "Error", description: "Failed to schedule email", variant: "destructive" });
+    } finally {
+      setIsScheduling(false);
+    }
+  };
 
   const fetchEmailData = async () => {
     setIsLoading(true);
@@ -681,6 +810,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                     <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                     Refresh
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setIsScheduleDialogOpen(true)}>
+                    <CalendarClock className="w-4 h-4 mr-2" />
+                    Schedule Email
+                  </Button>
                   <Button size="sm" onClick={handleProcessQueue} disabled={isLoading}>
                     <Send className="w-4 h-4 mr-2" />
                     Process Queue
@@ -719,7 +852,21 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                           <TableCell className="max-w-xs truncate">{item.subject}</TableCell>
                           <TableCell>{getStatusBadge(item.status)}</TableCell>
                           <TableCell className="text-muted-foreground">
-                            {format(new Date(item.scheduled_for), "MMM d, h:mm a")}
+                            <div>
+                              <p>{format(new Date(item.scheduled_for), "MMM d, h:mm a")}</p>
+                              {item.recipient_timezone && (
+                                <p className="text-xs flex items-center gap-1">
+                                  <Globe className="w-3 h-3" />
+                                  {TIMEZONES.find(tz => tz.value === item.recipient_timezone)?.label || item.recipient_timezone}
+                                  {item.optimal_send_time && (
+                                    <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1">
+                                      <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                                      Optimal
+                                    </Badge>
+                                  )}
+                                </p>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex gap-1 justify-end">
@@ -940,6 +1087,173 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Schedule Email Dialog */}
+      <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="w-5 h-5" />
+              Schedule Email
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            {/* Recipient Info */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="recipientEmail">Recipient Email *</Label>
+                <Input
+                  id="recipientEmail"
+                  type="email"
+                  placeholder="email@example.com"
+                  value={scheduleForm.recipientEmail}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, recipientEmail: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recipientName">Recipient Name</Label>
+                <Input
+                  id="recipientName"
+                  placeholder="John Doe"
+                  value={scheduleForm.recipientName}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, recipientName: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Subject */}
+            <div className="space-y-2">
+              <Label htmlFor="subject">Subject *</Label>
+              <Input
+                id="subject"
+                placeholder="Email subject"
+                value={scheduleForm.subject}
+                onChange={(e) => setScheduleForm({ ...scheduleForm, subject: e.target.value })}
+              />
+            </div>
+
+            {/* HTML Content */}
+            <div className="space-y-2">
+              <Label htmlFor="htmlContent">HTML Content *</Label>
+              <Textarea
+                id="htmlContent"
+                placeholder="<div>Your email content...</div>"
+                value={scheduleForm.htmlContent}
+                onChange={(e) => setScheduleForm({ ...scheduleForm, htmlContent: e.target.value })}
+                className="min-h-[150px] font-mono text-sm"
+              />
+            </div>
+
+            {/* Timezone */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                Recipient Timezone
+              </Label>
+              <Select
+                value={scheduleForm.timezone}
+                onValueChange={(value) => setScheduleForm({ ...scheduleForm, timezone: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Optimal Send Time Toggle */}
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span className="font-medium">Use Optimal Send Time</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Based on industry research, we'll schedule your email for the best engagement window.
+                    </p>
+                    {scheduleForm.useOptimalTime && (
+                      <p className="text-sm text-primary mt-2 font-medium">
+                        Scheduled for: {optimalTime.displayTime}
+                      </p>
+                    )}
+                  </div>
+                  <Switch
+                    checked={scheduleForm.useOptimalTime}
+                    onCheckedChange={(checked) => setScheduleForm({ ...scheduleForm, useOptimalTime: checked })}
+                  />
+                </div>
+
+                {/* Optimal time recommendations */}
+                <div className="mt-4 pt-4 border-t border-primary/10">
+                  <p className="text-xs text-muted-foreground mb-2">Recommended send times:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {OPTIMAL_TIMES.slice(0, 2).map((time) => (
+                      <div key={time.hour} className="flex items-center gap-2 text-xs">
+                        <Clock className="w-3 h-3 text-muted-foreground" />
+                        <span className="font-medium">{time.label}</span>
+                        <span className="text-muted-foreground">- {time.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Best days: Tuesday, Wednesday, Thursday</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Manual Schedule (when optimal is disabled) */}
+            {!scheduleForm.useOptimalTime && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="scheduleDate">Schedule Date</Label>
+                  <Input
+                    id="scheduleDate"
+                    type="date"
+                    value={scheduleForm.scheduleDate}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, scheduleDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="scheduleTime">Schedule Time</Label>
+                  <Input
+                    id="scheduleTime"
+                    type="time"
+                    value={scheduleForm.scheduleTime}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, scheduleTime: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsScheduleDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleScheduleEmail} disabled={isScheduling}>
+                {isScheduling ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Scheduling...
+                  </>
+                ) : (
+                  <>
+                    <CalendarClock className="w-4 h-4 mr-2" />
+                    Schedule Email
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
