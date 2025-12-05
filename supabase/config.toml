@@ -53,3 +53,9 @@ verify_jwt = false
 
 [functions.send-report-to-client]
 verify_jwt = false
+
+[functions.send-campaign]
+verify_jwt = false
+
+[functions.send-test-email]
+verify_jwt = false
