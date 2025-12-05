@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail, Send, Zap, Settings } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail, Send, Zap, Settings, Activity, Bell } from "lucide-react";
 import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
@@ -28,6 +28,8 @@ import { EmailTemplatesPanel } from "@/components/admin/EmailTemplatesPanel";
 import { CampaignSenderPanel } from "@/components/admin/CampaignSenderPanel";
 import { QuickActionsPanel } from "@/components/admin/QuickActionsPanel";
 import { ContentCalendarPanel } from "@/components/admin/ContentCalendarPanel";
+import PipelineDashboard from "@/components/admin/PipelineDashboard";
+import AutomationAlertsPanel from "@/components/admin/AutomationAlertsPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -713,9 +715,17 @@ const Admin = () => {
             </Card>
           </div>
 
-          <Tabs defaultValue="quick-actions" className="space-y-4">
+          <Tabs defaultValue="pipeline" className="space-y-4">
             <TabsList className="flex-wrap h-auto gap-1">
-              <TabsTrigger value="quick-actions" className="gap-1 bg-primary/10">
+              <TabsTrigger value="pipeline" className="gap-1 bg-primary/10">
+                <Activity className="w-4 h-4" />
+                Pipeline
+              </TabsTrigger>
+              <TabsTrigger value="alerts" className="gap-1">
+                <Bell className="w-4 h-4" />
+                Alerts
+              </TabsTrigger>
+              <TabsTrigger value="quick-actions" className="gap-1">
                 <Zap className="w-4 h-4" />
                 Quick Actions
               </TabsTrigger>
@@ -735,7 +745,17 @@ const Admin = () => {
               </TabsTrigger>
             </TabsList>
 
-            {/* Quick Actions - Main view */}
+            {/* Pipeline Dashboard - Main view */}
+            <TabsContent value="pipeline">
+              <PipelineDashboard />
+            </TabsContent>
+
+            {/* Automation Alerts */}
+            <TabsContent value="alerts">
+              <AutomationAlertsPanel />
+            </TabsContent>
+
+            {/* Quick Actions */}
             <TabsContent value="quick-actions">
               <QuickActionsPanel />
             </TabsContent>

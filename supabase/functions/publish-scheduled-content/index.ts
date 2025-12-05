@@ -122,6 +122,17 @@ serve(async (req) => {
             })
             .eq("id", item.id);
 
+          // Create automation alert for failure
+          await supabase.from("automation_alerts").insert({
+            alert_type: "content_publish_failure",
+            severity: "error",
+            title: "Content Publish Failed",
+            message: `Failed to publish "${item.title}" to ${item.platform}: ${errorMessage}`,
+            source: "publish-scheduled-content",
+            source_id: item.id,
+            metadata: { platform: item.platform, title: item.title, error: errorMessage },
+          });
+
           results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: errorMessage });
         }
       } catch (itemError: any) {
