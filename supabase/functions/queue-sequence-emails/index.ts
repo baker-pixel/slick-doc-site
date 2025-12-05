@@ -6,6 +6,65 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Optimal send windows (in local time)
+const OPTIMAL_SEND_WINDOWS = {
+  default: { start: 9, end: 17 }, // 9am-5pm
+  marketing: { start: 10, end: 14 }, // 10am-2pm
+};
+
+// Calculate next optimal send time
+function getNextOptimalSendTime(baseTime: Date, timezone: string): Date {
+  const localHour = getHourInTimezone(baseTime, timezone);
+  const window = OPTIMAL_SEND_WINDOWS.default;
+  
+  // If within optimal window, return as-is
+  if (localHour >= window.start && localHour < window.end) {
+    return baseTime;
+  }
+  
+  // Calculate next optimal time
+  const result = new Date(baseTime);
+  
+  if (localHour >= window.end) {
+    // After window - schedule for next day
+    result.setDate(result.getDate() + 1);
+  }
+  
+  // Set to start of optimal window
+  const offset = getTimezoneOffset(timezone);
+  result.setUTCHours(window.start - offset / 60, 0, 0, 0);
+  
+  return result;
+}
+
+// Get current hour in a specific timezone
+function getHourInTimezone(date: Date, timezone: string): number {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      hour12: false,
+      timeZone: timezone
+    });
+    return parseInt(formatter.format(date));
+  } catch {
+    return date.getUTCHours() - 5; // Default to EST
+  }
+}
+
+// Get timezone offset in minutes
+function getTimezoneOffset(timezone: string): number {
+  const offsets: Record<string, number> = {
+    "America/New_York": -300,
+    "America/Chicago": -360,
+    "America/Denver": -420,
+    "America/Los_Angeles": -480,
+    "America/Anchorage": -540,
+    "Pacific/Honolulu": -600,
+    "UTC": 0,
+  };
+  return offsets[timezone] ?? -300;
+}
+
 // Email templates
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
   immediate_report: (data) => ({
@@ -173,10 +232,17 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
   })
 };
 
+interface SequenceSettings {
+  use_recipient_timezone?: boolean;
+  default_timezone?: string;
+  optimal_send_enabled?: boolean;
+}
+
 interface QueueRequest {
   triggerType: string;
   recipientEmail: string;
   recipientName: string;
+  recipientTimezone?: string;
   data: Record<string, any>;
 }
 
@@ -190,7 +256,7 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { triggerType, recipientEmail, recipientName, data }: QueueRequest = await req.json();
+    const { triggerType, recipientEmail, recipientName, recipientTimezone, data }: QueueRequest = await req.json();
 
     console.log(`Queueing sequence for trigger: ${triggerType}, recipient: ${recipientEmail}`);
 
@@ -210,7 +276,25 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    const emails = sequence.emails as Array<{ delay_hours: number; subject: string; template: string }>;
+    // Parse sequence settings
+    const settings: SequenceSettings = (sequence as any).settings || {};
+    const useRecipientTimezone = settings.use_recipient_timezone ?? true;
+    const defaultTimezone = settings.default_timezone || "America/New_York";
+    const optimalSendEnabled = settings.optimal_send_enabled ?? false;
+    
+    // Determine timezone to use
+    const timezone = useRecipientTimezone && recipientTimezone 
+      ? recipientTimezone 
+      : defaultTimezone;
+
+    console.log(`Using timezone: ${timezone}, optimal send: ${optimalSendEnabled}`);
+
+    const emails = sequence.emails as Array<{ 
+      delay_hours: number; 
+      subject: string; 
+      template: string;
+      optimal_send_time?: boolean;
+    }>;
     const queuedEmails = [];
 
     for (const emailConfig of emails) {
@@ -221,13 +305,24 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       const { subject, html } = template({ ...data, firstName: recipientName });
-      const scheduledFor = new Date(Date.now() + emailConfig.delay_hours * 60 * 60 * 1000);
+      
+      // Calculate scheduled time
+      let scheduledFor = new Date(Date.now() + emailConfig.delay_hours * 60 * 60 * 1000);
+      
+      // Apply optimal send time if enabled for this email
+      const useOptimalTime = optimalSendEnabled && (emailConfig.optimal_send_time ?? true);
+      if (useOptimalTime) {
+        scheduledFor = getNextOptimalSendTime(scheduledFor, timezone);
+        console.log(`Optimized send time for ${emailConfig.template}: ${scheduledFor.toISOString()}`);
+      }
 
       const { data: queuedEmail, error: queueError } = await supabase
         .from("email_queue")
         .insert({
           recipient_email: recipientEmail,
           recipient_name: recipientName,
+          recipient_timezone: timezone,
+          optimal_send_time: useOptimalTime,
           subject: emailConfig.subject || subject,
           html_content: html,
           scheduled_for: scheduledFor.toISOString(),
@@ -235,6 +330,7 @@ const handler = async (req: Request): Promise<Response> => {
             sequence_id: sequence.id,
             trigger_type: triggerType,
             template: emailConfig.template,
+            optimal_send_applied: useOptimalTime,
             ...data,
           },
         })

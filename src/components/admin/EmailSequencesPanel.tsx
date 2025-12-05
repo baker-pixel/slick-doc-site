@@ -20,6 +20,15 @@ interface SequenceEmail {
   delay_hours: number;
   subject: string;
   template: string;
+  optimal_send_time?: boolean;
+  send_window_start?: number;
+  send_window_end?: number;
+}
+
+interface SequenceSettings {
+  use_recipient_timezone?: boolean;
+  default_timezone?: string;
+  optimal_send_enabled?: boolean;
 }
 
 interface EmailSequence {
@@ -30,6 +39,7 @@ interface EmailSequence {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  settings?: SequenceSettings;
 }
 
 const TRIGGER_TYPES = [
@@ -52,6 +62,16 @@ const TEMPLATE_OPTIONS = [
   { value: "pdf_thankyou", label: "PDF Thank You" },
   { value: "booking_confirmation", label: "Booking Confirmation" },
   { value: "custom", label: "Custom Template" },
+];
+
+const TIMEZONES = [
+  { value: "America/New_York", label: "Eastern Time (ET)" },
+  { value: "America/Chicago", label: "Central Time (CT)" },
+  { value: "America/Denver", label: "Mountain Time (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+  { value: "America/Anchorage", label: "Alaska Time (AKT)" },
+  { value: "Pacific/Honolulu", label: "Hawaii Time (HT)" },
+  { value: "UTC", label: "UTC" },
 ];
 
 export function EmailSequencesPanel() {
@@ -109,11 +129,19 @@ export function EmailSequencesPanel() {
 
   const openEditor = (sequence?: EmailSequence) => {
     if (sequence) {
-      setEditingSequence({ ...sequence });
+      setEditingSequence({ 
+        ...sequence,
+        settings: sequence.settings || { use_recipient_timezone: true, default_timezone: "America/New_York", optimal_send_enabled: false }
+      });
       setEditingEmails([...sequence.emails]);
     } else {
-      setEditingSequence({ name: "", trigger_type: "", is_active: true });
-      setEditingEmails([{ delay_hours: 0, subject: "", template: "" }]);
+      setEditingSequence({ 
+        name: "", 
+        trigger_type: "", 
+        is_active: true,
+        settings: { use_recipient_timezone: true, default_timezone: "America/New_York", optimal_send_enabled: false }
+      });
+      setEditingEmails([{ delay_hours: 0, subject: "", template: "", optimal_send_time: false }]);
     }
     setIsEditorOpen(true);
   };
@@ -121,17 +149,24 @@ export function EmailSequencesPanel() {
   const addEmail = () => {
     const lastEmail = editingEmails[editingEmails.length - 1];
     const newDelay = lastEmail ? lastEmail.delay_hours + 24 : 0;
-    setEditingEmails([...editingEmails, { delay_hours: newDelay, subject: "", template: "" }]);
+    setEditingEmails([...editingEmails, { delay_hours: newDelay, subject: "", template: "", optimal_send_time: editingSequence.settings?.optimal_send_enabled || false }]);
   };
 
   const removeEmail = (index: number) => {
     setEditingEmails(editingEmails.filter((_, i) => i !== index));
   };
 
-  const updateEmail = (index: number, field: keyof SequenceEmail, value: string | number) => {
+  const updateEmail = (index: number, field: keyof SequenceEmail, value: string | number | boolean) => {
     const updated = [...editingEmails];
     updated[index] = { ...updated[index], [field]: value };
     setEditingEmails(updated);
+  };
+
+  const updateSettings = (field: keyof SequenceSettings, value: string | boolean) => {
+    setEditingSequence({
+      ...editingSequence,
+      settings: { ...editingSequence.settings, [field]: value }
+    });
   };
 
   const saveSequence = async () => {
@@ -426,6 +461,52 @@ export function EmailSequencesPanel() {
               </div>
             </div>
 
+            {/* Scheduling Settings */}
+            <Card className="p-4 bg-muted/30">
+              <div className="flex items-center gap-2 mb-4">
+                <Clock className="w-4 h-4 text-primary" />
+                <Label className="text-base font-medium">Scheduling Options</Label>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Use Recipient Timezone</Label>
+                    <p className="text-xs text-muted-foreground">Send based on recipient's timezone</p>
+                  </div>
+                  <Switch
+                    checked={editingSequence.settings?.use_recipient_timezone ?? true}
+                    onCheckedChange={v => updateSettings("use_recipient_timezone", v)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Default Timezone</Label>
+                  <Select
+                    value={editingSequence.settings?.default_timezone || "America/New_York"}
+                    onValueChange={v => updateSettings("default_timezone", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEZONES.map(tz => (
+                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div>
+                  <Label className="text-sm">Enable Optimal Send Times</Label>
+                  <p className="text-xs text-muted-foreground">Send during business hours (9am-5pm)</p>
+                </div>
+                <Switch
+                  checked={editingSequence.settings?.optimal_send_enabled ?? false}
+                  onCheckedChange={v => updateSettings("optimal_send_enabled", v)}
+                />
+              </div>
+            </Card>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="text-base">Emails in Sequence</Label>
@@ -483,6 +564,18 @@ export function EmailSequencesPanel() {
                       placeholder="Email subject"
                     />
                   </div>
+                  {editingSequence.settings?.optimal_send_enabled && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div>
+                        <Label className="text-sm">Optimal Send Time</Label>
+                        <p className="text-xs text-muted-foreground">Wait for best delivery window</p>
+                      </div>
+                      <Switch
+                        checked={email.optimal_send_time ?? false}
+                        onCheckedChange={v => updateEmail(idx, "optimal_send_time", v)}
+                      />
+                    </div>
+                  )}
                 </Card>
               ))}
             </div>
