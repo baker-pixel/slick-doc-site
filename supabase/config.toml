@@ -1,5 +1,8 @@
 project_id = "dnwbdnwbwwoxiswzzikg"
 
+[functions.publish-scheduled-content]
+verify_jwt = false
+
 [functions.admin]
 verify_jwt = false
 
