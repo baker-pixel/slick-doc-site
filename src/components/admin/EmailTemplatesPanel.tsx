@@ -38,6 +38,9 @@ const CATEGORIES = [
   { value: "notification", label: "Notification" },
   { value: "onboarding", label: "Onboarding" },
   { value: "follow-up", label: "Follow-up" },
+  { value: "sales", label: "Sales & Conversion" },
+  { value: "customer-success", label: "Customer Success" },
+  { value: "engagement", label: "Engagement" },
 ];
 
 const getCategoryColor = (category: string) => {
@@ -46,6 +49,9 @@ const getCategoryColor = (category: string) => {
     case "notification": return "bg-amber-500/10 text-amber-600 border-amber-200";
     case "onboarding": return "bg-green-500/10 text-green-600 border-green-200";
     case "follow-up": return "bg-purple-500/10 text-purple-600 border-purple-200";
+    case "sales": return "bg-rose-500/10 text-rose-600 border-rose-200";
+    case "customer-success": return "bg-teal-500/10 text-teal-600 border-teal-200";
+    case "engagement": return "bg-indigo-500/10 text-indigo-600 border-indigo-200";
     default: return "bg-primary/10 text-primary border-primary/20";
   }
 };
