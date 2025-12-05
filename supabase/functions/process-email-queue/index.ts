@@ -424,6 +424,17 @@ const handler = async (req: Request): Promise<Response> => {
           metadata: { ...email.metadata, error: emailError.message },
         });
 
+        // Create automation alert for failure
+        await supabase.from("automation_alerts").insert({
+          alert_type: "email_failure",
+          severity: "error",
+          title: "Email Send Failed",
+          message: `Failed to send email to ${email.recipient_email}: ${emailError.message}`,
+          source: "process-email-queue",
+          source_id: email.id,
+          metadata: { subject: email.subject, error: emailError.message },
+        });
+
         results.push({ id: email.id, status: "failed", error: emailError.message });
       }
     }

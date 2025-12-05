@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      automation_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          created_at: string
+          id: string
+          message: string
+          metadata: Json | null
+          severity: string
+          source: string | null
+          source_id: string | null
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type: string
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json | null
+          severity?: string
+          source?: string | null
+          source_id?: string | null
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json | null
+          severity?: string
+          source?: string | null
+          source_id?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
       automation_jobs: {
         Row: {
           ai_model_used: string | null
@@ -182,6 +224,7 @@ export type Database = {
           id: string
           last_name: string
           marketing_challenge: string | null
+          pipeline_stage_id: string | null
           status: string
           updated_at: string
           website_url: string | null
@@ -194,6 +237,7 @@ export type Database = {
           id?: string
           last_name: string
           marketing_challenge?: string | null
+          pipeline_stage_id?: string | null
           status?: string
           updated_at?: string
           website_url?: string | null
@@ -206,11 +250,20 @@ export type Database = {
           id?: string
           last_name?: string
           marketing_challenge?: string | null
+          pipeline_stage_id?: string | null
           status?: string
           updated_at?: string
           website_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contact_submissions_pipeline_stage_id_fkey"
+            columns: ["pipeline_stage_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_stages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       content_calendar: {
         Row: {
@@ -896,6 +949,39 @@ export type Database = {
           first_name?: string | null
           id?: string
           source?: string | null
+        }
+        Relationships: []
+      }
+      pipeline_stages: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          stage_order: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          stage_order: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          stage_order?: number
+          updated_at?: string
         }
         Relationships: []
       }
