@@ -160,10 +160,21 @@ export function QuickActionsPanel() {
       const { error } = await supabase.from("email_queue").insert(emailsToQueue);
       if (error) throw error;
 
-      toast({ 
-        title: "Emails queued!", 
-        description: `${uniqueRecipients.length} emails ready to send`
-      });
+      // Trigger immediate send
+      const { error: sendError } = await supabase.functions.invoke("process-email-queue");
+      
+      if (sendError) {
+        toast({ 
+          title: "Emails queued but not sent", 
+          description: "Queued successfully but instant send failed. They'll send on next schedule.",
+          variant: "destructive"
+        });
+      } else {
+        toast({ 
+          title: "Emails sent!", 
+          description: `${uniqueRecipients.length} emails sent successfully`
+        });
+      }
       
       setEmailModalOpen(false);
       setSelectedTemplate("");
