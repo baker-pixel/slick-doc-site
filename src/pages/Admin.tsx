@@ -27,6 +27,7 @@ import { EmailSequencesPanel } from "@/components/admin/EmailSequencesPanel";
 import { EmailTemplatesPanel } from "@/components/admin/EmailTemplatesPanel";
 import { CampaignSenderPanel } from "@/components/admin/CampaignSenderPanel";
 import { QuickActionsPanel } from "@/components/admin/QuickActionsPanel";
+import { ContentCalendarPanel } from "@/components/admin/ContentCalendarPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -718,6 +719,10 @@ const Admin = () => {
                 <Zap className="w-4 h-4" />
                 Quick Actions
               </TabsTrigger>
+              <TabsTrigger value="calendar" className="gap-1">
+                <CalendarIcon className="w-4 h-4" />
+                Calendar
+              </TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="emails" className="gap-1">
@@ -733,6 +738,11 @@ const Admin = () => {
             {/* Quick Actions - Main view */}
             <TabsContent value="quick-actions">
               <QuickActionsPanel />
+            </TabsContent>
+
+            {/* Content Calendar */}
+            <TabsContent value="calendar">
+              <ContentCalendarPanel />
             </TabsContent>
 
             <TabsContent value="analytics">

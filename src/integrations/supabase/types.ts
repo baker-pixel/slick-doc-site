@@ -212,6 +212,59 @@ export type Database = {
         }
         Relationships: []
       }
+      content_calendar: {
+        Row: {
+          content: string
+          content_id: string | null
+          content_type: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          platform: string | null
+          published_at: string | null
+          scheduled_for: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          content_id?: string | null
+          content_type: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          platform?: string | null
+          published_at?: string | null
+          scheduled_for: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          content_id?: string | null
+          content_type?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          platform?: string | null
+          published_at?: string | null
+          scheduled_for?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_calendar_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "generated_content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_cleanup_log: {
         Row: {
           cleaned_at: string
