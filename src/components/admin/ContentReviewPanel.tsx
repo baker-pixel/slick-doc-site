@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye } from "lucide-react";
+import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2 } from "lucide-react";
 
 interface GeneratedContent {
   id: string;
@@ -21,6 +22,8 @@ interface GeneratedContent {
   metadata: Record<string, unknown> | null;
   client_accounts?: {
     business_name: string;
+    email: string;
+    first_name: string | null;
   };
 }
 
@@ -40,6 +43,9 @@ export const ContentReviewPanel = () => {
   const [editedContent, setEditedContent] = useState("");
   const [editedTitle, setEditedTitle] = useState("");
   const [previewContent, setPreviewContent] = useState<GeneratedContent | null>(null);
+  const [publishingContent, setPublishingContent] = useState<GeneratedContent | null>(null);
+  const [sendToClient, setSendToClient] = useState(true);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -50,7 +56,7 @@ export const ContentReviewPanel = () => {
     const [contentsRes, clientsRes] = await Promise.all([
       supabase
         .from("generated_content")
-        .select("*, client_accounts(business_name)")
+        .select("*, client_accounts(business_name, email, first_name)")
         .order("created_at", { ascending: false }),
       supabase
         .from("client_accounts")
@@ -149,6 +155,65 @@ export const ContentReviewPanel = () => {
       toast({ title: "Saved", description: "Content has been updated" });
       setEditingContent(null);
       fetchData();
+    }
+  };
+
+  const handlePublishClick = (content: GeneratedContent) => {
+    setPublishingContent(content);
+    setSendToClient(true);
+  };
+
+  const handlePublish = async () => {
+    if (!publishingContent) return;
+
+    setIsPublishing(true);
+
+    try {
+      // Update status to published
+      const { error: updateError } = await supabase
+        .from("generated_content")
+        .update({ status: "published", updated_at: new Date().toISOString() })
+        .eq("id", publishingContent.id);
+
+      if (updateError) throw updateError;
+
+      // Optionally send to client
+      if (sendToClient && publishingContent.client_accounts?.email) {
+        const { error: emailError } = await supabase.functions.invoke("send-content-to-client", {
+          body: {
+            contentId: publishingContent.id,
+            clientEmail: publishingContent.client_accounts.email,
+            clientName: publishingContent.client_accounts.first_name || publishingContent.client_accounts.business_name,
+            businessName: publishingContent.client_accounts.business_name,
+            contentTitle: publishingContent.title || "New Content",
+            contentType: formatContentType(publishingContent.content_type),
+            content: publishingContent.content,
+          },
+        });
+
+        if (emailError) {
+          console.error("Email error:", emailError);
+          toast({ 
+            title: "Published", 
+            description: "Content published but failed to send email to client",
+          });
+        } else {
+          toast({ 
+            title: "Published & Sent", 
+            description: "Content has been published and sent to the client" 
+          });
+        }
+      } else {
+        toast({ title: "Published", description: "Content has been published" });
+      }
+
+      setPublishingContent(null);
+      fetchData();
+    } catch (error: any) {
+      console.error("Publish error:", error);
+      toast({ title: "Error", description: "Failed to publish content", variant: "destructive" });
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -283,6 +348,16 @@ export const ContentReviewPanel = () => {
                       </Button>
                     </>
                   )}
+                  {(content.status === "approved" || content.status === "draft") && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => handlePublishClick(content)}
+                    >
+                      <Send className="w-3 h-3 mr-1" />
+                      Publish
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -309,7 +384,7 @@ export const ContentReviewPanel = () => {
               {previewContent?.content}
             </pre>
           </div>
-          <DialogFooter className="mt-4">
+          <DialogFooter className="mt-4 flex-wrap gap-2">
             {previewContent?.status === "draft" && (
               <>
                 <Button
@@ -335,8 +410,83 @@ export const ContentReviewPanel = () => {
                 </Button>
               </>
             )}
+            {previewContent && (previewContent.status === "approved" || previewContent.status === "draft") && (
+              <Button
+                variant="default"
+                onClick={() => {
+                  handlePublishClick(previewContent);
+                  setPreviewContent(null);
+                }}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Publish
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setPreviewContent(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Publish Dialog */}
+      <Dialog open={!!publishingContent} onOpenChange={() => setPublishingContent(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Publish Content</DialogTitle>
+            <DialogDescription>
+              Mark this content as published and optionally send it to the client.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="font-medium">{publishingContent?.title || "Untitled"}</p>
+              <p className="text-sm text-muted-foreground">
+                {formatContentType(publishingContent?.content_type || "")} for {publishingContent?.client_accounts?.business_name}
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="sendToClient"
+                checked={sendToClient}
+                onCheckedChange={(checked) => setSendToClient(checked === true)}
+              />
+              <label
+                htmlFor="sendToClient"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Send content to client via email
+              </label>
+            </div>
+            
+            {sendToClient && publishingContent?.client_accounts?.email && (
+              <p className="text-sm text-muted-foreground pl-6">
+                Will be sent to: {publishingContent.client_accounts.email}
+              </p>
+            )}
+            {sendToClient && !publishingContent?.client_accounts?.email && (
+              <p className="text-sm text-destructive pl-6">
+                No email address found for this client
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishingContent(null)} disabled={isPublishing}>
+              Cancel
+            </Button>
+            <Button onClick={handlePublish} disabled={isPublishing}>
+              {isPublishing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  {sendToClient ? "Publish & Send" : "Publish"}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
