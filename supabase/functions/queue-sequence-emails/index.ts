@@ -376,13 +376,45 @@ const handler = async (req: Request): Promise<Response> => {
     const queuedEmails = [];
 
     for (const emailConfig of emails) {
-      const template = templates[emailConfig.template];
-      if (!template) {
-        console.warn(`Template not found: ${emailConfig.template}`);
-        continue;
-      }
+      let subject: string;
+      let html: string;
 
-      const { subject, html } = template({ ...data, firstName: recipientName });
+      // Check if it's a custom template
+      if (emailConfig.template.startsWith("custom:")) {
+        const templateSlug = emailConfig.template.replace("custom:", "");
+        const { data: customTemplate, error: templateError } = await supabase
+          .from("email_templates")
+          .select("subject, html_content")
+          .eq("slug", templateSlug)
+          .eq("is_active", true)
+          .single();
+
+        if (templateError || !customTemplate) {
+          console.warn(`Custom template not found: ${templateSlug}`);
+          continue;
+        }
+
+        // Replace variables in custom template
+        subject = customTemplate.subject;
+        html = customTemplate.html_content;
+        
+        const templateData = { ...data, firstName: recipientName };
+        Object.entries(templateData).forEach(([key, value]) => {
+          const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+          subject = subject.replace(regex, String(value || ""));
+          html = html.replace(regex, String(value || ""));
+        });
+      } else {
+        // Use built-in template
+        const template = templates[emailConfig.template];
+        if (!template) {
+          console.warn(`Template not found: ${emailConfig.template}`);
+          continue;
+        }
+        const result = template({ ...data, firstName: recipientName });
+        subject = result.subject;
+        html = result.html;
+      }
       
       // Calculate scheduled time
       let scheduledFor = new Date(Date.now() + emailConfig.delay_hours * 60 * 60 * 1000);

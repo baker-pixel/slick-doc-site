@@ -63,8 +63,12 @@ const TEMPLATE_OPTIONS = [
   { value: "contact_followup", label: "Contact Follow-up" },
   { value: "pdf_thankyou", label: "PDF Thank You" },
   { value: "booking_confirmation", label: "Booking Confirmation" },
-  { value: "custom", label: "Custom Template" },
 ];
+
+interface CustomTemplate {
+  slug: string;
+  name: string;
+}
 
 const TIMEZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -78,6 +82,7 @@ const TIMEZONES = [
 
 export function EmailSequencesPanel() {
   const [sequences, setSequences] = useState<EmailSequence[]>([]);
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -92,6 +97,11 @@ export function EmailSequencesPanel() {
   const [previewSubject, setPreviewSubject] = useState("");
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  const allTemplateOptions = [
+    ...TEMPLATE_OPTIONS,
+    ...customTemplates.map(t => ({ value: `custom:${t.slug}`, label: `✨ ${t.name}` }))
+  ];
 
   const fetchSequences = async () => {
     setIsLoading(true);
@@ -111,8 +121,21 @@ export function EmailSequencesPanel() {
     setIsLoading(false);
   };
 
+  const fetchCustomTemplates = async () => {
+    const { data, error } = await supabase
+      .from("email_templates")
+      .select("slug, name")
+      .eq("is_active", true)
+      .order("name");
+
+    if (!error && data) {
+      setCustomTemplates(data);
+    }
+  };
+
   useEffect(() => {
     fetchSequences();
+    fetchCustomTemplates();
   }, []);
 
   const handleToggleActive = async (sequence: EmailSequence) => {
@@ -573,9 +596,18 @@ export function EmailSequencesPanel() {
                           <SelectValue placeholder="Select template" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="" disabled>Built-in Templates</SelectItem>
                           {TEMPLATE_OPTIONS.map(t => (
                             <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                           ))}
+                          {customTemplates.length > 0 && (
+                            <>
+                              <SelectItem value="" disabled className="font-semibold mt-2">Custom Templates</SelectItem>
+                              {customTemplates.map(t => (
+                                <SelectItem key={t.slug} value={`custom:${t.slug}`}>✨ {t.name}</SelectItem>
+                              ))}
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
