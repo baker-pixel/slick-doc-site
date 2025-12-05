@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail, Send } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Users, FileText, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, FileDown, Mail, Send, Zap, Settings } from "lucide-react";
 import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
@@ -26,6 +26,7 @@ import { ReportsReviewPanel } from "@/components/admin/ReportsReviewPanel";
 import { EmailSequencesPanel } from "@/components/admin/EmailSequencesPanel";
 import { EmailTemplatesPanel } from "@/components/admin/EmailTemplatesPanel";
 import { CampaignSenderPanel } from "@/components/admin/CampaignSenderPanel";
+import { QuickActionsPanel } from "@/components/admin/QuickActionsPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -711,31 +712,28 @@ const Admin = () => {
             </Card>
           </div>
 
-          <Tabs defaultValue="analytics" className="space-y-4">
+          <Tabs defaultValue="quick-actions" className="space-y-4">
             <TabsList className="flex-wrap h-auto gap-1">
+              <TabsTrigger value="quick-actions" className="gap-1 bg-primary/10">
+                <Zap className="w-4 h-4" />
+                Quick Actions
+              </TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
-              <TabsTrigger value="contacts">Contacts</TabsTrigger>
-              <TabsTrigger value="gap-analysis">Gap Analysis</TabsTrigger>
-              <TabsTrigger value="pdf-leads">PDF Leads</TabsTrigger>
+              <TabsTrigger value="leads">Leads</TabsTrigger>
               <TabsTrigger value="emails" className="gap-1">
                 <Send className="w-4 h-4" />
                 Emails
               </TabsTrigger>
-              <TabsTrigger value="clients">Clients</TabsTrigger>
-              <TabsTrigger value="sops">SOPs</TabsTrigger>
-              <TabsTrigger value="automation">Automation</TabsTrigger>
-              <TabsTrigger value="content">Content</TabsTrigger>
-              <TabsTrigger value="reports">Reports</TabsTrigger>
-              <TabsTrigger value="sequences">Sequences</TabsTrigger>
-              <TabsTrigger value="templates" className="gap-1">
-                <FileText className="w-4 h-4" />
-                Templates
-              </TabsTrigger>
-              <TabsTrigger value="campaigns" className="gap-1">
-                <Mail className="w-4 h-4" />
-                Campaigns
+              <TabsTrigger value="advanced" className="gap-1">
+                <Settings className="w-4 h-4" />
+                Advanced
               </TabsTrigger>
             </TabsList>
+
+            {/* Quick Actions - Main view */}
+            <TabsContent value="quick-actions">
+              <QuickActionsPanel />
+            </TabsContent>
 
             <TabsContent value="analytics">
               <div className="grid gap-4">
@@ -841,620 +839,211 @@ const Admin = () => {
               </div>
             </TabsContent>
 
-            <TabsContent value="contacts">
-              <Card>
-                <CardHeader className="flex flex-col gap-4 pb-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <CardTitle className="text-lg">Contact Submissions</CardTitle>
-                      {selectedContacts.size > 0 && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete {selectedContacts.size} selected
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete {selectedContacts.size} submissions?</AlertDialogTitle>
-                              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => bulkDelete("contact_submissions", Array.from(selectedContacts))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredContacts, "contact_submissions")}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search name, email, business..."
-                        value={contactSearch}
-                        onChange={(e) => setContactSearch(e.target.value)}
-                        className="pl-9 w-full sm:w-56"
-                      />
-                    </div>
-                    <Select value={contactStatusFilter} onValueChange={setContactStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-32">
-                        <SelectValue placeholder="All statuses" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="new">New</SelectItem>
-                        <SelectItem value="contacted">Contacted</SelectItem>
-                        <SelectItem value="qualified">Qualified</SelectItem>
-                        <SelectItem value="converted">Converted</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !contactDateFrom && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {contactDateFrom ? format(contactDateFrom, "MMM d, yyyy") : "From"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={contactDateFrom} onSelect={setContactDateFrom} initialFocus className="p-3 pointer-events-auto" />
-                      </PopoverContent>
-                    </Popover>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !contactDateTo && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {contactDateTo ? format(contactDateTo, "MMM d, yyyy") : "To"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={contactDateTo} onSelect={setContactDateTo} initialFocus className="p-3 pointer-events-auto" />
-                      </PopoverContent>
-                    </Popover>
-                    {(contactDateFrom || contactDateTo) && (
-                      <Button variant="ghost" size="icon" onClick={() => { setContactDateFrom(undefined); setContactDateTo(undefined); }}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="p-4 w-12">
-                            <Checkbox checked={paginatedContacts.length > 0 && selectedContacts.size === paginatedContacts.length} onCheckedChange={toggleAllContacts} />
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('name')}>
-                            <div className="flex items-center">Name<SortIcon column="name" sort={contactSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('business_name')}>
-                            <div className="flex items-center">Business<SortIcon column="business_name" sort={contactSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('email')}>
-                            <div className="flex items-center">Email<SortIcon column="email" sort={contactSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('status')}>
-                            <div className="flex items-center">Status<SortIcon column="status" sort={contactSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleContactSort('created_at')}>
-                            <div className="flex items-center">Date<SortIcon column="created_at" sort={contactSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {paginatedContacts.map((contact) => (
-                          <tr key={contact.id} className={cn("hover:bg-muted/30", selectedContacts.has(contact.id) && "bg-muted/20")}>
-                            <td className="p-4">
-                              <Checkbox checked={selectedContacts.has(contact.id)} onCheckedChange={() => toggleContactSelection(contact.id)} />
-                            </td>
-                            <td className="p-4">{contact.first_name} {contact.last_name}</td>
-                            <td className="p-4">{contact.business_name}</td>
-                            <td className="p-4">{contact.email}</td>
-                            <td className="p-4">
-                              <Select
-                                value={contact.status}
-                                onValueChange={(value) => updateStatus("contact_submissions", contact.id, value)}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="new">New</SelectItem>
-                                  <SelectItem value="contacted">Contacted</SelectItem>
-                                  <SelectItem value="qualified">Qualified</SelectItem>
-                                  <SelectItem value="converted">Converted</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="p-4 text-muted-foreground">
-                              {new Date(contact.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="p-4">
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="text-destructive">
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete submission?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteRecord("contact_submissions", contact.id)}
-                                      className="bg-destructive text-destructive-foreground"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </td>
-                          </tr>
-                        ))}
-                        {paginatedContacts.length === 0 && (
-                          <tr>
-                            <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                              {contacts.length === 0 ? "No contact submissions yet" : "No results match your search"}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {contactTotalPages > 1 && (
-                    <div className="flex items-center justify-between p-4 border-t">
-                      <span className="text-sm text-muted-foreground">
-                        Showing {(contactPage - 1) * pageSize + 1}-{Math.min(contactPage * pageSize, filteredContacts.length)} of {filteredContacts.length}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" onClick={() => setContactPage(p => Math.max(1, p - 1))} disabled={contactPage === 1}>
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm">Page {contactPage} of {contactTotalPages}</span>
-                        <Button variant="outline" size="icon" onClick={() => setContactPage(p => Math.min(contactTotalPages, p + 1))} disabled={contactPage === contactTotalPages}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="gap-analysis">
-              <Card>
-                <CardHeader className="flex flex-col gap-4 pb-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
-                      {selectedGaps.size > 0 && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete {selectedGaps.size} selected
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete {selectedGaps.size} submissions?</AlertDialogTitle>
-                              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => bulkDelete("gap_analysis_submissions", Array.from(selectedGaps))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredGapAnalyses, "gap_analysis_submissions")}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search name, email, business..."
-                        value={gapSearch}
-                        onChange={(e) => setGapSearch(e.target.value)}
-                        className="pl-9 w-full sm:w-56"
-                      />
-                    </div>
-                    <Select value={gapStatusFilter} onValueChange={setGapStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-32">
-                        <SelectValue placeholder="All statuses" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="submitted">Submitted</SelectItem>
-                        <SelectItem value="reviewed">Reviewed</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !gapDateFrom && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {gapDateFrom ? format(gapDateFrom, "MMM d, yyyy") : "From"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={gapDateFrom} onSelect={setGapDateFrom} initialFocus className="p-3 pointer-events-auto" />
-                      </PopoverContent>
-                    </Popover>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !gapDateTo && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {gapDateTo ? format(gapDateTo, "MMM d, yyyy") : "To"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={gapDateTo} onSelect={setGapDateTo} initialFocus className="p-3 pointer-events-auto" />
-                      </PopoverContent>
-                    </Popover>
-                    {(gapDateFrom || gapDateTo) && (
-                      <Button variant="ghost" size="icon" onClick={() => { setGapDateFrom(undefined); setGapDateTo(undefined); }}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="p-4 w-12">
-                            <Checkbox checked={paginatedGapAnalyses.length > 0 && selectedGaps.size === paginatedGapAnalyses.length} onCheckedChange={toggleAllGaps} />
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('name')}>
-                            <div className="flex items-center">Name<SortIcon column="name" sort={gapSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('business_name')}>
-                            <div className="flex items-center">Business<SortIcon column="business_name" sort={gapSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('email')}>
-                            <div className="flex items-center">Email<SortIcon column="email" sort={gapSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('phone')}>
-                            <div className="flex items-center">Phone<SortIcon column="phone" sort={gapSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('status')}>
-                            <div className="flex items-center">Status<SortIcon column="status" sort={gapSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handleGapSort('created_at')}>
-                            <div className="flex items-center">Date<SortIcon column="created_at" sort={gapSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {paginatedGapAnalyses.map((gap) => (
-                          <tr key={gap.id} className={cn("hover:bg-muted/30", selectedGaps.has(gap.id) && "bg-muted/20")}>
-                            <td className="p-4">
-                              <Checkbox checked={selectedGaps.has(gap.id)} onCheckedChange={() => toggleGapSelection(gap.id)} />
-                            </td>
-                            <td className="p-4">{gap.first_name} {gap.last_name}</td>
-                            <td className="p-4">{gap.business_name}</td>
-                            <td className="p-4">{gap.email}</td>
-                            <td className="p-4">{gap.phone || "-"}</td>
-                            <td className="p-4">
-                              <Select
-                                value={gap.status}
-                                onValueChange={(value) => updateStatus("gap_analysis_submissions", gap.id, value)}
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="submitted">Submitted</SelectItem>
-                                  <SelectItem value="reviewed">Reviewed</SelectItem>
-                                  <SelectItem value="completed">Completed</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="p-4 text-muted-foreground">
-                              {new Date(gap.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="p-4">
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => {
-                                    setSelectedGapAnalysis(gap);
-                                    setIsDetailModalOpen(true);
-                                  }}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-destructive">
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete submission?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        This action cannot be undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => deleteRecord("gap_analysis_submissions", gap.id)}
-                                        className="bg-destructive text-destructive-foreground"
-                                      >
-                                        Delete
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {paginatedGapAnalyses.length === 0 && (
-                          <tr>
-                            <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                              {gapAnalyses.length === 0 ? "No gap analysis submissions yet" : "No results match your search"}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {gapTotalPages > 1 && (
-                    <div className="flex items-center justify-between p-4 border-t">
-                      <span className="text-sm text-muted-foreground">
-                        Showing {(gapPage - 1) * pageSize + 1}-{Math.min(gapPage * pageSize, filteredGapAnalyses.length)} of {filteredGapAnalyses.length}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" onClick={() => setGapPage(p => Math.max(1, p - 1))} disabled={gapPage === 1}>
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm">Page {gapPage} of {gapTotalPages}</span>
-                        <Button variant="outline" size="icon" onClick={() => setGapPage(p => Math.min(gapTotalPages, p + 1))} disabled={gapPage === gapTotalPages}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="pdf-leads">
-              <Card>
-                <CardHeader className="flex flex-col gap-4 pb-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <CardTitle className="text-lg">PDF Leads</CardTitle>
-                      {selectedPdfLeads.size > 0 && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete {selectedPdfLeads.size} selected
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete {selectedPdfLeads.size} leads?</AlertDialogTitle>
-                              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => bulkDelete("pdf_leads", Array.from(selectedPdfLeads))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                    <Button variant="outline" size="default" onClick={() => exportToCSV(filteredPdfLeads, "pdf_leads")}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search name, email..."
-                        value={pdfSearch}
-                        onChange={(e) => setPdfSearch(e.target.value)}
-                        className="pl-9 w-full sm:w-56"
-                      />
-                    </div>
-                    <Select value={pdfSourceFilter} onValueChange={setPdfSourceFilter}>
-                      <SelectTrigger className="w-full sm:w-40">
-                        <SelectValue placeholder="All sources" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All sources</SelectItem>
-                        <SelectItem value="system_brochure">System Brochure</SelectItem>
-                        <SelectItem value="homepage">Homepage</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !pdfDateFrom && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {pdfDateFrom ? format(pdfDateFrom, "MMM d, yyyy") : "From"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={pdfDateFrom} onSelect={setPdfDateFrom} initialFocus className="p-3 pointer-events-auto" />
-                      </PopoverContent>
-                    </Popover>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full sm:w-[130px] justify-start text-left font-normal", !pdfDateTo && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {pdfDateTo ? format(pdfDateTo, "MMM d, yyyy") : "To"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={pdfDateTo} onSelect={setPdfDateTo} initialFocus className="p-3 pointer-events-auto" />
-                      </PopoverContent>
-                    </Popover>
-                    {(pdfDateFrom || pdfDateTo) && (
-                      <Button variant="ghost" size="icon" onClick={() => { setPdfDateFrom(undefined); setPdfDateTo(undefined); }}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="p-4 w-12">
-                            <Checkbox checked={paginatedPdfLeads.length > 0 && selectedPdfLeads.size === paginatedPdfLeads.length} onCheckedChange={() => toggleAllPdfLeads(paginatedPdfLeads)} />
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('first_name')}>
-                            <div className="flex items-center">Name<SortIcon column="first_name" sort={pdfSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('email')}>
-                            <div className="flex items-center">Email<SortIcon column="email" sort={pdfSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('source')}>
-                            <div className="flex items-center">Source<SortIcon column="source" sort={pdfSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium cursor-pointer hover:bg-muted/70" onClick={() => handlePdfSort('created_at')}>
-                            <div className="flex items-center">Date<SortIcon column="created_at" sort={pdfSort} /></div>
-                          </th>
-                          <th className="text-left p-4 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {paginatedPdfLeads.map((lead) => (
-                          <tr key={lead.id} className={cn("hover:bg-muted/30", selectedPdfLeads.has(lead.id) && "bg-muted/20")}>
-                            <td className="p-4">
-                              <Checkbox checked={selectedPdfLeads.has(lead.id)} onCheckedChange={() => togglePdfSelection(lead.id)} />
-                            </td>
-                            <td className="p-4">{lead.first_name || '-'}</td>
-                            <td className="p-4">{lead.email}</td>
-                            <td className="p-4">
-                              <Badge variant="outline">{lead.source || 'unknown'}</Badge>
-                            </td>
-                            <td className="p-4 text-muted-foreground">
-                              {new Date(lead.created_at).toLocaleDateString()}
-                            </td>
-                            <td className="p-4">
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="text-destructive">
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete lead?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteRecord("pdf_leads", lead.id)}
-                                      className="bg-destructive text-destructive-foreground"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </td>
-                          </tr>
-                        ))}
-                        {paginatedPdfLeads.length === 0 && (
-                          <tr>
-                            <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                              {pdfLeads.length === 0 ? "No PDF leads yet" : "No results match your search"}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {pdfTotalPages > 1 && (
-                    <div className="flex items-center justify-between p-4 border-t">
-                      <span className="text-sm text-muted-foreground">
-                        Showing {(pdfPage - 1) * pageSize + 1}-{Math.min(pdfPage * pageSize, filteredPdfLeads.length)} of {filteredPdfLeads.length}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="icon" onClick={() => setPdfPage(p => Math.max(1, p - 1))} disabled={pdfPage === 1}>
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm">Page {pdfPage} of {pdfTotalPages}</span>
-                        <Button variant="outline" size="icon" onClick={() => setPdfPage(p => Math.min(pdfTotalPages, p + 1))} disabled={pdfPage === pdfTotalPages}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+            {/* Old tabs removed - now consolidated in Leads tab */}
 
             <TabsContent value="emails">
               <EmailAdminPanel password={storedPassword} />
             </TabsContent>
 
-            <TabsContent value="clients">
-              <ClientManagementPanel />
+            {/* Leads - Combined view for contacts, gap analysis, pdf leads */}
+            <TabsContent value="leads">
+              <Tabs defaultValue="contacts" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="contacts">Contacts</TabsTrigger>
+                  <TabsTrigger value="gap-analysis">Gap Analysis</TabsTrigger>
+                  <TabsTrigger value="pdf-leads">PDF Leads</TabsTrigger>
+                </TabsList>
+                <TabsContent value="contacts">
+                  {/* Contacts content - this would be the existing contacts table */}
+                  <Card>
+                    <CardHeader className="flex flex-col gap-4 pb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <CardTitle className="text-lg">Contact Submissions</CardTitle>
+                          {selectedContacts.size > 0 && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm" disabled={isBulkDeleting}>
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete {selectedContacts.size} selected
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete {selectedContacts.size} submissions?</AlertDialogTitle>
+                                  <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => bulkDelete("contact_submissions", Array.from(selectedContacts))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
+                        <Button variant="outline" size="default" onClick={() => exportToCSV(filteredContacts, "contact_submissions")}>
+                          <Download className="w-4 h-4 mr-2" />
+                          Export
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="p-4 w-12">
+                                <Checkbox checked={paginatedContacts.length > 0 && selectedContacts.size === paginatedContacts.length} onCheckedChange={toggleAllContacts} />
+                              </th>
+                              <th className="text-left p-4 font-medium">Name</th>
+                              <th className="text-left p-4 font-medium">Business</th>
+                              <th className="text-left p-4 font-medium">Email</th>
+                              <th className="text-left p-4 font-medium">Status</th>
+                              <th className="text-left p-4 font-medium">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {paginatedContacts.map((contact) => (
+                              <tr key={contact.id} className={cn("hover:bg-muted/30", selectedContacts.has(contact.id) && "bg-muted/20")}>
+                                <td className="p-4">
+                                  <Checkbox checked={selectedContacts.has(contact.id)} onCheckedChange={() => toggleContactSelection(contact.id)} />
+                                </td>
+                                <td className="p-4">{contact.first_name} {contact.last_name}</td>
+                                <td className="p-4">{contact.business_name}</td>
+                                <td className="p-4">{contact.email}</td>
+                                <td className="p-4">
+                                  <Badge variant="outline">{contact.status}</Badge>
+                                </td>
+                                <td className="p-4 text-muted-foreground">
+                                  {new Date(contact.created_at).toLocaleDateString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="gap-analysis">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Gap Analysis Submissions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left p-4 font-medium">Name</th>
+                              <th className="text-left p-4 font-medium">Business</th>
+                              <th className="text-left p-4 font-medium">Email</th>
+                              <th className="text-left p-4 font-medium">Status</th>
+                              <th className="text-left p-4 font-medium">Date</th>
+                              <th className="text-left p-4 font-medium">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {paginatedGapAnalyses.map((gap) => (
+                              <tr key={gap.id} className="hover:bg-muted/30">
+                                <td className="p-4">{gap.first_name} {gap.last_name}</td>
+                                <td className="p-4">{gap.business_name}</td>
+                                <td className="p-4">{gap.email}</td>
+                                <td className="p-4">
+                                  <Badge variant="outline">{gap.status}</Badge>
+                                </td>
+                                <td className="p-4 text-muted-foreground">
+                                  {new Date(gap.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="p-4">
+                                  <Button variant="ghost" size="sm" onClick={() => { setSelectedGapAnalysis(gap); setIsDetailModalOpen(true); }}>
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="pdf-leads">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">PDF Download Leads</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left p-4 font-medium">Email</th>
+                              <th className="text-left p-4 font-medium">Name</th>
+                              <th className="text-left p-4 font-medium">Source</th>
+                              <th className="text-left p-4 font-medium">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {paginatedPdfLeads.map((lead) => (
+                              <tr key={lead.id} className="hover:bg-muted/30">
+                                <td className="p-4">{lead.email}</td>
+                                <td className="p-4">{lead.first_name || "-"}</td>
+                                <td className="p-4">
+                                  <Badge variant="outline">{lead.source || "system_brochure"}</Badge>
+                                </td>
+                                <td className="p-4 text-muted-foreground">
+                                  {new Date(lead.created_at).toLocaleDateString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
-            <TabsContent value="sops">
-              <SOPManagementPanel />
-            </TabsContent>
-
-            <TabsContent value="automation">
-              <AutomationJobsPanel />
-            </TabsContent>
-
-            <TabsContent value="content">
-              <ContentReviewPanel />
-            </TabsContent>
-
-            <TabsContent value="reports">
-              <ReportsReviewPanel />
-            </TabsContent>
-
-            <TabsContent value="sequences">
-              <EmailSequencesPanel />
-            </TabsContent>
-
-            <TabsContent value="templates">
-              <EmailTemplatesPanel />
-            </TabsContent>
-
-            <TabsContent value="campaigns">
-              <CampaignSenderPanel />
+            {/* Advanced - All the management panels */}
+            <TabsContent value="advanced">
+              <Tabs defaultValue="clients" className="space-y-4">
+                <TabsList className="flex-wrap h-auto gap-1">
+                  <TabsTrigger value="clients">Clients</TabsTrigger>
+                  <TabsTrigger value="templates">Templates</TabsTrigger>
+                  <TabsTrigger value="sequences">Sequences</TabsTrigger>
+                  <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+                  <TabsTrigger value="sops">SOPs</TabsTrigger>
+                  <TabsTrigger value="automation">Jobs</TabsTrigger>
+                  <TabsTrigger value="content">Content</TabsTrigger>
+                  <TabsTrigger value="reports">Reports</TabsTrigger>
+                </TabsList>
+                <TabsContent value="clients">
+                  <ClientManagementPanel />
+                </TabsContent>
+                <TabsContent value="templates">
+                  <EmailTemplatesPanel />
+                </TabsContent>
+                <TabsContent value="sequences">
+                  <EmailSequencesPanel />
+                </TabsContent>
+                <TabsContent value="campaigns">
+                  <CampaignSenderPanel />
+                </TabsContent>
+                <TabsContent value="sops">
+                  <SOPManagementPanel />
+                </TabsContent>
+                <TabsContent value="automation">
+                  <AutomationJobsPanel />
+                </TabsContent>
+                <TabsContent value="content">
+                  <ContentReviewPanel />
+                </TabsContent>
+                <TabsContent value="reports">
+                  <ReportsReviewPanel />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
           </Tabs>
         </div>
