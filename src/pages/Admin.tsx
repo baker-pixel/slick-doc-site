@@ -25,6 +25,7 @@ import { ContentReviewPanel } from "@/components/admin/ContentReviewPanel";
 import { ReportsReviewPanel } from "@/components/admin/ReportsReviewPanel";
 import { EmailSequencesPanel } from "@/components/admin/EmailSequencesPanel";
 import { EmailTemplatesPanel } from "@/components/admin/EmailTemplatesPanel";
+import { CampaignSenderPanel } from "@/components/admin/CampaignSenderPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -729,6 +730,10 @@ const Admin = () => {
               <TabsTrigger value="templates" className="gap-1">
                 <FileText className="w-4 h-4" />
                 Templates
+              </TabsTrigger>
+              <TabsTrigger value="campaigns" className="gap-1">
+                <Mail className="w-4 h-4" />
+                Campaigns
               </TabsTrigger>
             </TabsList>
 
@@ -1446,6 +1451,10 @@ const Admin = () => {
 
             <TabsContent value="templates">
               <EmailTemplatesPanel />
+            </TabsContent>
+
+            <TabsContent value="campaigns">
+              <CampaignSenderPanel />
             </TabsContent>
           </Tabs>
         </div>
