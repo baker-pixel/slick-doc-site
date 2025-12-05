@@ -23,6 +23,7 @@ import { SOPManagementPanel } from "@/components/admin/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/AutomationJobsPanel";
 import { ContentReviewPanel } from "@/components/admin/ContentReviewPanel";
 import { ReportsReviewPanel } from "@/components/admin/ReportsReviewPanel";
+import { EmailSequencesPanel } from "@/components/admin/EmailSequencesPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -723,6 +724,7 @@ const Admin = () => {
               <TabsTrigger value="automation">Automation</TabsTrigger>
               <TabsTrigger value="content">Content</TabsTrigger>
               <TabsTrigger value="reports">Reports</TabsTrigger>
+              <TabsTrigger value="sequences">Sequences</TabsTrigger>
             </TabsList>
 
             <TabsContent value="analytics">
@@ -1431,6 +1433,10 @@ const Admin = () => {
 
             <TabsContent value="reports">
               <ReportsReviewPanel />
+            </TabsContent>
+
+            <TabsContent value="sequences">
+              <EmailSequencesPanel />
             </TabsContent>
           </Tabs>
         </div>
