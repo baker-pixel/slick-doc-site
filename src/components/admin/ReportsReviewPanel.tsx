@@ -4,9 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Eye, Calendar, TrendingUp, Lightbulb, Target, Download, Trash2 } from "lucide-react";
+import { RefreshCw, Eye, Calendar, TrendingUp, Lightbulb, Target, Download, Trash2, Send, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { Json } from "@/integrations/supabase/types";
 
@@ -22,6 +22,8 @@ interface ClientReport {
   created_at: string;
   client_accounts?: {
     business_name: string;
+    email: string;
+    first_name: string | null;
   };
 }
 
@@ -37,6 +39,8 @@ export const ReportsReviewPanel = () => {
   const [selectedClient, setSelectedClient] = useState<string>("all");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [previewReport, setPreviewReport] = useState<ClientReport | null>(null);
+  const [sendingReport, setSendingReport] = useState<ClientReport | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -47,7 +51,7 @@ export const ReportsReviewPanel = () => {
     const [reportsRes, clientsRes] = await Promise.all([
       supabase
         .from("client_reports")
-        .select("*, client_accounts(business_name)")
+        .select("*, client_accounts(business_name, email, first_name)")
         .order("created_at", { ascending: false }),
       supabase
         .from("client_accounts")
@@ -88,6 +92,42 @@ export const ReportsReviewPanel = () => {
     } else {
       toast({ title: "Deleted", description: "Report has been deleted" });
       fetchData();
+    }
+  };
+
+  const handleSendToClient = async () => {
+    if (!sendingReport || !sendingReport.client_accounts?.email) return;
+
+    setIsSending(true);
+
+    try {
+      const { error } = await supabase.functions.invoke("send-report-to-client", {
+        body: {
+          reportId: sendingReport.id,
+          clientEmail: sendingReport.client_accounts.email,
+          clientName: sendingReport.client_accounts.first_name || sendingReport.client_accounts.business_name,
+          businessName: sendingReport.client_accounts.business_name,
+          reportType: formatReportType(sendingReport.report_type),
+          periodStart: sendingReport.report_period_start,
+          periodEnd: sendingReport.report_period_end,
+          metrics: sendingReport.metrics,
+          insights: sendingReport.insights,
+          recommendations: sendingReport.recommendations,
+        },
+      });
+
+      if (error) {
+        console.error("Email error:", error);
+        toast({ title: "Error", description: "Failed to send report", variant: "destructive" });
+      } else {
+        toast({ title: "Sent", description: "Report has been sent to the client" });
+        setSendingReport(null);
+      }
+    } catch (error: any) {
+      console.error("Send error:", error);
+      toast({ title: "Error", description: "Failed to send report", variant: "destructive" });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -233,6 +273,14 @@ export const ReportsReviewPanel = () => {
                   </Button>
                   <Button
                     size="sm"
+                    variant="default"
+                    onClick={() => setSendingReport(report)}
+                  >
+                    <Send className="w-3 h-3 mr-1" />
+                    Send
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="outline"
                     onClick={() => exportReportAsJson(report)}
                   >
@@ -294,7 +342,19 @@ export const ReportsReviewPanel = () => {
             )}
           </div>
 
-          <DialogFooter className="mt-4">
+          <DialogFooter className="mt-4 flex-wrap gap-2">
+            <Button
+              variant="default"
+              onClick={() => {
+                if (previewReport) {
+                  setSendingReport(previewReport);
+                  setPreviewReport(null);
+                }
+              }}
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Send to Client
+            </Button>
             <Button
               variant="outline"
               onClick={() => previewReport && exportReportAsJson(previewReport)}
@@ -304,6 +364,62 @@ export const ReportsReviewPanel = () => {
             </Button>
             <Button variant="outline" onClick={() => setPreviewReport(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send to Client Dialog */}
+      <Dialog open={!!sendingReport} onOpenChange={() => setSendingReport(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Report to Client</DialogTitle>
+            <DialogDescription>
+              Send this report summary via email to the client.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="font-medium">{formatReportType(sendingReport?.report_type || "")} Report</p>
+              <p className="text-sm text-muted-foreground">
+                {sendingReport?.client_accounts?.business_name}
+              </p>
+              {sendingReport && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {format(new Date(sendingReport.report_period_start), "MMM d")} - {format(new Date(sendingReport.report_period_end), "MMM d, yyyy")}
+                </p>
+              )}
+            </div>
+            
+            {sendingReport?.client_accounts?.email ? (
+              <p className="text-sm text-muted-foreground">
+                Will be sent to: <span className="font-medium">{sendingReport.client_accounts.email}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-destructive">
+                No email address found for this client
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendingReport(null)} disabled={isSending}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSendToClient} 
+              disabled={isSending || !sendingReport?.client_accounts?.email}
+            >
+              {isSending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Send Report
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
