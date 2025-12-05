@@ -9,8 +9,9 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Mail, Send, FileText, MessageSquare, Zap, Loader2, 
-  CheckCircle, Users, Sparkles, Clock, ArrowRight, Eye, Copy, Trash2, Edit, X
+  CheckCircle, Users, Sparkles, Clock, ArrowRight, Eye, Copy, Trash2, Edit, X, CheckCircle2, Circle
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface EmailTemplate {
   id: string;
@@ -180,6 +181,23 @@ export function QuickActionsPanel() {
       fetchData();
     } catch (error: any) {
       toast({ title: "Error deleting", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const togglePublishStatus = async (item: GeneratedContentItem) => {
+    const newStatus = item.status === "published" ? "draft" : "published";
+    try {
+      const { error } = await supabase
+        .from("generated_content")
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", item.id);
+      
+      if (error) throw error;
+      
+      toast({ title: newStatus === "published" ? "Content published!" : "Moved to draft" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error updating status", description: error.message, variant: "destructive" });
     }
   };
 
@@ -510,7 +528,13 @@ export function QuickActionsPanel() {
                         <h4 className="font-medium truncate">
                           {item.title || `Untitled ${item.content_type.replace("_", " ")}`}
                         </h4>
-                        <Badge variant="outline" className="text-xs">{item.status}</Badge>
+                        <Badge 
+                          variant={item.status === "published" ? "default" : "outline"} 
+                          className={`text-xs ${item.status === "published" ? "bg-green-600" : ""}`}
+                        >
+                          {item.status === "published" ? <CheckCircle2 className="w-3 h-3 mr-1" /> : <Circle className="w-3 h-3 mr-1" />}
+                          {item.status}
+                        </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {item.content.substring(0, 150)}...
@@ -519,7 +543,17 @@ export function QuickActionsPanel() {
                         {new Date(item.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 border-r pr-2 mr-1">
+                        <span className="text-xs text-muted-foreground">
+                          {item.status === "published" ? "Published" : "Draft"}
+                        </span>
+                        <Switch
+                          checked={item.status === "published"}
+                          onCheckedChange={() => togglePublishStatus(item)}
+                          className="data-[state=checked]:bg-green-600"
+                        />
+                      </div>
                       <Button 
                         variant="ghost" 
                         size="icon"
