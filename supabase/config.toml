@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.send-content-to-client]
 verify_jwt = false
+
+[functions.send-report-to-client]
+verify_jwt = false
