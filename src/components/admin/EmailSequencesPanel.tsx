@@ -12,8 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Json } from "@/integrations/supabase/types";
-import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy } from "lucide-react";
+import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
+import { EmailSequenceAnalytics } from "./EmailSequenceAnalytics";
 
 interface SequenceEmail {
   delay_hours: number;
@@ -61,6 +62,7 @@ export function EmailSequencesPanel() {
   const [selectedSequence, setSelectedSequence] = useState<EmailSequence | null>(null);
   const [editingSequence, setEditingSequence] = useState<Partial<EmailSequence>>({});
   const [editingEmails, setEditingEmails] = useState<SequenceEmail[]>([]);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const fetchSequences = async () => {
     setIsLoading(true);
@@ -214,6 +216,13 @@ export function EmailSequencesPanel() {
           <p className="text-muted-foreground">Manage automated email sequences for different triggers</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant={showAnalytics ? "default" : "outline"} 
+            onClick={() => setShowAnalytics(!showAnalytics)}
+          >
+            <BarChart3 className="w-4 h-4 mr-2" />
+            {showAnalytics ? "Hide Analytics" : "Analytics"}
+          </Button>
           <Button variant="outline" onClick={fetchSequences} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
@@ -224,6 +233,10 @@ export function EmailSequencesPanel() {
           </Button>
         </div>
       </div>
+
+      {showAnalytics && (
+        <EmailSequenceAnalytics />
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2">
