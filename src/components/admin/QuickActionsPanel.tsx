@@ -9,7 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Mail, Send, FileText, MessageSquare, Zap, Loader2, 
-  CheckCircle, Users, Sparkles, Clock, ArrowRight
+  CheckCircle, Users, Sparkles, Clock, ArrowRight, Eye, Copy, Trash2, Edit, X
 } from "lucide-react";
 
 interface EmailTemplate {
@@ -36,9 +36,19 @@ interface QuickAction {
   action: () => void;
 }
 
+interface GeneratedContentItem {
+  id: string;
+  title: string | null;
+  content: string;
+  content_type: string;
+  status: string;
+  created_at: string;
+}
+
 export function QuickActionsPanel() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [generatedContentList, setGeneratedContentList] = useState<GeneratedContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Quick Email Modal
@@ -70,6 +80,13 @@ export function QuickActionsPanel() {
   });
   const [isSendingAll, setIsSendingAll] = useState(false);
 
+  // Content viewer
+  const [viewContentModal, setViewContentModal] = useState(false);
+  const [editContentModal, setEditContentModal] = useState(false);
+  const [selectedContent, setSelectedContent] = useState<GeneratedContentItem | null>(null);
+  const [editedContent, setEditedContent] = useState("");
+  const [isSavingContent, setIsSavingContent] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -77,15 +94,17 @@ export function QuickActionsPanel() {
   const fetchData = async () => {
     setIsLoading(true);
     
-    const [templatesRes, clientsRes, queueRes, contentRes] = await Promise.all([
+    const [templatesRes, clientsRes, queueRes, contentRes, allContentRes] = await Promise.all([
       supabase.from("email_templates").select("id, name, slug, subject, category").eq("is_active", true),
       supabase.from("client_accounts").select("id, business_name, email, tier").eq("status", "active"),
       supabase.from("email_queue").select("id").eq("status", "pending"),
-      supabase.from("generated_content").select("id").gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      supabase.from("generated_content").select("id").gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+      supabase.from("generated_content").select("id, title, content, content_type, status, created_at").order("created_at", { ascending: false }).limit(20)
     ]);
 
     if (templatesRes.data) setTemplates(templatesRes.data);
     if (clientsRes.data) setClients(clientsRes.data);
+    if (allContentRes.data) setGeneratedContentList(allContentRes.data);
     
     setStats({
       pendingEmails: queueRes.data?.length || 0,
@@ -116,6 +135,61 @@ export function QuickActionsPanel() {
       toast({ title: "Error sending emails", description: error.message, variant: "destructive" });
     } finally {
       setIsSendingAll(false);
+    }
+  };
+
+  const viewContent = (content: GeneratedContentItem) => {
+    setSelectedContent(content);
+    setViewContentModal(true);
+  };
+
+  const openEditContent = (content: GeneratedContentItem) => {
+    setSelectedContent(content);
+    setEditedContent(content.content);
+    setEditContentModal(true);
+  };
+
+  const saveEditedContent = async () => {
+    if (!selectedContent) return;
+    setIsSavingContent(true);
+    
+    try {
+      const { error } = await supabase
+        .from("generated_content")
+        .update({ content: editedContent, updated_at: new Date().toISOString() })
+        .eq("id", selectedContent.id);
+      
+      if (error) throw error;
+      
+      toast({ title: "Content updated!" });
+      setEditContentModal(false);
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error saving", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingContent(false);
+    }
+  };
+
+  const deleteContent = async (id: string) => {
+    try {
+      const { error } = await supabase.from("generated_content").delete().eq("id", id);
+      if (error) throw error;
+      
+      toast({ title: "Content deleted" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error deleting", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const getContentTypeIcon = (type: string) => {
+    switch (type) {
+      case "blog_post": return "📝";
+      case "social_post": return "📱";
+      case "email_copy": return "✉️";
+      case "ad_copy": return "📢";
+      default: return "📄";
     }
   };
 
@@ -412,7 +486,131 @@ export function QuickActionsPanel() {
         </div>
       </div>
 
-      {/* Quick Email Modal */}
+      {/* Generated Content Library */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-primary" />
+          Generated Content
+        </h2>
+        {generatedContentList.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              No content generated yet. Use the "Generate Content" action above to create some!
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3">
+            {generatedContentList.map(item => (
+              <Card key={item.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{getContentTypeIcon(item.content_type)}</span>
+                        <h4 className="font-medium truncate">
+                          {item.title || `Untitled ${item.content_type.replace("_", " ")}`}
+                        </h4>
+                        <Badge variant="outline" className="text-xs">{item.status}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {item.content.substring(0, 150)}...
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => viewContent(item)}
+                        title="View"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => copyToClipboard(item.content)}
+                        title="Copy"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => openEditContent(item)}
+                        title="Edit"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => deleteContent(item.id)}
+                        title="Delete"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* View Content Modal */}
+      <Dialog open={viewContentModal} onOpenChange={setViewContentModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedContent && getContentTypeIcon(selectedContent.content_type)}
+              {selectedContent?.title || "Generated Content"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh] bg-muted p-4 rounded-lg whitespace-pre-wrap text-sm">
+            {selectedContent?.content}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewContentModal(false)}>
+              Close
+            </Button>
+            <Button onClick={() => selectedContent && copyToClipboard(selectedContent.content)}>
+              <Copy className="w-4 h-4 mr-2" /> Copy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Content Modal */}
+      <Dialog open={editContentModal} onOpenChange={setEditContentModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Edit Content</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={editedContent}
+            onChange={(e) => setEditedContent(e.target.value)}
+            className="min-h-[300px] font-mono text-sm"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditContentModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveEditedContent} disabled={isSavingContent}>
+              {isSavingContent ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
