@@ -382,6 +382,7 @@ export type Database = {
       }
       email_templates: {
         Row: {
+          category: string
           created_at: string
           description: string | null
           html_content: string
@@ -394,6 +395,7 @@ export type Database = {
           variables: Json | null
         }
         Insert: {
+          category?: string
           created_at?: string
           description?: string | null
           html_content: string
@@ -406,6 +408,7 @@ export type Database = {
           variables?: Json | null
         }
         Update: {
+          category?: string
           created_at?: string
           description?: string | null
           html_content?: string

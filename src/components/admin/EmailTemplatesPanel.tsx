@@ -11,7 +11,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
 interface EmailTemplate {
@@ -22,12 +23,32 @@ interface EmailTemplate {
   html_content: string;
   description: string | null;
   variables: string[];
+  category: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
 const DEFAULT_VARIABLES = ["firstName", "lastName", "businessName", "email", "resumeToken"];
+
+const CATEGORIES = [
+  { value: "all", label: "All Categories" },
+  { value: "marketing", label: "Marketing" },
+  { value: "transactional", label: "Transactional" },
+  { value: "notification", label: "Notification" },
+  { value: "onboarding", label: "Onboarding" },
+  { value: "follow-up", label: "Follow-up" },
+];
+
+const getCategoryColor = (category: string) => {
+  switch (category) {
+    case "transactional": return "bg-blue-500/10 text-blue-600 border-blue-200";
+    case "notification": return "bg-amber-500/10 text-amber-600 border-amber-200";
+    case "onboarding": return "bg-green-500/10 text-green-600 border-green-200";
+    case "follow-up": return "bg-purple-500/10 text-purple-600 border-purple-200";
+    default: return "bg-primary/10 text-primary border-primary/20";
+  }
+};
 
 export function EmailTemplatesPanel() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -37,6 +58,7 @@ export function EmailTemplatesPanel() {
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<Partial<EmailTemplate>>({});
   const [previewHtml, setPreviewHtml] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const fetchTemplates = async () => {
     setIsLoading(true);
@@ -85,11 +107,16 @@ export function EmailTemplatesPanel() {
         html_content: getDefaultHtmlTemplate(),
         description: "",
         variables: DEFAULT_VARIABLES,
+        category: "marketing",
         is_active: true,
       });
     }
     setIsEditorOpen(true);
   };
+
+  const filteredTemplates = categoryFilter === "all" 
+    ? templates 
+    : templates.filter(t => t.category === categoryFilter);
 
   const getDefaultHtmlTemplate = () => {
     return `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -140,6 +167,7 @@ export function EmailTemplatesPanel() {
       html_content: editingTemplate.html_content!,
       description: editingTemplate.description || null,
       variables,
+      category: editingTemplate.category || "marketing",
       is_active: editingTemplate.is_active ?? true,
     };
 
@@ -190,6 +218,7 @@ export function EmailTemplatesPanel() {
         html_content: template.html_content,
         description: template.description,
         variables: template.variables,
+        category: template.category,
         is_active: false,
       }]);
 
@@ -227,6 +256,17 @@ export function EmailTemplatesPanel() {
           <p className="text-muted-foreground">Create and manage custom email templates</p>
         </div>
         <div className="flex gap-2">
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[180px]">
+              <Filter className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Filter by category" />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map(cat => (
+                <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={fetchTemplates} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
@@ -259,17 +299,22 @@ export function EmailTemplatesPanel() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {templates.map(template => (
+          {filteredTemplates.map(template => (
             <Card key={template.id} className={!template.is_active ? "opacity-60" : ""}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-lg flex items-center gap-2">
                       {template.name}
+                    </CardTitle>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge className={getCategoryColor(template.category)}>
+                        {template.category}
+                      </Badge>
                       <Badge variant={template.is_active ? "default" : "secondary"}>
                         {template.is_active ? "Active" : "Inactive"}
                       </Badge>
-                    </CardTitle>
+                    </div>
                     <p className="text-sm text-muted-foreground mt-1 font-mono">
                       {template.slug}
                     </p>
@@ -390,14 +435,32 @@ export function EmailTemplatesPanel() {
                   You can use variables like {"{{firstName}}"} in the subject
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label>Description (optional)</Label>
-                <Textarea
-                  value={editingTemplate.description || ""}
-                  onChange={e => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
-                  placeholder="Brief description of when this template is used"
-                  rows={2}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select
+                    value={editingTemplate.category || "marketing"}
+                    onValueChange={value => setEditingTemplate({ ...editingTemplate, category: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.filter(c => c.value !== "all").map(cat => (
+                        <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Description (optional)</Label>
+                  <Textarea
+                    value={editingTemplate.description || ""}
+                    onChange={e => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
+                    placeholder="Brief description"
+                    rows={2}
+                  />
+                </div>
               </div>
               <Card className="p-4 bg-muted/30">
                 <div className="flex items-center gap-2 mb-3">
