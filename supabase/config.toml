@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.parse-sop]
 verify_jwt = false
+
+[functions.send-content-to-client]
+verify_jwt = false
