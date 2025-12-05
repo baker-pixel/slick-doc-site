@@ -65,6 +65,80 @@ function getTimezoneOffset(timezone: string): number {
   return offsets[timezone] ?? -300;
 }
 
+// US Federal Holidays (fixed dates and floating holidays calculated per year)
+function getUSHolidays(year: number): string[] {
+  const holidays: string[] = [];
+  
+  // Fixed holidays
+  holidays.push(`${year}-01-01`); // New Year's Day
+  holidays.push(`${year}-07-04`); // Independence Day
+  holidays.push(`${year}-11-11`); // Veterans Day
+  holidays.push(`${year}-12-25`); // Christmas Day
+  
+  // MLK Day - 3rd Monday of January
+  holidays.push(getNthWeekdayOfMonth(year, 0, 1, 3));
+  
+  // Presidents Day - 3rd Monday of February
+  holidays.push(getNthWeekdayOfMonth(year, 1, 1, 3));
+  
+  // Memorial Day - Last Monday of May
+  holidays.push(getLastWeekdayOfMonth(year, 4, 1));
+  
+  // Labor Day - 1st Monday of September
+  holidays.push(getNthWeekdayOfMonth(year, 8, 1, 1));
+  
+  // Columbus Day - 2nd Monday of October
+  holidays.push(getNthWeekdayOfMonth(year, 9, 1, 2));
+  
+  // Thanksgiving - 4th Thursday of November
+  holidays.push(getNthWeekdayOfMonth(year, 10, 4, 4));
+  
+  return holidays;
+}
+
+function getNthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): string {
+  const firstDay = new Date(year, month, 1);
+  let dayOffset = weekday - firstDay.getDay();
+  if (dayOffset < 0) dayOffset += 7;
+  const day = 1 + dayOffset + (n - 1) * 7;
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getLastWeekdayOfMonth(year: number, month: number, weekday: number): string {
+  const lastDay = new Date(year, month + 1, 0);
+  let dayOffset = lastDay.getDay() - weekday;
+  if (dayOffset < 0) dayOffset += 7;
+  const day = lastDay.getDate() - dayOffset;
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function isUSHoliday(date: Date): boolean {
+  const year = date.getFullYear();
+  const dateStr = `${year}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const holidays = getUSHolidays(year);
+  return holidays.includes(dateStr);
+}
+
+function skipExcludedDays(date: Date, excludeWeekends: boolean, excludeHolidays: boolean): Date {
+  const result = new Date(date);
+  let iterations = 0;
+  const maxIterations = 14; // Max 2 weeks of skipping
+  
+  while (iterations < maxIterations) {
+    const isExcluded = (excludeWeekends && isWeekend(result)) || (excludeHolidays && isUSHoliday(result));
+    if (!isExcluded) break;
+    result.setDate(result.getDate() + 1);
+    iterations++;
+  }
+  
+  return result;
+}
+
 // Email templates
 const templates: Record<string, (data: any) => { subject: string; html: string }> = {
   immediate_report: (data) => ({
@@ -236,6 +310,8 @@ interface SequenceSettings {
   use_recipient_timezone?: boolean;
   default_timezone?: string;
   optimal_send_enabled?: boolean;
+  exclude_weekends?: boolean;
+  exclude_holidays?: boolean;
 }
 
 interface QueueRequest {
@@ -281,13 +357,15 @@ const handler = async (req: Request): Promise<Response> => {
     const useRecipientTimezone = settings.use_recipient_timezone ?? true;
     const defaultTimezone = settings.default_timezone || "America/New_York";
     const optimalSendEnabled = settings.optimal_send_enabled ?? false;
+    const excludeWeekends = settings.exclude_weekends ?? false;
+    const excludeHolidays = settings.exclude_holidays ?? false;
     
     // Determine timezone to use
     const timezone = useRecipientTimezone && recipientTimezone 
       ? recipientTimezone 
       : defaultTimezone;
 
-    console.log(`Using timezone: ${timezone}, optimal send: ${optimalSendEnabled}`);
+    console.log(`Using timezone: ${timezone}, optimal send: ${optimalSendEnabled}, exclude weekends: ${excludeWeekends}, exclude holidays: ${excludeHolidays}`);
 
     const emails = sequence.emails as Array<{ 
       delay_hours: number; 
@@ -309,10 +387,20 @@ const handler = async (req: Request): Promise<Response> => {
       // Calculate scheduled time
       let scheduledFor = new Date(Date.now() + emailConfig.delay_hours * 60 * 60 * 1000);
       
+      // Skip excluded days (weekends/holidays)
+      if (excludeWeekends || excludeHolidays) {
+        scheduledFor = skipExcludedDays(scheduledFor, excludeWeekends, excludeHolidays);
+        console.log(`Skipped excluded days, new date: ${scheduledFor.toISOString()}`);
+      }
+      
       // Apply optimal send time if enabled for this email
       const useOptimalTime = optimalSendEnabled && (emailConfig.optimal_send_time ?? true);
       if (useOptimalTime) {
         scheduledFor = getNextOptimalSendTime(scheduledFor, timezone);
+        // Re-check for excluded days after optimal time adjustment
+        if (excludeWeekends || excludeHolidays) {
+          scheduledFor = skipExcludedDays(scheduledFor, excludeWeekends, excludeHolidays);
+        }
         console.log(`Optimized send time for ${emailConfig.template}: ${scheduledFor.toISOString()}`);
       }
 
