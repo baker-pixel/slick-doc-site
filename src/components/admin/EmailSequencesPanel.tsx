@@ -29,6 +29,8 @@ interface SequenceSettings {
   use_recipient_timezone?: boolean;
   default_timezone?: string;
   optimal_send_enabled?: boolean;
+  exclude_weekends?: boolean;
+  exclude_holidays?: boolean;
 }
 
 interface EmailSequence {
@@ -504,6 +506,28 @@ export function EmailSequencesPanel() {
                   checked={editingSequence.settings?.optimal_send_enabled ?? false}
                   onCheckedChange={v => updateSettings("optimal_send_enabled", v)}
                 />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 mt-4 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Exclude Weekends</Label>
+                    <p className="text-xs text-muted-foreground">Skip Saturday & Sunday</p>
+                  </div>
+                  <Switch
+                    checked={editingSequence.settings?.exclude_weekends ?? false}
+                    onCheckedChange={v => updateSettings("exclude_weekends", v)}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Exclude US Holidays</Label>
+                    <p className="text-xs text-muted-foreground">Skip major US holidays</p>
+                  </div>
+                  <Switch
+                    checked={editingSequence.settings?.exclude_holidays ?? false}
+                    onCheckedChange={v => updateSettings("exclude_holidays", v)}
+                  />
+                </div>
               </div>
             </Card>
 
