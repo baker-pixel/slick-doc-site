@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Json } from "@/integrations/supabase/types";
-import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3 } from "lucide-react";
+import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3, Send, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { EmailSequenceAnalytics } from "./EmailSequenceAnalytics";
 
@@ -59,10 +59,17 @@ export function EmailSequencesPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [selectedSequence, setSelectedSequence] = useState<EmailSequence | null>(null);
   const [editingSequence, setEditingSequence] = useState<Partial<EmailSequence>>({});
   const [editingEmails, setEditingEmails] = useState<SequenceEmail[]>([]);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [testTemplate, setTestTemplate] = useState("");
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewSubject, setPreviewSubject] = useState("");
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const fetchSequences = async () => {
     setIsLoading(true);
@@ -206,6 +213,49 @@ export function EmailSequencesPanel() {
 
   const getTriggerLabel = (type: string) => {
     return TRIGGER_TYPES.find(t => t.value === type)?.label || type;
+  };
+
+  const openTestModal = (template: string) => {
+    setTestTemplate(template);
+    setPreviewHtml("");
+    setPreviewSubject("");
+    setIsTestModalOpen(true);
+    loadPreview(template);
+  };
+
+  const loadPreview = async (template: string) => {
+    setIsLoadingPreview(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-test-email", {
+        body: { template, previewOnly: true },
+      });
+      if (error) throw error;
+      setPreviewHtml(data.html);
+      setPreviewSubject(data.subject);
+    } catch (error: any) {
+      toast({ title: "Error loading preview", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (!testEmail) {
+      toast({ title: "Please enter an email address", variant: "destructive" });
+      return;
+    }
+    setIsSendingTest(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-test-email", {
+        body: { template: testTemplate, testEmail },
+      });
+      if (error) throw error;
+      toast({ title: "Test email sent!", description: `Sent to ${testEmail}` });
+    } catch (error: any) {
+      toast({ title: "Error sending test email", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSendingTest(false);
+    }
   };
 
   return (
@@ -479,9 +529,20 @@ export function EmailSequencesPanel() {
                       </div>
                       <div className="flex-1 pb-4">
                         <p className="text-sm font-medium">{email.subject}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDelayTime(email.delay_hours)} • Template: {email.template}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-muted-foreground">
+                            {formatDelayTime(email.delay_hours)} • {email.template}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => openTestModal(email.template)}
+                          >
+                            <Send className="w-3 h-3 mr-1" />
+                            Test
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -489,6 +550,64 @@ export function EmailSequencesPanel() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Test Email Modal */}
+      <Dialog open={isTestModalOpen} onOpenChange={setIsTestModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Test Template: {testTemplate}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Send test email to</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={testEmail}
+                  onChange={e => setTestEmail(e.target.value)}
+                />
+                <Button onClick={sendTestEmail} disabled={isSendingTest || !testEmail}>
+                  {isSendingTest ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Send Test
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-muted px-4 py-2 border-b">
+                <p className="text-sm font-medium">Subject: {previewSubject || "Loading..."}</p>
+              </div>
+              <div className="p-4 bg-background">
+                {isLoadingPreview ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: previewHtml }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
