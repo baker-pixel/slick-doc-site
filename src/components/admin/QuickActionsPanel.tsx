@@ -68,6 +68,7 @@ export function QuickActionsPanel() {
     totalClients: 0,
     recentContent: 0
   });
+  const [isSendingAll, setIsSendingAll] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -93,6 +94,29 @@ export function QuickActionsPanel() {
     });
     
     setIsLoading(false);
+  };
+
+  const sendAllPending = async () => {
+    if (stats.pendingEmails === 0) {
+      toast({ title: "No pending emails", description: "Queue is empty" });
+      return;
+    }
+    
+    setIsSendingAll(true);
+    try {
+      const { error } = await supabase.functions.invoke("process-email-queue");
+      if (error) throw error;
+      
+      toast({ 
+        title: "Emails sent!", 
+        description: `Processed ${stats.pendingEmails} pending emails`
+      });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error sending emails", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSendingAll(false);
+    }
   };
 
   const sendQuickEmail = async () => {
@@ -310,13 +334,27 @@ export function QuickActionsPanel() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20">
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm text-muted-foreground">Pending Emails</p>
                 <p className="text-3xl font-bold">{stats.pendingEmails}</p>
               </div>
               <Clock className="w-10 h-10 text-blue-500/50" />
             </div>
+            {stats.pendingEmails > 0 && (
+              <Button 
+                size="sm" 
+                className="w-full" 
+                onClick={sendAllPending}
+                disabled={isSendingAll}
+              >
+                {isSendingAll ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</>
+                ) : (
+                  <><Send className="w-4 h-4 mr-2" /> Send All Now</>
+                )}
+              </Button>
+            )}
           </CardContent>
         </Card>
         
