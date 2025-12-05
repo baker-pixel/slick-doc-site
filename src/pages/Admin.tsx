@@ -21,6 +21,7 @@ import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModa
 import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
 import { SOPManagementPanel } from "@/components/admin/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/AutomationJobsPanel";
+import { ContentReviewPanel } from "@/components/admin/ContentReviewPanel";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from "recharts";
 import jsPDF from "jspdf";
@@ -719,6 +720,7 @@ const Admin = () => {
               <TabsTrigger value="clients">Clients</TabsTrigger>
               <TabsTrigger value="sops">SOPs</TabsTrigger>
               <TabsTrigger value="automation">Automation</TabsTrigger>
+              <TabsTrigger value="content">Content</TabsTrigger>
             </TabsList>
 
             <TabsContent value="analytics">
@@ -1419,6 +1421,10 @@ const Admin = () => {
 
             <TabsContent value="automation">
               <AutomationJobsPanel />
+            </TabsContent>
+
+            <TabsContent value="content">
+              <ContentReviewPanel />
             </TabsContent>
           </Tabs>
         </div>
