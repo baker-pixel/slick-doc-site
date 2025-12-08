@@ -43,11 +43,13 @@ export const ChatWidget = () => {
     let assistantContent = "";
 
     try {
+      const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const response = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          "apikey": apiKey,
+          "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({ messages: [...messages, userMessage] }),
       });
