@@ -693,6 +693,69 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "list_activities": {
+        const { client_account_id } = data || {};
+        let query = supabase.from("activity_feed").select("*").order("created_at", { ascending: false }).limit(100);
+        
+        if (client_account_id) {
+          query = query.eq("client_account_id", client_account_id);
+        }
+        
+        const { data: activities, error } = await query;
+        if (error) throw error;
+        
+        return new Response(
+          JSON.stringify({ data: activities }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "create_activity": {
+        const { client_account_id, activity_type, title, description, icon, metadata } = data || {};
+        
+        if (!client_account_id || !activity_type || !title) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id, activity_type, and title are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: activity, error } = await supabase
+          .from("activity_feed")
+          .insert({
+            client_account_id,
+            activity_type,
+            title,
+            description: description || null,
+            icon: icon || "activity",
+            metadata: metadata || {},
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Created activity for client ${client_account_id}: ${title}`);
+        return new Response(
+          JSON.stringify({ data: activity }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_activity": {
+        const { error: deleteError } = await supabase
+          .from("activity_feed")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) throw deleteError;
+
+        console.log(`Deleted activity ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),

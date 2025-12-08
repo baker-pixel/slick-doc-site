@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_feed: {
+        Row: {
+          activity_type: string
+          client_account_id: string
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          metadata: Json | null
+          title: string
+        }
+        Insert: {
+          activity_type: string
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          metadata?: Json | null
+          title: string
+        }
+        Update: {
+          activity_type?: string
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          metadata?: Json | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_feed_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_alerts: {
         Row: {
           acknowledged_at: string | null
@@ -1667,6 +1708,17 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      log_client_activity: {
+        Args: {
+          p_activity_type: string
+          p_client_account_id: string
+          p_description?: string
+          p_icon?: string
+          p_metadata?: Json
+          p_title: string
+        }
+        Returns: string
       }
     }
     Enums: {
