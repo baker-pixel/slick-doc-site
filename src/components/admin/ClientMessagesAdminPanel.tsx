@@ -123,10 +123,14 @@ export default function ClientMessagesAdminPanel() {
 
   const markAsRead = async (messageId: string) => {
     try {
-      await supabase
-        .from("client_messages")
-        .update({ is_read: true })
-        .eq("id", messageId);
+      const adminPassword = localStorage.getItem("admin_password");
+      await supabase.functions.invoke("admin", {
+        body: {
+          action: "mark_message_read",
+          password: adminPassword,
+          id: messageId,
+        },
+      });
     } catch (error) {
       console.error("Error marking as read:", error);
     }
@@ -137,26 +141,32 @@ export default function ClientMessagesAdminPanel() {
 
     setSending(true);
     try {
-      const { error } = await supabase.from("client_messages").insert({
-        client_account_id: selectedClient,
-        sender_type: "agency",
-        sender_name: "Agency Team",
-        message: newMessage.trim(),
-        is_read: false,
+      const adminPassword = localStorage.getItem("admin_password");
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "send_message",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient,
+            message: newMessage.trim(),
+            sender_name: "Agency Team",
+          },
+        },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       setNewMessage("");
       toast({
         title: "Message sent",
         description: "Your reply has been sent to the client",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending message:", error);
       toast({
         title: "Failed to send",
-        description: "Please try again",
+        description: error.message || "Please try again",
         variant: "destructive",
       });
     } finally {

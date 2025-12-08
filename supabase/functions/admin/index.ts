@@ -509,6 +509,51 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "send_message": {
+        const { client_account_id, message, sender_name } = data || {};
+        
+        if (!client_account_id || !message) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id and message are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: newMessage, error: insertError } = await supabase
+          .from("client_messages")
+          .insert({
+            client_account_id,
+            sender_type: "agency",
+            sender_name: sender_name || "Agency Team",
+            message,
+            is_read: false,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        console.log(`Sent message to client ${client_account_id}`);
+        return new Response(
+          JSON.stringify({ data: newMessage }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "mark_message_read": {
+        const { error: updateError } = await supabase
+          .from("client_messages")
+          .update({ is_read: true })
+          .eq("id", id);
+
+        if (updateError) throw updateError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
