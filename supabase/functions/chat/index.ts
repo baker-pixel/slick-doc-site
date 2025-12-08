@@ -30,10 +30,25 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const rawBody = await req.text();
+    console.log("Raw request body:", rawBody);
+    
+    let body: any = {};
+    try {
+      body = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      return new Response(JSON.stringify({ error: "Invalid JSON in request body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     const messages = body?.messages;
+    console.log("Messages received:", messages ? messages.length : "none");
     
     if (!messages || !Array.isArray(messages)) {
+      console.error("Messages validation failed. Body keys:", Object.keys(body));
       return new Response(JSON.stringify({ error: "Messages array is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
