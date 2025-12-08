@@ -23,6 +23,8 @@ import ARBusinessCard from "./pages/ARBusinessCard";
 import ARPresentation from "./pages/ARPresentation";
 import Dashboard from "./pages/Dashboard";
 import EmailPreferences from "./pages/EmailPreferences";
+import ClientPortal from "./pages/ClientPortal";
+import ClientPortalAuth from "./pages/ClientPortalAuth";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +48,8 @@ function AnimatedRoutes() {
         <Route path="/ar-presentation" element={<ARPresentation />} />
         <Route path="/dashboard/:token" element={<PageTransition><Dashboard /></PageTransition>} />
         <Route path="/email-preferences" element={<PageTransition><EmailPreferences /></PageTransition>} />
+        <Route path="/portal" element={<PageTransition><ClientPortal /></PageTransition>} />
+        <Route path="/portal/auth" element={<PageTransition><ClientPortalAuth /></PageTransition>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
       </Routes>
