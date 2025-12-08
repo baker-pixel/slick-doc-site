@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette, Activity } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
@@ -15,6 +15,7 @@ import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
 import ClientMeetingsTab from "@/components/client-portal/ClientMeetingsTab";
 import ClientRequestsTab from "@/components/client-portal/ClientRequestsTab";
 import ClientBrandAssetsTab from "@/components/client-portal/ClientBrandAssetsTab";
+import { ClientActivityTab } from "@/components/client-portal/ClientActivityTab";
 
 interface ClientPortalUser {
   id: string;
@@ -38,7 +39,7 @@ export default function ClientPortal() {
   const [loading, setLoading] = useState(true);
   const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
-  const [activeTab, setActiveTab] = useState("projects");
+  const [activeTab, setActiveTab] = useState("activity");
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -145,6 +146,10 @@ export default function ClientPortal() {
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap h-auto gap-1 lg:inline-flex">
+            <TabsTrigger value="activity" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              <span className="hidden sm:inline">Activity</span>
+            </TabsTrigger>
             <TabsTrigger value="projects" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Projects</span>
@@ -182,6 +187,10 @@ export default function ClientPortal() {
               <span className="hidden sm:inline">Invoices</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="activity">
+            <ClientActivityTab />
+          </TabsContent>
 
           <TabsContent value="projects">
             <ClientProjectsTab clientAccountId={portalUser.client_account_id} />
