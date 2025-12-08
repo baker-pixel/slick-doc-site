@@ -102,17 +102,23 @@ export default function ClientMessagesAdminPanel() {
 
   const fetchMessages = async (clientId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("client_messages")
-        .select("*")
-        .eq("client_account_id", clientId)
-        .order("created_at", { ascending: true });
+      const adminPassword = localStorage.getItem("admin_password");
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "get_messages",
+          password: adminPassword,
+          data: { client_account_id: clientId },
+        },
+      });
 
       if (error) throw error;
-      setMessages((data || []) as Message[]);
+      if (data?.error) throw new Error(data.error);
+      
+      const messagesData = data?.data || [];
+      setMessages(messagesData as Message[]);
 
       // Mark unread client messages as read
-      const unread = (data || []).filter((m) => m.sender_type === "client" && !m.is_read);
+      const unread = messagesData.filter((m: Message) => m.sender_type === "client" && !m.is_read);
       for (const msg of unread) {
         await markAsRead(msg.id);
       }
