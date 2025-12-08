@@ -30,6 +30,38 @@ Deno.serve(async (req) => {
     console.log(`Admin action: ${action} on table: ${table}`);
 
     switch (action) {
+      case "authenticate": {
+        // Password already validated above, just return success
+        console.log("Admin authenticated successfully");
+        return new Response(
+          JSON.stringify({ authenticated: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "fetch": {
+        // Fetch all admin data in one call
+        const [contactsResult, gapResult, pdfResult] = await Promise.all([
+          supabase.from("contact_submissions").select("*").order("created_at", { ascending: false }),
+          supabase.from("gap_analysis_submissions").select("*").order("created_at", { ascending: false }),
+          supabase.from("pdf_leads").select("*").order("created_at", { ascending: false }),
+        ]);
+
+        if (contactsResult.error) throw contactsResult.error;
+        if (gapResult.error) throw gapResult.error;
+        if (pdfResult.error) throw pdfResult.error;
+
+        console.log(`Fetched ${contactsResult.data?.length || 0} contacts, ${gapResult.data?.length || 0} gap analyses, ${pdfResult.data?.length || 0} PDF leads`);
+        return new Response(
+          JSON.stringify({ 
+            contacts: contactsResult.data,
+            gapAnalyses: gapResult.data,
+            pdfLeads: pdfResult.data
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "list": {
         let query = supabase.from(table).select("*");
         
