@@ -49,18 +49,38 @@ export function ClientAgreementsTab({ clientAccountId }: ClientAgreementsTabProp
   });
 
   const signMutation = useMutation({
-    mutationFn: async ({ agreementId, signatureData, signerName }: { agreementId: string; signatureData: string; signerName: string }) => {
+    mutationFn: async ({ agreementId, signatureData, signerName, agreementTitle }: { agreementId: string; signatureData: string; signerName: string; agreementTitle: string }) => {
+      const signedAt = new Date().toISOString();
+      
       const { error } = await supabase
         .from('service_agreements')
         .update({
           signature_data: signatureData,
           signer_name: signerName,
-          signed_at: new Date().toISOString(),
+          signed_at: signedAt,
           status: 'active',
         })
         .eq('id', agreementId);
 
       if (error) throw error;
+
+      // Send notification to admin
+      try {
+        await supabase.functions.invoke('send-client-notification', {
+          body: {
+            type: 'agreement_signed',
+            client_account_id: clientAccountId,
+            title: agreementTitle,
+            admin_email: 'admin@example.com', // Replace with actual admin email
+            details: {
+              signer_name: signerName,
+              signed_at: new Date(signedAt).toLocaleString(),
+            },
+          },
+        });
+      } catch (notifyError) {
+        console.error('Failed to send admin notification:', notifyError);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-agreements', clientAccountId] });
@@ -111,6 +131,7 @@ export function ClientAgreementsTab({ clientAccountId }: ClientAgreementsTabProp
       agreementId: signingAgreement.id,
       signatureData,
       signerName,
+      agreementTitle: signingAgreement.title,
     });
   };
 
