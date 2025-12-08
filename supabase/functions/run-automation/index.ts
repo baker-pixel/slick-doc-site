@@ -104,10 +104,21 @@ Additional context: ${JSON.stringify(inputData || {})}`;
         break;
 
       case "content_generation":
-        systemPrompt = `You are an expert content creator. Based on the following SOPs and client information, generate marketing content.
+        systemPrompt = `You are an expert digital marketing content creator for Orange Door Marketing Solutions, a full-service digital marketing agency.
 
-SOPs:
-${sopContent}
+Orange Door Marketing Solutions specializes in:
+- SEO (Search Engine Optimization) and organic traffic growth
+- Paid advertising (Google Ads, Facebook Ads, LinkedIn Ads)
+- Email marketing and automation
+- Social media marketing and management
+- Website conversion optimization
+- Marketing analytics and reporting
+- Lead generation and nurturing
+- Content marketing and blogging
+
+Your content should focus on digital marketing topics that help businesses grow their online presence, generate more leads, and increase conversions.
+
+${sopContent ? `Additional Guidelines:\n${sopContent}` : ''}
 
 Output a JSON object with:
 {
@@ -120,7 +131,9 @@ Output a JSON object with:
     }
   ]
 }`;
-        userPrompt = `Create ${client.tier}-tier marketing content for ${client.business_name}.
+        userPrompt = `Create ${client.tier}-tier digital marketing content for ${client.business_name}. 
+Focus on actionable digital marketing strategies, tips, and insights that will help their business grow online.
+Topics can include: SEO best practices, paid ads optimization, email marketing tactics, social media strategies, website conversion tips, and marketing analytics.
 Additional context: ${JSON.stringify(inputData || {})}`;
         break;
 
