@@ -14,7 +14,8 @@ import {
   ClipboardCheck,
   FileCheck,
   FolderOpen,
-  MessageCircle
+  MessageCircle,
+  CalendarCheck
 } from "lucide-react";
 import {
   Sidebar,
@@ -43,6 +44,7 @@ export type AdminSection =
   | "clients"
   | "client-documents"
   | "client-messages"
+  | "client-meetings"
   | "templates"
   | "sequences"
   | "campaigns"
@@ -80,6 +82,7 @@ const emailNavItems = [
 const advancedNavItems = [
   { id: "clients" as const, label: "Clients", icon: Briefcase },
   { id: "client-messages" as const, label: "Messages", icon: MessageCircle },
+  { id: "client-meetings" as const, label: "Meetings", icon: CalendarCheck },
   { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
   { id: "sops" as const, label: "SOPs", icon: FileCheck },
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },
