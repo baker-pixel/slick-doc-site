@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
@@ -596,13 +596,13 @@ export function EmailSequencesPanel() {
                           <SelectValue placeholder="Select template" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="" disabled>Built-in Templates</SelectItem>
+                          <SelectLabel>Built-in Templates</SelectLabel>
                           {TEMPLATE_OPTIONS.map(t => (
                             <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                           ))}
                           {customTemplates.length > 0 && (
                             <>
-                              <SelectItem value="" disabled className="font-semibold mt-2">Custom Templates</SelectItem>
+                              <SelectLabel className="mt-2">Custom Templates</SelectLabel>
                               {customTemplates.map(t => (
                                 <SelectItem key={t.slug} value={`custom:${t.slug}`}>✨ {t.name}</SelectItem>
                               ))}
