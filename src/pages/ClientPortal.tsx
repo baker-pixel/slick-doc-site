@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
@@ -12,6 +12,7 @@ import ClientAnalyticsTab from "@/components/client-portal/ClientAnalyticsTab";
 import ClientInvoicesTab from "@/components/client-portal/ClientInvoicesTab";
 import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
 import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
+import ClientMeetingsTab from "@/components/client-portal/ClientMeetingsTab";
 
 interface ClientPortalUser {
   id: string;
@@ -141,7 +142,7 @@ export default function ClientPortal() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+          <TabsList className="flex flex-wrap h-auto gap-1 lg:inline-flex">
             <TabsTrigger value="projects" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Projects</span>
@@ -149,6 +150,10 @@ export default function ClientPortal() {
             <TabsTrigger value="messages" className="flex items-center gap-2">
               <MessageCircle className="h-4 w-4" />
               <span className="hidden sm:inline">Messages</span>
+            </TabsTrigger>
+            <TabsTrigger value="meetings" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <span className="hidden sm:inline">Meetings</span>
             </TabsTrigger>
             <TabsTrigger value="approvals" className="flex items-center gap-2">
               <FileCheck className="h-4 w-4" />
@@ -174,6 +179,13 @@ export default function ClientPortal() {
 
           <TabsContent value="messages">
             <ClientMessagesTab 
+              clientAccountId={portalUser.client_account_id} 
+              clientName={`${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined}
+            />
+          </TabsContent>
+
+          <TabsContent value="meetings">
+            <ClientMeetingsTab 
               clientAccountId={portalUser.client_account_id} 
               clientName={`${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined}
             />

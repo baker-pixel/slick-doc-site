@@ -355,6 +355,62 @@ export type Database = {
           },
         ]
       }
+      client_meetings: {
+        Row: {
+          booked_by: string | null
+          client_account_id: string
+          created_at: string
+          description: string | null
+          duration_minutes: number
+          id: string
+          meeting_link: string | null
+          meeting_type: string
+          notes: string | null
+          scheduled_at: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          booked_by?: string | null
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          meeting_link?: string | null
+          meeting_type?: string
+          notes?: string | null
+          scheduled_at: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          booked_by?: string | null
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          meeting_link?: string | null
+          meeting_type?: string
+          notes?: string | null
+          scheduled_at?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_meetings_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_messages: {
         Row: {
           client_account_id: string
