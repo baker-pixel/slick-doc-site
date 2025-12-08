@@ -19,7 +19,9 @@ import {
   ClipboardList,
   Palette,
   UserCircle,
-  FileSignature
+  FileSignature,
+  Receipt,
+  Target
 } from "lucide-react";
 import {
   Sidebar,
@@ -46,6 +48,9 @@ export type AdminSection =
   | "pdf-leads"
   | "emails"
   | "clients"
+  | "client-projects"
+  | "client-analytics"
+  | "client-invoices"
   | "client-documents"
   | "client-messages"
   | "client-meetings"
@@ -90,6 +95,9 @@ const emailNavItems = [
 
 const advancedNavItems = [
   { id: "clients" as const, label: "Clients", icon: Briefcase },
+  { id: "client-projects" as const, label: "Projects", icon: Target },
+  { id: "client-analytics" as const, label: "Client Analytics", icon: BarChart3 },
+  { id: "client-invoices" as const, label: "Invoices", icon: Receipt },
   { id: "client-messages" as const, label: "Messages", icon: MessageCircle },
   { id: "client-meetings" as const, label: "Meetings", icon: CalendarCheck },
   { id: "client-requests" as const, label: "Requests", icon: ClipboardList },

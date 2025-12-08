@@ -43,6 +43,9 @@ import BrandAssetsAdminPanel from "@/components/admin/BrandAssetsAdminPanel";
 import TeamDirectoryPanel from "@/components/admin/TeamDirectoryPanel";
 import DeliverablesAdminPanel from "@/components/admin/DeliverablesAdminPanel";
 import { ServiceAgreementsPanel } from "@/components/admin/ServiceAgreementsPanel";
+import { ClientAnalyticsAdminPanel } from "@/components/admin/ClientAnalyticsAdminPanel";
+import { ClientInvoicesAdminPanel } from "@/components/admin/ClientInvoicesAdminPanel";
+import { ClientProjectsAdminPanel } from "@/components/admin/ClientProjectsAdminPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1007,6 +1010,12 @@ const Admin = () => {
         return <CampaignSenderPanel />;
       case "clients":
         return <ClientManagementPanel adminPassword={storedPassword} />;
+      case "client-projects":
+        return <ClientProjectsAdminPanel />;
+      case "client-analytics":
+        return <ClientAnalyticsAdminPanel />;
+      case "client-invoices":
+        return <ClientInvoicesAdminPanel />;
       case "client-documents":
         return <ClientDocumentsPanel />;
       case "client-messages":
@@ -1051,6 +1060,9 @@ const Admin = () => {
       sequences: "Email Sequences",
       campaigns: "Campaigns",
       clients: "Client Management",
+      "client-projects": "Client Projects",
+      "client-analytics": "Client Analytics",
+      "client-invoices": "Client Invoices",
       "client-documents": "Client Documents",
       "client-messages": "Client Messages",
       "client-meetings": "Client Meetings",
