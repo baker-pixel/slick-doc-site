@@ -40,6 +40,46 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
 
   useEffect(() => {
     fetchProjects();
+
+    // Subscribe to real-time updates for projects
+    const projectsChannel = supabase
+      .channel('client-projects-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'client_projects',
+          filter: `client_account_id=eq.${clientAccountId}`,
+        },
+        () => {
+          console.log('Projects updated, refreshing...');
+          fetchProjects();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to real-time updates for milestones
+    const milestonesChannel = supabase
+      .channel('project-milestones-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'project_milestones',
+        },
+        () => {
+          console.log('Milestones updated, refreshing...');
+          fetchProjects();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(projectsChannel);
+      supabase.removeChannel(milestonesChannel);
+    };
   }, [clientAccountId]);
 
   const fetchProjects = async () => {

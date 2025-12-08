@@ -38,6 +38,28 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
 
   useEffect(() => {
     fetchAnalytics();
+
+    // Subscribe to real-time updates for analytics
+    const channel = supabase
+      .channel('client-analytics-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'client_analytics',
+          filter: `client_account_id=eq.${clientAccountId}`,
+        },
+        () => {
+          console.log('Analytics updated, refreshing...');
+          fetchAnalytics();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [clientAccountId]);
 
   const fetchAnalytics = async () => {
