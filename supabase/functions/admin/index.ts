@@ -554,6 +554,30 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "get_messages": {
+        const { client_account_id } = data || {};
+        
+        if (!client_account_id) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: messagesData, error: messagesError } = await supabase
+          .from("client_messages")
+          .select("*")
+          .eq("client_account_id", client_account_id)
+          .order("created_at", { ascending: true });
+
+        if (messagesError) throw messagesError;
+
+        return new Response(
+          JSON.stringify({ data: messagesData }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
