@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.test-api-key]
 verify_jwt = false
+
+[functions.send-client-invite]
+verify_jwt = false
