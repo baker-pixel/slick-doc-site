@@ -329,6 +329,8 @@ const Admin = () => {
 
       setIsAuthenticated(true);
       setStoredPassword(password);
+      // Store password in localStorage for child components to use
+      localStorage.setItem("admin_password", password);
       toast({ title: "Access granted" });
       fetchData(password);
     } catch (error: any) {

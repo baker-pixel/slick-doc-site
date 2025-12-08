@@ -435,6 +435,80 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create_invitation": {
+        const { client_account_id, email, first_name, last_name } = data || {};
+        
+        if (!client_account_id || !email) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id and email are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: invitation, error: insertError } = await supabase
+          .from("client_invitations")
+          .insert({
+            client_account_id,
+            email,
+            first_name: first_name || null,
+            last_name: last_name || null,
+            invited_by: "Admin",
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        console.log(`Created invitation for ${email} to client ${client_account_id}`);
+        return new Response(
+          JSON.stringify({ data: invitation }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_invitation": {
+        const { error: deleteError } = await supabase
+          .from("client_invitations")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) throw deleteError;
+
+        console.log(`Deleted invitation ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "list_invitations": {
+        const { data: invitations, error: listError } = await supabase
+          .from("client_invitations")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (listError) throw listError;
+
+        return new Response(
+          JSON.stringify({ data: invitations }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "list_portal_users": {
+        const { data: portalUsers, error: listError } = await supabase
+          .from("client_portal_users")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (listError) throw listError;
+
+        return new Response(
+          JSON.stringify({ data: portalUsers }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
