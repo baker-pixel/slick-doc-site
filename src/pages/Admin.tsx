@@ -999,7 +999,7 @@ const Admin = () => {
       case "campaigns":
         return <CampaignSenderPanel />;
       case "clients":
-        return <ClientManagementPanel />;
+        return <ClientManagementPanel adminPassword={storedPassword} />;
       case "sops":
         return <SOPManagementPanel />;
       case "automation":
