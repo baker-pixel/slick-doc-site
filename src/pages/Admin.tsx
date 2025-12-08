@@ -20,6 +20,7 @@ import { AdminSidebar, type AdminSection } from "@/components/admin/AdminSidebar
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { AdminAnalyticsSection } from "@/components/admin/AdminAnalyticsSection";
 import { AdminOnboarding } from "@/components/admin/AdminOnboarding";
+import { QuickStartChecklist } from "@/components/admin/QuickStartChecklist";
 import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
@@ -1060,6 +1061,13 @@ const Admin = () => {
           </header>
           
           <main className="flex-1 p-6">
+            {activeSection === "pipeline" && (
+              <QuickStartChecklist 
+                onNavigate={setActiveSection as (section: string) => void} 
+                password={storedPassword}
+              />
+            )}
+            
             <AdminStatsCards
               contactsCount={contacts.length}
               gapAnalysesCount={gapAnalyses.length}
