@@ -10,11 +10,12 @@ const corsHeaders = {
 };
 
 interface NotificationRequest {
-  type: "deliverable" | "invoice" | "analytics";
+  type: "deliverable" | "invoice" | "analytics" | "agreement_signed";
   client_account_id: string;
   title: string;
   description?: string;
   details?: Record<string, string | number>;
+  admin_email?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -27,9 +28,9 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { type, client_account_id, title, description, details }: NotificationRequest = await req.json();
+    const { type, client_account_id, title, description, details, admin_email }: NotificationRequest = await req.json();
 
-    console.log(`Sending ${type} notification to client: ${client_account_id}`);
+    console.log(`Sending ${type} notification for client: ${client_account_id}`);
 
     // Get client account info
     const { data: clientAccount, error: clientError } = await supabase
@@ -113,6 +114,24 @@ const handler = async (req: Request): Promise<Response> => {
         `;
         break;
 
+      case "agreement_signed":
+        subject = `Agreement Signed: ${title}`;
+        htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a1a1a;">Agreement Signed</h1>
+            <p>A client has signed an agreement:</p>
+            <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h2 style="margin: 0 0 10px 0; color: #1a1a1a;">${title}</h2>
+              <p style="color: #666; margin: 5px 0;"><strong>Client:</strong> ${clientName} (${clientAccount.business_name})</p>
+              ${details?.signer_name ? `<p style="color: #666; margin: 5px 0;"><strong>Signed by:</strong> ${details.signer_name}</p>` : ""}
+              ${details?.signed_at ? `<p style="color: #666; margin: 5px 0;"><strong>Signed at:</strong> ${details.signed_at}</p>` : ""}
+            </div>
+            <p>You can view the signed agreement in the admin panel.</p>
+            <p style="color: #888; margin-top: 30px; font-size: 12px;">This is an automated notification from the Client Portal.</p>
+          </div>
+        `;
+        break;
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid notification type" }),
@@ -120,9 +139,14 @@ const handler = async (req: Request): Promise<Response> => {
         );
     }
 
+    // For agreement_signed, send to admin; otherwise send to client
+    const recipientEmail = type === "agreement_signed" && admin_email 
+      ? admin_email 
+      : clientAccount.email;
+
     const emailResponse = await resend.emails.send({
       from: "Client Portal <onboarding@resend.dev>",
-      to: [clientAccount.email],
+      to: [recipientEmail],
       subject,
       html: htmlContent,
     });
