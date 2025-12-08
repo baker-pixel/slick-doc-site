@@ -578,6 +578,50 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "get_requests": {
+        const { data: requestsData, error: requestsError } = await supabase
+          .from("client_requests")
+          .select("*, client_accounts(business_name)")
+          .order("created_at", { ascending: false });
+
+        if (requestsError) throw requestsError;
+
+        return new Response(
+          JSON.stringify({ data: requestsData }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "update_request": {
+        if (!id) {
+          return new Response(
+            JSON.stringify({ error: "Request ID is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { status, admin_notes, assigned_to, due_date, completed_at } = data || {};
+
+        const { error: updateError } = await supabase
+          .from("client_requests")
+          .update({
+            status,
+            admin_notes,
+            assigned_to,
+            due_date,
+            completed_at,
+          })
+          .eq("id", id);
+
+        if (updateError) throw updateError;
+
+        console.log(`Updated request ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
@@ -13,6 +13,7 @@ import ClientInvoicesTab from "@/components/client-portal/ClientInvoicesTab";
 import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
 import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
 import ClientMeetingsTab from "@/components/client-portal/ClientMeetingsTab";
+import ClientRequestsTab from "@/components/client-portal/ClientRequestsTab";
 
 interface ClientPortalUser {
   id: string;
@@ -155,6 +156,10 @@ export default function ClientPortal() {
               <Calendar className="h-4 w-4" />
               <span className="hidden sm:inline">Meetings</span>
             </TabsTrigger>
+            <TabsTrigger value="requests" className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              <span className="hidden sm:inline">Requests</span>
+            </TabsTrigger>
             <TabsTrigger value="approvals" className="flex items-center gap-2">
               <FileCheck className="h-4 w-4" />
               <span className="hidden sm:inline">Approvals</span>
@@ -189,6 +194,10 @@ export default function ClientPortal() {
               clientAccountId={portalUser.client_account_id} 
               clientName={`${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined}
             />
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <ClientRequestsTab clientAccountId={portalUser.client_account_id} />
           </TabsContent>
           
           <TabsContent value="approvals">

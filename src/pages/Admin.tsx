@@ -38,6 +38,7 @@ import AutomationAlertsPanel from "@/components/admin/AutomationAlertsPanel";
 import ClientDocumentsPanel from "@/components/admin/ClientDocumentsPanel";
 import ClientMessagesAdminPanel from "@/components/admin/ClientMessagesAdminPanel";
 import ClientMeetingsAdminPanel from "@/components/admin/ClientMeetingsAdminPanel";
+import ClientRequestsAdminPanel from "@/components/admin/ClientRequestsAdminPanel";
 import { cn } from "@/lib/utils";
 
 interface ContactSubmission {
@@ -1009,6 +1010,8 @@ const Admin = () => {
         return <ClientMessagesAdminPanel />;
       case "client-meetings":
         return <ClientMeetingsAdminPanel />;
+      case "client-requests":
+        return <ClientRequestsAdminPanel />;
       case "sops":
         return <SOPManagementPanel />;
       case "automation":
@@ -1040,6 +1043,7 @@ const Admin = () => {
       "client-documents": "Client Documents",
       "client-messages": "Client Messages",
       "client-meetings": "Client Meetings",
+      "client-requests": "Client Requests",
       sops: "SOP Management",
       automation: "Automation Jobs",
       "content-review": "Content Review",
