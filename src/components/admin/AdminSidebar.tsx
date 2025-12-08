@@ -12,7 +12,8 @@ import {
   Briefcase,
   Bot,
   ClipboardCheck,
-  FileCheck
+  FileCheck,
+  FolderOpen
 } from "lucide-react";
 import {
   Sidebar,
@@ -39,6 +40,7 @@ export type AdminSection =
   | "pdf-leads"
   | "emails"
   | "clients"
+  | "client-documents"
   | "templates"
   | "sequences"
   | "campaigns"
@@ -75,6 +77,7 @@ const emailNavItems = [
 
 const advancedNavItems = [
   { id: "clients" as const, label: "Clients", icon: Briefcase },
+  { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
   { id: "sops" as const, label: "SOPs", icon: FileCheck },
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },
   { id: "content-review" as const, label: "Content Review", icon: ClipboardCheck },
