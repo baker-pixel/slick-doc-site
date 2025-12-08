@@ -48,7 +48,11 @@ interface ClientPortalUser {
   created_at: string;
 }
 
-export function ClientManagementPanel() {
+interface ClientManagementPanelProps {
+  adminPassword: string;
+}
+
+export function ClientManagementPanel({ adminPassword }: ClientManagementPanelProps) {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [invitations, setInvitations] = useState<ClientInvitation[]>([]);
   const [portalUsers, setPortalUsers] = useState<ClientPortalUser[]>([]);
@@ -100,7 +104,7 @@ export function ClientManagementPanel() {
   const fetchInvitations = async () => {
     // Use admin function to bypass RLS
     const { data, error } = await supabase.functions.invoke("admin", {
-      body: { action: "list_invitations", password: getAdminPassword() },
+      body: { action: "list_invitations", password: adminPassword },
     });
 
     if (error) {
@@ -113,7 +117,7 @@ export function ClientManagementPanel() {
   const fetchPortalUsers = async () => {
     // Use admin function to bypass RLS
     const { data, error } = await supabase.functions.invoke("admin", {
-      body: { action: "list_portal_users", password: getAdminPassword() },
+      body: { action: "list_portal_users", password: adminPassword },
     });
 
     if (error) {
@@ -123,10 +127,6 @@ export function ClientManagementPanel() {
     }
   };
 
-  const getAdminPassword = () => {
-    // Get the password from localStorage (set during admin login)
-    return localStorage.getItem("admin_password") || "";
-  };
 
   const addClient = async () => {
     if (!newClient.email || !newClient.business_name) {
@@ -175,7 +175,7 @@ export function ClientManagementPanel() {
       const { data: inviteResult, error: insertError } = await supabase.functions.invoke("admin", {
         body: {
           action: "create_invitation",
-          password: getAdminPassword(),
+          password: adminPassword,
           data: {
             client_account_id: selectedClientForInvite.id,
             email: newInvite.email,
@@ -226,7 +226,7 @@ export function ClientManagementPanel() {
 
   const deleteInvitation = async (id: string) => {
     const { data, error } = await supabase.functions.invoke("admin", {
-      body: { action: "delete_invitation", password: getAdminPassword(), id },
+      body: { action: "delete_invitation", password: adminPassword, id },
     });
     if (error || data?.error) {
       toast.error("Failed to delete invitation");
