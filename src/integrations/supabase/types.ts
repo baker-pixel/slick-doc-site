@@ -355,6 +355,44 @@ export type Database = {
           },
         ]
       }
+      client_messages: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          sender_name: string | null
+          sender_type: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          sender_name?: string | null
+          sender_type: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          sender_name?: string | null
+          sender_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_messages_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_portal_users: {
         Row: {
           client_account_id: string

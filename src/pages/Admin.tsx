@@ -36,6 +36,7 @@ import { ContentCalendarPanel } from "@/components/admin/ContentCalendarPanel";
 import PipelineDashboard from "@/components/admin/PipelineDashboard";
 import AutomationAlertsPanel from "@/components/admin/AutomationAlertsPanel";
 import ClientDocumentsPanel from "@/components/admin/ClientDocumentsPanel";
+import ClientMessagesAdminPanel from "@/components/admin/ClientMessagesAdminPanel";
 import { cn } from "@/lib/utils";
 
 interface ContactSubmission {
@@ -1003,6 +1004,8 @@ const Admin = () => {
         return <ClientManagementPanel adminPassword={storedPassword} />;
       case "client-documents":
         return <ClientDocumentsPanel />;
+      case "client-messages":
+        return <ClientMessagesAdminPanel />;
       case "sops":
         return <SOPManagementPanel />;
       case "automation":
@@ -1032,6 +1035,7 @@ const Admin = () => {
       campaigns: "Campaigns",
       clients: "Client Management",
       "client-documents": "Client Documents",
+      "client-messages": "Client Messages",
       sops: "SOP Management",
       automation: "Automation Jobs",
       "content-review": "Content Review",
