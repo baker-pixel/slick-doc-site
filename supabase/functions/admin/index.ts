@@ -846,6 +846,85 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "list_deliverables": {
+        const { data: deliverables, error } = await supabase
+          .from("deliverables")
+          .select("*")
+          .order("submitted_at", { ascending: false });
+        
+        if (error) throw error;
+        return new Response(
+          JSON.stringify({ data: deliverables }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "create_deliverable": {
+        const { client_account_id, title, description, category, file_url, file_name, preview_url } = data || {};
+        
+        if (!client_account_id || !title) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id and title are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: deliverable, error } = await supabase
+          .from("deliverables")
+          .insert({
+            client_account_id,
+            title,
+            description: description || null,
+            category: category || "general",
+            file_url: file_url || null,
+            file_name: file_name || null,
+            preview_url: preview_url || null,
+            status: "pending_review",
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Created deliverable: ${title}`);
+        return new Response(
+          JSON.stringify({ data: deliverable }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "update_deliverable": {
+        const updateData = data || {};
+
+        const { data: deliverable, error } = await supabase
+          .from("deliverables")
+          .update(updateData)
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Updated deliverable: ${id}`);
+        return new Response(
+          JSON.stringify({ data: deliverable }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_deliverable": {
+        const { error: deleteError } = await supabase
+          .from("deliverables")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) throw deleteError;
+
+        console.log(`Deleted deliverable ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),

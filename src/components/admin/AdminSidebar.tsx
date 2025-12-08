@@ -51,6 +51,7 @@ export type AdminSection =
   | "client-requests"
   | "brand-assets"
   | "team-directory"
+  | "deliverables"
   | "templates"
   | "sequences"
   | "campaigns"
@@ -92,6 +93,7 @@ const advancedNavItems = [
   { id: "client-requests" as const, label: "Requests", icon: ClipboardList },
   { id: "brand-assets" as const, label: "Brand Assets", icon: Palette },
   { id: "team-directory" as const, label: "Team Directory", icon: UserCircle },
+  { id: "deliverables" as const, label: "Deliverables", icon: FileCheck },
   { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
   { id: "sops" as const, label: "SOPs", icon: FileCheck },
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },

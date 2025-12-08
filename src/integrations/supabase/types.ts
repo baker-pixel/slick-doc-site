@@ -922,6 +922,84 @@ export type Database = {
           },
         ]
       }
+      deliverables: {
+        Row: {
+          category: string
+          client_account_id: string
+          created_at: string
+          description: string | null
+          feedback: string | null
+          file_name: string | null
+          file_url: string | null
+          id: string
+          preview_url: string | null
+          project_id: string | null
+          rating: number | null
+          reviewed_at: string | null
+          revision_count: number | null
+          revision_notes: string | null
+          status: string
+          submitted_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          feedback?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          preview_url?: string | null
+          project_id?: string | null
+          rating?: number | null
+          reviewed_at?: string | null
+          revision_count?: number | null
+          revision_notes?: string | null
+          status?: string
+          submitted_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          feedback?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          preview_url?: string | null
+          project_id?: string | null
+          rating?: number | null
+          reviewed_at?: string | null
+          revision_count?: number | null
+          revision_notes?: string | null
+          status?: string
+          submitted_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deliverables_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliverables_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "client_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_cleanup_log: {
         Row: {
           cleaned_at: string
