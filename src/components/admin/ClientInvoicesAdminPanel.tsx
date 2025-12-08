@@ -73,6 +73,23 @@ export function ClientInvoicesAdminPanel() {
     },
   });
 
+  const sendNotification = async (clientId: string, invoiceNumber: string, amount: string, currency: string, dueDate: string, description: string) => {
+    try {
+      await supabase.functions.invoke("send-client-notification", {
+        body: {
+          type: "invoice",
+          client_account_id: clientId,
+          title: invoiceNumber,
+          description,
+          details: { amount, currency, due_date: format(new Date(dueDate), 'MMM d, yyyy') },
+        },
+      });
+      toast.success("Notification sent to client");
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const { error } = await supabase
@@ -88,10 +105,12 @@ export function ClientInvoicesAdminPanel() {
         }]);
 
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-invoices'] });
       toast.success("Invoice created");
+      sendNotification(data.client_account_id, data.invoice_number, data.amount, data.currency, data.due_date, data.description);
       resetForm();
     },
     onError: (error) => {
