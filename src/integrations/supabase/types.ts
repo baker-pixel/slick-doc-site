@@ -1723,7 +1723,10 @@ export type Database = {
           file_size: number | null
           file_url: string | null
           id: string
+          signature_data: string | null
           signed_at: string | null
+          signer_ip: string | null
+          signer_name: string | null
           status: string
           title: string
           updated_at: string
@@ -1739,7 +1742,10 @@ export type Database = {
           file_size?: number | null
           file_url?: string | null
           id?: string
+          signature_data?: string | null
           signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -1755,7 +1761,10 @@ export type Database = {
           file_size?: number | null
           file_url?: string | null
           id?: string
+          signature_data?: string | null
           signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
           status?: string
           title?: string
           updated_at?: string
