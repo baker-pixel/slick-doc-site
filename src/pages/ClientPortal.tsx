@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
 import ClientAnalyticsTab from "@/components/client-portal/ClientAnalyticsTab";
 import ClientInvoicesTab from "@/components/client-portal/ClientInvoicesTab";
+import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
 
 interface ClientPortalUser {
   id: string;
@@ -139,7 +140,7 @@ export default function ClientPortal() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="projects" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Projects</span>
@@ -147,6 +148,10 @@ export default function ClientPortal() {
             <TabsTrigger value="approvals" className="flex items-center gap-2">
               <FileCheck className="h-4 w-4" />
               <span className="hidden sm:inline">Approvals</span>
+            </TabsTrigger>
+            <TabsTrigger value="documents" className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              <span className="hidden sm:inline">Documents</span>
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
@@ -164,6 +169,10 @@ export default function ClientPortal() {
           
           <TabsContent value="approvals">
             <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />
+          </TabsContent>
+
+          <TabsContent value="documents">
+            <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />
           </TabsContent>
           
           <TabsContent value="analytics">
