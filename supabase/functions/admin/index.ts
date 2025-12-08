@@ -756,6 +756,96 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "list_team_members": {
+        const { data: members, error } = await supabase
+          .from("team_members")
+          .select("*")
+          .order("display_order", { ascending: true });
+        
+        if (error) throw error;
+        return new Response(
+          JSON.stringify({ data: members }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "create_team_member": {
+        const { name, role, email, phone, photo_url, bio, specialties, is_active, display_order } = data || {};
+        
+        if (!name || !role) {
+          return new Response(
+            JSON.stringify({ error: "name and role are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: member, error } = await supabase
+          .from("team_members")
+          .insert({
+            name,
+            role,
+            email: email || null,
+            phone: phone || null,
+            photo_url: photo_url || null,
+            bio: bio || null,
+            specialties: specialties || [],
+            is_active: is_active ?? true,
+            display_order: display_order || 0,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Created team member: ${name}`);
+        return new Response(
+          JSON.stringify({ data: member }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "update_team_member": {
+        const { name, role, email, phone, photo_url, bio, specialties, is_active, display_order } = data || {};
+
+        const { data: member, error } = await supabase
+          .from("team_members")
+          .update({
+            name,
+            role,
+            email: email || null,
+            phone: phone || null,
+            photo_url: photo_url || null,
+            bio: bio || null,
+            specialties: specialties || [],
+            is_active: is_active ?? true,
+            display_order: display_order || 0,
+          })
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Updated team member: ${id}`);
+        return new Response(
+          JSON.stringify({ data: member }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_team_member": {
+        const { error: deleteError } = await supabase
+          .from("team_members")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) throw deleteError;
+
+        console.log(`Deleted team member ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
