@@ -99,17 +99,35 @@ export default function DeliverablesAdminPanel({ adminPassword }: DeliverablesAd
     },
   });
 
+  const sendNotification = async (clientId: string, title: string, description: string, category: string) => {
+    try {
+      await supabase.functions.invoke("send-client-notification", {
+        body: {
+          type: "deliverable",
+          client_account_id: clientId,
+          title,
+          description,
+          details: { category },
+        },
+      });
+      toast({ title: "Notification sent to client" });
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const response = await supabase.functions.invoke("admin", {
         body: { action: "create_deliverable", password: adminPassword, data },
       });
       if (response.error) throw response.error;
-      return response.data;
+      return { response: response.data, data };
     },
-    onSuccess: () => {
+    onSuccess: ({ data }) => {
       queryClient.invalidateQueries({ queryKey: ["admin-deliverables"] });
       toast({ title: "Deliverable created" });
+      sendNotification(data.client_account_id, data.title, data.description, data.category);
       resetForm();
     },
     onError: (error) => {

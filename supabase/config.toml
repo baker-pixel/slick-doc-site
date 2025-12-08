@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.send-client-invite]
 verify_jwt = false
+
+[functions.send-client-notification]
+verify_jwt = false

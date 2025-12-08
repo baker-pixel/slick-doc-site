@@ -72,6 +72,28 @@ export function ClientAnalyticsAdminPanel() {
     },
   });
 
+  const sendNotification = async (clientId: string, periodStart: string, periodEnd: string, metrics: Record<string, number>) => {
+    try {
+      const period = `${format(new Date(periodStart), 'MMM d')} - ${format(new Date(periodEnd), 'MMM d, yyyy')}`;
+      await supabase.functions.invoke("send-client-notification", {
+        body: {
+          type: "analytics",
+          client_account_id: clientId,
+          title: `Performance Report (${period})`,
+          details: { 
+            period,
+            website_visits: metrics.website_visits,
+            leads_generated: metrics.leads_generated,
+            conversions: metrics.conversions,
+          },
+        },
+      });
+      toast.success("Notification sent to client");
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const metrics = {
@@ -95,10 +117,12 @@ export function ClientAnalyticsAdminPanel() {
         }]);
 
       if (error) throw error;
+      return { data, metrics };
     },
-    onSuccess: () => {
+    onSuccess: ({ data, metrics }) => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-analytics'] });
       toast.success("Analytics snapshot created");
+      sendNotification(data.client_account_id, data.period_start, data.period_end, metrics);
       resetForm();
     },
     onError: (error) => {
