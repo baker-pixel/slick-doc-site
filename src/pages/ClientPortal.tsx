@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
@@ -14,6 +14,7 @@ import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
 import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
 import ClientMeetingsTab from "@/components/client-portal/ClientMeetingsTab";
 import ClientRequestsTab from "@/components/client-portal/ClientRequestsTab";
+import ClientBrandAssetsTab from "@/components/client-portal/ClientBrandAssetsTab";
 
 interface ClientPortalUser {
   id: string;
@@ -168,6 +169,10 @@ export default function ClientPortal() {
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
             </TabsTrigger>
+            <TabsTrigger value="brand" className="flex items-center gap-2">
+              <Palette className="h-4 w-4" />
+              <span className="hidden sm:inline">Brand</span>
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               <span className="hidden sm:inline">Analytics</span>
@@ -206,6 +211,10 @@ export default function ClientPortal() {
 
           <TabsContent value="documents">
             <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />
+          </TabsContent>
+
+          <TabsContent value="brand">
+            <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />
           </TabsContent>
           
           <TabsContent value="analytics">

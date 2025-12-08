@@ -39,6 +39,7 @@ import ClientDocumentsPanel from "@/components/admin/ClientDocumentsPanel";
 import ClientMessagesAdminPanel from "@/components/admin/ClientMessagesAdminPanel";
 import ClientMeetingsAdminPanel from "@/components/admin/ClientMeetingsAdminPanel";
 import ClientRequestsAdminPanel from "@/components/admin/ClientRequestsAdminPanel";
+import BrandAssetsAdminPanel from "@/components/admin/BrandAssetsAdminPanel";
 import { cn } from "@/lib/utils";
 
 interface ContactSubmission {
@@ -1012,6 +1013,8 @@ const Admin = () => {
         return <ClientMeetingsAdminPanel />;
       case "client-requests":
         return <ClientRequestsAdminPanel />;
+      case "brand-assets":
+        return <BrandAssetsAdminPanel />;
       case "sops":
         return <SOPManagementPanel />;
       case "automation":
@@ -1044,6 +1047,7 @@ const Admin = () => {
       "client-messages": "Client Messages",
       "client-meetings": "Client Meetings",
       "client-requests": "Client Requests",
+      "brand-assets": "Brand Assets",
       sops: "SOP Management",
       automation: "Automation Jobs",
       "content-review": "Content Review",
