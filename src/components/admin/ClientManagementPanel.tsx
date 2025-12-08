@@ -98,29 +98,34 @@ export function ClientManagementPanel() {
   };
 
   const fetchInvitations = async () => {
-    const { data, error } = await supabase
-      .from("client_invitations")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Use admin function to bypass RLS
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "list_invitations", password: getAdminPassword() },
+    });
 
     if (error) {
       console.error("Failed to fetch invitations:", error);
     } else {
-      setInvitations(data || []);
+      setInvitations(data?.data || []);
     }
   };
 
   const fetchPortalUsers = async () => {
-    const { data, error } = await supabase
-      .from("client_portal_users")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Use admin function to bypass RLS
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "list_portal_users", password: getAdminPassword() },
+    });
 
     if (error) {
       console.error("Failed to fetch portal users:", error);
     } else {
-      setPortalUsers(data || []);
+      setPortalUsers(data?.data || []);
     }
+  };
+
+  const getAdminPassword = () => {
+    // Get the password from localStorage (set during admin login)
+    return localStorage.getItem("admin_password") || "";
   };
 
   const addClient = async () => {
@@ -166,20 +171,24 @@ export function ClientManagementPanel() {
 
     setSendingInvite(true);
     try {
-      // Create the invitation in the database
-      const { data: invitation, error: insertError } = await supabase
-        .from("client_invitations")
-        .insert({
-          client_account_id: selectedClientForInvite.id,
-          email: newInvite.email,
-          first_name: newInvite.first_name || null,
-          last_name: newInvite.last_name || null,
-          invited_by: "Admin",
-        })
-        .select()
-        .single();
+      // Create the invitation through admin function (bypasses RLS)
+      const { data: inviteResult, error: insertError } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_invitation",
+          password: getAdminPassword(),
+          data: {
+            client_account_id: selectedClientForInvite.id,
+            email: newInvite.email,
+            first_name: newInvite.first_name || null,
+            last_name: newInvite.last_name || null,
+          },
+        },
+      });
 
       if (insertError) throw insertError;
+      if (inviteResult?.error) throw new Error(inviteResult.error);
+
+      const invitation = inviteResult?.data;
 
       // Send the invitation email
       const { error: emailError } = await supabase.functions.invoke("send-client-invite", {
@@ -216,8 +225,10 @@ export function ClientManagementPanel() {
   };
 
   const deleteInvitation = async (id: string) => {
-    const { error } = await supabase.from("client_invitations").delete().eq("id", id);
-    if (error) {
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "delete_invitation", password: getAdminPassword(), id },
+    });
+    if (error || data?.error) {
       toast.error("Failed to delete invitation");
     } else {
       toast.success("Invitation deleted");
