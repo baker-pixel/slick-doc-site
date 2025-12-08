@@ -111,7 +111,7 @@ serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Orange Door Marketing <noreply@orangedoormarketing.com>",
+        from: "Orange Door Marketing <onboarding@resend.dev>",
         to: [email],
         subject: `You're invited to ${businessName}'s Client Portal`,
         html: htmlContent,
