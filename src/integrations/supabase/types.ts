@@ -161,6 +161,244 @@ export type Database = {
         }
         Relationships: []
       }
+      client_analytics: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          highlights: Json | null
+          id: string
+          metrics: Json
+          period_end: string
+          period_start: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          highlights?: Json | null
+          id?: string
+          metrics?: Json
+          period_end: string
+          period_start: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          highlights?: Json | null
+          id?: string
+          metrics?: Json
+          period_end?: string
+          period_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_analytics_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_invitations: {
+        Row: {
+          accepted_at: string | null
+          client_account_id: string
+          created_at: string
+          email: string
+          expires_at: string
+          first_name: string | null
+          id: string
+          invited_by: string | null
+          last_name: string | null
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          client_account_id: string
+          created_at?: string
+          email: string
+          expires_at?: string
+          first_name?: string | null
+          id?: string
+          invited_by?: string | null
+          last_name?: string | null
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          client_account_id?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          first_name?: string | null
+          id?: string
+          invited_by?: string | null
+          last_name?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_invitations_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_invoices: {
+        Row: {
+          amount: number
+          client_account_id: string
+          created_at: string
+          currency: string | null
+          description: string | null
+          due_date: string
+          id: string
+          invoice_number: string
+          line_items: Json | null
+          paid_at: string | null
+          status: string
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          client_account_id: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          due_date: string
+          id?: string
+          invoice_number: string
+          line_items?: Json | null
+          paid_at?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          client_account_id?: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          due_date?: string
+          id?: string
+          invoice_number?: string
+          line_items?: Json | null
+          paid_at?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_invoices_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_portal_users: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          first_name: string | null
+          id: string
+          invited_at: string
+          invited_by: string | null
+          last_login_at: string | null
+          last_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          last_login_at?: string | null
+          last_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          invited_at?: string
+          invited_by?: string | null
+          last_login_at?: string | null
+          last_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_users_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_projects: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          progress_percentage: number | null
+          start_date: string | null
+          status: string
+          target_end_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          progress_percentage?: number | null
+          start_date?: string | null
+          status?: string
+          target_end_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          progress_percentage?: number | null
+          start_date?: string | null
+          status?: string
+          target_end_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_projects_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_reports: {
         Row: {
           client_id: string
@@ -261,6 +499,69 @@ export type Database = {
             columns: ["pipeline_stage_id"]
             isOneToOne: false
             referencedRelation: "pipeline_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_approvals: {
+        Row: {
+          client_account_id: string
+          content_id: string | null
+          content_preview: string | null
+          content_type: string
+          created_at: string
+          feedback: string | null
+          full_content: string | null
+          id: string
+          reviewed_at: string | null
+          status: string
+          submitted_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          content_id?: string | null
+          content_preview?: string | null
+          content_type: string
+          created_at?: string
+          feedback?: string | null
+          full_content?: string | null
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          submitted_at?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          content_id?: string | null
+          content_preview?: string | null
+          content_type?: string
+          created_at?: string
+          feedback?: string | null
+          full_content?: string | null
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          submitted_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_approvals_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_approvals_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "generated_content"
             referencedColumns: ["id"]
           },
         ]
@@ -985,6 +1286,50 @@ export type Database = {
         }
         Relationships: []
       }
+      project_milestones: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          name: string
+          project_id: string
+          sort_order: number | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          name: string
+          project_id: string
+          sort_order?: number | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          name?: string
+          project_id?: string
+          sort_order?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "client_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sop_documents: {
         Row: {
           action_items: Json | null
@@ -1027,15 +1372,43 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       get_optimal_send_hour: { Args: { p_timezone?: string }; Returns: number }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1162,6 +1535,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "client"],
+    },
   },
 } as const
