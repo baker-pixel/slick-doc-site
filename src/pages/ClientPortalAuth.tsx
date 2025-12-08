@@ -18,6 +18,8 @@ export default function ClientPortalAuth() {
   const [loading, setLoading] = useState(false);
   const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
   const [existingUserMode, setExistingUserMode] = useState(false);
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const [invitation, setInvitation] = useState<{
     id: string;
     email: string;
@@ -27,14 +29,12 @@ export default function ClientPortalAuth() {
   } | null>(null);
 
   useEffect(() => {
-    // Check if already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         checkClientPortalAccess(session.user.id);
       }
     });
 
-    // Load invitation if token provided
     if (inviteToken) {
       loadInvitation(inviteToken);
     }
@@ -78,6 +78,41 @@ export default function ClientPortalAuth() {
     setIsAcceptingInvite(false);
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/portal/auth`,
+      });
+
+      if (error) {
+        toast({
+          title: "Reset Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      setResetEmailSent(true);
+      toast({
+        title: "Check Your Email",
+        description: "We've sent you a password reset link.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -98,7 +133,6 @@ export default function ClientPortalAuth() {
         return;
       }
 
-      // Check if user has portal access
       const { data: portalUser } = await supabase
         .from("client_portal_users")
         .select("id")
@@ -135,7 +169,6 @@ export default function ClientPortalAuth() {
     setLoading(true);
 
     try {
-      // If in existing user mode, just sign in
       if (existingUserMode) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email: invitation.email,
@@ -163,7 +196,6 @@ export default function ClientPortalAuth() {
           return;
         }
 
-        // Check if portal user already exists for this client
         const { data: existingPortalUser } = await supabase
           .from("client_portal_users")
           .select("id")
@@ -171,7 +203,6 @@ export default function ClientPortalAuth() {
           .eq("client_account_id", invitation.client_account_id)
           .single();
 
-        // Create client portal user record if not exists
         if (!existingPortalUser) {
           const { error: portalError } = await supabase
             .from("client_portal_users")
@@ -195,7 +226,6 @@ export default function ClientPortalAuth() {
           }
         }
 
-        // Mark invitation as accepted
         await supabase
           .from("client_invitations")
           .update({ accepted_at: new Date().toISOString() })
@@ -210,7 +240,6 @@ export default function ClientPortalAuth() {
         return;
       }
 
-      // First, try to sign up
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: invitation.email,
         password,
@@ -219,10 +248,9 @@ export default function ClientPortalAuth() {
         },
       });
 
-      // If user already exists, switch to existing user mode
       if (authError?.message?.toLowerCase().includes("already registered")) {
         setExistingUserMode(true);
-        setPassword(""); // Clear password field
+        setPassword("");
         toast({
           title: "Account Already Exists",
           description: "You already have an account. Please enter your existing password.",
@@ -252,7 +280,6 @@ export default function ClientPortalAuth() {
         return;
       }
 
-      // Create client portal user record
       const { error: portalError } = await supabase
         .from("client_portal_users")
         .insert({
@@ -274,7 +301,6 @@ export default function ClientPortalAuth() {
         return;
       }
 
-      // Create client role
       const { error: roleError } = await supabase
         .from("user_roles")
         .insert({
@@ -286,7 +312,6 @@ export default function ClientPortalAuth() {
         console.error("Role creation error:", roleError);
       }
 
-      // Mark invitation as accepted
       await supabase
         .from("client_invitations")
         .update({ accepted_at: new Date().toISOString() })
@@ -313,6 +338,81 @@ export default function ClientPortalAuth() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (forgotPasswordMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">
+              {resetEmailSent ? "Check Your Email" : "Reset Password"}
+            </CardTitle>
+            <CardDescription>
+              {resetEmailSent 
+                ? "We've sent a password reset link to your email."
+                : "Enter your email to receive a reset link"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {resetEmailSent ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground text-center">
+                  Didn't receive the email? Check your spam folder or try again.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    setForgotPasswordMode(false);
+                    setResetEmailSent(false);
+                  }}
+                >
+                  Back to Sign In
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Send Reset Link
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => setForgotPasswordMode(false)}
+                  className="w-full text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Back to Sign In
+                </button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -396,6 +496,16 @@ export default function ClientPortalAuth() {
                 </>
               )}
             </Button>
+
+            {!invitation && (
+              <button
+                type="button"
+                onClick={() => setForgotPasswordMode(true)}
+                className="w-full text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Forgot your password?
+              </button>
+            )}
           </form>
         </CardContent>
       </Card>
