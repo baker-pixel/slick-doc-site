@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target, Download } from "lucide-react";
 import { format } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import { toast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface AnalyticsMetrics {
   website_visits?: number;
@@ -30,9 +34,10 @@ interface AnalyticsSnapshot {
 
 interface ClientAnalyticsTabProps {
   clientAccountId: string;
+  businessName?: string;
 }
 
-export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsTabProps) {
+export default function ClientAnalyticsTab({ clientAccountId, businessName }: ClientAnalyticsTabProps) {
   const [analytics, setAnalytics] = useState<AnalyticsSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -95,6 +100,167 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
     if (current === undefined || previous === undefined || previous === 0) return null;
     const change = ((current - previous) / previous) * 100;
     return change;
+  };
+
+  const generatePDF = () => {
+    try {
+      const doc = new jsPDF();
+      const latestPeriod = analytics[0];
+      const previousPeriod = analytics[1];
+      const metrics = latestPeriod?.metrics || {};
+      const previousMetrics = previousPeriod?.metrics || {};
+      
+      // Header
+      doc.setFontSize(24);
+      doc.setTextColor(33, 33, 33);
+      doc.text("Performance Report", 20, 25);
+      
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100);
+      doc.text(businessName || "Client Report", 20, 35);
+      
+      if (latestPeriod) {
+        doc.text(
+          `Period: ${format(new Date(latestPeriod.period_start), "MMM d")} - ${format(new Date(latestPeriod.period_end), "MMM d, yyyy")}`,
+          20,
+          42
+        );
+      }
+      
+      doc.text(`Generated: ${format(new Date(), "MMMM d, yyyy")}`, 20, 49);
+      
+      // Divider
+      doc.setDrawColor(200, 200, 200);
+      doc.line(20, 55, 190, 55);
+      
+      // Key Metrics Section
+      doc.setFontSize(16);
+      doc.setTextColor(33, 33, 33);
+      doc.text("Key Metrics", 20, 68);
+      
+      const metricsData = [
+        ["Metric", "Current", "Previous", "Change"],
+        [
+          "Website Visits",
+          formatNumber(metrics.website_visits),
+          formatNumber(previousMetrics.website_visits),
+          getTrendText(metrics.website_visits, previousMetrics.website_visits),
+        ],
+        [
+          "Leads Generated",
+          formatNumber(metrics.leads_generated),
+          formatNumber(previousMetrics.leads_generated),
+          getTrendText(metrics.leads_generated, previousMetrics.leads_generated),
+        ],
+        [
+          "Email Opens",
+          formatNumber(metrics.email_opens),
+          formatNumber(previousMetrics.email_opens),
+          getTrendText(metrics.email_opens, previousMetrics.email_opens),
+        ],
+        [
+          "Email Clicks",
+          formatNumber(metrics.email_clicks),
+          formatNumber(previousMetrics.email_clicks),
+          getTrendText(metrics.email_clicks, previousMetrics.email_clicks),
+        ],
+        [
+          "Social Reach",
+          formatNumber(metrics.social_reach),
+          formatNumber(previousMetrics.social_reach),
+          getTrendText(metrics.social_reach, previousMetrics.social_reach),
+        ],
+        [
+          "Conversions",
+          formatNumber(metrics.conversions),
+          formatNumber(previousMetrics.conversions),
+          getTrendText(metrics.conversions, previousMetrics.conversions),
+        ],
+      ];
+      
+      autoTable(doc, {
+        head: [metricsData[0]],
+        body: metricsData.slice(1),
+        startY: 75,
+        theme: "striped",
+        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+        styles: { fontSize: 10 },
+        columnStyles: {
+          3: { halign: "center" },
+        },
+      });
+      
+      // Highlights Section
+      if (latestPeriod?.highlights?.items && latestPeriod.highlights.items.length > 0) {
+        const finalY = (doc as any).lastAutoTable?.finalY || 130;
+        
+        doc.setFontSize(16);
+        doc.setTextColor(33, 33, 33);
+        doc.text("Key Highlights", 20, finalY + 15);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(60, 60, 60);
+        latestPeriod.highlights.items.forEach((highlight, index) => {
+          doc.text(`• ${highlight}`, 25, finalY + 25 + index * 8);
+        });
+      }
+      
+      // Historical Performance
+      if (analytics.length > 1) {
+        const highlightsHeight = latestPeriod?.highlights?.items ? latestPeriod.highlights.items.length * 8 + 30 : 0;
+        const historyStartY = ((doc as any).lastAutoTable?.finalY || 130) + highlightsHeight + 15;
+        
+        doc.setFontSize(16);
+        doc.setTextColor(33, 33, 33);
+        doc.text("Historical Performance", 20, historyStartY);
+        
+        const historyData = analytics.slice(0, 6).map((period) => [
+          `${format(new Date(period.period_start), "MMM d")} - ${format(new Date(period.period_end), "MMM d, yyyy")}`,
+          formatNumber(period.metrics?.website_visits),
+          formatNumber(period.metrics?.leads_generated),
+          formatNumber(period.metrics?.conversions),
+        ]);
+        
+        autoTable(doc, {
+          head: [["Period", "Visits", "Leads", "Conversions"]],
+          body: historyData,
+          startY: historyStartY + 7,
+          theme: "striped",
+          headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+          styles: { fontSize: 9 },
+        });
+      }
+      
+      // Footer
+      const pageHeight = doc.internal.pageSize.height;
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text("This report was generated automatically from your client portal.", 20, pageHeight - 15);
+      doc.text("Orange Door Marketing | orangedoormarketing.com", 20, pageHeight - 10);
+      
+      // Save the PDF
+      const fileName = `performance-report-${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      doc.save(fileName);
+      
+      toast({
+        title: "Report Downloaded",
+        description: "Your performance report has been saved.",
+      });
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const getTrendText = (current: number | undefined, previous: number | undefined) => {
+    const trend = calculateTrend(current, previous);
+    if (trend === null) return "—";
+    const sign = trend >= 0 ? "+" : "";
+    return `${sign}${trend.toFixed(0)}%`;
   };
 
   if (loading) {
@@ -167,15 +333,21 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Performance Analytics</h2>
-        <p className="text-muted-foreground">
-          {latestPeriod && (
-            <>
-              Data for {format(new Date(latestPeriod.period_start), "MMM d")} - {format(new Date(latestPeriod.period_end), "MMM d, yyyy")}
-            </>
-          )}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Performance Analytics</h2>
+          <p className="text-muted-foreground">
+            {latestPeriod && (
+              <>
+                Data for {format(new Date(latestPeriod.period_start), "MMM d")} - {format(new Date(latestPeriod.period_end), "MMM d, yyyy")}
+              </>
+            )}
+          </p>
+        </div>
+        <Button onClick={generatePDF} variant="outline">
+          <Download className="h-4 w-4 mr-2" />
+          Download Report
+        </Button>
       </div>
 
       {/* Key Metrics Grid */}
