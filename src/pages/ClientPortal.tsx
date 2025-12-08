@@ -209,7 +209,10 @@ export default function ClientPortal() {
           </TabsContent>
           
           <TabsContent value="analytics">
-            <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} />
+            <ClientAnalyticsTab 
+              clientAccountId={portalUser.client_account_id} 
+              businessName={clientAccount?.business_name}
+            />
           </TabsContent>
           
           <TabsContent value="invoices">
