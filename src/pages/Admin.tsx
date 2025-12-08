@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -14,11 +14,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle } from "lucide-react";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar, type AdminSection } from "@/components/admin/AdminSidebar";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { AdminAnalyticsSection } from "@/components/admin/AdminAnalyticsSection";
+import { AdminOnboarding } from "@/components/admin/AdminOnboarding";
 import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
@@ -151,6 +152,30 @@ const Admin = () => {
   const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<AdminSection>("pipeline");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check if user has seen onboarding
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem("admin_onboarding_complete");
+    if (!hasSeenOnboarding && isAuthenticated) {
+      setShowOnboarding(true);
+    }
+  }, [isAuthenticated]);
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem("admin_onboarding_complete", "true");
+    setShowOnboarding(false);
+  };
+
+  const handleOnboardingNavigate = (section: string) => {
+    setActiveSection(section as AdminSection);
+    setShowOnboarding(false);
+    localStorage.setItem("admin_onboarding_complete", "true");
+  };
+
+  const restartOnboarding = () => {
+    setShowOnboarding(true);
+  };
   
   // Filtering and pagination state
   const [contactSearch, setContactSearch] = useState("");
@@ -1019,6 +1044,15 @@ const Admin = () => {
             <div className="flex-1">
               <h1 className="text-lg font-semibold">{getSectionTitle()}</h1>
             </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={restartOnboarding}
+              className="gap-2"
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">Tutorial</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => fetchData(storedPassword)} disabled={isLoading}>
               <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
               Refresh
@@ -1036,6 +1070,13 @@ const Admin = () => {
           </main>
         </SidebarInset>
       </div>
+
+      {showOnboarding && (
+        <AdminOnboarding 
+          onComplete={handleOnboardingComplete}
+          onNavigate={handleOnboardingNavigate}
+        />
+      )}
 
       <GapAnalysisDetailModal
         open={isDetailModalOpen}
