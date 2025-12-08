@@ -18,7 +18,8 @@ import {
   CalendarCheck,
   ClipboardList,
   Palette,
-  UserCircle
+  UserCircle,
+  FileSignature
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,6 +53,7 @@ export type AdminSection =
   | "brand-assets"
   | "team-directory"
   | "deliverables"
+  | "service-agreements"
   | "templates"
   | "sequences"
   | "campaigns"
@@ -94,6 +96,7 @@ const advancedNavItems = [
   { id: "brand-assets" as const, label: "Brand Assets", icon: Palette },
   { id: "team-directory" as const, label: "Team Directory", icon: UserCircle },
   { id: "deliverables" as const, label: "Deliverables", icon: FileCheck },
+  { id: "service-agreements" as const, label: "Agreements", icon: FileSignature },
   { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
   { id: "sops" as const, label: "SOPs", icon: FileCheck },
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },

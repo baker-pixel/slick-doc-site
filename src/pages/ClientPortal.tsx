@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette, Activity, Users, Package } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette, Activity, Users, Package, FileSignature } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
@@ -18,6 +18,7 @@ import ClientBrandAssetsTab from "@/components/client-portal/ClientBrandAssetsTa
 import { ClientActivityTab } from "@/components/client-portal/ClientActivityTab";
 import { ClientTeamTab } from "@/components/client-portal/ClientTeamTab";
 import { ClientDeliverablesTab } from "@/components/client-portal/ClientDeliverablesTab";
+import { ClientAgreementsTab } from "@/components/client-portal/ClientAgreementsTab";
 
 interface ClientPortalUser {
   id: string;
@@ -180,6 +181,10 @@ export default function ClientPortal() {
               <FolderOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Documents</span>
             </TabsTrigger>
+            <TabsTrigger value="agreements" className="flex items-center gap-2">
+              <FileSignature className="h-4 w-4" />
+              <span className="hidden sm:inline">Agreements</span>
+            </TabsTrigger>
             <TabsTrigger value="brand" className="flex items-center gap-2">
               <Palette className="h-4 w-4" />
               <span className="hidden sm:inline">Brand</span>
@@ -234,6 +239,10 @@ export default function ClientPortal() {
 
           <TabsContent value="documents">
             <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />
+          </TabsContent>
+
+          <TabsContent value="agreements">
+            <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />
           </TabsContent>
 
           <TabsContent value="brand">

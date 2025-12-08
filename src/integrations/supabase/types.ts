@@ -1711,6 +1711,65 @@ export type Database = {
           },
         ]
       }
+      service_agreements: {
+        Row: {
+          agreement_type: string
+          client_account_id: string
+          created_at: string
+          description: string | null
+          effective_date: string | null
+          expiration_date: string | null
+          file_name: string | null
+          file_size: number | null
+          file_url: string | null
+          id: string
+          signed_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          agreement_type?: string
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          effective_date?: string | null
+          expiration_date?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          signed_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          agreement_type?: string
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          effective_date?: string | null
+          expiration_date?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          signed_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_agreements_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sop_documents: {
         Row: {
           action_items: Json | null
