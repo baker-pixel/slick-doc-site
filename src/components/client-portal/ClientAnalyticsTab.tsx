@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, TrendingUp, Eye, MousePointer, Users, BarChart3 } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target } from "lucide-react";
 import { format } from "date-fns";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 
 interface AnalyticsMetrics {
   website_visits?: number;
@@ -68,6 +69,12 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
     return num.toString();
   };
 
+  const calculateTrend = (current: number | undefined, previous: number | undefined) => {
+    if (current === undefined || previous === undefined || previous === 0) return null;
+    const change = ((current - previous) / previous) * 100;
+    return change;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -89,7 +96,52 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
   }
 
   const latestPeriod = analytics[0];
+  const previousPeriod = analytics[1];
   const metrics = latestPeriod?.metrics || {};
+  const previousMetrics = previousPeriod?.metrics || {};
+
+  // Prepare chart data (reversed for chronological order)
+  const chartData = [...analytics].reverse().map(period => ({
+    name: format(new Date(period.period_start), "MMM"),
+    visits: period.metrics?.website_visits || 0,
+    leads: period.metrics?.leads_generated || 0,
+    conversions: period.metrics?.conversions || 0,
+  }));
+
+  const MetricCard = ({ 
+    label, 
+    value, 
+    previousValue, 
+    icon: Icon 
+  }: { 
+    label: string; 
+    value: number | undefined; 
+    previousValue: number | undefined; 
+    icon: React.ElementType;
+  }) => {
+    const trend = calculateTrend(value, previousValue);
+    const isPositive = trend !== null && trend >= 0;
+    
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Icon className="h-4 w-4" />
+              <span className="text-xs font-medium">{label}</span>
+            </div>
+            {trend !== null && (
+              <div className={`flex items-center gap-1 text-xs ${isPositive ? 'text-green-600' : 'text-red-500'}`}>
+                {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                <span>{Math.abs(trend).toFixed(0)}%</span>
+              </div>
+            )}
+          </div>
+          <p className="text-2xl font-bold">{formatNumber(value)}</p>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -106,66 +158,136 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
 
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <Eye className="h-4 w-4" />
-              <span className="text-xs font-medium">Website Visits</span>
-            </div>
-            <p className="text-2xl font-bold">{formatNumber(metrics.website_visits)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <Users className="h-4 w-4" />
-              <span className="text-xs font-medium">Leads Generated</span>
-            </div>
-            <p className="text-2xl font-bold">{formatNumber(metrics.leads_generated)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-xs font-medium">Email Opens</span>
-            </div>
-            <p className="text-2xl font-bold">{formatNumber(metrics.email_opens)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <MousePointer className="h-4 w-4" />
-              <span className="text-xs font-medium">Email Clicks</span>
-            </div>
-            <p className="text-2xl font-bold">{formatNumber(metrics.email_clicks)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <Users className="h-4 w-4" />
-              <span className="text-xs font-medium">Social Reach</span>
-            </div>
-            <p className="text-2xl font-bold">{formatNumber(metrics.social_reach)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-xs font-medium">Conversions</span>
-            </div>
-            <p className="text-2xl font-bold">{formatNumber(metrics.conversions)}</p>
-          </CardContent>
-        </Card>
+        <MetricCard 
+          label="Website Visits" 
+          value={metrics.website_visits} 
+          previousValue={previousMetrics.website_visits}
+          icon={Eye} 
+        />
+        <MetricCard 
+          label="Leads Generated" 
+          value={metrics.leads_generated} 
+          previousValue={previousMetrics.leads_generated}
+          icon={Users} 
+        />
+        <MetricCard 
+          label="Email Opens" 
+          value={metrics.email_opens} 
+          previousValue={previousMetrics.email_opens}
+          icon={TrendingUp} 
+        />
+        <MetricCard 
+          label="Email Clicks" 
+          value={metrics.email_clicks} 
+          previousValue={previousMetrics.email_clicks}
+          icon={MousePointer} 
+        />
+        <MetricCard 
+          label="Social Reach" 
+          value={metrics.social_reach} 
+          previousValue={previousMetrics.social_reach}
+          icon={Users} 
+        />
+        <MetricCard 
+          label="Conversions" 
+          value={metrics.conversions} 
+          previousValue={previousMetrics.conversions}
+          icon={Target} 
+        />
       </div>
+
+      {/* Trend Charts */}
+      {chartData.length > 1 && (
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Website Traffic Trend</CardTitle>
+              <CardDescription>Monthly website visits over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorVisits" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis className="text-xs" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="visits" 
+                      stroke="hsl(var(--primary))" 
+                      fillOpacity={1} 
+                      fill="url(#colorVisits)" 
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Leads & Conversions</CardTitle>
+              <CardDescription>Monthly leads and conversion trends</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis className="text-xs" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="leads" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2}
+                      dot={{ fill: 'hsl(var(--primary))' }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="conversions" 
+                      stroke="hsl(142.1 76.2% 36.3%)" 
+                      strokeWidth={2}
+                      dot={{ fill: 'hsl(142.1 76.2% 36.3%)' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-center gap-6 mt-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-primary" />
+                  <span className="text-muted-foreground">Leads</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(142.1 76.2% 36.3%)' }} />
+                  <span className="text-muted-foreground">Conversions</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Highlights */}
       {latestPeriod?.highlights?.items && latestPeriod.highlights.items.length > 0 && (
@@ -207,6 +329,7 @@ export default function ClientAnalyticsTab({ clientAccountId }: ClientAnalyticsT
                   <div className="flex gap-4 text-sm text-muted-foreground">
                     <span>{formatNumber(period.metrics?.website_visits)} visits</span>
                     <span>{formatNumber(period.metrics?.leads_generated)} leads</span>
+                    <span>{formatNumber(period.metrics?.conversions)} conversions</span>
                   </div>
                 </div>
               ))}
