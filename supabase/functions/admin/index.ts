@@ -622,6 +622,77 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "get_brand_assets": {
+        const { data: assetsData, error: assetsError } = await supabase
+          .from("brand_assets")
+          .select("*, client_accounts(business_name)")
+          .order("created_at", { ascending: false });
+
+        if (assetsError) throw assetsError;
+
+        return new Response(
+          JSON.stringify({ data: assetsData }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "create_brand_asset": {
+        const { client_account_id, name, description, asset_type, category, file_path, file_url, metadata, is_primary } = data || {};
+        
+        if (!client_account_id || !name) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id and name are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: newAsset, error: insertError } = await supabase
+          .from("brand_assets")
+          .insert({
+            client_account_id,
+            name,
+            description,
+            asset_type: asset_type || "other",
+            category: category || "general",
+            file_path,
+            file_url,
+            metadata: metadata || {},
+            is_primary: is_primary || false,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        console.log(`Created brand asset for client ${client_account_id}`);
+        return new Response(
+          JSON.stringify({ data: newAsset }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_brand_asset": {
+        if (!id) {
+          return new Response(
+            JSON.stringify({ error: "Asset ID is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error: deleteError } = await supabase
+          .from("brand_assets")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) throw deleteError;
+
+        console.log(`Deleted brand asset ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),

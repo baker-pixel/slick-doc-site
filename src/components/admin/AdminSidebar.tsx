@@ -16,7 +16,8 @@ import {
   FolderOpen,
   MessageCircle,
   CalendarCheck,
-  ClipboardList
+  ClipboardList,
+  Palette
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,6 +48,7 @@ export type AdminSection =
   | "client-messages"
   | "client-meetings"
   | "client-requests"
+  | "brand-assets"
   | "templates"
   | "sequences"
   | "campaigns"
@@ -86,6 +88,7 @@ const advancedNavItems = [
   { id: "client-messages" as const, label: "Messages", icon: MessageCircle },
   { id: "client-meetings" as const, label: "Meetings", icon: CalendarCheck },
   { id: "client-requests" as const, label: "Requests", icon: ClipboardList },
+  { id: "brand-assets" as const, label: "Brand Assets", icon: Palette },
   { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
   { id: "sops" as const, label: "SOPs", icon: FileCheck },
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },

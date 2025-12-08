@@ -116,6 +116,62 @@ export type Database = {
           },
         ]
       }
+      brand_assets: {
+        Row: {
+          asset_type: string
+          category: string
+          client_account_id: string
+          created_at: string
+          description: string | null
+          file_path: string | null
+          file_size: number | null
+          file_url: string | null
+          id: string
+          is_primary: boolean | null
+          metadata: Json | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          asset_type?: string
+          category?: string
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          is_primary?: boolean | null
+          metadata?: Json | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          asset_type?: string
+          category?: string
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          is_primary?: boolean | null
+          metadata?: Json | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_assets_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_accounts: {
         Row: {
           business_name: string
