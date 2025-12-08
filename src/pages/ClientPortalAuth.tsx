@@ -17,6 +17,7 @@ export default function ClientPortalAuth() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [isAcceptingInvite, setIsAcceptingInvite] = useState(false);
+  const [existingUserMode, setExistingUserMode] = useState(false);
   const [invitation, setInvitation] = useState<{
     id: string;
     email: string;
@@ -134,6 +135,81 @@ export default function ClientPortalAuth() {
     setLoading(true);
 
     try {
+      // If in existing user mode, just sign in
+      if (existingUserMode) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: invitation.email,
+          password,
+        });
+
+        if (signInError) {
+          toast({
+            title: "Sign In Failed",
+            description: "Incorrect password. Please try again.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        const userId = signInData.user?.id;
+        if (!userId) {
+          toast({
+            title: "Sign In Failed",
+            description: "Could not access your account",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Check if portal user already exists for this client
+        const { data: existingPortalUser } = await supabase
+          .from("client_portal_users")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("client_account_id", invitation.client_account_id)
+          .single();
+
+        // Create client portal user record if not exists
+        if (!existingPortalUser) {
+          const { error: portalError } = await supabase
+            .from("client_portal_users")
+            .insert({
+              user_id: userId,
+              client_account_id: invitation.client_account_id,
+              first_name: invitation.first_name,
+              last_name: invitation.last_name,
+              invited_by: "admin",
+            });
+
+          if (portalError) {
+            console.error("Portal user creation error:", portalError);
+            toast({
+              title: "Setup Failed",
+              description: "Could not complete portal setup. Please contact support.",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Mark invitation as accepted
+        await supabase
+          .from("client_invitations")
+          .update({ accepted_at: new Date().toISOString() })
+          .eq("id", invitation.id);
+
+        toast({
+          title: "Welcome!",
+          description: "You've been signed in successfully.",
+        });
+
+        navigate("/portal");
+        return;
+      }
+
       // First, try to sign up
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: invitation.email,
@@ -143,27 +219,19 @@ export default function ClientPortalAuth() {
         },
       });
 
-      let userId: string | null = null;
-
-      // If user already exists, try to sign in instead
+      // If user already exists, switch to existing user mode
       if (authError?.message?.toLowerCase().includes("already registered")) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: invitation.email,
-          password,
+        setExistingUserMode(true);
+        setPassword(""); // Clear password field
+        toast({
+          title: "Account Already Exists",
+          description: "You already have an account. Please enter your existing password.",
         });
+        setLoading(false);
+        return;
+      }
 
-        if (signInError) {
-          toast({
-            title: "Sign In Failed",
-            description: "This email is already registered. Please enter your existing password.",
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
-        }
-
-        userId = signInData.user?.id ?? null;
-      } else if (authError) {
+      if (authError) {
         toast({
           title: "Registration Failed",
           description: authError.message,
@@ -171,61 +239,51 @@ export default function ClientPortalAuth() {
         });
         setLoading(false);
         return;
-      } else {
-        userId = authData.user?.id ?? null;
       }
 
+      const userId = authData.user?.id;
       if (!userId) {
         toast({
           title: "Registration Failed",
-          description: "Could not create or access user account",
+          description: "Could not create user account",
           variant: "destructive",
         });
         setLoading(false);
         return;
       }
 
-      // Check if portal user already exists
-      const { data: existingPortalUser } = await supabase
+      // Create client portal user record
+      const { error: portalError } = await supabase
         .from("client_portal_users")
-        .select("id")
-        .eq("user_id", userId)
-        .single();
+        .insert({
+          user_id: userId,
+          client_account_id: invitation.client_account_id,
+          first_name: invitation.first_name,
+          last_name: invitation.last_name,
+          invited_by: "admin",
+        });
 
-      // Create client portal user record if not exists
-      if (!existingPortalUser) {
-        const { error: portalError } = await supabase
-          .from("client_portal_users")
-          .insert({
-            user_id: userId,
-            client_account_id: invitation.client_account_id,
-            first_name: invitation.first_name,
-            last_name: invitation.last_name,
-            invited_by: "admin",
-          });
+      if (portalError) {
+        console.error("Portal user creation error:", portalError);
+        toast({
+          title: "Setup Failed",
+          description: "Could not complete portal setup. Please contact support.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
 
-        if (portalError) {
-          console.error("Portal user creation error:", portalError);
-          toast({
-            title: "Setup Failed",
-            description: "Could not complete portal setup. Please contact support.",
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
-        }
+      // Create client role
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .insert({
+          user_id: userId,
+          role: "client",
+        });
 
-        // Create client role
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .insert({
-            user_id: userId,
-            role: "client",
-          });
-
-        if (roleError) {
-          console.error("Role creation error:", roleError);
-        }
+      if (roleError) {
+        console.error("Role creation error:", roleError);
       }
 
       // Mark invitation as accepted
@@ -236,9 +294,7 @@ export default function ClientPortalAuth() {
 
       toast({
         title: "Welcome!",
-        description: existingPortalUser 
-          ? "You've been signed in successfully." 
-          : "Your account has been created successfully.",
+        description: "Your account has been created successfully.",
       });
 
       navigate("/portal");
@@ -266,11 +322,15 @@ export default function ClientPortalAuth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">
-            {invitation ? "Accept Invitation" : "Client Portal"}
+            {invitation 
+              ? (existingUserMode ? "Sign In to Accept Invitation" : "Accept Invitation") 
+              : "Client Portal"}
           </CardTitle>
           <CardDescription>
             {invitation 
-              ? `Set up your account for ${invitation.email}` 
+              ? (existingUserMode 
+                  ? `Enter your existing password for ${invitation.email}` 
+                  : `Set up your account for ${invitation.email}`)
               : "Sign in to access your dashboard"}
           </CardDescription>
         </CardHeader>
@@ -295,7 +355,9 @@ export default function ClientPortalAuth() {
             
             <div className="space-y-2">
               <Label htmlFor="password">
-                {invitation ? "Create Password" : "Password"}
+                {invitation 
+                  ? (existingUserMode ? "Your Existing Password" : "Create Password")
+                  : "Password"}
               </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -307,12 +369,17 @@ export default function ClientPortalAuth() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10"
                   required
-                  minLength={8}
+                  minLength={existingUserMode ? 1 : 8}
                 />
               </div>
-              {invitation && (
+              {invitation && !existingUserMode && (
                 <p className="text-xs text-muted-foreground">
                   Password must be at least 8 characters
+                </p>
+              )}
+              {existingUserMode && (
+                <p className="text-xs text-muted-foreground">
+                  Enter the password you used when you first signed up
                 </p>
               )}
             </div>
@@ -322,7 +389,9 @@ export default function ClientPortalAuth() {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  {invitation ? "Create Account" : "Sign In"}
+                  {invitation 
+                    ? (existingUserMode ? "Sign In & Accept" : "Create Account")
+                    : "Sign In"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </>
               )}
