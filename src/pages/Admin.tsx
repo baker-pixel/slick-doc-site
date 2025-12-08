@@ -42,6 +42,7 @@ import ClientRequestsAdminPanel from "@/components/admin/ClientRequestsAdminPane
 import BrandAssetsAdminPanel from "@/components/admin/BrandAssetsAdminPanel";
 import TeamDirectoryPanel from "@/components/admin/TeamDirectoryPanel";
 import DeliverablesAdminPanel from "@/components/admin/DeliverablesAdminPanel";
+import { ServiceAgreementsPanel } from "@/components/admin/ServiceAgreementsPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1020,6 +1021,8 @@ const Admin = () => {
         return <TeamDirectoryPanel adminPassword={storedPassword} />;
       case "deliverables":
         return <DeliverablesAdminPanel adminPassword={storedPassword} />;
+      case "service-agreements":
+        return <ServiceAgreementsPanel />;
       case "sops":
         return <SOPManagementPanel />;
       case "automation":
@@ -1055,6 +1058,7 @@ const Admin = () => {
       "brand-assets": "Brand Assets",
       "team-directory": "Team Directory",
       "deliverables": "Deliverables",
+      "service-agreements": "Service Agreements",
       sops: "SOP Management",
       automation: "Automation Jobs",
       "content-review": "Content Review",
