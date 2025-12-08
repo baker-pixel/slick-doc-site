@@ -34,6 +34,28 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
 
   useEffect(() => {
     fetchApprovals();
+
+    // Subscribe to real-time updates for content approvals
+    const channel = supabase
+      .channel('content-approvals-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'content_approvals',
+          filter: `client_account_id=eq.${clientAccountId}`,
+        },
+        () => {
+          console.log('Content approvals updated, refreshing...');
+          fetchApprovals();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [clientAccountId]);
 
   const fetchApprovals = async () => {

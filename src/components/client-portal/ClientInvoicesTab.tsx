@@ -43,6 +43,28 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
 
   useEffect(() => {
     fetchInvoices();
+
+    // Subscribe to real-time updates for invoices
+    const channel = supabase
+      .channel('client-invoices-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'client_invoices',
+          filter: `client_account_id=eq.${clientAccountId}`,
+        },
+        () => {
+          console.log('Invoices updated, refreshing...');
+          fetchInvoices();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [clientAccountId]);
 
   const fetchInvoices = async () => {
