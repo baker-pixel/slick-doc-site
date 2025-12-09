@@ -65,7 +65,8 @@ export type AdminSection =
   | "sops"
   | "automation"
   | "content-review"
-  | "reports-review";
+  | "reports-review"
+  | "settings";
 
 interface AdminSidebarProps {
   activeSection: AdminSection;
@@ -110,6 +111,7 @@ const advancedNavItems = [
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },
   { id: "content-review" as const, label: "Content Review", icon: ClipboardCheck },
   { id: "reports-review" as const, label: "Reports Review", icon: FileCheck },
+  { id: "settings" as const, label: "Settings", icon: Settings },
 ];
 
 export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarProps) {
