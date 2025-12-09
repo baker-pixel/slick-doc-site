@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,9 +13,14 @@ import {
   Palette,
   BarChart3,
   Activity,
-  Clock
+  Clock,
+  MessageCircle,
+  ClipboardList,
+  FileCheck,
+  Edit3
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 
 interface ActivityItem {
   id: string;
@@ -29,16 +35,28 @@ interface ActivityItem {
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   document: FileText,
   message: MessageSquare,
+  'message-circle': MessageCircle,
   meeting: Calendar,
+  calendar: Calendar,
+  'calendar-check': Calendar,
   request: CheckCircle,
+  'clipboard-list': ClipboardList,
+  'clipboard-check': ClipboardList,
   upload: Upload,
   invoice: CreditCard,
   brand: Palette,
   analytics: BarChart3,
   activity: Activity,
+  'file-check': FileCheck,
+  'check-circle': CheckCircle,
+  'edit': Edit3,
+  'edit-3': Edit3,
+  'file-text': FileText,
 };
 
 export function ClientActivityTab() {
+  const queryClient = useQueryClient();
+
   const { data: activities, isLoading } = useQuery({
     queryKey: ["client-activities"],
     queryFn: async () => {
@@ -52,6 +70,41 @@ export function ClientActivityTab() {
       return data as ActivityItem[];
     },
   });
+
+  // Set up real-time subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('client-activity-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_feed'
+        },
+        (payload) => {
+          const newActivity = payload.new as ActivityItem;
+          
+          // Update the query cache with the new activity
+          queryClient.setQueryData<ActivityItem[]>(["client-activities"], (oldData) => {
+            if (!oldData) return [newActivity];
+            // Add new activity at the beginning, keep limit of 50
+            return [newActivity, ...oldData].slice(0, 50);
+          });
+
+          // Show a toast notification
+          toast({
+            title: "New Activity",
+            description: newActivity.title,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   if (isLoading) {
     return (
