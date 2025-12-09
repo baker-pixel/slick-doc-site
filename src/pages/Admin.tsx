@@ -46,6 +46,7 @@ import { ServiceAgreementsPanel } from "@/components/admin/ServiceAgreementsPane
 import { ClientAnalyticsAdminPanel } from "@/components/admin/ClientAnalyticsAdminPanel";
 import { ClientInvoicesAdminPanel } from "@/components/admin/ClientInvoicesAdminPanel";
 import { ClientProjectsAdminPanel } from "@/components/admin/ClientProjectsAdminPanel";
+import { AdminSettingsPanel } from "@/components/admin/AdminSettingsPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1040,6 +1041,8 @@ const Admin = () => {
         return <ContentReviewPanel />;
       case "reports-review":
         return <ReportsReviewPanel />;
+      case "settings":
+        return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
         return <PipelineDashboard />;
     }
@@ -1075,6 +1078,7 @@ const Admin = () => {
       automation: "Automation Jobs",
       "content-review": "Content Review",
       "reports-review": "Reports Review",
+      settings: "Admin Settings",
     };
     return titles[activeSection];
   };

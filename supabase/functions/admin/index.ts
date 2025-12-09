@@ -925,6 +925,71 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "fetch_settings": {
+        const { data: settings, error } = await supabase
+          .from("admin_settings")
+          .select("*")
+          .order("key", { ascending: true });
+
+        if (error) throw error;
+        console.log(`Fetched ${settings?.length || 0} admin settings`);
+        return new Response(
+          JSON.stringify({ settings }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "update_setting": {
+        const { settingId, value, description } = data || {};
+        
+        const { data: setting, error } = await supabase
+          .from("admin_settings")
+          .update({ value, description, updated_at: new Date().toISOString() })
+          .eq("id", settingId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Updated setting: ${settingId}`);
+        return new Response(
+          JSON.stringify({ data: setting }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "add_setting": {
+        const { key, value: settingValue, description: settingDesc } = data || {};
+        
+        const { data: setting, error } = await supabase
+          .from("admin_settings")
+          .insert({ key, value: settingValue, description: settingDesc })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Added setting: ${key}`);
+        return new Response(
+          JSON.stringify({ data: setting }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_setting": {
+        const { settingId } = data || {};
+        
+        const { error } = await supabase
+          .from("admin_settings")
+          .delete()
+          .eq("id", settingId);
+
+        if (error) throw error;
+        console.log(`Deleted setting: ${settingId}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
