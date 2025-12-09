@@ -42,7 +42,8 @@ export type AdminSection =
   | "alerts" 
   | "quick-actions" 
   | "calendar"
-  | "analytics" 
+  | "analytics"
+  | "activity-feed"
   | "contacts"
   | "gap-analysis"
   | "pdf-leads"
@@ -73,12 +74,15 @@ interface AdminSidebarProps {
   onSectionChange: (section: AdminSection) => void;
 }
 
+import { List } from "lucide-react";
+
 const mainNavItems = [
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
   { id: "alerts" as const, label: "Alerts", icon: Bell },
   { id: "quick-actions" as const, label: "Quick Actions", icon: Zap },
   { id: "calendar" as const, label: "Calendar", icon: CalendarIcon },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
+  { id: "activity-feed" as const, label: "Activity Feed", icon: List },
 ];
 
 const leadsNavItems = [

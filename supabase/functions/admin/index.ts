@@ -990,6 +990,35 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "fetch_activities": {
+        const { data: activities, error } = await supabase
+          .from("activity_feed")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (error) throw error;
+        console.log(`Fetched ${activities?.length || 0} activities`);
+        return new Response(
+          JSON.stringify({ activities }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "fetch_client_accounts": {
+        const { data: clients, error } = await supabase
+          .from("client_accounts")
+          .select("id, business_name")
+          .order("business_name", { ascending: true });
+
+        if (error) throw error;
+        console.log(`Fetched ${clients?.length || 0} client accounts`);
+        return new Response(
+          JSON.stringify({ clients }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
