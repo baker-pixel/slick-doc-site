@@ -47,6 +47,7 @@ import { ClientAnalyticsAdminPanel } from "@/components/admin/ClientAnalyticsAdm
 import { ClientInvoicesAdminPanel } from "@/components/admin/ClientInvoicesAdminPanel";
 import { ClientProjectsAdminPanel } from "@/components/admin/ClientProjectsAdminPanel";
 import { AdminSettingsPanel } from "@/components/admin/AdminSettingsPanel";
+import { ActivityFeedAdminPanel } from "@/components/admin/ActivityFeedAdminPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -995,6 +996,8 @@ const Admin = () => {
             setReportPeriod={setReportPeriod}
           />
         );
+      case "activity-feed":
+        return <ActivityFeedAdminPanel />;
       case "contacts":
         return renderContactsTable();
       case "gap-analysis":
@@ -1055,6 +1058,7 @@ const Admin = () => {
       "quick-actions": "Quick Actions",
       calendar: "Content Calendar",
       analytics: "Analytics",
+      "activity-feed": "Activity Feed",
       contacts: "Contact Submissions",
       "gap-analysis": "Gap Analysis",
       "pdf-leads": "PDF Leads",
