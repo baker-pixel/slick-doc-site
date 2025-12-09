@@ -140,9 +140,18 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // For agreement_signed, send to admin; otherwise send to client
-    const recipientEmail = type === "agreement_signed" && admin_email 
-      ? admin_email 
-      : clientAccount.email;
+    let recipientEmail = clientAccount.email;
+    
+    if (type === "agreement_signed") {
+      // Fetch admin notification email from settings
+      const { data: setting } = await supabase
+        .from("admin_settings")
+        .select("value")
+        .eq("key", "admin_notification_email")
+        .single();
+      
+      recipientEmail = setting?.value || admin_email || "admin@example.com";
+    }
 
     const emailResponse = await resend.emails.send({
       from: "Client Portal <onboarding@resend.dev>",

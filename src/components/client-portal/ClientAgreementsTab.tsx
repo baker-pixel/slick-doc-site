@@ -71,7 +71,7 @@ export function ClientAgreementsTab({ clientAccountId }: ClientAgreementsTabProp
             type: 'agreement_signed',
             client_account_id: clientAccountId,
             title: agreementTitle,
-            admin_email: 'admin@example.com', // Replace with actual admin email
+            // Admin email is now fetched from admin_settings table in edge function
             details: {
               signer_name: signerName,
               signed_at: new Date(signedAt).toLocaleString(),
