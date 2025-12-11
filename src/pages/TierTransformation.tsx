@@ -189,18 +189,32 @@ export default function TierTransformation() {
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <Card className={`h-full hover:shadow-lg transition-shadow ${
+                  <Card className={`group h-full hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 ${
                     feature.highlight 
                       ? "border-primary bg-primary/5" 
                       : "border-border hover:border-primary/30"
                   }`}>
                     <CardContent className="pt-6">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
-                        feature.highlight ? "bg-primary text-primary-foreground" : "bg-primary/10"
+                      <div className={`relative w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors duration-300 ${
+                        feature.highlight 
+                          ? "bg-primary text-primary-foreground group-hover:bg-primary/90" 
+                          : "bg-primary/10 group-hover:bg-primary/20"
                       }`}>
-                        <feature.icon className={`h-6 w-6 ${feature.highlight ? "" : "text-primary"}`} />
+                        <motion.div
+                          whileHover={{ scale: 1.2, rotate: feature.highlight ? -5 : 5 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                          className={feature.highlight ? "animate-pulse" : ""}
+                        >
+                          <feature.icon className={`h-6 w-6 ${feature.highlight ? "" : "text-primary"}`} />
+                        </motion.div>
+                        {!feature.highlight && (
+                          <div className="absolute inset-0 rounded-xl bg-primary/20 opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300" />
+                        )}
+                        {feature.highlight && (
+                          <div className="absolute inset-0 rounded-xl bg-primary opacity-0 group-hover:opacity-30 blur-lg transition-opacity duration-300" />
+                        )}
                       </div>
-                      <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+                      <h3 className="font-semibold text-foreground mb-2 group-hover:text-primary transition-colors duration-300">{feature.title}</h3>
                       <p className="text-sm text-muted-foreground">{feature.description}</p>
                     </CardContent>
                   </Card>
