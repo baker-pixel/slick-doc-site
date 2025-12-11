@@ -78,6 +78,7 @@ export type AdminSection =
   | "review-engine"
   | "reports-review"
   | "seo-dashboard"
+  | "win-notifications"
   | "settings";
 
 interface AdminSidebarProps {
@@ -109,7 +110,7 @@ const emailNavItems = [
   { id: "campaigns" as const, label: "Campaigns", icon: Send },
 ];
 
-import { Rocket, Link2, ListChecks } from "lucide-react";
+import { Rocket, Link2, ListChecks, Trophy } from "lucide-react";
 
 const automationNavItems = [
   { id: "onboarding" as const, label: "Client Onboarding", icon: Rocket },
@@ -120,6 +121,7 @@ const automationNavItems = [
   { id: "seo-dashboard" as const, label: "SEO Dashboard", icon: BarChart3 },
   { id: "marketing-os" as const, label: "Marketing OS", icon: Target },
   { id: "review-engine" as const, label: "Review Engine", icon: Star },
+  { id: "win-notifications" as const, label: "Win Notifications", icon: Trophy },
 ];
 
 const advancedNavItems = [
