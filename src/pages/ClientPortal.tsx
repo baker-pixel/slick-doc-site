@@ -2,10 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette, Activity, Users, Package, FileSignature, Bell } from "lucide-react";
+import { Loader2, Search, Bell, Menu } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
+import { ClientPortalSidebar, type PortalTab } from "@/components/client-portal/ClientPortalSidebar";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+// Tab Components
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
 import ClientAnalyticsTab from "@/components/client-portal/ClientAnalyticsTab";
@@ -36,6 +41,40 @@ interface ClientAccount {
   tier: string;
 }
 
+const tabTitles: Record<PortalTab, string> = {
+  activity: "Activity Feed",
+  notifications: "Wins & Updates",
+  projects: "Projects",
+  messages: "Messages",
+  meetings: "Meetings",
+  requests: "Requests",
+  approvals: "Content Approvals",
+  deliverables: "Deliverables",
+  documents: "Documents",
+  agreements: "Agreements",
+  brand: "Brand Assets",
+  team: "Your Team",
+  analytics: "Analytics",
+  invoices: "Invoices",
+};
+
+const tabDescriptions: Record<PortalTab, string> = {
+  activity: "See recent activity on your account",
+  notifications: "Celebrate your wins and stay updated",
+  projects: "Track your active projects and milestones",
+  messages: "Communicate with your marketing team",
+  meetings: "Schedule and manage your meetings",
+  requests: "Submit and track your requests",
+  approvals: "Review and approve content",
+  deliverables: "Access your completed deliverables",
+  documents: "View and download your documents",
+  agreements: "Manage your service agreements",
+  brand: "Access your brand assets and guidelines",
+  team: "Meet your dedicated team",
+  analytics: "View your performance metrics",
+  invoices: "Manage billing and payments",
+};
+
 export default function ClientPortal() {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -43,7 +82,7 @@ export default function ClientPortal() {
   const [loading, setLoading] = useState(true);
   const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
-  const [activeTab, setActiveTab] = useState("activity");
+  const [activeTab, setActiveTab] = useState<PortalTab>("activity");
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -110,10 +149,54 @@ export default function ClientPortal() {
     navigate("/portal/auth");
   };
 
+  const clientName = portalUser 
+    ? `${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined
+    : undefined;
+
+  const renderContent = () => {
+    if (!portalUser) return null;
+
+    switch (activeTab) {
+      case "activity":
+        return <ClientActivityTab />;
+      case "notifications":
+        return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
+      case "projects":
+        return <ClientProjectsTab clientAccountId={portalUser.client_account_id} />;
+      case "messages":
+        return <ClientMessagesTab clientAccountId={portalUser.client_account_id} clientName={clientName} />;
+      case "meetings":
+        return <ClientMeetingsTab clientAccountId={portalUser.client_account_id} clientName={clientName} />;
+      case "requests":
+        return <ClientRequestsTab clientAccountId={portalUser.client_account_id} />;
+      case "approvals":
+        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />;
+      case "deliverables":
+        return <ClientDeliverablesTab clientAccountId={portalUser.client_account_id} />;
+      case "documents":
+        return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />;
+      case "agreements":
+        return <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />;
+      case "brand":
+        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
+      case "team":
+        return <ClientTeamTab />;
+      case "analytics":
+        return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
+      case "invoices":
+        return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
+      default:
+        return <ClientActivityTab />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground text-sm">Loading your portal...</p>
+        </div>
       </div>
     );
   }
@@ -124,156 +207,54 @@ export default function ClientPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Client Portal</h1>
-            {clientAccount && (
-              <p className="text-sm text-muted-foreground">{clientAccount.business_name}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">
-              {portalUser.first_name} {portalUser.last_name}
-            </span>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-muted/30">
+        <ClientPortalSidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          clientName={clientName}
+          businessName={clientAccount?.business_name}
+          onSignOut={handleSignOut}
+        />
+        
+        <SidebarInset className="flex-1">
+          {/* Header */}
+          <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
+            <SidebarTrigger className="md:hidden" />
+            
+            <div className="flex-1">
+              <h1 className="text-lg font-semibold">{tabTitles[activeTab]}</h1>
+              <p className="text-sm text-muted-foreground hidden sm:block">
+                {tabDescriptions[activeTab]}
+              </p>
+            </div>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex flex-wrap h-auto gap-1 lg:inline-flex">
-            <TabsTrigger value="activity" className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              <span className="hidden sm:inline">Activity</span>
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              <span className="hidden sm:inline">Wins</span>
-            </TabsTrigger>
-            <TabsTrigger value="projects" className="flex items-center gap-2">
-              <LayoutDashboard className="h-4 w-4" />
-              <span className="hidden sm:inline">Projects</span>
-            </TabsTrigger>
-            <TabsTrigger value="messages" className="flex items-center gap-2">
-              <MessageCircle className="h-4 w-4" />
-              <span className="hidden sm:inline">Messages</span>
-            </TabsTrigger>
-            <TabsTrigger value="meetings" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              <span className="hidden sm:inline">Meetings</span>
-            </TabsTrigger>
-            <TabsTrigger value="requests" className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" />
-              <span className="hidden sm:inline">Requests</span>
-            </TabsTrigger>
-            <TabsTrigger value="approvals" className="flex items-center gap-2">
-              <FileCheck className="h-4 w-4" />
-              <span className="hidden sm:inline">Approvals</span>
-            </TabsTrigger>
-            <TabsTrigger value="deliverables" className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              <span className="hidden sm:inline">Deliverables</span>
-            </TabsTrigger>
-            <TabsTrigger value="documents" className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Documents</span>
-            </TabsTrigger>
-            <TabsTrigger value="agreements" className="flex items-center gap-2">
-              <FileSignature className="h-4 w-4" />
-              <span className="hidden sm:inline">Agreements</span>
-            </TabsTrigger>
-            <TabsTrigger value="brand" className="flex items-center gap-2">
-              <Palette className="h-4 w-4" />
-              <span className="hidden sm:inline">Brand</span>
-            </TabsTrigger>
-            <TabsTrigger value="team" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Team</span>
-            </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Analytics</span>
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="flex items-center gap-2">
-              <Receipt className="h-4 w-4" />
-              <span className="hidden sm:inline">Invoices</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="activity">
-            <ClientActivityTab />
-          </TabsContent>
-
-          <TabsContent value="notifications">
-            <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="projects">
-            <ClientProjectsTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="messages">
-            <ClientMessagesTab 
-              clientAccountId={portalUser.client_account_id} 
-              clientName={`${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined}
-            />
-          </TabsContent>
-
-          <TabsContent value="meetings">
-            <ClientMeetingsTab 
-              clientAccountId={portalUser.client_account_id} 
-              clientName={`${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined}
-            />
-          </TabsContent>
-
-          <TabsContent value="requests">
-            <ClientRequestsTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
+            <div className="flex items-center gap-3">
+              <div className="relative hidden md:block">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Search..." 
+                  className="w-64 pl-9 bg-muted/50 border-0 focus-visible:ring-1"
+                />
+              </div>
+              
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-primary-foreground text-[10px] font-medium rounded-full flex items-center justify-center">
+                  3
+                </span>
+              </Button>
+            </div>
+          </header>
           
-          <TabsContent value="approvals">
-            <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="deliverables">
-            <ClientDeliverablesTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="documents">
-            <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="agreements">
-            <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="brand">
-            <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-
-          <TabsContent value="team">
-            <ClientTeamTab />
-          </TabsContent>
-          
-          <TabsContent value="analytics">
-            <ClientAnalyticsTab 
-              clientAccountId={portalUser.client_account_id} 
-              businessName={clientAccount?.business_name}
-            />
-          </TabsContent>
-          
-          <TabsContent value="invoices">
-            <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+          {/* Main Content */}
+          <main className="flex-1 p-6">
+            <div className="animate-fade-in">
+              {renderContent()}
+            </div>
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }
