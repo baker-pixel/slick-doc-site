@@ -11,9 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { TierInterestForm } from "@/components/TierInterestForm";
 
 const heroImages = [
-  "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=1200&h=600&fit=crop", // Digital marketing workspace
-  "https://images.unsplash.com/photo-1533750349088-cd871a92f312?w=1200&h=600&fit=crop", // Marketing strategy planning
-  "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200&h=600&fit=crop", // Digital agency workspace
+  "https://images.unsplash.com/photo-1542744094-3a31f272c490?w=1200&h=600&fit=crop", // Google Analytics traffic graphs
+  "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=1200&h=600&fit=crop", // Instagram & social media marketing
+  "https://images.unsplash.com/photo-1596526131083-e8c633c948d2?w=1200&h=600&fit=crop", // Email campaign analytics
 ];
 
 const features = [
