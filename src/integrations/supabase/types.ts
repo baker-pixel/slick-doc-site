@@ -1893,6 +1893,48 @@ export type Database = {
         }
         Relationships: []
       }
+      tier_interest_submissions: {
+        Row: {
+          business_name: string
+          contacted_at: string | null
+          created_at: string
+          email: string
+          first_name: string
+          id: string
+          last_name: string
+          message: string | null
+          phone: string | null
+          selected_tier: string
+          status: string
+        }
+        Insert: {
+          business_name: string
+          contacted_at?: string | null
+          created_at?: string
+          email: string
+          first_name: string
+          id?: string
+          last_name: string
+          message?: string | null
+          phone?: string | null
+          selected_tier: string
+          status?: string
+        }
+        Update: {
+          business_name?: string
+          contacted_at?: string | null
+          created_at?: string
+          email?: string
+          first_name?: string
+          id?: string
+          last_name?: string
+          message?: string | null
+          phone?: string | null
+          selected_tier?: string
+          status?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
