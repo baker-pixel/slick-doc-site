@@ -677,6 +677,56 @@ export type Database = {
           },
         ]
       }
+      client_notifications: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_positive: boolean | null
+          is_read: boolean
+          metric: string | null
+          metric_value: string | null
+          notification_type: string
+          priority: string
+          title: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_positive?: boolean | null
+          is_read?: boolean
+          metric?: string | null
+          metric_value?: string | null
+          notification_type: string
+          priority?: string
+          title: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_positive?: boolean | null
+          is_read?: boolean
+          metric?: string | null
+          metric_value?: string | null
+          notification_type?: string
+          priority?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_notifications_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_onboarding: {
         Row: {
           client_account_id: string

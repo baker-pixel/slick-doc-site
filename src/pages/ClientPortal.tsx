@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette, Activity, Users, Package, FileSignature } from "lucide-react";
+import { Loader2, LogOut, LayoutDashboard, FileCheck, BarChart3, Receipt, FolderOpen, MessageCircle, Calendar, ClipboardList, Palette, Activity, Users, Package, FileSignature, Bell } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
 import ClientContentApprovalTab from "@/components/client-portal/ClientContentApprovalTab";
@@ -19,6 +19,7 @@ import { ClientActivityTab } from "@/components/client-portal/ClientActivityTab"
 import { ClientTeamTab } from "@/components/client-portal/ClientTeamTab";
 import { ClientDeliverablesTab } from "@/components/client-portal/ClientDeliverablesTab";
 import { ClientAgreementsTab } from "@/components/client-portal/ClientAgreementsTab";
+import ClientNotificationsTab from "@/components/client-portal/ClientNotificationsTab";
 
 interface ClientPortalUser {
   id: string;
@@ -153,6 +154,10 @@ export default function ClientPortal() {
               <Activity className="h-4 w-4" />
               <span className="hidden sm:inline">Activity</span>
             </TabsTrigger>
+            <TabsTrigger value="notifications" className="flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              <span className="hidden sm:inline">Wins</span>
+            </TabsTrigger>
             <TabsTrigger value="projects" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Projects</span>
@@ -205,6 +210,10 @@ export default function ClientPortal() {
 
           <TabsContent value="activity">
             <ClientActivityTab />
+          </TabsContent>
+
+          <TabsContent value="notifications">
+            <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />
           </TabsContent>
 
           <TabsContent value="projects">

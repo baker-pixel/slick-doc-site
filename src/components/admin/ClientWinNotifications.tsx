@@ -163,17 +163,62 @@ export default function ClientWinNotifications() {
     }
   };
 
-  const sendNotification = (win: WinNotification) => {
-    toast.success(`Notification sent to ${win.clientName}!`);
-    setWins(prev => prev.map(w => w.id === win.id ? { ...w, sent: true } : w));
+  const sendNotification = async (win: WinNotification) => {
+    try {
+      // Save to database so it appears in client portal
+      const { error } = await supabase
+        .from("client_notifications")
+        .insert({
+          client_account_id: win.clientId,
+          notification_type: win.type,
+          title: win.title,
+          description: win.description,
+          metric: win.metric,
+          metric_value: win.change.toString(),
+          is_positive: win.isPositive,
+          priority: win.priority
+        });
+
+      if (error) throw error;
+
+      toast.success(`Notification sent to ${win.clientName}!`);
+      setWins(prev => prev.map(w => w.id === win.id ? { ...w, sent: true } : w));
+    } catch (error) {
+      console.error("Error sending notification:", error);
+      toast.error("Failed to send notification");
+    }
   };
 
-  const sendAllUnsent = () => {
+  const sendAllUnsent = async () => {
     const unsent = filteredWins.filter(w => !w.sent);
-    unsent.forEach(win => {
-      setWins(prev => prev.map(w => w.id === win.id ? { ...w, sent: true } : w));
-    });
-    toast.success(`Sent ${unsent.length} notifications!`);
+    if (unsent.length === 0) return;
+
+    try {
+      const notifications = unsent.map(win => ({
+        client_account_id: win.clientId,
+        notification_type: win.type,
+        title: win.title,
+        description: win.description,
+        metric: win.metric,
+        metric_value: win.change.toString(),
+        is_positive: win.isPositive,
+        priority: win.priority
+      }));
+
+      const { error } = await supabase
+        .from("client_notifications")
+        .insert(notifications);
+
+      if (error) throw error;
+
+      unsent.forEach(win => {
+        setWins(prev => prev.map(w => w.id === win.id ? { ...w, sent: true } : w));
+      });
+      toast.success(`Sent ${unsent.length} notifications!`);
+    } catch (error) {
+      console.error("Error sending notifications:", error);
+      toast.error("Failed to send notifications");
+    }
   };
 
   const getTypeIcon = (type: WinNotification["type"]) => {
