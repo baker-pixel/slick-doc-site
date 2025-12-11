@@ -43,6 +43,7 @@ export function ClientTasksPanel() {
   const [selectedTask, setSelectedTask] = useState<ClientTask | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [runningTasks, setRunningTasks] = useState<Set<string>>(new Set());
+  const [runningAll, setRunningAll] = useState(false);
   const [clients, setClients] = useState<{ id: string; business_name: string }[]>([]);
 
   useEffect(() => {
@@ -156,6 +157,34 @@ export function ClientTasksPanel() {
     }
   };
 
+  const runAllPending = async () => {
+    const pendingAutomatable = filteredTasks.filter(
+      t => t.status === "pending" && t.automation_type === "FULL"
+    );
+
+    if (pendingAutomatable.length === 0) {
+      toast.info("No pending FULL automation tasks to run");
+      return;
+    }
+
+    setRunningAll(true);
+    let completed = 0;
+    let failed = 0;
+
+    for (const task of pendingAutomatable) {
+      try {
+        await runAutomation(task);
+        completed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    setRunningAll(false);
+    toast.success(`Batch complete: ${completed} succeeded, ${failed} failed`);
+    fetchTasks();
+  };
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       pending: "bg-yellow-500",
@@ -193,15 +222,32 @@ export function ClientTasksPanel() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5" />
             Client Tasks
           </CardTitle>
-          <Button size="sm" variant="outline" onClick={fetchTasks}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            {stats.automatable > 0 && (
+              <Button 
+                size="sm" 
+                onClick={runAllPending}
+                disabled={runningAll}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {runningAll ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 mr-2" />
+                )}
+                Run All Pending ({stats.automatable})
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={fetchTasks}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-4 gap-4 mt-4">
           <Card className="p-3">
