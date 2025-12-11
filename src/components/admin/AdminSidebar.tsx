@@ -83,6 +83,7 @@ export type AdminSection =
   | "lead-scoring"
   | "ad-generator"
   | "case-studies"
+  | "client-health"
   | "settings";
 
 interface AdminSidebarProps {
@@ -117,7 +118,7 @@ const emailNavItems = [
   { id: "campaigns" as const, label: "Campaigns", icon: Send },
 ];
 
-import { Rocket, Link2, ListChecks, Trophy, BookOpen } from "lucide-react";
+import { Rocket, Link2, ListChecks, Trophy, BookOpen, HeartPulse } from "lucide-react";
 
 const automationNavItems = [
   { id: "onboarding" as const, label: "Client Onboarding", icon: Rocket },
@@ -131,6 +132,7 @@ const automationNavItems = [
   { id: "win-notifications" as const, label: "Win Notifications", icon: Trophy },
   { id: "ad-generator" as const, label: "AI Ad Generator", icon: Megaphone },
   { id: "case-studies" as const, label: "Case Studies", icon: BookOpen },
+  { id: "client-health" as const, label: "Client Health", icon: HeartPulse },
 ];
 
 const advancedNavItems = [
