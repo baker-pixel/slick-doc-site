@@ -277,15 +277,25 @@ export default function ClientPortal() {
                 </div>
                 
                 {/* Notifications */}
-                <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl hover:bg-muted/80">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="relative h-9 w-9 rounded-xl hover:bg-muted/80"
+                  onClick={() => setActiveTab("notifications")}
+                >
                   <Bell className="h-4 w-4" />
                   <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-[9px] font-bold rounded-full flex items-center justify-center shadow-sm">
                     3
                   </span>
                 </Button>
                 
-                {/* Settings */}
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-muted/80 hidden sm:flex">
+                {/* Settings - Navigate to account section */}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-9 w-9 rounded-xl hover:bg-muted/80 hidden sm:flex"
+                  onClick={() => setActiveTab("agreements")}
+                >
                   <Settings className="h-4 w-4" />
                 </Button>
                 
