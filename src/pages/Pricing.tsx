@@ -149,13 +149,16 @@ export default function Pricing() {
                     </Badge>
                   </div>
                 )}
+                <Link
+                  to={`/pricing/${plan.name.split(" ")[1].toLowerCase()}`}
+                  className="block h-full"
+                >
                 <Card 
                   className={`h-full flex flex-col transition-all duration-300 hover:shadow-xl cursor-pointer group ${
                     plan.popular 
                       ? "border-primary shadow-lg" 
                       : "border-border hover:border-primary/50"
                   }`}
-                  onClick={() => setSelectedPlan(plan.name)}
                 >
                   <CardHeader className="text-center pb-4">
                     <Badge variant="outline" className="w-fit mx-auto mb-3">
@@ -218,6 +221,7 @@ export default function Pricing() {
                     </Button>
                   </CardContent>
                 </Card>
+                </Link>
               </motion.div>
             ))}
           </div>
