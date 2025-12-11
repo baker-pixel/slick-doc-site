@@ -18,6 +18,9 @@ import Admin from "./pages/Admin";
 import System from "./pages/System";
 import Report from "./pages/Report";
 import Pricing from "./pages/Pricing";
+import TierFoundation from "./pages/TierFoundation";
+import TierGrowth from "./pages/TierGrowth";
+import TierTransformation from "./pages/TierTransformation";
 import NotFound from "./pages/NotFound";
 import ARBusinessCard from "./pages/ARBusinessCard";
 import ARPresentation from "./pages/ARPresentation";
@@ -42,6 +45,9 @@ function AnimatedRoutes() {
         <Route path="/schedule" element={<PageTransition><ScheduleCall /></PageTransition>} />
         <Route path="/system" element={<PageTransition><System /></PageTransition>} />
         <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />
+        <Route path="/pricing/foundation" element={<PageTransition><TierFoundation /></PageTransition>} />
+        <Route path="/pricing/growth" element={<PageTransition><TierGrowth /></PageTransition>} />
+        <Route path="/pricing/transformation" element={<PageTransition><TierTransformation /></PageTransition>} />
         <Route path="/admin" element={<PageTransition><Admin /></PageTransition>} />
         <Route path="/report/:id" element={<PageTransition><Report /></PageTransition>} />
         <Route path="/ar-card" element={<PageTransition><ARBusinessCard /></PageTransition>} />

@@ -9,11 +9,18 @@ const routeNames: Record<string, string> = {
   "/quick-assessment": "Quick Assessment",
   "/schedule": "Schedule Call",
   "/pricing": "Pricing",
+  "/pricing/foundation": "Foundation",
+  "/pricing/growth": "Growth",
+  "/pricing/transformation": "Transformation",
   "/admin": "Admin Dashboard",
   "/report": "Report",
 };
 
-export function BackButton() {
+interface BackButtonProps {
+  className?: string;
+}
+
+export function BackButton({ className }: BackButtonProps) {
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -39,7 +46,7 @@ export function BackButton() {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={`flex flex-col gap-3 ${className || ""}`}>
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
