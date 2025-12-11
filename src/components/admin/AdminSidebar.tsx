@@ -74,6 +74,7 @@ export type AdminSection =
   | "integrations"
   | "content-review"
   | "reports-review"
+  | "seo-dashboard"
   | "settings";
 
 interface AdminSidebarProps {
@@ -113,6 +114,7 @@ const automationNavItems = [
   { id: "client-tasks" as const, label: "Client Tasks", icon: ClipboardList },
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },
   { id: "integrations" as const, label: "Integrations", icon: Link2 },
+  { id: "seo-dashboard" as const, label: "SEO Dashboard", icon: BarChart3 },
 ];
 
 const advancedNavItems = [

@@ -2206,6 +2206,107 @@ export type Database = {
           },
         ]
       }
+      seo_page_analysis: {
+        Row: {
+          ai_rewrites: Json | null
+          analyzed_at: string
+          backlink_potential: number | null
+          broken_links: Json | null
+          client_account_id: string
+          created_at: string
+          external_links: number | null
+          h1_tags: Json | null
+          id: string
+          image_count: number | null
+          images_missing_alt: number | null
+          internal_links: number | null
+          keyword_score: number | null
+          keywords_found: Json | null
+          load_time_ms: number | null
+          meta_description: string | null
+          meta_title: string | null
+          mobile_friendly: boolean | null
+          overall_score: number | null
+          page_title: string | null
+          readability_issues: Json | null
+          readability_score: number | null
+          suggestions: Json | null
+          technical_issues: Json | null
+          technical_score: number | null
+          updated_at: string
+          url: string
+          word_count: number | null
+        }
+        Insert: {
+          ai_rewrites?: Json | null
+          analyzed_at?: string
+          backlink_potential?: number | null
+          broken_links?: Json | null
+          client_account_id: string
+          created_at?: string
+          external_links?: number | null
+          h1_tags?: Json | null
+          id?: string
+          image_count?: number | null
+          images_missing_alt?: number | null
+          internal_links?: number | null
+          keyword_score?: number | null
+          keywords_found?: Json | null
+          load_time_ms?: number | null
+          meta_description?: string | null
+          meta_title?: string | null
+          mobile_friendly?: boolean | null
+          overall_score?: number | null
+          page_title?: string | null
+          readability_issues?: Json | null
+          readability_score?: number | null
+          suggestions?: Json | null
+          technical_issues?: Json | null
+          technical_score?: number | null
+          updated_at?: string
+          url: string
+          word_count?: number | null
+        }
+        Update: {
+          ai_rewrites?: Json | null
+          analyzed_at?: string
+          backlink_potential?: number | null
+          broken_links?: Json | null
+          client_account_id?: string
+          created_at?: string
+          external_links?: number | null
+          h1_tags?: Json | null
+          id?: string
+          image_count?: number | null
+          images_missing_alt?: number | null
+          internal_links?: number | null
+          keyword_score?: number | null
+          keywords_found?: Json | null
+          load_time_ms?: number | null
+          meta_description?: string | null
+          meta_title?: string | null
+          mobile_friendly?: boolean | null
+          overall_score?: number | null
+          page_title?: string | null
+          readability_issues?: Json | null
+          readability_score?: number | null
+          suggestions?: Json | null
+          technical_issues?: Json | null
+          technical_score?: number | null
+          updated_at?: string
+          url?: string
+          word_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_page_analysis_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seo_suggestions: {
         Row: {
           client_account_id: string

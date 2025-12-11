@@ -74,3 +74,6 @@ verify_jwt = false
 
 [functions.auto-run-client-tasks]
 verify_jwt = false
+
+[functions.analyze-seo]
+verify_jwt = false
