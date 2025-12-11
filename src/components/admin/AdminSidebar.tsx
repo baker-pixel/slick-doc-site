@@ -22,7 +22,8 @@ import {
   UserCircle,
   FileSignature,
   Receipt,
-  Target
+  Target,
+  Star
 } from "lucide-react";
 import {
   Sidebar,
@@ -74,6 +75,7 @@ export type AdminSection =
   | "integrations"
   | "content-review"
   | "marketing-os"
+  | "review-engine"
   | "reports-review"
   | "seo-dashboard"
   | "settings";
@@ -117,6 +119,7 @@ const automationNavItems = [
   { id: "integrations" as const, label: "Integrations", icon: Link2 },
   { id: "seo-dashboard" as const, label: "SEO Dashboard", icon: BarChart3 },
   { id: "marketing-os" as const, label: "Marketing OS", icon: Target },
+  { id: "review-engine" as const, label: "Review Engine", icon: Star },
 ];
 
 const advancedNavItems = [
