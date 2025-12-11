@@ -10,6 +10,7 @@ import { ClientPortalSidebar, type PortalTab, type BadgeCounts } from "@/compone
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { usePortalPreferences } from "@/hooks/use-portal-preferences";
 
 // Tab Components
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
@@ -92,11 +93,21 @@ export default function ClientPortal() {
   const [shouldRedirect, setShouldRedirect] = useState(false);
   const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
-  const [activeTab, setActiveTab] = useState<PortalTab>("activity");
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({ notifications: 0, messages: 0, approvals: 0 });
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  
+  // Portal preferences hook
+  const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(user?.id);
+  const [activeTab, setActiveTab] = useState<PortalTab>(preferences.default_landing_page || "activity");
+  
+  // Update active tab when preferences load
+  useEffect(() => {
+    if (!preferencesLoading && preferences.default_landing_page) {
+      setActiveTab(preferences.default_landing_page);
+    }
+  }, [preferences.default_landing_page, preferencesLoading]);
 
   // Handle redirect in useEffect to avoid React warning
   useEffect(() => {
@@ -248,7 +259,13 @@ export default function ClientPortal() {
       case "help":
         return <ClientHelpTab onStartTour={handleStartTour} />;
       case "settings":
-        return <ClientSettingsTab userId={portalUser.user_id} clientAccountId={portalUser.client_account_id} />;
+        return (
+          <ClientSettingsTab 
+            userId={portalUser.user_id} 
+            clientAccountId={portalUser.client_account_id} 
+            onPreferencesChange={updatePreferences}
+          />
+        );
       default:
         return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
     }
@@ -320,6 +337,7 @@ export default function ClientPortal() {
           businessName={clientAccount?.business_name}
           onSignOut={handleSignOut}
           badgeCounts={badgeCounts}
+          hiddenTabs={preferences.hidden_tabs}
         />
         
         <SidebarInset className="flex-1">

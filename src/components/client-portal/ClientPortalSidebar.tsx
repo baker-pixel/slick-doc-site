@@ -66,6 +66,7 @@ interface ClientPortalSidebarProps {
   businessName?: string;
   onSignOut: () => void;
   badgeCounts?: BadgeCounts;
+  hiddenTabs?: string[];
 }
 
 const mainNavItems = [
@@ -146,8 +147,12 @@ export function ClientPortalSidebar({
   clientName, 
   businessName,
   onSignOut,
-  badgeCounts 
+  badgeCounts,
+  hiddenTabs = []
 }: ClientPortalSidebarProps) {
+  // Filter out hidden tabs from each nav group
+  const filterItems = <T extends { id: string }>(items: T[]) => 
+    items.filter(item => !hiddenTabs.includes(item.id));
   const initials = clientName
     ?.split(" ")
     .map(n => n[0])
@@ -181,7 +186,7 @@ export function ClientPortalSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {mainNavItems.map((item) => (
+              {filterItems(mainNavItems).map((item) => (
                 <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
               ))}
             </SidebarMenu>
@@ -194,7 +199,7 @@ export function ClientPortalSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {communicationItems.map((item) => (
+              {filterItems(communicationItems).map((item) => (
                 <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
               ))}
             </SidebarMenu>
@@ -207,7 +212,7 @@ export function ClientPortalSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {contentItems.map((item) => (
+              {filterItems(contentItems).map((item) => (
                 <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
               ))}
             </SidebarMenu>
@@ -220,7 +225,7 @@ export function ClientPortalSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {accountItems.map((item) => (
+              {filterItems(accountItems).map((item) => (
                 <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
               ))}
             </SidebarMenu>
