@@ -81,9 +81,17 @@ export default function ClientPortal() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shouldRedirect, setShouldRedirect] = useState(false);
   const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
   const [activeTab, setActiveTab] = useState<PortalTab>("activity");
+
+  // Handle redirect in useEffect to avoid React warning
+  useEffect(() => {
+    if (shouldRedirect) {
+      navigate("/portal/auth");
+    }
+  }, [shouldRedirect, navigate]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -96,6 +104,7 @@ export default function ClientPortal() {
         }, 0);
       } else {
         setLoading(false);
+        setShouldRedirect(true);
       }
     });
 
@@ -107,6 +116,7 @@ export default function ClientPortal() {
         fetchPortalUser(session.user.id);
       } else {
         setLoading(false);
+        setShouldRedirect(true);
       }
     });
 
@@ -122,7 +132,8 @@ export default function ClientPortal() {
         .single();
 
       if (portalError || !portalUserData) {
-        navigate("/portal/auth");
+        setShouldRedirect(true);
+        setLoading(false);
         return;
       }
 
@@ -139,7 +150,7 @@ export default function ClientPortal() {
       }
     } catch (error) {
       console.error("Error fetching portal user:", error);
-      navigate("/portal/auth");
+      setShouldRedirect(true);
     } finally {
       setLoading(false);
     }
@@ -159,7 +170,7 @@ export default function ClientPortal() {
 
     switch (activeTab) {
       case "activity":
-        return <ClientActivityTab />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
       case "projects":
@@ -181,13 +192,13 @@ export default function ClientPortal() {
       case "brand":
         return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
       case "team":
-        return <ClientTeamTab />;
+        return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":
         return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
       case "invoices":
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
       default:
-        return <ClientActivityTab />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
     }
   };
 
@@ -218,8 +229,7 @@ export default function ClientPortal() {
   }
 
   if (!user || !portalUser) {
-    navigate("/portal/auth");
-    return null;
+    return null; // Redirect is handled by useEffect
   }
 
   return (
