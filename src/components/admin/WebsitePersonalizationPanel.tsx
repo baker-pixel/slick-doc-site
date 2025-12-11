@@ -20,7 +20,6 @@ import {
   Sparkles,
   Plus,
   Trash2,
-  Eye,
   Code,
   Wand2
 } from "lucide-react";
@@ -29,6 +28,7 @@ type UserSegment = 'new_visitor' | 'returning_visitor' | 'local_user' | 'out_of_
 
 interface PersonalizationRule {
   id: string;
+  client_account_id: string;
   name: string;
   segment: UserSegment;
   component_type: 'headline' | 'cta' | 'banner' | 'offer';
@@ -42,6 +42,8 @@ interface PersonalizationRule {
     time_on_site?: number;
     geo_radius_miles?: number;
   };
+  created_at: string;
+  updated_at: string;
 }
 
 const segmentConfig: Record<UserSegment, { label: string; icon: React.ReactNode; description: string }> = {
@@ -108,12 +110,12 @@ export default function WebsitePersonalizationPanel() {
     queryFn: async () => {
       if (!selectedClient) return [];
       const { data, error } = await supabase
-        .from('personalization_rules')
+        .from('personalization_rules' as any)
         .select('*')
         .eq('client_account_id', selectedClient)
         .order('priority');
       if (error) throw error;
-      return data as PersonalizationRule[];
+      return (data || []) as unknown as PersonalizationRule[];
     },
     enabled: !!selectedClient
   });
@@ -121,7 +123,7 @@ export default function WebsitePersonalizationPanel() {
   const createRuleMutation = useMutation({
     mutationFn: async (rule: Partial<PersonalizationRule>) => {
       const { error } = await supabase
-        .from('personalization_rules')
+        .from('personalization_rules' as any)
         .insert({
           client_account_id: selectedClient,
           name: rule.name,
@@ -132,7 +134,7 @@ export default function WebsitePersonalizationPanel() {
           is_active: rule.is_active,
           priority: rule.priority,
           conditions: rule.conditions
-        });
+        } as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -155,8 +157,8 @@ export default function WebsitePersonalizationPanel() {
   const toggleRuleMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error } = await supabase
-        .from('personalization_rules')
-        .update({ is_active })
+        .from('personalization_rules' as any)
+        .update({ is_active } as any)
         .eq('id', id);
       if (error) throw error;
     },
@@ -169,7 +171,7 @@ export default function WebsitePersonalizationPanel() {
   const deleteRuleMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from('personalization_rules')
+        .from('personalization_rules' as any)
         .delete()
         .eq('id', id);
       if (error) throw error;

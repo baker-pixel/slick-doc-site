@@ -184,6 +184,68 @@ export type Database = {
           },
         ]
       }
+      before_after_showcases: {
+        Row: {
+          after_mobile_url: string | null
+          after_screenshot_url: string | null
+          after_stats: Json | null
+          before_mobile_url: string | null
+          before_screenshot_url: string | null
+          before_stats: Json | null
+          client_account_id: string
+          created_at: string
+          description: string | null
+          id: string
+          improvements: Json | null
+          is_public: boolean
+          project_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          after_mobile_url?: string | null
+          after_screenshot_url?: string | null
+          after_stats?: Json | null
+          before_mobile_url?: string | null
+          before_screenshot_url?: string | null
+          before_stats?: Json | null
+          client_account_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          improvements?: Json | null
+          is_public?: boolean
+          project_type?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          after_mobile_url?: string | null
+          after_screenshot_url?: string | null
+          after_stats?: Json | null
+          before_mobile_url?: string | null
+          before_screenshot_url?: string | null
+          before_stats?: Json | null
+          client_account_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          improvements?: Json | null
+          is_public?: boolean
+          project_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "before_after_showcases_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_assets: {
         Row: {
           asset_type: string
@@ -2144,6 +2206,59 @@ export type Database = {
         }
         Relationships: []
       }
+      personalization_rules: {
+        Row: {
+          client_account_id: string
+          component_type: string
+          conditions: Json | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          original_content: string
+          personalized_content: string
+          priority: number
+          segment: string
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          component_type: string
+          conditions?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          original_content: string
+          personalized_content: string
+          priority?: number
+          segment: string
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          component_type?: string
+          conditions?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          original_content?: string
+          personalized_content?: string
+          priority?: number
+          segment?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personalization_rules_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline_stages: {
         Row: {
           color: string | null
@@ -2221,6 +2336,68 @@ export type Database = {
           },
         ]
       }
+      qa_reports: {
+        Row: {
+          accessibility_issues: Json | null
+          auto_fixes_applied: Json | null
+          broken_links: Json | null
+          client_account_id: string
+          created_at: string
+          id: string
+          load_time_ms: number | null
+          missing_metadata: Json | null
+          mobile_issues: Json | null
+          overall_score: number | null
+          page_title: string | null
+          spelling_errors: Json | null
+          status: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          accessibility_issues?: Json | null
+          auto_fixes_applied?: Json | null
+          broken_links?: Json | null
+          client_account_id: string
+          created_at?: string
+          id?: string
+          load_time_ms?: number | null
+          missing_metadata?: Json | null
+          mobile_issues?: Json | null
+          overall_score?: number | null
+          page_title?: string | null
+          spelling_errors?: Json | null
+          status?: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          accessibility_issues?: Json | null
+          auto_fixes_applied?: Json | null
+          broken_links?: Json | null
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          load_time_ms?: number | null
+          missing_metadata?: Json | null
+          mobile_issues?: Json | null
+          overall_score?: number | null
+          page_title?: string | null
+          spelling_errors?: Json | null
+          status?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qa_reports_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reporting_schedules: {
         Row: {
           client_account_id: string
@@ -2264,6 +2441,80 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_proposals: {
+        Row: {
+          contact_submission_id: string | null
+          created_at: string
+          id: string
+          industry_analysis: Json | null
+          pricing_breakdown: Json | null
+          proposed_services: Json | null
+          prospect_business: string
+          prospect_email: string
+          prospect_industry: string | null
+          prospect_name: string
+          responded_at: string | null
+          roi_projections: Json | null
+          sample_designs: Json | null
+          sent_at: string | null
+          status: string
+          timeline: Json | null
+          total_investment: number | null
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          contact_submission_id?: string | null
+          created_at?: string
+          id?: string
+          industry_analysis?: Json | null
+          pricing_breakdown?: Json | null
+          proposed_services?: Json | null
+          prospect_business: string
+          prospect_email: string
+          prospect_industry?: string | null
+          prospect_name: string
+          responded_at?: string | null
+          roi_projections?: Json | null
+          sample_designs?: Json | null
+          sent_at?: string | null
+          status?: string
+          timeline?: Json | null
+          total_investment?: number | null
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          contact_submission_id?: string | null
+          created_at?: string
+          id?: string
+          industry_analysis?: Json | null
+          pricing_breakdown?: Json | null
+          proposed_services?: Json | null
+          prospect_business?: string
+          prospect_email?: string
+          prospect_industry?: string | null
+          prospect_name?: string
+          responded_at?: string | null
+          roi_projections?: Json | null
+          sample_designs?: Json | null
+          sent_at?: string | null
+          status?: string
+          timeline?: Json | null
+          total_investment?: number | null
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_proposals_contact_submission_id_fkey"
+            columns: ["contact_submission_id"]
+            isOneToOne: false
+            referencedRelation: "contact_submissions"
             referencedColumns: ["id"]
           },
         ]
