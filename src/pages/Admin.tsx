@@ -48,6 +48,10 @@ import { ClientInvoicesAdminPanel } from "@/components/admin/ClientInvoicesAdmin
 import { ClientProjectsAdminPanel } from "@/components/admin/ClientProjectsAdminPanel";
 import { AdminSettingsPanel } from "@/components/admin/AdminSettingsPanel";
 import { ActivityFeedAdminPanel } from "@/components/admin/ActivityFeedAdminPanel";
+import { TaskTemplatesPanel } from "@/components/admin/TaskTemplatesPanel";
+import { ClientTasksPanel } from "@/components/admin/ClientTasksPanel";
+import { OnboardingAutomationPanel } from "@/components/admin/OnboardingAutomationPanel";
+import { IntegrationConfigPanel } from "@/components/admin/IntegrationConfigPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1040,6 +1044,14 @@ const Admin = () => {
         return <SOPManagementPanel />;
       case "automation":
         return <AutomationJobsPanel />;
+      case "task-templates":
+        return <TaskTemplatesPanel />;
+      case "client-tasks":
+        return <ClientTasksPanel />;
+      case "onboarding":
+        return <OnboardingAutomationPanel />;
+      case "integrations":
+        return <IntegrationConfigPanel />;
       case "content-review":
         return <ContentReviewPanel />;
       case "reports-review":
