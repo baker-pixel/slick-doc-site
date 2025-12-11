@@ -64,6 +64,7 @@ import WebsitePersonalizationPanel from "@/components/admin/WebsitePersonalizati
 import QualityAssurancePanel from "@/components/admin/QualityAssurancePanel";
 import BeforeAfterShowcasePanel from "@/components/admin/BeforeAfterShowcasePanel";
 import SalesProposalPanel from "@/components/admin/SalesProposalPanel";
+import FeatureGuidePanel from "@/components/admin/FeatureGuidePanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1014,6 +1015,8 @@ const Admin = () => {
         );
       case "activity-feed":
         return <ActivityFeedAdminPanel />;
+      case "feature-guide":
+        return <FeatureGuidePanel />;
       case "contacts":
         return renderContactsTable();
       case "gap-analysis":
@@ -1107,6 +1110,7 @@ const Admin = () => {
       calendar: "Content Calendar",
       analytics: "Analytics",
       "activity-feed": "Activity Feed",
+      "feature-guide": "Feature Guide",
       contacts: "Contact Submissions",
       "gap-analysis": "Gap Analysis",
       "pdf-leads": "PDF Leads",
