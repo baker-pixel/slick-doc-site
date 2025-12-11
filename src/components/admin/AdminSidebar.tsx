@@ -65,6 +65,10 @@ export type AdminSection =
   | "campaigns"
   | "sops"
   | "automation"
+  | "task-templates"
+  | "client-tasks"
+  | "onboarding"
+  | "integrations"
   | "content-review"
   | "reports-review"
   | "settings";
@@ -98,6 +102,16 @@ const emailNavItems = [
   { id: "campaigns" as const, label: "Campaigns", icon: Send },
 ];
 
+import { Rocket, Link2, ListChecks } from "lucide-react";
+
+const automationNavItems = [
+  { id: "onboarding" as const, label: "Client Onboarding", icon: Rocket },
+  { id: "task-templates" as const, label: "Task Templates", icon: ListChecks },
+  { id: "client-tasks" as const, label: "Client Tasks", icon: ClipboardList },
+  { id: "automation" as const, label: "Automation Jobs", icon: Bot },
+  { id: "integrations" as const, label: "Integrations", icon: Link2 },
+];
+
 const advancedNavItems = [
   { id: "clients" as const, label: "Clients", icon: Briefcase },
   { id: "client-projects" as const, label: "Projects", icon: Target },
@@ -112,7 +126,6 @@ const advancedNavItems = [
   { id: "service-agreements" as const, label: "Agreements", icon: FileSignature },
   { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
   { id: "sops" as const, label: "SOPs", icon: FileCheck },
-  { id: "automation" as const, label: "Automation Jobs", icon: Bot },
   { id: "content-review" as const, label: "Content Review", icon: ClipboardCheck },
   { id: "reports-review" as const, label: "Reports Review", icon: FileCheck },
   { id: "settings" as const, label: "Settings", icon: Settings },
@@ -190,7 +203,27 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Advanced</SidebarGroupLabel>
+          <SidebarGroupLabel>Automation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {automationNavItems.map((item) => (
+                <SidebarMenuItem key={item.id}>
+                  <SidebarMenuButton
+                    isActive={activeSection === item.id}
+                    onClick={() => onSectionChange(item.id)}
+                    tooltip={item.label}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Client Management</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {advancedNavItems.map((item) => (
