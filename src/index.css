@@ -158,9 +158,55 @@
   }
 }
 
+/* Layout Density Classes for Portal */
+.density-compact {
+  --portal-spacing-sm: 0.25rem;
+  --portal-spacing-md: 0.5rem;
+  --portal-spacing-lg: 0.75rem;
+  --portal-padding: 0.75rem;
+  --portal-gap: 0.5rem;
+}
+
+.density-comfortable {
+  --portal-spacing-sm: 0.5rem;
+  --portal-spacing-md: 1rem;
+  --portal-spacing-lg: 1.5rem;
+  --portal-padding: 1rem;
+  --portal-gap: 1rem;
+}
+
+.density-spacious {
+  --portal-spacing-sm: 0.75rem;
+  --portal-spacing-md: 1.5rem;
+  --portal-spacing-lg: 2rem;
+  --portal-padding: 1.5rem;
+  --portal-gap: 1.5rem;
+}
+
 @layer utilities {
   .animate-fade-up {
     animation: fadeUp 0.6s ease-out forwards;
+  }
+
+  /* Portal density utilities */
+  .portal-spacing-sm {
+    padding: var(--portal-spacing-sm, 0.5rem);
+  }
+  
+  .portal-spacing-md {
+    padding: var(--portal-spacing-md, 1rem);
+  }
+  
+  .portal-spacing-lg {
+    padding: var(--portal-spacing-lg, 1.5rem);
+  }
+  
+  .portal-padding {
+    padding: var(--portal-padding, 1rem);
+  }
+  
+  .portal-gap {
+    gap: var(--portal-gap, 1rem);
   }
 
   .animate-fade-in {
