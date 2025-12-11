@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, ArrowRight, Zap, Star, Crown, Info } from "lucide-react";
+import { Check, ArrowRight, Zap, Star, Crown, Info, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -10,6 +10,50 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { PricingTierModal } from "@/components/PricingTierModal";
 import { TierInterestForm } from "@/components/TierInterestForm";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const comparisonFeatures = [
+  { category: "Website & Conversion", features: [
+    { name: "Website Conversion Tune-Up", foundation: true, growth: true, transformation: true },
+    { name: "Landing Page Pack (3-5 pages)", foundation: false, growth: true, transformation: true },
+    { name: "Full Website Rebuild", foundation: false, growth: false, transformation: true },
+  ]},
+  { category: "SEO & Visibility", features: [
+    { name: "Local Visibility Upgrade", foundation: true, growth: true, transformation: true },
+    { name: "Basic SEO Cleanup", foundation: true, growth: true, transformation: true },
+    { name: "Monthly SEO Optimization", foundation: false, growth: true, transformation: true },
+    { name: "Advanced SEO Program", foundation: false, growth: false, transformation: true },
+    { name: "Quarterly SEO Tuning", foundation: true, growth: true, transformation: true },
+  ]},
+  { category: "Content & Marketing", features: [
+    { name: "Monthly GBP Posts", foundation: true, growth: true, transformation: true },
+    { name: "Blog Articles", foundation: "1/month", growth: "2/month", transformation: "4/month" },
+    { name: "Lead Magnet Development", foundation: false, growth: false, transformation: true },
+  ]},
+  { category: "Automation & CRM", features: [
+    { name: "Review Generation Setup", foundation: true, growth: true, transformation: true },
+    { name: "Email & SMS Automation", foundation: false, growth: true, transformation: true },
+    { name: "CRM Pipeline Optimization", foundation: false, growth: true, transformation: true },
+    { name: "Full Funnel Buildout", foundation: false, growth: false, transformation: true },
+  ]},
+  { category: "Advertising & Retargeting", features: [
+    { name: "Retargeting Ads Setup", foundation: false, growth: true, transformation: true },
+    { name: "Sales Enablement System", foundation: false, growth: false, transformation: true },
+  ]},
+  { category: "Analytics & Support", features: [
+    { name: "Analytics & KPI Setup", foundation: true, growth: true, transformation: true },
+    { name: "Full Analytics Suite", foundation: false, growth: false, transformation: true },
+    { name: "Monthly Strategy Call", foundation: false, growth: true, transformation: true },
+    { name: "Retention Engine Setup", foundation: false, growth: false, transformation: true },
+  ]},
+];
 const plans = [
   {
     name: "SYSTEM Foundation",
@@ -238,11 +282,138 @@ export default function Pricing() {
             </p>
           </motion.div>
 
-          {/* FAQs */}
+          {/* Feature Comparison Table */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
+            className="mb-20"
+          >
+            <h2 className="text-3xl font-display font-semibold text-foreground text-center mb-4">
+              Compare All Features
+            </h2>
+            <p className="text-muted-foreground text-center mb-10 max-w-2xl mx-auto">
+              See exactly what's included in each tier to find the perfect fit for your business.
+            </p>
+            
+            <div className="overflow-x-auto">
+              <Table className="w-full">
+                <TableHeader>
+                  <TableRow className="border-border">
+                    <TableHead className="w-[300px] text-foreground font-semibold">Features</TableHead>
+                    <TableHead className="text-center min-w-[140px]">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <Zap className="h-5 w-5 text-primary" />
+                        </div>
+                        <span className="text-foreground font-semibold">Foundation</span>
+                        <span className="text-xs text-muted-foreground">$249/mo</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-center min-w-[140px] bg-primary/5">
+                      <div className="flex flex-col items-center gap-2">
+                        <Badge className="bg-primary text-primary-foreground text-xs mb-1">Popular</Badge>
+                        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+                          <Star className="h-5 w-5 text-primary-foreground" />
+                        </div>
+                        <span className="text-foreground font-semibold">Growth</span>
+                        <span className="text-xs text-muted-foreground">$449–549/mo</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-center min-w-[140px]">
+                      <div className="flex flex-col items-center gap-2">
+                        <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs border-0 mb-1">Premium</Badge>
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center">
+                          <Crown className="h-5 w-5 text-white" />
+                        </div>
+                        <span className="text-foreground font-semibold">Transformation</span>
+                        <span className="text-xs text-muted-foreground">$799–999/mo</span>
+                      </div>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comparisonFeatures.map((section, sectionIndex) => (
+                    <>
+                      <TableRow key={`category-${sectionIndex}`} className="bg-muted/30 border-border">
+                        <TableCell colSpan={4} className="font-semibold text-foreground py-3">
+                          {section.category}
+                        </TableCell>
+                      </TableRow>
+                      {section.features.map((feature, featureIndex) => (
+                        <TableRow key={`${sectionIndex}-${featureIndex}`} className="border-border hover:bg-muted/20 transition-colors">
+                          <TableCell className="text-muted-foreground">{feature.name}</TableCell>
+                          <TableCell className="text-center">
+                            {typeof feature.foundation === 'string' ? (
+                              <span className="text-sm text-foreground font-medium">{feature.foundation}</span>
+                            ) : feature.foundation ? (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                whileInView={{ scale: 1 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: featureIndex * 0.05, type: "spring", stiffness: 400 }}
+                                className="inline-flex"
+                              >
+                                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+                                  <Check className="h-4 w-4 text-primary" />
+                                </div>
+                              </motion.div>
+                            ) : (
+                              <X className="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center bg-primary/5">
+                            {typeof feature.growth === 'string' ? (
+                              <span className="text-sm text-foreground font-medium">{feature.growth}</span>
+                            ) : feature.growth ? (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                whileInView={{ scale: 1 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: featureIndex * 0.05, type: "spring", stiffness: 400 }}
+                                className="inline-flex"
+                              >
+                                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                                  <Check className="h-4 w-4 text-primary-foreground" />
+                                </div>
+                              </motion.div>
+                            ) : (
+                              <X className="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {typeof feature.transformation === 'string' ? (
+                              <span className="text-sm text-foreground font-medium">{feature.transformation}</span>
+                            ) : feature.transformation ? (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                whileInView={{ scale: 1 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: featureIndex * 0.05, type: "spring", stiffness: 400 }}
+                                className="inline-flex"
+                              >
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center">
+                                  <Check className="h-4 w-4 text-white" />
+                                </div>
+                              </motion.div>
+                            ) : (
+                              <X className="h-4 w-4 text-muted-foreground/40 mx-auto" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </motion.div>
+
+          {/* FAQs */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
             className="max-w-3xl mx-auto"
           >
             <h2 className="text-3xl font-display font-semibold text-foreground text-center mb-10">
@@ -264,7 +435,7 @@ export default function Pricing() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
+            transition={{ delay: 0.7 }}
             className="text-center mt-20"
           >
             <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20 max-w-2xl mx-auto">
