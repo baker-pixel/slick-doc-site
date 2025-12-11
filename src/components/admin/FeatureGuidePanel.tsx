@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -787,7 +788,11 @@ const categoryColors: Record<string, string> = {
   "client-management": "bg-pink-500/10 text-pink-500 border-pink-500/20"
 };
 
-export default function FeatureGuidePanel() {
+interface FeatureGuidePanelProps {
+  onNavigate?: (section: string) => void;
+}
+
+export default function FeatureGuidePanel({ onNavigate }: FeatureGuidePanelProps) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
 
@@ -887,6 +892,17 @@ export default function FeatureGuidePanel() {
                 </ul>
               </div>
             </CardContent>
+            {feature.id !== "feature-guide" && onNavigate && (
+              <CardFooter className="pt-0">
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => onNavigate(feature.id)}
+                >
+                  Go to {feature.name}
+                </Button>
+              </CardFooter>
+            )}
           </Card>
         ))}
       </div>
