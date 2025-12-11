@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, ArrowRight, Zap, Star, Crown } from "lucide-react";
+import { Check, ArrowRight, Zap, Star, Crown, Info } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -7,7 +8,7 @@ import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
+import { PricingTierModal } from "@/components/PricingTierModal";
 const plans = [
   {
     name: "SYSTEM Foundation",
@@ -97,8 +98,12 @@ const faqs = [
 ];
 
 export default function Pricing() {
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+
   return (
     <div className="min-h-screen bg-background">
+      <Header />
+      <PricingTierModal planName={selectedPlan} onClose={() => setSelectedPlan(null)} />
       <Header />
       
       <main className="pt-32 pb-20">
@@ -142,11 +147,14 @@ export default function Pricing() {
                     </Badge>
                   </div>
                 )}
-                <Card className={`h-full flex flex-col transition-all duration-300 hover:shadow-xl ${
-                  plan.popular 
-                    ? "border-primary shadow-lg" 
-                    : "border-border hover:border-primary/50"
-                }`}>
+                <Card 
+                  className={`h-full flex flex-col transition-all duration-300 hover:shadow-xl cursor-pointer group ${
+                    plan.popular 
+                      ? "border-primary shadow-lg" 
+                      : "border-border hover:border-primary/50"
+                  }`}
+                  onClick={() => setSelectedPlan(plan.name)}
+                >
                   <CardHeader className="text-center pb-4">
                     <Badge variant="outline" className="w-fit mx-auto mb-3">
                       {plan.level}
@@ -171,7 +179,7 @@ export default function Pricing() {
                       SYSTEM Score: {plan.scoreRange}
                     </p>
                     
-                    <ul className="space-y-3 mb-8 flex-1">
+                    <ul className="space-y-3 mb-4 flex-1">
                       {plan.features.map((feature, i) => (
                         <li key={i} className="flex items-start gap-3">
                           <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -179,6 +187,17 @@ export default function Pricing() {
                         </li>
                       ))}
                     </ul>
+
+                    <button 
+                      className="flex items-center justify-center gap-2 text-sm text-primary font-medium mb-4 group-hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPlan(plan.name);
+                      }}
+                    >
+                      <Info className="h-4 w-4" />
+                      See detailed breakdown
+                    </button>
                     
                     <Button 
                       size="lg" 
