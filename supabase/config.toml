@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.analyze-seo]
 verify_jwt = false
+
+[functions.generate-ads]
+verify_jwt = false
