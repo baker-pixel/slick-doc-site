@@ -23,7 +23,8 @@ import {
   FileSignature,
   Receipt,
   Target,
-  Star
+  Star,
+  Megaphone
 } from "lucide-react";
 import {
   Sidebar,
@@ -80,6 +81,7 @@ export type AdminSection =
   | "seo-dashboard"
   | "win-notifications"
   | "lead-scoring"
+  | "ad-generator"
   | "settings";
 
 interface AdminSidebarProps {
@@ -126,6 +128,7 @@ const automationNavItems = [
   { id: "marketing-os" as const, label: "Marketing OS", icon: Target },
   { id: "review-engine" as const, label: "Review Engine", icon: Star },
   { id: "win-notifications" as const, label: "Win Notifications", icon: Trophy },
+  { id: "ad-generator" as const, label: "AI Ad Generator", icon: Megaphone },
 ];
 
 const advancedNavItems = [

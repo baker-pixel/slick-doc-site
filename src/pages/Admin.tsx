@@ -57,6 +57,7 @@ import { MarketingOSDashboard } from "@/components/admin/MarketingOSDashboard";
 import { GoogleReviewEngine } from "@/components/admin/GoogleReviewEngine";
 import ClientWinNotifications from "@/components/admin/ClientWinNotifications";
 import LeadScoringPanel from "@/components/admin/LeadScoringPanel";
+import AIAdGenerator from "@/components/admin/AIAdGenerator";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1071,6 +1072,8 @@ const Admin = () => {
         return <ClientWinNotifications />;
       case "lead-scoring":
         return <LeadScoringPanel />;
+      case "ad-generator":
+        return <AIAdGenerator />;
       case "settings":
         return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
@@ -1118,6 +1121,7 @@ const Admin = () => {
       "review-engine": "Review Engine",
       "win-notifications": "Win Notifications",
       "lead-scoring": "AI Lead Scoring",
+      "ad-generator": "AI Ad Generator",
       settings: "Admin Settings",
     };
     return titles[activeSection];
