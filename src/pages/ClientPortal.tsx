@@ -29,6 +29,7 @@ import { ClientAgreementsTab } from "@/components/client-portal/ClientAgreements
 import ClientNotificationsTab from "@/components/client-portal/ClientNotificationsTab";
 import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
+import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningHubTab";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
@@ -64,6 +65,7 @@ const tabTitles: Record<PortalTab, string> = {
   invoices: "Invoices",
   help: "Help & Guide",
   settings: "Settings",
+  learning: "Learning Hub",
 };
 
 const tabDescriptions: Record<PortalTab, string> = {
@@ -83,6 +85,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   invoices: "Manage billing and payments",
   help: "Learn how to use your portal",
   settings: "Customize your portal experience",
+  learning: "Educational resources to grow your marketing knowledge",
 };
 
 export default function ClientPortal() {
@@ -258,6 +261,8 @@ export default function ClientPortal() {
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
       case "help":
         return <ClientHelpTab onStartTour={handleStartTour} />;
+      case "learning":
+        return <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />;
       case "settings":
         return (
           <ClientSettingsTab 
