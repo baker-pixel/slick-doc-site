@@ -85,6 +85,7 @@ export default function ClientPortal() {
   const [portalUser, setPortalUser] = useState<ClientPortalUser | null>(null);
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
   const [activeTab, setActiveTab] = useState<PortalTab>("activity");
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   // Handle redirect in useEffect to avoid React warning
   useEffect(() => {
@@ -148,6 +149,15 @@ export default function ClientPortal() {
       if (!accountError && accountData) {
         setClientAccount(accountData);
       }
+
+      // Fetch unread notification count
+      const { count } = await supabase
+        .from("client_notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("client_account_id", portalUserData.client_account_id)
+        .eq("is_read", false);
+
+      setUnreadNotificationCount(count || 0);
     } catch (error) {
       console.error("Error fetching portal user:", error);
       setShouldRedirect(true);
@@ -284,9 +294,11 @@ export default function ClientPortal() {
                   onClick={() => setActiveTab("notifications")}
                 >
                   <Bell className="h-4 w-4" />
-                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-[9px] font-bold rounded-full flex items-center justify-center shadow-sm">
-                    3
-                  </span>
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-[9px] font-bold rounded-full flex items-center justify-center shadow-sm">
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
+                  )}
                 </Button>
                 
                 {/* Settings - Navigate to account section */}
