@@ -14,7 +14,8 @@ import {
   Package, 
   FileSignature,
   LogOut,
-  Building2
+  Sparkles,
+  ChevronRight
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,7 +28,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -59,19 +59,19 @@ interface ClientPortalSidebarProps {
 
 const mainNavItems = [
   { id: "activity" as const, label: "Activity", icon: Activity },
-  { id: "notifications" as const, label: "Wins & Updates", icon: Bell },
+  { id: "notifications" as const, label: "Wins & Updates", icon: Bell, badge: "3" },
   { id: "projects" as const, label: "Projects", icon: LayoutDashboard },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
 ];
 
 const communicationItems = [
-  { id: "messages" as const, label: "Messages", icon: MessageCircle },
+  { id: "messages" as const, label: "Messages", icon: MessageCircle, badge: "2" },
   { id: "meetings" as const, label: "Meetings", icon: Calendar },
   { id: "requests" as const, label: "Requests", icon: ClipboardList },
 ];
 
 const contentItems = [
-  { id: "approvals" as const, label: "Approvals", icon: FileCheck },
+  { id: "approvals" as const, label: "Approvals", icon: FileCheck, badge: "1" },
   { id: "deliverables" as const, label: "Deliverables", icon: Package },
   { id: "documents" as const, label: "Documents", icon: FolderOpen },
 ];
@@ -82,6 +82,51 @@ const accountItems = [
   { id: "team" as const, label: "Team", icon: Users },
   { id: "invoices" as const, label: "Invoices", icon: Receipt },
 ];
+
+interface NavItemProps {
+  item: { id: PortalTab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string };
+  activeTab: PortalTab;
+  onTabChange: (tab: PortalTab) => void;
+}
+
+function NavItem({ item, activeTab, onTabChange }: NavItemProps) {
+  const isActive = activeTab === item.id;
+  
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={() => onTabChange(item.id)}
+        tooltip={item.label}
+        className={cn(
+          "relative group/item transition-all duration-300 rounded-xl h-10",
+          isActive 
+            ? "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-md shadow-primary/20" 
+            : "hover:bg-muted/80"
+        )}
+      >
+        <item.icon className={cn(
+          "h-4 w-4 transition-transform duration-300",
+          isActive && "scale-110"
+        )} />
+        <span className="flex-1">{item.label}</span>
+        {item.badge && (
+          <span className={cn(
+            "text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+            isActive 
+              ? "bg-primary-foreground/20 text-primary-foreground" 
+              : "bg-primary/10 text-primary"
+          )}>
+            {item.badge}
+          </span>
+        )}
+        {isActive && (
+          <ChevronRight className="h-3.5 w-3.5 opacity-60" />
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
 export function ClientPortalSidebar({ 
   activeTab, 
@@ -98,145 +143,99 @@ export function ClientPortalSidebar({
     .slice(0, 2) || "CL";
 
   return (
-    <Sidebar collapsible="icon" className="border-r">
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+    <Sidebar collapsible="icon" className="border-r-0 bg-gradient-to-b from-sidebar-background to-sidebar-background/95">
+      <SidebarHeader className="p-4 pb-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Building2 className="h-5 w-5" />
+          <div className="relative">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 border-2 border-sidebar-background" />
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sm truncate max-w-[140px]">
+            <span className="font-bold text-sm truncate max-w-[140px]">
               {businessName || "Client Portal"}
             </span>
-            <span className="text-xs text-muted-foreground">Dashboard</span>
+            <span className="text-[11px] text-muted-foreground font-medium">Premium Dashboard</span>
           </div>
         </div>
       </SidebarHeader>
       
-      <SidebarContent className="px-2">
+      <SidebarContent className="px-3 space-y-6">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-2">
             Overview
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-1">
               {mainNavItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeTab === item.id}
-                    onClick={() => onTabChange(item.id)}
-                    tooltip={item.label}
-                    className={cn(
-                      "transition-all duration-200",
-                      activeTab === item.id && "bg-primary/10 text-primary font-medium"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-2">
             Communication
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-1">
               {communicationItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeTab === item.id}
-                    onClick={() => onTabChange(item.id)}
-                    tooltip={item.label}
-                    className={cn(
-                      "transition-all duration-200",
-                      activeTab === item.id && "bg-primary/10 text-primary font-medium"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-2">
             Content
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-1">
               {contentItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeTab === item.id}
-                    onClick={() => onTabChange(item.id)}
-                    tooltip={item.label}
-                    className={cn(
-                      "transition-all duration-200",
-                      activeTab === item.id && "bg-primary/10 text-primary font-medium"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground px-2">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-2">
             Account
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-1">
               {accountItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeTab === item.id}
-                    onClick={() => onTabChange(item.id)}
-                    tooltip={item.label}
-                    className={cn(
-                      "transition-all duration-200",
-                      activeTab === item.id && "bg-primary/10 text-primary font-medium"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="text-sm font-medium truncate">{clientName || "Client"}</p>
+      <SidebarFooter className="p-3 mt-auto">
+        <div className="rounded-xl bg-gradient-to-r from-muted/80 to-muted/40 p-3 group-data-[collapsible=icon]:p-2">
+          <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
+            <Avatar className="h-9 w-9 ring-2 ring-primary/20 ring-offset-2 ring-offset-sidebar-background">
+              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xs font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+              <p className="text-sm font-semibold truncate">{clientName || "Client"}</p>
+              <p className="text-[11px] text-muted-foreground">View profile</p>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={onSignOut}
+              className="h-8 w-8 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors group-data-[collapsible=icon]:hidden"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onSignOut}
-            className="h-8 w-8 shrink-0 group-data-[collapsible=icon]:hidden"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
