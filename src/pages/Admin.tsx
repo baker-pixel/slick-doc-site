@@ -1016,7 +1016,7 @@ const Admin = () => {
       case "activity-feed":
         return <ActivityFeedAdminPanel />;
       case "feature-guide":
-        return <FeatureGuidePanel />;
+        return <FeatureGuidePanel onNavigate={(section) => setActiveSection(section as AdminSection)} />;
       case "contacts":
         return renderContactsTable();
       case "gap-analysis":
