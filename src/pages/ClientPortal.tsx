@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Search, Bell, Command, Settings, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
-import { ClientPortalSidebar, type PortalTab } from "@/components/client-portal/ClientPortalSidebar";
+import { ClientPortalSidebar, type PortalTab, type BadgeCounts } from "@/components/client-portal/ClientPortalSidebar";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -86,6 +86,7 @@ export default function ClientPortal() {
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
   const [activeTab, setActiveTab] = useState<PortalTab>("activity");
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({ notifications: 0, messages: 0, approvals: 0 });
 
   // Handle redirect in useEffect to avoid React warning
   useEffect(() => {
@@ -150,14 +151,33 @@ export default function ClientPortal() {
         setClientAccount(accountData);
       }
 
-      // Fetch unread notification count
-      const { count } = await supabase
-        .from("client_notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("client_account_id", portalUserData.client_account_id)
-        .eq("is_read", false);
+      // Fetch badge counts for sidebar
+      const [notifCount, messagesCount, approvalsCount] = await Promise.all([
+        supabase
+          .from("client_notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("client_account_id", portalUserData.client_account_id)
+          .eq("is_read", false),
+        supabase
+          .from("client_messages")
+          .select("*", { count: "exact", head: true })
+          .eq("client_account_id", portalUserData.client_account_id)
+          .eq("is_read", false),
+        supabase
+          .from("content_approvals")
+          .select("*", { count: "exact", head: true })
+          .eq("client_account_id", portalUserData.client_account_id)
+          .eq("status", "pending"),
+      ]);
 
-      setUnreadNotificationCount(count || 0);
+      const counts = {
+        notifications: notifCount.count || 0,
+        messages: messagesCount.count || 0,
+        approvals: approvalsCount.count || 0,
+      };
+      
+      setBadgeCounts(counts);
+      setUnreadNotificationCount(counts.notifications);
     } catch (error) {
       console.error("Error fetching portal user:", error);
       setShouldRedirect(true);
@@ -251,6 +271,7 @@ export default function ClientPortal() {
           clientName={clientName}
           businessName={clientAccount?.business_name}
           onSignOut={handleSignOut}
+          badgeCounts={badgeCounts}
         />
         
         <SidebarInset className="flex-1">

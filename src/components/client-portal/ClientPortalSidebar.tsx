@@ -49,29 +49,36 @@ export type PortalTab =
   | "analytics" 
   | "invoices";
 
+export interface BadgeCounts {
+  notifications: number;
+  messages: number;
+  approvals: number;
+}
+
 interface ClientPortalSidebarProps {
   activeTab: PortalTab;
   onTabChange: (tab: PortalTab) => void;
   clientName?: string;
   businessName?: string;
   onSignOut: () => void;
+  badgeCounts?: BadgeCounts;
 }
 
 const mainNavItems = [
   { id: "activity" as const, label: "Activity", icon: Activity },
-  { id: "notifications" as const, label: "Wins & Updates", icon: Bell, badge: "3" },
+  { id: "notifications" as const, label: "Wins & Updates", icon: Bell, badgeKey: "notifications" as const },
   { id: "projects" as const, label: "Projects", icon: LayoutDashboard },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
 ];
 
 const communicationItems = [
-  { id: "messages" as const, label: "Messages", icon: MessageCircle, badge: "2" },
+  { id: "messages" as const, label: "Messages", icon: MessageCircle, badgeKey: "messages" as const },
   { id: "meetings" as const, label: "Meetings", icon: Calendar },
   { id: "requests" as const, label: "Requests", icon: ClipboardList },
 ];
 
 const contentItems = [
-  { id: "approvals" as const, label: "Approvals", icon: FileCheck, badge: "1" },
+  { id: "approvals" as const, label: "Approvals", icon: FileCheck, badgeKey: "approvals" as const },
   { id: "deliverables" as const, label: "Deliverables", icon: Package },
   { id: "documents" as const, label: "Documents", icon: FolderOpen },
 ];
@@ -84,13 +91,17 @@ const accountItems = [
 ];
 
 interface NavItemProps {
-  item: { id: PortalTab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string };
+  item: { id: PortalTab; label: string; icon: React.ComponentType<{ className?: string }>; badgeKey?: keyof BadgeCounts };
   activeTab: PortalTab;
   onTabChange: (tab: PortalTab) => void;
+  badgeCounts?: BadgeCounts;
 }
 
-function NavItem({ item, activeTab, onTabChange }: NavItemProps) {
+function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
   const isActive = activeTab === item.id;
+  const badgeCount = item.badgeKey && badgeCounts ? badgeCounts[item.badgeKey] : 0;
+  // Hide badge when tab is active (user is viewing it) or when count is 0
+  const showBadge = badgeCount > 0 && !isActive;
   
   return (
     <SidebarMenuItem>
@@ -110,14 +121,9 @@ function NavItem({ item, activeTab, onTabChange }: NavItemProps) {
           isActive && "scale-110"
         )} />
         <span className="flex-1">{item.label}</span>
-        {item.badge && (
-          <span className={cn(
-            "text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-            isActive 
-              ? "bg-primary-foreground/20 text-primary-foreground" 
-              : "bg-primary/10 text-primary"
-          )}>
-            {item.badge}
+        {showBadge && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary/10 text-primary">
+            {badgeCount > 9 ? "9+" : badgeCount}
           </span>
         )}
         {isActive && (
@@ -133,7 +139,8 @@ export function ClientPortalSidebar({
   onTabChange, 
   clientName, 
   businessName,
-  onSignOut 
+  onSignOut,
+  badgeCounts 
 }: ClientPortalSidebarProps) {
   const initials = clientName
     ?.split(" ")
@@ -169,7 +176,7 @@ export function ClientPortalSidebar({
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
               {mainNavItems.map((item) => (
-                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -182,7 +189,7 @@ export function ClientPortalSidebar({
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
               {communicationItems.map((item) => (
-                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -195,7 +202,7 @@ export function ClientPortalSidebar({
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
               {contentItems.map((item) => (
-                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} />
+                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
