@@ -49,6 +49,7 @@ export type AdminSection =
   | "calendar"
   | "analytics"
   | "activity-feed"
+  | "feature-guide"
   | "contacts"
   | "gap-analysis"
   | "pdf-leads"
@@ -95,7 +96,7 @@ interface AdminSidebarProps {
   onSectionChange: (section: AdminSection) => void;
 }
 
-import { List } from "lucide-react";
+import { List, BookOpen as BookOpenIcon } from "lucide-react";
 
 const mainNavItems = [
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
@@ -104,6 +105,7 @@ const mainNavItems = [
   { id: "calendar" as const, label: "Calendar", icon: CalendarIcon },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
   { id: "activity-feed" as const, label: "Activity Feed", icon: List },
+  { id: "feature-guide" as const, label: "Feature Guide", icon: BookOpenIcon },
 ];
 
 import { Brain } from "lucide-react";
