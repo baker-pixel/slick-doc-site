@@ -170,8 +170,8 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
 
   return (
     <Dialog open={!!planName} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col">
-        <DialogHeader className="p-6 pb-4 border-b border-border sticky top-0 bg-background z-10">
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b border-border bg-background z-10 shrink-0">
           <div className="flex items-center gap-4">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
               plan.popular ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
@@ -201,7 +201,7 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
           <DialogDescription className="mt-2">{plan.description}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="p-6 space-y-4">
             <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               What's Included
@@ -223,7 +223,7 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
               </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="p-6 pt-4 border-t border-border bg-background shrink-0">
           <Button size="lg" className="w-full" asChild>
