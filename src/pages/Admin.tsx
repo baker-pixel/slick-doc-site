@@ -59,6 +59,7 @@ import ClientWinNotifications from "@/components/admin/ClientWinNotifications";
 import LeadScoringPanel from "@/components/admin/LeadScoringPanel";
 import AIAdGenerator from "@/components/admin/AIAdGenerator";
 import CaseStudyBuilderPanel from "@/components/admin/CaseStudyBuilderPanel";
+import ClientHealthDashboard from "@/components/admin/ClientHealthDashboard";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1077,6 +1078,8 @@ const Admin = () => {
         return <AIAdGenerator />;
       case "case-studies":
         return <CaseStudyBuilderPanel />;
+      case "client-health":
+        return <ClientHealthDashboard />;
       case "settings":
         return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
@@ -1126,6 +1129,7 @@ const Admin = () => {
       "lead-scoring": "AI Lead Scoring",
       "ad-generator": "AI Ad Generator",
       "case-studies": "Case Study Builder",
+      "client-health": "Client Health",
       settings: "Admin Settings",
     };
     return titles[activeSection];
