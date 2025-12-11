@@ -52,6 +52,7 @@ import { TaskTemplatesPanel } from "@/components/admin/TaskTemplatesPanel";
 import { ClientTasksPanel } from "@/components/admin/ClientTasksPanel";
 import { OnboardingAutomationPanel } from "@/components/admin/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/IntegrationConfigPanel";
+import SeoAnalysisDashboard from "@/components/admin/SeoAnalysisDashboard";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1048,6 +1049,8 @@ const Admin = () => {
         return <TaskTemplatesPanel />;
       case "client-tasks":
         return <ClientTasksPanel />;
+      case "seo-dashboard":
+        return <SeoAnalysisDashboard />;
       case "onboarding":
         return <OnboardingAutomationPanel />;
       case "integrations":
@@ -1098,6 +1101,7 @@ const Admin = () => {
       integrations: "Integrations",
       "content-review": "Content Review",
       "reports-review": "Reports Review",
+      "seo-dashboard": "SEO Dashboard",
       settings: "Admin Settings",
     };
     return titles[activeSection];
