@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PricingTierModal } from "@/components/PricingTierModal";
+import { TierInterestForm } from "@/components/TierInterestForm";
 const plans = [
   {
     name: "SYSTEM Foundation",
@@ -99,12 +100,13 @@ const faqs = [
 
 export default function Pricing() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [interestPlan, setInterestPlan] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <PricingTierModal planName={selectedPlan} onClose={() => setSelectedPlan(null)} />
-      <Header />
+      <PricingTierModal planName={selectedPlan} onClose={() => setSelectedPlan(null)} onGetStarted={(plan) => { setSelectedPlan(null); setInterestPlan(plan); }} />
+      <TierInterestForm tierName={interestPlan} onClose={() => setInterestPlan(null)} />
       
       <main className="pt-32 pb-20">
         <div className="container-wide mx-auto px-4">
@@ -206,12 +208,13 @@ export default function Pricing() {
                           ? "bg-primary hover:bg-primary/90" 
                           : "bg-secondary text-foreground hover:bg-secondary/80"
                       }`}
-                      asChild
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInterestPlan(plan.name);
+                      }}
                     >
-                      <Link to="/schedule">
-                        {plan.cta}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
+                      {plan.cta}
+                      <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </CardContent>
                 </Card>

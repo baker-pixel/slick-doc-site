@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowRight, Check, Zap, Star, Crown } from "lucide-react";
-import { Link } from "react-router-dom";
+
 
 interface FeatureDetail {
   title: string;
@@ -159,9 +159,10 @@ const planDetails: Record<string, PlanDetails> = {
 interface PricingTierModalProps {
   planName: string | null;
   onClose: () => void;
+  onGetStarted?: (planName: string) => void;
 }
 
-export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
+export function PricingTierModal({ planName, onClose, onGetStarted }: PricingTierModalProps) {
   const plan = planName ? planDetails[planName] : null;
 
   if (!plan) return null;
@@ -226,11 +227,13 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
         </div>
 
         <div className="p-6 pt-4 border-t border-border bg-background shrink-0">
-          <Button size="lg" className="w-full" asChild>
-            <Link to="/schedule">
-              Get Started with {plan.name}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
+          <Button 
+            size="lg" 
+            className="w-full" 
+            onClick={() => onGetStarted ? onGetStarted(plan.name) : null}
+          >
+            Get Started with {plan.name}
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
       </DialogContent>
