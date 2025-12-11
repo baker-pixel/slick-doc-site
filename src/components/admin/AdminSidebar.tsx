@@ -84,6 +84,10 @@ export type AdminSection =
   | "ad-generator"
   | "case-studies"
   | "client-health"
+  | "website-personalization"
+  | "quality-assurance"
+  | "before-after"
+  | "sales-proposals"
   | "settings";
 
 interface AdminSidebarProps {
@@ -118,7 +122,7 @@ const emailNavItems = [
   { id: "campaigns" as const, label: "Campaigns", icon: Send },
 ];
 
-import { Rocket, Link2, ListChecks, Trophy, BookOpen, HeartPulse } from "lucide-react";
+import { Rocket, Link2, ListChecks, Trophy, BookOpen, HeartPulse, Wand2, ShieldCheck, GitCompare, FileSpreadsheet } from "lucide-react";
 
 const automationNavItems = [
   { id: "onboarding" as const, label: "Client Onboarding", icon: Rocket },
@@ -133,6 +137,10 @@ const automationNavItems = [
   { id: "ad-generator" as const, label: "AI Ad Generator", icon: Megaphone },
   { id: "case-studies" as const, label: "Case Studies", icon: BookOpen },
   { id: "client-health" as const, label: "Client Health", icon: HeartPulse },
+  { id: "website-personalization" as const, label: "Personalization", icon: Wand2 },
+  { id: "quality-assurance" as const, label: "QA Checks", icon: ShieldCheck },
+  { id: "before-after" as const, label: "Before & After", icon: GitCompare },
+  { id: "sales-proposals" as const, label: "Sales Proposals", icon: FileSpreadsheet },
 ];
 
 const advancedNavItems = [

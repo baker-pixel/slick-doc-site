@@ -60,6 +60,10 @@ import LeadScoringPanel from "@/components/admin/LeadScoringPanel";
 import AIAdGenerator from "@/components/admin/AIAdGenerator";
 import CaseStudyBuilderPanel from "@/components/admin/CaseStudyBuilderPanel";
 import ClientHealthDashboard from "@/components/admin/ClientHealthDashboard";
+import WebsitePersonalizationPanel from "@/components/admin/WebsitePersonalizationPanel";
+import QualityAssurancePanel from "@/components/admin/QualityAssurancePanel";
+import BeforeAfterShowcasePanel from "@/components/admin/BeforeAfterShowcasePanel";
+import SalesProposalPanel from "@/components/admin/SalesProposalPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1080,6 +1084,14 @@ const Admin = () => {
         return <CaseStudyBuilderPanel />;
       case "client-health":
         return <ClientHealthDashboard />;
+      case "website-personalization":
+        return <WebsitePersonalizationPanel />;
+      case "quality-assurance":
+        return <QualityAssurancePanel />;
+      case "before-after":
+        return <BeforeAfterShowcasePanel />;
+      case "sales-proposals":
+        return <SalesProposalPanel />;
       case "settings":
         return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
@@ -1130,6 +1142,10 @@ const Admin = () => {
       "ad-generator": "AI Ad Generator",
       "case-studies": "Case Study Builder",
       "client-health": "Client Health",
+      "website-personalization": "Website Personalization",
+      "quality-assurance": "AI Quality Assurance",
+      "before-after": "Before & After Showcase",
+      "sales-proposals": "AI Sales Proposals",
       settings: "Admin Settings",
     };
     return titles[activeSection];
