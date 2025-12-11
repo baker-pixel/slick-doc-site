@@ -2224,6 +2224,108 @@ export type Database = {
           },
         ]
       }
+      learning_content: {
+        Row: {
+          content_body: string | null
+          content_type: string
+          content_url: string | null
+          created_at: string
+          description: string | null
+          difficulty_level: string | null
+          estimated_read_time: number | null
+          id: string
+          industry: string | null
+          is_featured: boolean | null
+          is_published: boolean | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          view_count: number | null
+        }
+        Insert: {
+          content_body?: string | null
+          content_type?: string
+          content_url?: string | null
+          created_at?: string
+          description?: string | null
+          difficulty_level?: string | null
+          estimated_read_time?: number | null
+          id?: string
+          industry?: string | null
+          is_featured?: boolean | null
+          is_published?: boolean | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          view_count?: number | null
+        }
+        Update: {
+          content_body?: string | null
+          content_type?: string
+          content_url?: string | null
+          created_at?: string
+          description?: string | null
+          difficulty_level?: string | null
+          estimated_read_time?: number | null
+          id?: string
+          industry?: string | null
+          is_featured?: boolean | null
+          is_published?: boolean | null
+          tags?: string[] | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          view_count?: number | null
+        }
+        Relationships: []
+      }
+      learning_progress: {
+        Row: {
+          client_account_id: string
+          completed_at: string | null
+          content_id: string
+          created_at: string
+          id: string
+          is_bookmarked: boolean | null
+          viewed_at: string | null
+        }
+        Insert: {
+          client_account_id: string
+          completed_at?: string | null
+          content_id: string
+          created_at?: string
+          id?: string
+          is_bookmarked?: boolean | null
+          viewed_at?: string | null
+        }
+        Update: {
+          client_account_id?: string
+          completed_at?: string | null
+          content_id?: string
+          created_at?: string
+          id?: string
+          is_bookmarked?: boolean | null
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_progress_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_progress_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "learning_content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       page_speed_results: {
         Row: {
           client_account_id: string
@@ -3038,6 +3140,56 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      voice_memos: {
+        Row: {
+          audio_duration: number | null
+          audio_url: string
+          client_account_id: string
+          context: string | null
+          created_at: string
+          id: string
+          is_read: boolean | null
+          related_id: string | null
+          transcript: string | null
+          transcription_status: string | null
+          user_id: string
+        }
+        Insert: {
+          audio_duration?: number | null
+          audio_url: string
+          client_account_id: string
+          context?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          related_id?: string | null
+          transcript?: string | null
+          transcription_status?: string | null
+          user_id: string
+        }
+        Update: {
+          audio_duration?: number | null
+          audio_url?: string
+          client_account_id?: string
+          context?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          related_id?: string | null
+          transcript?: string | null
+          transcription_status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_memos_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
