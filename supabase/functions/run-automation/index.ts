@@ -306,7 +306,7 @@ async function runPageSpeedTest(supabase: any, client: ClientData) {
     return { tested: true, scoreMobile: score };
   } catch (error) {
     console.error("PageSpeed test error:", error);
-    return { tested: false, error: error.message };
+    return { tested: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
 
