@@ -73,6 +73,7 @@ export type AdminSection =
   | "onboarding"
   | "integrations"
   | "content-review"
+  | "marketing-os"
   | "reports-review"
   | "seo-dashboard"
   | "settings";
@@ -115,6 +116,7 @@ const automationNavItems = [
   { id: "automation" as const, label: "Automation Jobs", icon: Bot },
   { id: "integrations" as const, label: "Integrations", icon: Link2 },
   { id: "seo-dashboard" as const, label: "SEO Dashboard", icon: BarChart3 },
+  { id: "marketing-os" as const, label: "Marketing OS", icon: Target },
 ];
 
 const advancedNavItems = [

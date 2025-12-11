@@ -53,6 +53,7 @@ import { ClientTasksPanel } from "@/components/admin/ClientTasksPanel";
 import { OnboardingAutomationPanel } from "@/components/admin/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/IntegrationConfigPanel";
 import SeoAnalysisDashboard from "@/components/admin/SeoAnalysisDashboard";
+import { MarketingOSDashboard } from "@/components/admin/MarketingOSDashboard";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1059,6 +1060,8 @@ const Admin = () => {
         return <ContentReviewPanel />;
       case "reports-review":
         return <ReportsReviewPanel />;
+      case "marketing-os":
+        return <MarketingOSDashboard />;
       case "settings":
         return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
@@ -1102,6 +1105,7 @@ const Admin = () => {
       "content-review": "Content Review",
       "reports-review": "Reports Review",
       "seo-dashboard": "SEO Dashboard",
+      "marketing-os": "Marketing OS",
       settings: "Admin Settings",
     };
     return titles[activeSection];
