@@ -895,6 +895,89 @@ export type Database = {
           },
         ]
       }
+      client_portal_preferences: {
+        Row: {
+          accent_color: string
+          activity_widget_types: string[] | null
+          client_account_id: string
+          created_at: string
+          default_landing_page: string
+          email_notifications: boolean
+          hidden_tabs: string[] | null
+          id: string
+          layout_density: string
+          notification_digest: string
+          notify_on_approvals: boolean
+          notify_on_deliverables: boolean
+          notify_on_invoices: boolean
+          notify_on_meetings: boolean
+          notify_on_messages: boolean
+          pinned_sections: string[] | null
+          show_analytics_summary: boolean
+          show_quick_actions: boolean
+          sidebar_order: string[] | null
+          theme: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string
+          activity_widget_types?: string[] | null
+          client_account_id: string
+          created_at?: string
+          default_landing_page?: string
+          email_notifications?: boolean
+          hidden_tabs?: string[] | null
+          id?: string
+          layout_density?: string
+          notification_digest?: string
+          notify_on_approvals?: boolean
+          notify_on_deliverables?: boolean
+          notify_on_invoices?: boolean
+          notify_on_meetings?: boolean
+          notify_on_messages?: boolean
+          pinned_sections?: string[] | null
+          show_analytics_summary?: boolean
+          show_quick_actions?: boolean
+          sidebar_order?: string[] | null
+          theme?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accent_color?: string
+          activity_widget_types?: string[] | null
+          client_account_id?: string
+          created_at?: string
+          default_landing_page?: string
+          email_notifications?: boolean
+          hidden_tabs?: string[] | null
+          id?: string
+          layout_density?: string
+          notification_digest?: string
+          notify_on_approvals?: boolean
+          notify_on_deliverables?: boolean
+          notify_on_invoices?: boolean
+          notify_on_meetings?: boolean
+          notify_on_messages?: boolean
+          pinned_sections?: string[] | null
+          show_analytics_summary?: boolean
+          show_quick_actions?: boolean
+          sidebar_order?: string[] | null
+          theme?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_preferences_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_portal_users: {
         Row: {
           client_account_id: string

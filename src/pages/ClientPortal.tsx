@@ -27,6 +27,7 @@ import { ClientDeliverablesTab } from "@/components/client-portal/ClientDelivera
 import { ClientAgreementsTab } from "@/components/client-portal/ClientAgreementsTab";
 import ClientNotificationsTab from "@/components/client-portal/ClientNotificationsTab";
 import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
+import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
@@ -61,6 +62,7 @@ const tabTitles: Record<PortalTab, string> = {
   analytics: "Analytics",
   invoices: "Invoices",
   help: "Help & Guide",
+  settings: "Settings",
 };
 
 const tabDescriptions: Record<PortalTab, string> = {
@@ -79,6 +81,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   analytics: "View your performance metrics",
   invoices: "Manage billing and payments",
   help: "Learn how to use your portal",
+  settings: "Customize your portal experience",
 };
 
 export default function ClientPortal() {
@@ -244,6 +247,8 @@ export default function ClientPortal() {
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
       case "help":
         return <ClientHelpTab onStartTour={handleStartTour} />;
+      case "settings":
+        return <ClientSettingsTab userId={portalUser.user_id} clientAccountId={portalUser.client_account_id} />;
       default:
         return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
     }
@@ -365,12 +370,12 @@ export default function ClientPortal() {
                   )}
                 </Button>
                 
-                {/* Settings - Navigate to account section */}
+                {/* Settings */}
                 <Button 
                   variant="ghost" 
                   size="icon" 
                   className="h-9 w-9 rounded-xl hover:bg-muted/80 hidden sm:flex"
-                  onClick={() => setActiveTab("agreements")}
+                  onClick={() => setActiveTab("settings")}
                 >
                   <Settings className="h-4 w-4" />
                 </Button>
