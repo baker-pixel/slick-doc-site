@@ -16,7 +16,8 @@ import {
   LogOut,
   Sparkles,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  Settings
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,7 +50,8 @@ export type PortalTab =
   | "team" 
   | "analytics" 
   | "invoices"
-  | "help";
+  | "help"
+  | "settings";
 
 export interface BadgeCounts {
   notifications: number;
@@ -90,6 +92,7 @@ const accountItems = [
   { id: "brand" as const, label: "Brand Assets", icon: Palette },
   { id: "team" as const, label: "Team", icon: Users },
   { id: "invoices" as const, label: "Invoices", icon: Receipt },
+  { id: "settings" as const, label: "Settings", icon: Settings },
   { id: "help" as const, label: "Help & Guide", icon: HelpCircle },
 ];
 
