@@ -26,6 +26,9 @@ import { ClientTeamTab } from "@/components/client-portal/ClientTeamTab";
 import { ClientDeliverablesTab } from "@/components/client-portal/ClientDeliverablesTab";
 import { ClientAgreementsTab } from "@/components/client-portal/ClientAgreementsTab";
 import ClientNotificationsTab from "@/components/client-portal/ClientNotificationsTab";
+import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
+import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
+import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
 interface ClientPortalUser {
   id: string;
@@ -57,6 +60,7 @@ const tabTitles: Record<PortalTab, string> = {
   team: "Your Team",
   analytics: "Analytics",
   invoices: "Invoices",
+  help: "Help & Guide",
 };
 
 const tabDescriptions: Record<PortalTab, string> = {
@@ -74,6 +78,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   team: "Meet your dedicated team",
   analytics: "View your performance metrics",
   invoices: "Manage billing and payments",
+  help: "Learn how to use your portal",
 };
 
 export default function ClientPortal() {
@@ -87,6 +92,8 @@ export default function ClientPortal() {
   const [activeTab, setActiveTab] = useState<PortalTab>("activity");
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({ notifications: 0, messages: 0, approvals: 0 });
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   // Handle redirect in useEffect to avoid React warning
   useEffect(() => {
@@ -178,6 +185,14 @@ export default function ClientPortal() {
       
       setBadgeCounts(counts);
       setUnreadNotificationCount(counts.notifications);
+
+      // Check if this is the user's first visit
+      const welcomeKey = `portal_welcome_seen_${portalUserData.user_id}`;
+      const hasSeenWelcome = localStorage.getItem(welcomeKey);
+      if (!hasSeenWelcome) {
+        setShowWelcomeModal(true);
+        localStorage.setItem(welcomeKey, "true");
+      }
     } catch (error) {
       console.error("Error fetching portal user:", error);
       setShouldRedirect(true);
@@ -227,9 +242,19 @@ export default function ClientPortal() {
         return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
       case "invoices":
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
+      case "help":
+        return <ClientHelpTab onStartTour={handleStartTour} />;
       default:
         return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
     }
+  };
+
+  const handleStartTour = () => {
+    setShowTour(true);
+  };
+
+  const handleCloseTour = () => {
+    setShowTour(false);
   };
 
   const userInitials = clientName
@@ -263,7 +288,25 @@ export default function ClientPortal() {
   }
 
   return (
-    <SidebarProvider>
+    <>
+      {/* Welcome Modal for first-time users */}
+      <WelcomeModal
+        open={showWelcomeModal}
+        onClose={() => setShowWelcomeModal(false)}
+        onStartTour={handleStartTour}
+        clientName={clientName}
+        businessName={clientAccount?.business_name}
+      />
+
+      {/* Interactive Onboarding Tour */}
+      <OnboardingTour
+        active={showTour}
+        onClose={handleCloseTour}
+        onTabChange={setActiveTab}
+        currentTab={activeTab}
+      />
+
+      <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-muted/20 via-background to-muted/30">
         <ClientPortalSidebar
           activeTab={activeTab}
@@ -352,6 +395,7 @@ export default function ClientPortal() {
           </main>
         </SidebarInset>
       </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </>
   );
 }
