@@ -17,7 +17,8 @@ import {
   Sparkles,
   ChevronRight,
   HelpCircle,
-  Settings
+  Settings,
+  GraduationCap
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,7 +52,8 @@ export type PortalTab =
   | "analytics" 
   | "invoices"
   | "help"
-  | "settings";
+  | "settings"
+  | "learning";
 
 export interface BadgeCounts {
   notifications: number;
@@ -86,6 +88,7 @@ const contentItems = [
   { id: "approvals" as const, label: "Approvals", icon: FileCheck, badgeKey: "approvals" as const },
   { id: "deliverables" as const, label: "Deliverables", icon: Package },
   { id: "documents" as const, label: "Documents", icon: FolderOpen },
+  { id: "learning" as const, label: "Learning Hub", icon: GraduationCap },
 ];
 
 const accountItems = [
