@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { 
   Activity, 
   Bell, 
@@ -33,9 +34,11 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuBadge,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 export type AdminSection = 
   | "pipeline" 
@@ -132,6 +135,35 @@ const advancedNavItems = [
 ];
 
 export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarProps) {
+  const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
+
+  useEffect(() => {
+    // Fetch initial count
+    const fetchAlertCount = async () => {
+      const { count } = await supabase
+        .from("automation_alerts")
+        .select("*", { count: "exact", head: true })
+        .is("acknowledged_at", null);
+      setUnacknowledgedCount(count || 0);
+    };
+
+    fetchAlertCount();
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel("sidebar-alert-count")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "automation_alerts" },
+        () => fetchAlertCount()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -156,6 +188,11 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
                     <item.icon className="h-4 w-4" />
                     <span>{item.label}</span>
                   </SidebarMenuButton>
+                  {item.id === "alerts" && unacknowledgedCount > 0 && (
+                    <SidebarMenuBadge className="bg-red-500 text-white">
+                      {unacknowledgedCount}
+                    </SidebarMenuBadge>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
