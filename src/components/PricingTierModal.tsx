@@ -170,7 +170,7 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
 
   return (
     <Dialog open={!!planName} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] p-0">
+      <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col">
         <DialogHeader className="p-6 pb-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center gap-4">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
@@ -201,7 +201,7 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
           <DialogDescription className="mt-2">{plan.description}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[50vh]">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="p-6 space-y-4">
             <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               What's Included
@@ -225,7 +225,7 @@ export function PricingTierModal({ planName, onClose }: PricingTierModalProps) {
           </div>
         </ScrollArea>
 
-        <div className="p-6 pt-4 border-t border-border sticky bottom-0 bg-background">
+        <div className="p-6 pt-4 border-t border-border bg-background shrink-0">
           <Button size="lg" className="w-full" asChild>
             <Link to="/schedule">
               Get Started with {plan.name}
