@@ -15,7 +15,8 @@ import {
   FileSignature,
   LogOut,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  HelpCircle
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,7 +48,8 @@ export type PortalTab =
   | "brand" 
   | "team" 
   | "analytics" 
-  | "invoices";
+  | "invoices"
+  | "help";
 
 export interface BadgeCounts {
   notifications: number;
@@ -88,6 +90,7 @@ const accountItems = [
   { id: "brand" as const, label: "Brand Assets", icon: Palette },
   { id: "team" as const, label: "Team", icon: Users },
   { id: "invoices" as const, label: "Invoices", icon: Receipt },
+  { id: "help" as const, label: "Help & Guide", icon: HelpCircle },
 ];
 
 interface NavItemProps {
