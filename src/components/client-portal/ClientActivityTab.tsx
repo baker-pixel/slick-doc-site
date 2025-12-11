@@ -54,15 +54,20 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'file-text': FileText,
 };
 
-export function ClientActivityTab() {
+interface ClientActivityTabProps {
+  clientAccountId: string;
+}
+
+export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
   const queryClient = useQueryClient();
 
   const { data: activities, isLoading } = useQuery({
-    queryKey: ["client-activities"],
+    queryKey: ["client-activities", clientAccountId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("activity_feed")
         .select("*")
+        .eq("client_account_id", clientAccountId)
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -80,13 +85,14 @@ export function ClientActivityTab() {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'activity_feed'
+          table: 'activity_feed',
+          filter: `client_account_id=eq.${clientAccountId}`
         },
         (payload) => {
           const newActivity = payload.new as ActivityItem;
           
           // Update the query cache with the new activity
-          queryClient.setQueryData<ActivityItem[]>(["client-activities"], (oldData) => {
+          queryClient.setQueryData<ActivityItem[]>(["client-activities", clientAccountId], (oldData) => {
             if (!oldData) return [newActivity];
             // Add new activity at the beginning, keep limit of 50
             return [newActivity, ...oldData].slice(0, 50);
@@ -104,7 +110,7 @@ export function ClientActivityTab() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, clientAccountId]);
 
   if (isLoading) {
     return (
