@@ -79,6 +79,7 @@ export type AdminSection =
   | "reports-review"
   | "seo-dashboard"
   | "win-notifications"
+  | "lead-scoring"
   | "settings";
 
 interface AdminSidebarProps {
@@ -97,10 +98,13 @@ const mainNavItems = [
   { id: "activity-feed" as const, label: "Activity Feed", icon: List },
 ];
 
+import { Brain } from "lucide-react";
+
 const leadsNavItems = [
   { id: "contacts" as const, label: "Contacts", icon: Users },
   { id: "gap-analysis" as const, label: "Gap Analysis", icon: FileText },
   { id: "pdf-leads" as const, label: "PDF Leads", icon: Mail },
+  { id: "lead-scoring" as const, label: "Lead Scoring", icon: Brain },
 ];
 
 const emailNavItems = [
