@@ -246,9 +246,16 @@ export type Database = {
           created_at: string
           email: string
           first_name: string | null
+          google_place_id: string | null
+          google_review_url: string | null
           id: string
+          industry: string | null
+          intake_completed_at: string | null
+          kickoff_scheduled_at: string | null
           last_name: string | null
+          level: number | null
           onboarded_at: string | null
+          review_qr_image_url: string | null
           status: string
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -260,9 +267,16 @@ export type Database = {
           created_at?: string
           email: string
           first_name?: string | null
+          google_place_id?: string | null
+          google_review_url?: string | null
           id?: string
+          industry?: string | null
+          intake_completed_at?: string | null
+          kickoff_scheduled_at?: string | null
           last_name?: string | null
+          level?: number | null
           onboarded_at?: string | null
+          review_qr_image_url?: string | null
           status?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -274,9 +288,16 @@ export type Database = {
           created_at?: string
           email?: string
           first_name?: string | null
+          google_place_id?: string | null
+          google_review_url?: string | null
           id?: string
+          industry?: string | null
+          intake_completed_at?: string | null
+          kickoff_scheduled_at?: string | null
           last_name?: string | null
+          level?: number | null
           onboarded_at?: string | null
+          review_qr_image_url?: string | null
           status?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -316,6 +337,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "client_analytics_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_competitors: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          domain: string
+          id: string
+          name: string
+          notes: string | null
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          domain: string
+          id?: string
+          name: string
+          notes?: string | null
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          name?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_competitors_client_account_id_fkey"
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
@@ -369,6 +425,54 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_integrations: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          external_id: string | null
+          id: string
+          integration_config_id: string
+          is_active: boolean | null
+          settings: Json | null
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          integration_config_id: string
+          is_active?: boolean | null
+          settings?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          integration_config_id?: string
+          is_active?: boolean | null
+          settings?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_integrations_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_integrations_integration_config_id_fkey"
+            columns: ["integration_config_id"]
+            isOneToOne: false
+            referencedRelation: "integration_configs"
             referencedColumns: ["id"]
           },
         ]
@@ -568,6 +672,65 @@ export type Database = {
             foreignKeyName: "client_messages_client_account_id_fkey"
             columns: ["client_account_id"]
             isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_onboarding: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          crm_added_at: string | null
+          current_step: number | null
+          dashboard_created_at: string | null
+          id: string
+          intake_form_completed_at: string | null
+          intake_form_sent_at: string | null
+          kickoff_completed_at: string | null
+          kickoff_scheduled_at: string | null
+          notes: string | null
+          onboarding_completed_at: string | null
+          review_system_setup_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          crm_added_at?: string | null
+          current_step?: number | null
+          dashboard_created_at?: string | null
+          id?: string
+          intake_form_completed_at?: string | null
+          intake_form_sent_at?: string | null
+          kickoff_completed_at?: string | null
+          kickoff_scheduled_at?: string | null
+          notes?: string | null
+          onboarding_completed_at?: string | null
+          review_system_setup_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          crm_added_at?: string | null
+          current_step?: number | null
+          dashboard_created_at?: string | null
+          id?: string
+          intake_form_completed_at?: string | null
+          intake_form_sent_at?: string | null
+          kickoff_completed_at?: string | null
+          kickoff_scheduled_at?: string | null
+          notes?: string | null
+          onboarding_completed_at?: string | null
+          review_system_setup_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_onboarding_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: true
             referencedRelation: "client_accounts"
             referencedColumns: ["id"]
           },
@@ -779,6 +942,91 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_tasks: {
+        Row: {
+          assigned_to: string | null
+          automation_job_id: string | null
+          automation_type: string
+          category: string
+          client_account_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          instructions: string | null
+          name: string
+          notes: string | null
+          output_data: Json | null
+          status: string
+          task_template_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          automation_job_id?: string | null
+          automation_type?: string
+          category?: string
+          client_account_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          instructions?: string | null
+          name: string
+          notes?: string | null
+          output_data?: Json | null
+          status?: string
+          task_template_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          automation_job_id?: string | null
+          automation_type?: string
+          category?: string
+          client_account_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          instructions?: string | null
+          name?: string
+          notes?: string | null
+          output_data?: Json | null
+          status?: string
+          task_template_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_tasks_automation_job_id_fkey"
+            columns: ["automation_job_id"]
+            isOneToOne: false
+            referencedRelation: "automation_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_tasks_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_tasks_task_template_id_fkey"
+            columns: ["task_template_id"]
+            isOneToOne: false
+            referencedRelation: "task_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -1637,6 +1885,144 @@ export type Database = {
           },
         ]
       }
+      integration_configs: {
+        Row: {
+          api_key_encrypted: string | null
+          created_at: string
+          id: string
+          integration_type: string
+          is_active: boolean | null
+          name: string
+          settings: Json | null
+          updated_at: string
+        }
+        Insert: {
+          api_key_encrypted?: string | null
+          created_at?: string
+          id?: string
+          integration_type: string
+          is_active?: boolean | null
+          name: string
+          settings?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          api_key_encrypted?: string | null
+          created_at?: string
+          id?: string
+          integration_type?: string
+          is_active?: boolean | null
+          name?: string
+          settings?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      keyword_gap_results: {
+        Row: {
+          client_account_id: string
+          competitors: string[] | null
+          created_at: string
+          id: string
+          results: Json
+        }
+        Insert: {
+          client_account_id: string
+          competitors?: string[] | null
+          created_at?: string
+          id?: string
+          results?: Json
+        }
+        Update: {
+          client_account_id?: string
+          competitors?: string[] | null
+          created_at?: string
+          id?: string
+          results?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keyword_gap_results_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpi_dashboards: {
+        Row: {
+          client_account_id: string
+          config: Json
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          config?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          config?: Json
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_dashboards_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: true
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      page_speed_results: {
+        Row: {
+          client_account_id: string
+          core_web_vitals: Json | null
+          created_at: string
+          id: string
+          raw_data: Json | null
+          score_desktop: number | null
+          score_mobile: number | null
+          url: string
+        }
+        Insert: {
+          client_account_id: string
+          core_web_vitals?: Json | null
+          created_at?: string
+          id?: string
+          raw_data?: Json | null
+          score_desktop?: number | null
+          score_mobile?: number | null
+          url: string
+        }
+        Update: {
+          client_account_id?: string
+          core_web_vitals?: Json | null
+          created_at?: string
+          id?: string
+          raw_data?: Json | null
+          score_desktop?: number | null
+          score_mobile?: number | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_speed_results_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pdf_leads: {
         Row: {
           created_at: string
@@ -1734,6 +2120,123 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "client_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reporting_schedules: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          frequency: string
+          id: string
+          is_active: boolean | null
+          last_run_at: string | null
+          next_run_at: string | null
+          recipients: string[]
+          report_type: string
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          frequency?: string
+          id?: string
+          is_active?: boolean | null
+          last_run_at?: string | null
+          next_run_at?: string | null
+          recipients?: string[]
+          report_type?: string
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          frequency?: string
+          id?: string
+          is_active?: boolean | null
+          last_run_at?: string | null
+          next_run_at?: string | null
+          recipients?: string[]
+          report_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reporting_schedules_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_audits: {
+        Row: {
+          audit_type: string
+          client_account_id: string
+          created_at: string
+          id: string
+          results: Json
+          score: number | null
+        }
+        Insert: {
+          audit_type?: string
+          client_account_id: string
+          created_at?: string
+          id?: string
+          results?: Json
+          score?: number | null
+        }
+        Update: {
+          audit_type?: string
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          results?: Json
+          score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_audits_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_suggestions: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          id: string
+          period: string | null
+          status: string | null
+          suggestions: Json
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          id?: string
+          period?: string | null
+          status?: string | null
+          suggestions?: Json
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          period?: string | null
+          status?: string | null
+          suggestions?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_suggestions_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1843,6 +2346,54 @@ export type Database = {
           is_active?: boolean
           name?: string
           parsed_content?: Json | null
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      task_templates: {
+        Row: {
+          automation_type: string
+          category: string
+          created_at: string
+          description: string | null
+          estimated_minutes: number | null
+          frequency: string | null
+          id: string
+          instructions: string | null
+          is_active: boolean | null
+          name: string
+          order_index: number | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          automation_type?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          estimated_minutes?: number | null
+          frequency?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean | null
+          name: string
+          order_index?: number | null
+          tier: string
+          updated_at?: string
+        }
+        Update: {
+          automation_type?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          estimated_minutes?: number | null
+          frequency?: string | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean | null
+          name?: string
+          order_index?: number | null
           tier?: string
           updated_at?: string
         }
@@ -1961,6 +2512,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_tasks_for_client: {
+        Args: { p_client_id: string }
+        Returns: number
+      }
       get_optimal_send_hour: { Args: { p_timezone?: string }; Returns: number }
       has_role: {
         Args: {
