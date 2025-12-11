@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.send-client-notification]
 verify_jwt = false
+
+[functions.auto-run-client-tasks]
+verify_jwt = false
