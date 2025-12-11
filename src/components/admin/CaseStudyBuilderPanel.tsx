@@ -12,19 +12,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FileText, Plus, Trash2, Eye, Download, Sparkles, Image, BarChart3 } from "lucide-react";
 
+interface CaseStudyResults {
+  metrics: Array<{ label: string; before: string; after: string; improvement: string }>;
+  testimonial?: string;
+  testimonial_author?: string;
+}
+
 interface CaseStudy {
   id: string;
   client_account_id: string;
   title: string;
-  industry: string;
+  industry: string | null;
   challenge: string;
   solution: string;
-  results: {
-    metrics: Array<{ label: string; before: string; after: string; improvement: string }>;
-    testimonial?: string;
-    testimonial_author?: string;
-  };
-  status: "draft" | "published";
+  results: CaseStudyResults;
+  status: string;
   created_at: string;
 }
 
@@ -63,7 +65,10 @@ export default function CaseStudyBuilderPanel() {
         .select("*, client_accounts(business_name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as (CaseStudy & { client_accounts: { business_name: string } })[];
+      return (data || []).map(item => ({
+        ...item,
+        results: (item.results as unknown as CaseStudyResults) || { metrics: [] }
+      })) as (CaseStudy & { client_accounts: { business_name: string } | null })[];
     }
   });
 

@@ -240,6 +240,53 @@ export type Database = {
           },
         ]
       }
+      case_studies: {
+        Row: {
+          challenge: string
+          client_account_id: string
+          created_at: string
+          id: string
+          industry: string | null
+          results: Json
+          solution: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          challenge: string
+          client_account_id: string
+          created_at?: string
+          id?: string
+          industry?: string | null
+          results?: Json
+          solution: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          challenge?: string
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          industry?: string | null
+          results?: Json
+          solution?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_studies_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_accounts: {
         Row: {
           business_name: string
