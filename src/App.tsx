@@ -28,6 +28,7 @@ import Dashboard from "./pages/Dashboard";
 import EmailPreferences from "./pages/EmailPreferences";
 import ClientPortal from "./pages/ClientPortal";
 import ClientPortalAuth from "./pages/ClientPortalAuth";
+import Portfolio from "./pages/Portfolio";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ function AnimatedRoutes() {
         <Route path="/quick-assessment" element={<PageTransition><QuickAssessment /></PageTransition>} />
         <Route path="/quick-analysis" element={<PageTransition><QuickAnalysis /></PageTransition>} />
         <Route path="/about" element={<PageTransition><AboutUs /></PageTransition>} />
+        <Route path="/portfolio" element={<PageTransition><Portfolio /></PageTransition>} />
         <Route path="/schedule" element={<PageTransition><ScheduleCall /></PageTransition>} />
         <Route path="/system" element={<PageTransition><System /></PageTransition>} />
         <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />
