@@ -13,6 +13,7 @@ import { Loader2, CheckCircle, FileUp, Bell, Package } from "lucide-react";
 interface TaskCompletionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  adminPassword: string;
   task: {
     id: string;
     name: string;
@@ -25,7 +26,7 @@ interface TaskCompletionModalProps {
   onComplete: () => void;
 }
 
-export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: TaskCompletionModalProps) {
+export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, onComplete }: TaskCompletionModalProps) {
   const [loading, setLoading] = useState(false);
   const [createDeliverable, setCreateDeliverable] = useState(true);
   const [notifyClient, setNotifyClient] = useState(true);
@@ -71,23 +72,28 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
         throw new Error(`Task update failed: ${getErrorMessage(taskError)}`);
       }
 
-      // 2. Create deliverable if requested
+      // 2. Create deliverable if requested (use admin function to bypass RLS)
       if (createDeliverable && deliverableTitle) {
-        const { error: deliverableError } = await supabase.from("deliverables").insert({
-          client_account_id: task.client_account_id,
-          title: deliverableTitle,
-          description: deliverableDescription || `Deliverable from task: ${task.name}`,
-          category: deliverableCategory,
-          status: "pending_review",
+        const { error: deliverableFnError } = await supabase.functions.invoke("admin", {
+          body: {
+            action: "create_deliverable",
+            password: adminPassword,
+            data: {
+              client_account_id: task.client_account_id,
+              title: deliverableTitle,
+              description: deliverableDescription || `Deliverable from task: ${task.name}`,
+              category: deliverableCategory,
+            },
+          },
         });
 
-        if (deliverableError) {
-          console.error("Deliverable insert failed:", deliverableError);
-          throw new Error(`Deliverable creation failed: ${getErrorMessage(deliverableError)}`);
+        if (deliverableFnError) {
+          console.error("Deliverable creation (admin fn) failed:", deliverableFnError);
+          throw new Error(`Deliverable creation failed: ${getErrorMessage(deliverableFnError)}`);
         }
       }
 
-      // 3. Create client notification if requested
+      // 3. Create client notification if requested (use admin function to bypass RLS)
       if (notifyClient) {
         const notificationTitle =
           createDeliverable && deliverableTitle
@@ -99,20 +105,23 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
             ? "A new deliverable is ready for your review in the portal."
             : "Your team has completed a task. Check your portal for updates.";
 
-        const { error: notificationError } = await supabase
-          .from("client_notifications")
-          .insert({
-            client_account_id: task.client_account_id,
-            notification_type: createDeliverable ? "deliverable" : "task_complete",
-            title: notificationTitle,
-            description: notificationDescription,
-            priority: "high",
-            is_positive: true,
-          });
+        const { error: notificationFnError } = await supabase.functions.invoke("admin", {
+          body: {
+            action: "createClientNotification",
+            password: adminPassword,
+            notification: {
+              client_account_id: task.client_account_id,
+              notification_type: createDeliverable ? "deliverable" : "task_complete",
+              title: notificationTitle,
+              description: notificationDescription,
+              priority: "high",
+            },
+          },
+        });
 
-        if (notificationError) {
-          console.error("Notification insert failed:", notificationError);
-          throw new Error(`Client notification failed: ${getErrorMessage(notificationError)}`);
+        if (notificationFnError) {
+          console.error("Client notification (admin fn) failed:", notificationFnError);
+          throw new Error(`Client notification failed: ${getErrorMessage(notificationFnError)}`);
         }
       }
 
@@ -144,14 +153,14 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-500" />
             Complete Task
           </DialogTitle>
           <DialogDescription>
-            Complete "{task.name}" for {task.client_accounts?.business_name}
+            Complete "{task.name}" for {task.client_accounts?.business_name ?? "this client"}
           </DialogDescription>
         </DialogHeader>
 

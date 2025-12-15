@@ -1086,7 +1086,7 @@ const Admin = () => {
       case "task-templates":
         return <TaskTemplatesPanel />;
       case "client-tasks":
-        return <ClientTasksPanel />;
+        return <ClientTasksPanel adminPassword={storedPassword} />;
       case "seo-dashboard":
         return <SeoAnalysisDashboard />;
       case "onboarding":

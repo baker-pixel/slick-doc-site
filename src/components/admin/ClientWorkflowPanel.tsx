@@ -818,6 +818,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
       <TaskCompletionModal
         open={isCompletionModalOpen}
         onOpenChange={setIsCompletionModalOpen}
+        adminPassword={adminPassword}
         task={selectedTaskForCompletion}
         onComplete={handleTaskCompleted}
       />
