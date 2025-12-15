@@ -491,16 +491,17 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Check if client account already exists
+        // Check if client account already exists with same email AND business name
         const { data: existing } = await supabase
           .from("client_accounts")
           .select("id")
           .eq("email", email)
+          .eq("business_name", business_name)
           .maybeSingle();
 
         if (existing) {
           return new Response(
-            JSON.stringify({ error: "A client account with this email already exists", existingId: existing.id }),
+            JSON.stringify({ error: "A client account with this email and business name already exists", existingId: existing.id }),
             { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
