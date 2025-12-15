@@ -1182,6 +1182,72 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create_project_with_milestones": {
+        const {
+          client_account_id,
+          name,
+          description = null,
+          milestones = [],
+        } = data || {};
+
+        if (!client_account_id || !name) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id and name are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const startDate = new Date().toISOString().split("T")[0];
+
+        // Create the project first
+        const { data: project, error: projectError } = await supabase
+          .from("client_projects")
+          .insert({
+            client_account_id,
+            name,
+            description,
+            status: "in_progress",
+            start_date: startDate,
+            progress_percentage: 0,
+          })
+          .select()
+          .single();
+
+        if (projectError) throw projectError;
+
+        // Create milestones if any
+        if (milestones.length > 0) {
+          const milestonesToInsert = milestones.map((m: any, index: number) => {
+            const dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + (m.days_from_start || 0));
+            
+            return {
+              project_id: project.id,
+              name: m.name,
+              description: m.description || null,
+              due_date: dueDate.toISOString().split("T")[0],
+              status: "pending",
+              sort_order: m.sort_order ?? index,
+            };
+          });
+
+          const { error: milestonesError } = await supabase
+            .from("project_milestones")
+            .insert(milestonesToInsert);
+
+          if (milestonesError) {
+            console.error("Error creating milestones:", milestonesError);
+            // Don't fail the whole operation, project was created
+          }
+        }
+
+        console.log(`Created project "${name}" with ${milestones.length} milestones for client: ${client_account_id}`);
+        return new Response(
+          JSON.stringify({ data: { project, milestonesCount: milestones.length } }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
