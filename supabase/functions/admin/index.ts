@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, password, table, id, data } = await req.json();
+    const { action, password, table, id, data, approval, notification, taskId, updates, deliverableId } = await req.json();
     
     // Verify admin password
     const adminPassword = Deno.env.get("ADMIN_PASSWORD");
@@ -1433,7 +1433,6 @@ Deno.serve(async (req) => {
       }
 
       case "createContentApproval": {
-        const { approval } = await req.clone().json();
         if (!approval?.client_account_id || !approval?.title || !approval?.content_type) {
           return new Response(
             JSON.stringify({ error: "client_account_id, title, and content_type are required" }),
@@ -1463,7 +1462,6 @@ Deno.serve(async (req) => {
       }
 
       case "createClientNotification": {
-        const { notification } = await req.clone().json();
         if (!notification?.client_account_id || !notification?.title || !notification?.notification_type) {
           return new Response(
             JSON.stringify({ error: "client_account_id, title, and notification_type are required" }),
@@ -1493,7 +1491,6 @@ Deno.serve(async (req) => {
       }
 
       case "updateClientTask": {
-        const { taskId, updates } = await req.clone().json();
         if (!taskId) {
           return new Response(
             JSON.stringify({ error: "taskId is required" }),
@@ -1517,7 +1514,6 @@ Deno.serve(async (req) => {
       }
 
       case "updateDeliverable": {
-        const { deliverableId, updates } = await req.clone().json();
         if (!deliverableId) {
           return new Response(
             JSON.stringify({ error: "deliverableId is required" }),
