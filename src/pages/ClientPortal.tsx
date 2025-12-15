@@ -30,6 +30,7 @@ import ClientNotificationsTab from "@/components/client-portal/ClientNotificatio
 import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningHubTab";
+import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
@@ -60,6 +61,7 @@ const tabTitles: Record<PortalTab, string> = {
   documents: "Documents",
   agreements: "Agreements",
   brand: "Brand Assets",
+  access: "Platform Access",
   team: "Your Team",
   analytics: "Analytics",
   invoices: "Invoices",
@@ -80,6 +82,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   documents: "View and download your documents",
   agreements: "Manage your service agreements",
   brand: "Access your brand assets and guidelines",
+  access: "Share your platform login credentials securely",
   team: "Meet your dedicated team",
   analytics: "View your performance metrics",
   invoices: "Manage billing and payments",
@@ -253,6 +256,8 @@ export default function ClientPortal() {
         return <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />;
       case "brand":
         return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
+      case "access":
+        return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
       case "team":
         return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":

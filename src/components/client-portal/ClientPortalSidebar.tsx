@@ -18,7 +18,8 @@ import {
   ChevronRight,
   HelpCircle,
   Settings,
-  GraduationCap
+  GraduationCap,
+  KeyRound
 } from "lucide-react";
 import {
   Sidebar,
@@ -48,6 +49,7 @@ export type PortalTab =
   | "documents" 
   | "agreements" 
   | "brand" 
+  | "access"
   | "team" 
   | "analytics" 
   | "invoices"
@@ -94,6 +96,7 @@ const contentItems = [
 const accountItems = [
   { id: "agreements" as const, label: "Agreements", icon: FileSignature },
   { id: "brand" as const, label: "Brand Assets", icon: Palette },
+  { id: "access" as const, label: "Platform Access", icon: KeyRound },
   { id: "team" as const, label: "Team", icon: Users },
   { id: "invoices" as const, label: "Invoices", icon: Receipt },
   { id: "settings" as const, label: "Settings", icon: Settings },
