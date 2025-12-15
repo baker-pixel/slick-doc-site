@@ -581,16 +581,18 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
                         </div>
-                        {!step.isComplete && step.actionLabel && (
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
+                        {(step.actionLabel && (!step.isComplete || step.id === "project_setup")) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
                             className="flex-shrink-0"
                             disabled={actionLoading === step.id}
                             onClick={() => handleStepAction(step.id)}
                           >
                             {actionLoading === step.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : step.id === "project_setup" && step.isComplete ? (
+                              "Create Another Project"
                             ) : (
                               step.actionLabel
                             )}
