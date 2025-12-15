@@ -1142,6 +1142,46 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create_project": {
+        const {
+          client_account_id,
+          name,
+          description = null,
+          status = "in_progress",
+          start_date = null,
+          target_end_date = null,
+          progress_percentage = 0,
+        } = data || {};
+
+        if (!client_account_id || !name) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id and name are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: project, error } = await supabase
+          .from("client_projects")
+          .insert({
+            client_account_id,
+            name,
+            description,
+            status,
+            start_date: start_date || new Date().toISOString().split("T")[0],
+            target_end_date,
+            progress_percentage,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Created project: ${name} for client: ${client_account_id}`);
+        return new Response(
+          JSON.stringify({ data: project }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
