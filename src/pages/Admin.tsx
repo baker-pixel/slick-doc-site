@@ -392,7 +392,7 @@ const Admin = () => {
   const updateStatus = async (table: string, id: string, status: string) => {
     try {
       const { data, error } = await supabase.functions.invoke("admin", {
-        body: { action: "update", table, id, status, password: storedPassword },
+        body: { action: "update", table, id, data: { status }, password: storedPassword },
       });
 
       if (error) throw error;
