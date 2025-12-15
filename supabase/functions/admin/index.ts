@@ -1432,6 +1432,114 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "createContentApproval": {
+        const { approval } = await req.clone().json();
+        if (!approval?.client_account_id || !approval?.title || !approval?.content_type) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id, title, and content_type are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: newApproval, error } = await supabase
+          .from("content_approvals")
+          .insert({
+            client_account_id: approval.client_account_id,
+            title: approval.title,
+            content_type: approval.content_type,
+            content_preview: approval.content_preview || null,
+            full_content: approval.full_content || null,
+            status: approval.status || "pending",
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Created content approval: ${newApproval.id}`);
+        return new Response(
+          JSON.stringify({ data: newApproval }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "createClientNotification": {
+        const { notification } = await req.clone().json();
+        if (!notification?.client_account_id || !notification?.title || !notification?.notification_type) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id, title, and notification_type are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: newNotification, error } = await supabase
+          .from("client_notifications")
+          .insert({
+            client_account_id: notification.client_account_id,
+            title: notification.title,
+            description: notification.description || null,
+            notification_type: notification.notification_type,
+            priority: notification.priority || "medium",
+            is_read: false,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Created client notification: ${newNotification.id}`);
+        return new Response(
+          JSON.stringify({ data: newNotification }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "updateClientTask": {
+        const { taskId, updates } = await req.clone().json();
+        if (!taskId) {
+          return new Response(
+            JSON.stringify({ error: "taskId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: updatedTask, error } = await supabase
+          .from("client_tasks")
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq("id", taskId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Updated client task: ${taskId}`);
+        return new Response(
+          JSON.stringify({ data: updatedTask }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "updateDeliverable": {
+        const { deliverableId, updates } = await req.clone().json();
+        if (!deliverableId) {
+          return new Response(
+            JSON.stringify({ error: "deliverableId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: updatedDeliverable, error } = await supabase
+          .from("deliverables")
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq("id", deliverableId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log(`Updated deliverable: ${deliverableId}`);
+        return new Response(
+          JSON.stringify({ data: updatedDeliverable }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
