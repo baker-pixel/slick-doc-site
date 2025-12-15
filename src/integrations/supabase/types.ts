@@ -895,6 +895,56 @@ export type Database = {
           },
         ]
       }
+      client_platform_credentials: {
+        Row: {
+          additional_info: Json | null
+          client_account_id: string
+          created_at: string
+          id: string
+          login_url: string | null
+          notes: string | null
+          password: string | null
+          platform_name: string
+          platform_type: string
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          additional_info?: Json | null
+          client_account_id: string
+          created_at?: string
+          id?: string
+          login_url?: string | null
+          notes?: string | null
+          password?: string | null
+          platform_name: string
+          platform_type: string
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          additional_info?: Json | null
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          login_url?: string | null
+          notes?: string | null
+          password?: string | null
+          platform_name?: string
+          platform_type?: string
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_platform_credentials_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_portal_preferences: {
         Row: {
           accent_color: string
