@@ -379,6 +379,12 @@ const handler = async (req: Request): Promise<Response> => {
       let subject: string;
       let html: string;
 
+      // Skip if no template defined
+      if (!emailConfig.template) {
+        console.warn(`No template defined for email config:`, emailConfig);
+        continue;
+      }
+
       // Check if it's a custom template
       if (emailConfig.template.startsWith("custom:")) {
         const templateSlug = emailConfig.template.replace("custom:", "");
