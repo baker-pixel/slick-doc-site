@@ -22,7 +22,11 @@ interface PipelineMetrics {
   scheduledContent: number;
 }
 
-export default function PipelineDashboard() {
+interface PipelineDashboardProps {
+  adminPassword: string;
+}
+
+export default function PipelineDashboard({ adminPassword }: PipelineDashboardProps) {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [metrics, setMetrics] = useState<PipelineMetrics>({
     totalLeads: 0,
@@ -36,37 +40,54 @@ export default function PipelineDashboard() {
 
   useEffect(() => {
     fetchPipelineData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminPassword]);
 
   const fetchPipelineData = async () => {
-    try {
-      // Fetch pipeline stages
-      const { data: stagesData } = await supabase
-        .from("pipeline_stages")
-        .select("*")
-        .eq("is_active", true)
-        .order("stage_order");
+    if (!adminPassword) {
+      setStages([]);
+      setIsLoading(false);
+      return;
+    }
 
-      // Fetch contact counts per stage
-      const { data: contacts } = await supabase
-        .from("contact_submissions")
-        .select("pipeline_stage_id");
+    try {
+      // Use admin function to bypass RLS for internal admin dashboards
+      const [stagesRes, contactsRes] = await Promise.all([
+        supabase.functions.invoke("admin", {
+          body: { action: "list", table: "pipeline_stages", password: adminPassword },
+        }),
+        supabase.functions.invoke("admin", {
+          body: { action: "list", table: "contact_submissions", password: adminPassword },
+        }),
+      ]);
+
+      if (stagesRes.error) throw stagesRes.error;
+      if (contactsRes.error) throw contactsRes.error;
+      if ((stagesRes.data as any)?.error) throw new Error((stagesRes.data as any).error);
+      if ((contactsRes.data as any)?.error) throw new Error((contactsRes.data as any).error);
+
+      const stagesData = ((stagesRes.data as any)?.data || []) as Array<Omit<PipelineStage, "count">>;
+      const contacts = ((contactsRes.data as any)?.data || []) as Array<{ pipeline_stage_id: string | null }>;
+
+      const activeStages = stagesData
+        .filter((s: any) => s.is_active !== false)
+        .sort((a: any, b: any) => (a.stage_order ?? 0) - (b.stage_order ?? 0));
 
       // Count contacts per stage
       const stageCounts: Record<string, number> = {};
-      contacts?.forEach((c) => {
+      contacts.forEach((c) => {
         const stageId = c.pipeline_stage_id || "unassigned";
         stageCounts[stageId] = (stageCounts[stageId] || 0) + 1;
       });
 
-      const stagesWithCounts = (stagesData || []).map((stage) => ({
+      const stagesWithCounts = activeStages.map((stage: any) => ({
         ...stage,
         count: stageCounts[stage.id] || 0,
-      }));
+      })) as PipelineStage[];
 
       setStages(stagesWithCounts);
 
-      // Fetch metrics
+      // Keep the existing metrics logic (best-effort), but totalLeads should at least include contacts.
       const [emailLogs, trackingEvents, emailQueue, contentCalendar, gapAnalysis, pdfLeads] =
         await Promise.all([
           supabase.from("email_logs").select("id", { count: "exact" }),
@@ -81,10 +102,7 @@ export default function PipelineDashboard() {
       const clicks = trackingEvents.data?.filter((e) => e.event_type === "click").length || 0;
 
       setMetrics({
-        totalLeads:
-          (contacts?.length || 0) +
-          (gapAnalysis.count || 0) +
-          (pdfLeads.count || 0),
+        totalLeads: (contacts.length || 0) + (gapAnalysis.count || 0) + (pdfLeads.count || 0),
         emailsSent: emailLogs.count || 0,
         emailsOpened: opens,
         emailsClicked: clicks,

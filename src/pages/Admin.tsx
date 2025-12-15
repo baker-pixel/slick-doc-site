@@ -997,7 +997,7 @@ const Admin = () => {
   const renderActiveSection = () => {
     switch (activeSection) {
       case "pipeline":
-        return <PipelineDashboard />;
+        return <PipelineDashboard adminPassword={storedPassword} />;
       case "alerts":
         return <AutomationAlertsPanel />;
       case "quick-actions":
@@ -1098,7 +1098,7 @@ const Admin = () => {
       case "settings":
         return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
-        return <PipelineDashboard />;
+        return <PipelineDashboard adminPassword={storedPassword} />;
     }
   };
 
