@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -21,11 +20,11 @@ import {
   ClipboardCheck,
   Loader2,
   AlertCircle,
-  ChevronDown,
-  ChevronUp
+  ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { TaskCompletionModal } from "./TaskCompletionModal";
 
 interface ClientWorkflowPanelProps {
   adminPassword: string;
@@ -107,8 +106,8 @@ export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps)
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
-  const [completionNotes, setCompletionNotes] = useState("");
-  const [expandedTask, setExpandedTask] = useState<string | null>(null);
+  const [selectedTaskForCompletion, setSelectedTaskForCompletion] = useState<ClientTask | null>(null);
+  const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
 
   const selectedClient = useMemo(() => 
     clients.find(c => c.id === selectedClientId), 
@@ -235,38 +234,40 @@ export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps)
     }
   };
 
-  const handleCompleteTask = async (task: ClientTask) => {
-    setIsActionLoading(true);
-    try {
-      const { error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "updateClientTask",
-          password: adminPassword,
-          taskId: task.id,
-          updates: {
-            status: "completed",
-            completed_at: new Date().toISOString(),
-            notes: completionNotes || task.notes,
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      setTasks(prev => prev.map(t => 
-        t.id === task.id 
-          ? { ...t, status: "completed", completed_at: new Date().toISOString(), notes: completionNotes || t.notes }
-          : t
-      ));
-      setCompletionNotes("");
-      setCurrentTaskIndex(prev => prev + 1);
-      toast({ title: "Task completed!" });
-    } catch (error) {
-      console.error("Error completing task:", error);
-      toast({ title: "Error completing task", variant: "destructive" });
-    } finally {
-      setIsActionLoading(false);
-    }
+  const handleTaskCompleted = () => {
+    // Refresh tasks after completion
+    const refreshTasks = async () => {
+      try {
+        const tasksRes = await supabase.functions.invoke("admin", {
+          body: { action: "getClientTasks", password: adminPassword },
+        });
+        
+        const clientTasks = (tasksRes.data?.tasks || [])
+          .filter((t: ClientTask) => t.client_account_id === selectedClientId)
+          .sort((a: ClientTask, b: ClientTask) => 
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        
+        setTasks(clientTasks);
+        
+        // Find first incomplete task
+        const firstIncomplete = clientTasks.findIndex((t: ClientTask) => t.status !== "completed");
+        setCurrentTaskIndex(firstIncomplete >= 0 ? firstIncomplete : clientTasks.length - 1);
+        
+        // Also refresh deliverables
+        const deliverablesRes = await supabase.functions.invoke("admin", {
+          body: { action: "getDeliverables", password: adminPassword },
+        });
+        const clientDeliverables = (deliverablesRes.data?.deliverables || [])
+          .filter((d: Deliverable & { client_account_id: string }) => 
+            d.client_account_id === selectedClientId
+          );
+        setDeliverables(clientDeliverables);
+      } catch (error) {
+        console.error("Error refreshing tasks:", error);
+      }
+    };
+    refreshTasks();
   };
 
   const handleCompleteOnboardingStep = async (step: string) => {
@@ -321,7 +322,7 @@ export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps)
     }
   };
 
-  const currentTask = tasks[currentTaskIndex];
+  
 
   if (isLoading && clients.length === 0) {
     return (
@@ -522,114 +523,105 @@ export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps)
           {currentPhase === "tasks" && (
             <Card>
               <CardHeader>
-                <CardTitle>Current Task</CardTitle>
+                <CardTitle>Tasks</CardTitle>
                 <CardDescription>
-                  Task {currentTaskIndex + 1} of {tasks.length} — Complete each task before moving to the next
+                  {tasks.filter(t => t.status !== "completed").length} of {tasks.length} tasks remaining
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {currentTask ? (
+              <CardContent className="space-y-4">
+                {tasks.length > 0 ? (
                   <>
-                    {/* Current Task Detail */}
-                    <div className="p-6 rounded-lg border-2 border-primary bg-primary/5 space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <Badge className="mb-2">{currentTask.category}</Badge>
-                          <h3 className="text-xl font-semibold">{currentTask.name}</h3>
-                        </div>
-                        <Badge variant="outline">
-                          {currentTask.automation_type === "MANUAL" ? "Manual" : "Automated"}
-                        </Badge>
-                      </div>
+                    {/* Task List with Complete Actions */}
+                    <div className="space-y-3">
+                      {tasks.map((task, index) => {
+                        const isCurrentTask = index === currentTaskIndex;
+                        const isCompleted = task.status === "completed";
+                        const isLocked = index > currentTaskIndex && !isCompleted;
 
-                      {currentTask.description && (
-                        <div>
-                          <h4 className="text-sm font-medium text-muted-foreground mb-1">Description</h4>
-                          <p>{currentTask.description}</p>
-                        </div>
-                      )}
-
-                      {currentTask.instructions && (
-                        <div className="p-4 rounded-lg bg-muted/50">
-                          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                            <FileText className="h-4 w-4" />
-                            Instructions
-                          </h4>
-                          <p className="text-sm whitespace-pre-wrap">{currentTask.instructions}</p>
-                        </div>
-                      )}
-
-                      <div className="pt-4 border-t space-y-4">
-                        <div>
-                          <label className="text-sm font-medium block mb-2">Completion Notes (optional)</label>
-                          <Textarea
-                            value={completionNotes}
-                            onChange={(e) => setCompletionNotes(e.target.value)}
-                            placeholder="Add any notes about this task..."
-                            rows={3}
-                          />
-                        </div>
-                        <Button
-                          size="lg"
-                          className="w-full"
-                          onClick={() => handleCompleteTask(currentTask)}
-                          disabled={isActionLoading}
-                        >
-                          {isActionLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                          )}
-                          Mark as Complete
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Task List */}
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-medium text-muted-foreground">All Tasks</h4>
-                      {tasks.map((task, index) => (
-                        <div
-                          key={task.id}
-                          className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
-                            index === currentTaskIndex && "border-primary bg-primary/5",
-                            task.status === "completed" && "border-green-500/30 bg-green-500/5",
-                            index > currentTaskIndex && task.status !== "completed" && "opacity-50"
-                          )}
-                          onClick={() => {
-                            if (task.status === "completed" || index === currentTaskIndex) {
-                              setExpandedTask(expandedTask === task.id ? null : task.id);
-                            }
-                          }}
-                        >
-                          <div className={cn(
-                            "h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0",
-                            task.status === "completed" && "bg-green-500 text-white",
-                            task.status !== "completed" && index === currentTaskIndex && "bg-primary text-primary-foreground",
-                            task.status !== "completed" && index !== currentTaskIndex && "bg-muted"
-                          )}>
-                            {task.status === "completed" ? (
-                              <CheckCircle className="h-4 w-4" />
-                            ) : index === currentTaskIndex ? (
-                              <Circle className="h-3 w-3 fill-current" />
-                            ) : (
-                              <Lock className="h-3 w-3" />
+                        return (
+                          <div
+                            key={task.id}
+                            className={cn(
+                              "p-4 rounded-lg border transition-all",
+                              isCurrentTask && !isCompleted && "border-primary bg-primary/5",
+                              isCompleted && "border-green-500/30 bg-green-500/5",
+                              isLocked && "opacity-50"
                             )}
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className={cn(
+                                "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                                isCompleted && "bg-green-500 text-white",
+                                isCurrentTask && !isCompleted && "bg-primary text-primary-foreground",
+                                !isCurrentTask && !isCompleted && "bg-muted text-muted-foreground"
+                              )}>
+                                {isCompleted ? (
+                                  <CheckCircle className="h-5 w-5" />
+                                ) : isCurrentTask ? (
+                                  <span className="font-bold text-sm">{index + 1}</span>
+                                ) : (
+                                  <Lock className="h-4 w-4" />
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-xs">{task.category}</Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {task.automation_type === "MANUAL" ? "Manual" : "Automated"}
+                                  </Badge>
+                                </div>
+                                <h4 className={cn(
+                                  "font-medium",
+                                  isCompleted && "line-through text-muted-foreground"
+                                )}>
+                                  {task.name}
+                                </h4>
+                                {task.description && (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {task.description}
+                                  </p>
+                                )}
+                                {task.instructions && (
+                                  <div className="mt-2 p-3 rounded bg-muted/50 text-sm">
+                                    <div className="flex items-center gap-1 text-muted-foreground mb-1">
+                                      <FileText className="h-3 w-3" />
+                                      <span className="text-xs font-medium">Instructions:</span>
+                                    </div>
+                                    <p className="text-muted-foreground line-clamp-3">{task.instructions}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex-shrink-0">
+                                {isCompleted ? (
+                                  <Badge className="bg-green-500/10 text-green-500 border-green-500/30">
+                                    Done
+                                  </Badge>
+                                ) : isCurrentTask ? (
+                                  <Button
+                                    onClick={() => {
+                                      setSelectedTaskForCompletion({
+                                        ...task,
+                                        client_accounts: selectedClient ? { business_name: selectedClient.business_name } : undefined
+                                      } as any);
+                                      setIsCompletionModalOpen(true);
+                                    }}
+                                  >
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Complete Task
+                                  </Button>
+                                ) : (
+                                  <Badge variant="outline" className="text-muted-foreground">
+                                    <Lock className="h-3 w-3 mr-1" />
+                                    Locked
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <span className={cn(
-                            "flex-1 text-sm",
-                            task.status === "completed" && "line-through text-muted-foreground"
-                          )}>
-                            {task.name}
-                          </span>
-                          {expandedTask === task.id ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 ) : (
@@ -752,6 +744,14 @@ export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps)
           )}
         </>
       )}
+
+      {/* Task Completion Modal */}
+      <TaskCompletionModal
+        open={isCompletionModalOpen}
+        onOpenChange={setIsCompletionModalOpen}
+        task={selectedTaskForCompletion}
+        onComplete={handleTaskCompleted}
+      />
     </div>
   );
 }
