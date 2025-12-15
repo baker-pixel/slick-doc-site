@@ -67,6 +67,7 @@ import BeforeAfterShowcasePanel from "@/components/admin/BeforeAfterShowcasePane
 import SalesProposalPanel from "@/components/admin/SalesProposalPanel";
 import FeatureGuidePanel from "@/components/admin/FeatureGuidePanel";
 import { ClientPhaseTracker } from "@/components/admin/ClientPhaseTracker";
+import ClientProgressTracker from "@/components/admin/ClientProgressTracker";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
