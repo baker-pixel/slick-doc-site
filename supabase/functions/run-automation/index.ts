@@ -435,14 +435,27 @@ async function runSeoAudit(supabase: any, client: ClientData) {
     offPage: { score: 60, issues: ["Low domain authority", "Few backlinks"] },
   };
 
+  const overallScore = Math.round((auditResults.technical.score + auditResults.onPage.score + auditResults.offPage.score) / 3);
+
   await supabase.from("seo_audits").insert({
     client_account_id: client.id,
     audit_type: "full",
-    score: Math.round((auditResults.technical.score + auditResults.onPage.score + auditResults.offPage.score) / 3),
+    score: overallScore,
     results: auditResults,
   });
 
-  return { completed: true, results: auditResults };
+  // Create a deliverable so client can view the SEO audit results
+  const reportDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  await supabase.from("deliverables").insert({
+    client_account_id: client.id,
+    title: `SEO Audit Report - ${reportDate}`,
+    description: `Comprehensive SEO audit with overall score of ${overallScore}/100. Technical: ${auditResults.technical.score}, On-Page: ${auditResults.onPage.score}, Off-Page: ${auditResults.offPage.score}.`,
+    category: "report",
+    status: "pending_review",
+    file_url: JSON.stringify(auditResults), // Store results as JSON for now
+  });
+
+  return { completed: true, results: auditResults, deliverableCreated: true };
 }
 
 async function runKeywordGapAnalysis(supabase: any, client: ClientData) {
