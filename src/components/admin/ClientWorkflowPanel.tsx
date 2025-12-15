@@ -63,6 +63,14 @@ const getTargetSectionForTask = (taskName: string, taskCategory: string): AdminS
   const name = taskName.toLowerCase();
   const category = taskCategory.toLowerCase();
   
+  // Meeting/Call/Scheduling tasks -> Client Meetings
+  if (name.includes("call") || name.includes("meeting") || name.includes("schedule") ||
+      name.includes("strategy") || name.includes("check-in") || name.includes("checkin") ||
+      name.includes("consultation") || name.includes("weekly") || name.includes("bi-weekly") ||
+      name.includes("biweekly") || name.includes("monthly")) {
+    return "client-meetings";
+  }
+  
   // Blog/Content tasks -> Content Review (where they can generate content)
   if (name.includes("blog") || name.includes("article") || name.includes("post") || 
       name.includes("content creation") || name.includes("write")) {
