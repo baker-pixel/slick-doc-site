@@ -1002,7 +1002,16 @@ const Admin = () => {
   const renderActiveSection = () => {
     switch (activeSection) {
       case "client-workflow":
-        return <ClientWorkflowPanel adminPassword={storedPassword} />;
+        return <ClientWorkflowPanel 
+          adminPassword={storedPassword} 
+          onNavigateToSection={(section, context) => {
+            setActiveSection(section);
+            // Could store context for pre-selecting client in target section
+            if (context?.clientId) {
+              console.log("Navigating to section with client context:", context);
+            }
+          }}
+        />;
       case "pipeline":
         return <PipelineDashboard adminPassword={storedPassword} />;
       case "alerts":

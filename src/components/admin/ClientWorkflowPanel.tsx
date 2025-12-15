@@ -25,10 +25,28 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { TaskCompletionModal } from "./TaskCompletionModal";
+import { AdminSection } from "./AdminSidebar";
 
 interface ClientWorkflowPanelProps {
   adminPassword: string;
+  onNavigateToSection?: (section: AdminSection, context?: { clientId?: string; taskId?: string }) => void;
 }
+
+// Map task categories to admin sections for "Work on Task" navigation
+const taskCategoryToSection: Record<string, AdminSection> = {
+  "content": "content-review",
+  "blog": "content-review", 
+  "seo": "seo-dashboard",
+  "ads": "ad-generator",
+  "email": "campaigns",
+  "social": "calendar",
+  "reviews": "review-engine",
+  "analytics": "client-analytics",
+  "reporting": "reports-review",
+  "design": "deliverables",
+  "onboarding": "onboarding",
+  "general": "client-tasks",
+};
 
 interface ClientAccount {
   id: string;
@@ -96,7 +114,7 @@ const tierColors: Record<string, string> = {
   transform: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
 };
 
-export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps) {
+export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: ClientWorkflowPanelProps) {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [currentPhase, setCurrentPhase] = useState<WorkflowPhase>("onboarding");
@@ -593,24 +611,66 @@ export function ClientWorkflowPanel({ adminPassword }: ClientWorkflowPanelProps)
                                 )}
                               </div>
 
-                              <div className="flex-shrink-0">
+                              <div className="flex-shrink-0 flex flex-col gap-2">
                                 {isCompleted ? (
                                   <Badge className="bg-green-500/10 text-green-500 border-green-500/30">
                                     Done
                                   </Badge>
                                 ) : isCurrentTask ? (
-                                  <Button
-                                    onClick={() => {
-                                      setSelectedTaskForCompletion({
-                                        ...task,
-                                        client_accounts: selectedClient ? { business_name: selectedClient.business_name } : undefined
-                                      } as any);
-                                      setIsCompletionModalOpen(true);
-                                    }}
-                                  >
-                                    <ExternalLink className="h-4 w-4 mr-2" />
-                                    Complete Task
-                                  </Button>
+                                  <>
+                                    {/* Work on Task - navigates to appropriate tool */}
+                                    <Button
+                                      variant="default"
+                                      onClick={() => {
+                                        const category = task.category.toLowerCase();
+                                        const taskName = task.name.toLowerCase();
+                                        
+                                        // Determine the best section based on task category and name
+                                        let targetSection: AdminSection = taskCategoryToSection[category] || "client-tasks";
+                                        
+                                        // Override based on task name keywords
+                                        if (taskName.includes("blog") || taskName.includes("content") || taskName.includes("article")) {
+                                          targetSection = "content-review";
+                                        } else if (taskName.includes("ad") || taskName.includes("campaign")) {
+                                          targetSection = "ad-generator";
+                                        } else if (taskName.includes("seo") || taskName.includes("keyword")) {
+                                          targetSection = "seo-dashboard";
+                                        } else if (taskName.includes("email")) {
+                                          targetSection = "campaigns";
+                                        } else if (taskName.includes("review")) {
+                                          targetSection = "review-engine";
+                                        } else if (taskName.includes("report")) {
+                                          targetSection = "reports-review";
+                                        }
+                                        
+                                        if (onNavigateToSection) {
+                                          onNavigateToSection(targetSection, { 
+                                            clientId: task.client_account_id,
+                                            taskId: task.id 
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <ExternalLink className="h-4 w-4 mr-2" />
+                                      Work on Task
+                                    </Button>
+                                    
+                                    {/* Mark Complete - opens completion modal */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedTaskForCompletion({
+                                          ...task,
+                                          client_accounts: selectedClient ? { business_name: selectedClient.business_name } : undefined
+                                        } as any);
+                                        setIsCompletionModalOpen(true);
+                                      }}
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-2" />
+                                      Mark Complete
+                                    </Button>
+                                  </>
                                 ) : (
                                   <Badge variant="outline" className="text-muted-foreground">
                                     <Lock className="h-3 w-3 mr-1" />
