@@ -136,14 +136,29 @@ Deno.serve(async (req) => {
       }
 
       case "update": {
+        if (!data || Object.keys(data).length === 0) {
+          console.log("Update called with empty data object");
+          return new Response(
+            JSON.stringify({ error: "No data provided for update" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
         const { data: updated, error } = await supabase
           .from(table)
           .update(data)
           .eq("id", id)
           .select()
-          .single();
+          .maybeSingle();
         
         if (error) throw error;
+        if (!updated) {
+          console.log(`No record found to update in ${table} with id: ${id}`);
+          return new Response(
+            JSON.stringify({ error: "Record not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         console.log(`Updated ${table} record: ${id}`);
         return new Response(
           JSON.stringify({ data: updated }),
