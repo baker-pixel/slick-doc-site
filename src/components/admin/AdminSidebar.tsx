@@ -2,29 +2,13 @@ import { useState, useEffect } from "react";
 import { 
   Activity, 
   Bell, 
-  Zap, 
-  CalendarIcon, 
-  BarChart3, 
   Users, 
-  Send, 
   Settings,
-  FileText,
-  Mail,
   Briefcase,
-  Bot,
-  ClipboardCheck,
-  FileCheck,
+  ChevronDown,
+  ChevronRight,
+  PlayCircle,
   FolderOpen,
-  MessageCircle,
-  CalendarCheck,
-  ClipboardList,
-  Palette,
-  UserCircle,
-  FileSignature,
-  Receipt,
-  Target,
-  Star,
-  Megaphone
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,8 +21,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuBadge,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -98,83 +82,82 @@ interface AdminSidebarProps {
   onSectionChange: (section: AdminSection) => void;
 }
 
-import { List, BookOpen as BookOpenIcon } from "lucide-react";
-
-import { PlayCircle } from "lucide-react";
-
-const mainNavItems = [
+// Daily Work - The essentials
+const dailyWorkItems = [
   { id: "client-workflow" as const, label: "Client Workflow", icon: PlayCircle },
-  { id: "pipeline" as const, label: "Pipeline", icon: Activity },
-  { id: "alerts" as const, label: "Alerts", icon: Bell },
-  { id: "review-workflow" as const, label: "Review Workflow", icon: ClipboardCheck },
-  { id: "quick-actions" as const, label: "Quick Actions", icon: Zap },
-  { id: "calendar" as const, label: "Calendar", icon: CalendarIcon },
-  { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
-  { id: "activity-feed" as const, label: "Activity Feed", icon: List },
-  { id: "feature-guide" as const, label: "Feature Guide", icon: BookOpenIcon },
-];
-
-import { Brain } from "lucide-react";
-
-const leadsNavItems = [
-  { id: "contacts" as const, label: "Contacts", icon: Users },
-  { id: "gap-analysis" as const, label: "Gap Analysis", icon: FileText },
-  { id: "pdf-leads" as const, label: "PDF Leads", icon: Mail },
-  { id: "lead-scoring" as const, label: "Lead Scoring", icon: Brain },
-];
-
-const emailNavItems = [
-  { id: "emails" as const, label: "Email Admin", icon: Send },
-  { id: "templates" as const, label: "Templates", icon: FileText },
-  { id: "sequences" as const, label: "Sequences", icon: Mail },
-  { id: "campaigns" as const, label: "Campaigns", icon: Send },
-];
-
-import { Rocket, Link2, ListChecks, Trophy, BookOpen, HeartPulse, Wand2, ShieldCheck, GitCompare, FileSpreadsheet } from "lucide-react";
-
-const automationNavItems = [
-  { id: "onboarding" as const, label: "Client Onboarding", icon: Rocket },
-  { id: "task-templates" as const, label: "Task Templates", icon: ListChecks },
-  { id: "client-tasks" as const, label: "Client Tasks", icon: ClipboardList },
-  { id: "automation" as const, label: "Automation Jobs", icon: Bot },
-  { id: "integrations" as const, label: "Integrations", icon: Link2 },
-  { id: "seo-dashboard" as const, label: "SEO Dashboard", icon: BarChart3 },
-  { id: "marketing-os" as const, label: "Marketing OS", icon: Target },
-  { id: "review-engine" as const, label: "Review Engine", icon: Star },
-  { id: "win-notifications" as const, label: "Win Notifications", icon: Trophy },
-  { id: "ad-generator" as const, label: "AI Ad Generator", icon: Megaphone },
-  { id: "case-studies" as const, label: "Case Studies", icon: BookOpen },
-  { id: "client-health" as const, label: "Client Health", icon: HeartPulse },
-  { id: "website-personalization" as const, label: "Personalization", icon: Wand2 },
-  { id: "quality-assurance" as const, label: "QA Checks", icon: ShieldCheck },
-  { id: "before-after" as const, label: "Before & After", icon: GitCompare },
-  { id: "sales-proposals" as const, label: "Sales Proposals", icon: FileSpreadsheet },
-];
-
-const advancedNavItems = [
   { id: "clients" as const, label: "Clients", icon: Briefcase },
-  { id: "client-projects" as const, label: "Projects", icon: Target },
-  { id: "client-analytics" as const, label: "Client Analytics", icon: BarChart3 },
-  { id: "client-invoices" as const, label: "Invoices", icon: Receipt },
-  { id: "client-messages" as const, label: "Messages", icon: MessageCircle },
-  { id: "client-meetings" as const, label: "Meetings", icon: CalendarCheck },
-  { id: "client-requests" as const, label: "Requests", icon: ClipboardList },
-  { id: "brand-assets" as const, label: "Brand Assets", icon: Palette },
-  { id: "team-directory" as const, label: "Team Directory", icon: UserCircle },
-  { id: "deliverables" as const, label: "Deliverables", icon: FileCheck },
-  { id: "service-agreements" as const, label: "Agreements", icon: FileSignature },
-  { id: "client-documents" as const, label: "Documents", icon: FolderOpen },
-  { id: "sops" as const, label: "SOPs", icon: FileCheck },
-  { id: "content-review" as const, label: "Content Review", icon: ClipboardCheck },
-  { id: "reports-review" as const, label: "Reports Review", icon: FileCheck },
-  { id: "settings" as const, label: "Settings", icon: Settings },
+  { id: "pipeline" as const, label: "Pipeline", icon: Activity },
+  { id: "contacts" as const, label: "Leads", icon: Users },
+  { id: "alerts" as const, label: "Alerts", icon: Bell },
+];
+
+// All other sections grouped into collapsible "More Tools"
+const moreToolsItems = [
+  { id: "review-workflow" as const, label: "Review Workflow" },
+  { id: "quick-actions" as const, label: "Quick Actions" },
+  { id: "calendar" as const, label: "Calendar" },
+  { id: "analytics" as const, label: "Analytics" },
+  { id: "activity-feed" as const, label: "Activity Feed" },
+  { id: "gap-analysis" as const, label: "Gap Analysis" },
+  { id: "pdf-leads" as const, label: "PDF Leads" },
+  { id: "lead-scoring" as const, label: "Lead Scoring" },
+  { id: "emails" as const, label: "Email Admin" },
+  { id: "templates" as const, label: "Email Templates" },
+  { id: "sequences" as const, label: "Sequences" },
+  { id: "campaigns" as const, label: "Campaigns" },
+  { id: "client-tasks" as const, label: "Client Tasks" },
+  { id: "deliverables" as const, label: "Deliverables" },
+  { id: "client-projects" as const, label: "Projects" },
+  { id: "client-messages" as const, label: "Messages" },
+  { id: "client-meetings" as const, label: "Meetings" },
+  { id: "client-requests" as const, label: "Requests" },
+];
+
+const configItems = [
+  { id: "onboarding" as const, label: "Onboarding Setup" },
+  { id: "task-templates" as const, label: "Task Templates" },
+  { id: "automation" as const, label: "Automation Jobs" },
+  { id: "integrations" as const, label: "Integrations" },
+  { id: "sops" as const, label: "SOPs" },
+  { id: "client-analytics" as const, label: "Client Analytics" },
+  { id: "client-invoices" as const, label: "Invoices" },
+  { id: "client-documents" as const, label: "Documents" },
+  { id: "brand-assets" as const, label: "Brand Assets" },
+  { id: "team-directory" as const, label: "Team Directory" },
+  { id: "service-agreements" as const, label: "Agreements" },
+  { id: "content-review" as const, label: "Content Review" },
+  { id: "reports-review" as const, label: "Reports Review" },
+  { id: "seo-dashboard" as const, label: "SEO Dashboard" },
+  { id: "marketing-os" as const, label: "Marketing OS" },
+  { id: "review-engine" as const, label: "Review Engine" },
+  { id: "win-notifications" as const, label: "Win Notifications" },
+  { id: "ad-generator" as const, label: "AI Ad Generator" },
+  { id: "case-studies" as const, label: "Case Studies" },
+  { id: "client-health" as const, label: "Client Health" },
+  { id: "website-personalization" as const, label: "Personalization" },
+  { id: "quality-assurance" as const, label: "QA Checks" },
+  { id: "before-after" as const, label: "Before & After" },
+  { id: "sales-proposals" as const, label: "Sales Proposals" },
+  { id: "feature-guide" as const, label: "Feature Guide" },
+  { id: "settings" as const, label: "Settings" },
 ];
 
 export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarProps) {
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+
+  // Auto-expand if active section is in a collapsed group
+  useEffect(() => {
+    if (moreToolsItems.some(item => item.id === activeSection)) {
+      setMoreToolsOpen(true);
+    }
+    if (configItems.some(item => item.id === activeSection)) {
+      setConfigOpen(true);
+    }
+  }, [activeSection]);
 
   useEffect(() => {
-    // Fetch initial count
     const fetchAlertCount = async () => {
       const { count } = await supabase
         .from("automation_alerts")
@@ -185,7 +168,6 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
 
     fetchAlertCount();
 
-    // Subscribe to changes
     const channel = supabase
       .channel("sidebar-alert-count")
       .on(
@@ -210,11 +192,12 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
       </SidebarHeader>
       
       <SidebarContent>
+        {/* Daily Work - Always visible */}
         <SidebarGroup>
-          <SidebarGroupLabel>Overview</SidebarGroupLabel>
+          <SidebarGroupLabel>Daily Work</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
+              {dailyWorkItems.map((item) => (
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
                     isActive={activeSection === item.id}
@@ -235,84 +218,74 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* More Tools - Collapsible */}
         <SidebarGroup>
-          <SidebarGroupLabel>Leads</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {leadsNavItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeSection === item.id}
-                    onClick={() => onSectionChange(item.id)}
-                    tooltip={item.label}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <Collapsible open={moreToolsOpen} onOpenChange={setMoreToolsOpen}>
+            <CollapsibleTrigger asChild>
+              <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1.5 flex items-center justify-between group-data-[collapsible=icon]:justify-center">
+                <span className="group-data-[collapsible=icon]:hidden">More Tools</span>
+                <FolderOpen className="h-4 w-4 hidden group-data-[collapsible=icon]:block" />
+                {moreToolsOpen ? (
+                  <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                )}
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {moreToolsItems.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        isActive={activeSection === item.id}
+                        onClick={() => onSectionChange(item.id)}
+                        tooltip={item.label}
+                        className="pl-4"
+                      >
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
 
+        {/* Config & Settings - Collapsible */}
         <SidebarGroup>
-          <SidebarGroupLabel>Email</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {emailNavItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeSection === item.id}
-                    onClick={() => onSectionChange(item.id)}
-                    tooltip={item.label}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Automation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {automationNavItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeSection === item.id}
-                    onClick={() => onSectionChange(item.id)}
-                    tooltip={item.label}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Client Management</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {advancedNavItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    isActive={activeSection === item.id}
-                    onClick={() => onSectionChange(item.id)}
-                    tooltip={item.label}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
+            <CollapsibleTrigger asChild>
+              <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1.5 flex items-center justify-between group-data-[collapsible=icon]:justify-center">
+                <span className="group-data-[collapsible=icon]:hidden">Config & Settings</span>
+                <Settings className="h-4 w-4 hidden group-data-[collapsible=icon]:block" />
+                {configOpen ? (
+                  <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                )}
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {configItems.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        isActive={activeSection === item.id}
+                        onClick={() => onSectionChange(item.id)}
+                        tooltip={item.label}
+                        className="pl-4"
+                      >
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
