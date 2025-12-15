@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Calendar, Clock, Link as LinkIcon, RefreshCw, Video, Phone, Users, Search, Edit2, ExternalLink, Plus, Loader2 } from "lucide-react";
+import { Calendar, Clock, Link as LinkIcon, RefreshCw, Video, Phone, Users, Search, Edit2, ExternalLink, Plus, Loader2, ArrowLeft } from "lucide-react";
 
 interface ClientMeeting {
   id: string;
@@ -255,25 +255,36 @@ const ClientMeetingsAdminPanel = () => {
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Client Meetings
-            </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              {upcomingCount} upcoming · {todayCount} today
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => setCreateDialogOpen(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Schedule Meeting
-            </Button>
-            <Button onClick={fetchMeetings} variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+        <div className="flex flex-col gap-4">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => window.history.back()}
+            className="w-fit gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Client Meetings
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                {upcomingCount} upcoming · {todayCount} today
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Schedule Meeting
+              </Button>
+              <Button onClick={fetchMeetings} variant="outline" size="sm">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>
