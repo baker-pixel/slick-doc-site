@@ -36,7 +36,7 @@ interface ClientTask {
   };
 }
 
-export function ClientTasksPanel() {
+export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [clientFilter, setClientFilter] = useState("all");
@@ -592,6 +592,7 @@ export function ClientTasksPanel() {
         <TaskCompletionModal
           open={completionModalOpen}
           onOpenChange={setCompletionModalOpen}
+          adminPassword={adminPassword}
           task={taskToComplete}
           onComplete={fetchTasks}
         />
