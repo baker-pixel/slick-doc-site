@@ -34,9 +34,26 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
   const [deliverableCategory, setDeliverableCategory] = useState("general");
   const [completionNotes, setCompletionNotes] = useState("");
 
+  const getErrorMessage = (err: unknown) => {
+    if (!err) return "Unknown error";
+    if (err instanceof Error) return err.message;
+    if (typeof err === "string") return err;
+    if (typeof err === "object") {
+      const anyErr = err as any;
+      return (
+        anyErr.message ||
+        anyErr.error_description ||
+        anyErr.details ||
+        anyErr.hint ||
+        JSON.stringify(anyErr)
+      );
+    }
+    return String(err);
+  };
+
   const handleComplete = async () => {
     if (!task) return;
-    
+
     setLoading(true);
     try {
       // 1. Update task status
@@ -49,32 +66,38 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
         })
         .eq("id", task.id);
 
-      if (taskError) throw taskError;
+      if (taskError) {
+        console.error("Task update failed:", taskError);
+        throw new Error(`Task update failed: ${getErrorMessage(taskError)}`);
+      }
 
       // 2. Create deliverable if requested
       if (createDeliverable && deliverableTitle) {
-        const { error: deliverableError } = await supabase
-          .from("deliverables")
-          .insert({
-            client_account_id: task.client_account_id,
-            title: deliverableTitle,
-            description: deliverableDescription || `Deliverable from task: ${task.name}`,
-            category: deliverableCategory,
-            status: "pending_review",
-          });
+        const { error: deliverableError } = await supabase.from("deliverables").insert({
+          client_account_id: task.client_account_id,
+          title: deliverableTitle,
+          description: deliverableDescription || `Deliverable from task: ${task.name}`,
+          category: deliverableCategory,
+          status: "pending_review",
+        });
 
-        if (deliverableError) throw deliverableError;
+        if (deliverableError) {
+          console.error("Deliverable insert failed:", deliverableError);
+          throw new Error(`Deliverable creation failed: ${getErrorMessage(deliverableError)}`);
+        }
       }
 
       // 3. Create client notification if requested
       if (notifyClient) {
-        const notificationTitle = createDeliverable && deliverableTitle
-          ? `New deliverable ready: ${deliverableTitle}`
-          : `Task completed: ${task.name}`;
-        
-        const notificationDescription = createDeliverable && deliverableTitle
-          ? "A new deliverable is ready for your review in the portal."
-          : "Your team has completed a task. Check your portal for updates.";
+        const notificationTitle =
+          createDeliverable && deliverableTitle
+            ? `New deliverable ready: ${deliverableTitle}`
+            : `Task completed: ${task.name}`;
+
+        const notificationDescription =
+          createDeliverable && deliverableTitle
+            ? "A new deliverable is ready for your review in the portal."
+            : "Your team has completed a task. Check your portal for updates.";
 
         const { error: notificationError } = await supabase
           .from("client_notifications")
@@ -88,7 +111,8 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
           });
 
         if (notificationError) {
-          console.error("Failed to create notification:", notificationError);
+          console.error("Notification insert failed:", notificationError);
+          throw new Error(`Client notification failed: ${getErrorMessage(notificationError)}`);
         }
       }
 
@@ -97,18 +121,20 @@ export function TaskCompletionModal({ open, onOpenChange, task, onComplete }: Ta
           ? "Task completed and deliverable created!"
           : "Task marked as complete!"
       );
-      
+
       // Reset form
       setDeliverableTitle("");
       setDeliverableDescription("");
       setCompletionNotes("");
       setCreateDeliverable(true);
       setNotifyClient(true);
-      
+
       onComplete();
       onOpenChange(false);
     } catch (err) {
-      toast.error(`Failed to complete task: ${err instanceof Error ? err.message : "Unknown error"}`);
+      const msg = getErrorMessage(err);
+      console.error("Task completion failed:", err);
+      toast.error(`Failed to complete task: ${msg}`);
     } finally {
       setLoading(false);
     }
