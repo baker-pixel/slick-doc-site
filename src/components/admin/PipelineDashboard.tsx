@@ -1,8 +1,29 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Users, Mail, MousePointerClick, Calendar, TrendingUp } from "lucide-react";
+import { 
+  Loader2, Users, Mail, MousePointerClick, Calendar, TrendingUp, 
+  UserPlus, Eye, ChevronDown, ChevronUp, FileText, Building2 
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface PipelineStage {
   id: string;
@@ -22,12 +43,26 @@ interface PipelineMetrics {
   scheduledContent: number;
 }
 
+interface Lead {
+  id: string;
+  first_name: string;
+  last_name: string;
+  business_name: string;
+  email: string;
+  status: string;
+  created_at: string;
+  source: "gap_analysis" | "contact" | "pdf";
+  has_client_account?: boolean;
+  ai_analysis?: any;
+}
+
 interface PipelineDashboardProps {
   adminPassword: string;
 }
 
 export default function PipelineDashboard({ adminPassword }: PipelineDashboardProps) {
   const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [metrics, setMetrics] = useState<PipelineMetrics>({
     totalLeads: 0,
     emailsSent: 0,
@@ -37,6 +72,12 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
     scheduledContent: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [showLeads, setShowLeads] = useState(true);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isCreatingClient, setIsCreatingClient] = useState(false);
+  const [selectedTier, setSelectedTier] = useState("foundation");
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchPipelineData();
@@ -46,28 +87,81 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
   const fetchPipelineData = async () => {
     if (!adminPassword) {
       setStages([]);
+      setLeads([]);
       setIsLoading(false);
       return;
     }
 
     try {
       // Use admin function to bypass RLS for internal admin dashboards
-      const [stagesRes, contactsRes] = await Promise.all([
+      const [stagesRes, contactsRes, gapRes, clientsRes] = await Promise.all([
         supabase.functions.invoke("admin", {
           body: { action: "list", table: "pipeline_stages", password: adminPassword },
         }),
         supabase.functions.invoke("admin", {
           body: { action: "list", table: "contact_submissions", password: adminPassword },
         }),
+        supabase.functions.invoke("admin", {
+          body: { action: "list", table: "gap_analysis_submissions", password: adminPassword },
+        }),
+        supabase.functions.invoke("admin", {
+          body: { action: "list", table: "client_accounts", password: adminPassword },
+        }),
       ]);
 
       if (stagesRes.error) throw stagesRes.error;
       if (contactsRes.error) throw contactsRes.error;
-      if ((stagesRes.data as any)?.error) throw new Error((stagesRes.data as any).error);
-      if ((contactsRes.data as any)?.error) throw new Error((contactsRes.data as any).error);
+      if (gapRes.error) throw gapRes.error;
+      if (clientsRes.error) throw clientsRes.error;
 
       const stagesData = ((stagesRes.data as any)?.data || []) as Array<Omit<PipelineStage, "count">>;
-      const contacts = ((contactsRes.data as any)?.data || []) as Array<{ pipeline_stage_id: string | null }>;
+      const contacts = ((contactsRes.data as any)?.data || []) as Array<any>;
+      const gapAnalyses = ((gapRes.data as any)?.data || []) as Array<any>;
+      const clients = ((clientsRes.data as any)?.data || []) as Array<any>;
+
+      // Create a set of client emails for quick lookup
+      const clientEmails = new Set(clients.map((c: any) => c.email?.toLowerCase()));
+
+      // Build unified leads list
+      const allLeads: Lead[] = [];
+
+      // Add gap analysis submissions (these are the primary leads we care about)
+      gapAnalyses.forEach((gap: any) => {
+        allLeads.push({
+          id: gap.id,
+          first_name: gap.first_name || "",
+          last_name: gap.last_name || "",
+          business_name: gap.business_name || "",
+          email: gap.email || "",
+          status: gap.status || "submitted",
+          created_at: gap.created_at,
+          source: "gap_analysis",
+          has_client_account: clientEmails.has(gap.email?.toLowerCase()),
+          ai_analysis: gap.ai_analysis,
+        });
+      });
+
+      // Add contact submissions that don't have a matching gap analysis
+      const gapEmails = new Set(gapAnalyses.map((g: any) => g.email?.toLowerCase()));
+      contacts.forEach((contact: any) => {
+        if (!gapEmails.has(contact.email?.toLowerCase())) {
+          allLeads.push({
+            id: contact.id,
+            first_name: contact.first_name || "",
+            last_name: contact.last_name || "",
+            business_name: contact.business_name || "",
+            email: contact.email || "",
+            status: contact.status || "new",
+            created_at: contact.created_at,
+            source: "contact",
+            has_client_account: clientEmails.has(contact.email?.toLowerCase()),
+          });
+        }
+      });
+
+      // Sort by created_at desc
+      allLeads.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setLeads(allLeads);
 
       const activeStages = stagesData
         .filter((s: any) => s.is_active !== false)
@@ -75,7 +169,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
 
       // Count contacts per stage
       const stageCounts: Record<string, number> = {};
-      contacts.forEach((c) => {
+      contacts.forEach((c: any) => {
         const stageId = c.pipeline_stage_id || "unassigned";
         stageCounts[stageId] = (stageCounts[stageId] || 0) + 1;
       });
@@ -87,14 +181,13 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
 
       setStages(stagesWithCounts);
 
-      // Keep the existing metrics logic (best-effort), but totalLeads should at least include contacts.
-      const [emailLogs, trackingEvents, emailQueue, contentCalendar, gapAnalysis, pdfLeads] =
+      // Fetch metrics
+      const [emailLogs, trackingEvents, emailQueue, contentCalendar, pdfLeads] =
         await Promise.all([
           supabase.from("email_logs").select("id", { count: "exact" }),
           supabase.from("email_tracking_events").select("event_type"),
           supabase.from("email_queue").select("id", { count: "exact" }).eq("status", "pending"),
           supabase.from("content_calendar").select("id", { count: "exact" }).eq("status", "scheduled"),
-          supabase.from("gap_analysis_submissions").select("id", { count: "exact" }),
           supabase.from("pdf_leads").select("id", { count: "exact" }),
         ]);
 
@@ -102,7 +195,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
       const clicks = trackingEvents.data?.filter((e) => e.event_type === "click").length || 0;
 
       setMetrics({
-        totalLeads: (contacts.length || 0) + (gapAnalysis.count || 0) + (pdfLeads.count || 0),
+        totalLeads: allLeads.length + (pdfLeads.count || 0),
         emailsSent: emailLogs.count || 0,
         emailsOpened: opens,
         emailsClicked: clicks,
@@ -114,6 +207,109 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCreateClientAndInvite = async () => {
+    if (!selectedLead) return;
+
+    setIsCreatingClient(true);
+    try {
+      // 1. Create client account
+      const { data: createRes, error: createErr } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_client_account",
+          password: adminPassword,
+          data: {
+            email: selectedLead.email,
+            business_name: selectedLead.business_name,
+            first_name: selectedLead.first_name,
+            last_name: selectedLead.last_name,
+            tier: selectedTier,
+          },
+        },
+      });
+
+      if (createErr) throw createErr;
+      if ((createRes as any)?.error) throw new Error((createRes as any).error);
+
+      const clientAccountId = (createRes as any)?.data?.id;
+      if (!clientAccountId) throw new Error("Failed to create client account");
+
+      // 2. Create invitation
+      const { data: inviteRes, error: inviteErr } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_invitation",
+          password: adminPassword,
+          data: {
+            client_account_id: clientAccountId,
+            email: selectedLead.email,
+            first_name: selectedLead.first_name,
+            last_name: selectedLead.last_name,
+          },
+        },
+      });
+
+      if (inviteErr) throw inviteErr;
+      if ((inviteRes as any)?.error) throw new Error((inviteRes as any).error);
+
+      const inviteToken = (inviteRes as any)?.data?.token;
+
+      // 3. Send invitation email
+      const { error: sendErr } = await supabase.functions.invoke("send-client-invite", {
+        body: {
+          email: selectedLead.email,
+          firstName: selectedLead.first_name,
+          businessName: selectedLead.business_name,
+          inviteToken,
+        },
+      });
+
+      if (sendErr) throw sendErr;
+
+      toast({
+        title: "Client created & invite sent!",
+        description: `Invitation sent to ${selectedLead.email}`,
+      });
+
+      setIsInviteModalOpen(false);
+      setSelectedLead(null);
+      fetchPipelineData();
+    } catch (error: any) {
+      console.error("Error creating client:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create client and send invite",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingClient(false);
+    }
+  };
+
+  const getSourceBadge = (source: Lead["source"]) => {
+    switch (source) {
+      case "gap_analysis":
+        return <Badge variant="default" className="bg-purple-500">Gap Analysis</Badge>;
+      case "contact":
+        return <Badge variant="secondary">Contact Form</Badge>;
+      case "pdf":
+        return <Badge variant="outline">PDF Download</Badge>;
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const colors: Record<string, string> = {
+      submitted: "bg-blue-100 text-blue-800",
+      new: "bg-gray-100 text-gray-800",
+      contacted: "bg-yellow-100 text-yellow-800",
+      qualified: "bg-green-100 text-green-800",
+      converted: "bg-purple-100 text-purple-800",
+    };
+    return (
+      <Badge variant="outline" className={colors[status] || "bg-gray-100"}>
+        {status}
+      </Badge>
+    );
   };
 
   if (isLoading) {
@@ -239,6 +435,78 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
         </Card>
       </div>
 
+      {/* Leads List */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Recent Leads ({leads.length})
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowLeads(!showLeads)}
+            >
+              {showLeads ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+        </CardHeader>
+        {showLeads && (
+          <CardContent>
+            <div className="space-y-3">
+              {leads.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">No leads yet</p>
+              ) : (
+                leads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        {lead.source === "gap_analysis" ? (
+                          <FileText className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Building2 className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {lead.business_name || `${lead.first_name} ${lead.last_name}`.trim() || "Unknown"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{lead.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {getSourceBadge(lead.source)}
+                      {getStatusBadge(lead.status)}
+                      {lead.has_client_account ? (
+                        <Badge variant="default" className="bg-green-500">
+                          <Eye className="h-3 w-3 mr-1" />
+                          Client
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setIsInviteModalOpen(true);
+                          }}
+                        >
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          Create Client
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Automation Status */}
       <Card>
         <CardHeader>
@@ -270,6 +538,63 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
           </div>
         </CardContent>
       </Card>
+
+      {/* Create Client & Send Invite Modal */}
+      <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Client & Send Portal Invite</DialogTitle>
+          </DialogHeader>
+          {selectedLead && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="font-medium">{selectedLead.business_name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedLead.first_name} {selectedLead.last_name}
+                </p>
+                <p className="text-sm text-muted-foreground">{selectedLead.email}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Service Tier</Label>
+                <Select value={selectedTier} onValueChange={setSelectedTier}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="foundation">Foundation</SelectItem>
+                    <SelectItem value="growth">Growth</SelectItem>
+                    <SelectItem value="scale">Scale</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                This will create a client account and send an email invitation to access the client portal.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateClientAndInvite} disabled={isCreatingClient}>
+              {isCreatingClient ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Create & Send Invite
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

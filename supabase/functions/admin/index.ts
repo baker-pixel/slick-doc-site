@@ -481,6 +481,53 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create_client_account": {
+        const { email, business_name, first_name, last_name, tier, industry } = data || {};
+        
+        if (!email || !business_name) {
+          return new Response(
+            JSON.stringify({ error: "email and business_name are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Check if client account already exists
+        const { data: existing } = await supabase
+          .from("client_accounts")
+          .select("id")
+          .eq("email", email)
+          .maybeSingle();
+
+        if (existing) {
+          return new Response(
+            JSON.stringify({ error: "A client account with this email already exists", existingId: existing.id }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: newClient, error: insertError } = await supabase
+          .from("client_accounts")
+          .insert({
+            email,
+            business_name,
+            first_name: first_name || null,
+            last_name: last_name || null,
+            tier: tier || "foundation",
+            industry: industry || null,
+            status: "active",
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        console.log(`Created client account for ${business_name} (${email})`);
+        return new Response(
+          JSON.stringify({ data: newClient }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "delete_invitation": {
         const { error: deleteError } = await supabase
           .from("client_invitations")
