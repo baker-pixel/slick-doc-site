@@ -35,17 +35,108 @@ interface ClientWorkflowPanelProps {
 // Map task categories to admin sections for "Work on Task" navigation
 const taskCategoryToSection: Record<string, AdminSection> = {
   "content": "content-review",
-  "blog": "content-review", 
+  "blog": "content-review",
   "seo": "seo-dashboard",
   "ads": "ad-generator",
+  "advertising": "ad-generator",
+  "ppc": "ad-generator",
   "email": "campaigns",
   "social": "calendar",
   "reviews": "review-engine",
+  "reputation": "review-engine",
   "analytics": "client-analytics",
   "reporting": "reports-review",
+  "reports": "reports-review",
   "design": "deliverables",
   "onboarding": "onboarding",
+  "setup": "onboarding",
+  "branding": "brand-assets",
+  "brand": "brand-assets",
+  "website": "seo-dashboard",
+  "marketing": "content-review",
+  "automation": "automation",
   "general": "client-tasks",
+};
+
+// Enhanced keyword-based routing for more precise navigation
+const getTargetSectionForTask = (taskName: string, taskCategory: string): AdminSection => {
+  const name = taskName.toLowerCase();
+  const category = taskCategory.toLowerCase();
+  
+  // Blog/Content tasks -> Content Review (where they can generate content)
+  if (name.includes("blog") || name.includes("article") || name.includes("post") || 
+      name.includes("content creation") || name.includes("write")) {
+    return "content-review";
+  }
+  
+  // Ad/Campaign tasks -> AI Ad Generator
+  if (name.includes("ad ") || name.includes("ads") || name.includes("advertisement") || 
+      name.includes("google ads") || name.includes("facebook ads") || name.includes("ppc") ||
+      name.includes("paid media") || name.includes("display")) {
+    return "ad-generator";
+  }
+  
+  // SEO tasks -> SEO Dashboard
+  if (name.includes("seo") || name.includes("keyword") || name.includes("ranking") || 
+      name.includes("backlink") || name.includes("meta") || name.includes("sitemap") ||
+      name.includes("search engine") || name.includes("organic")) {
+    return "seo-dashboard";
+  }
+  
+  // Email tasks -> Campaigns
+  if (name.includes("email") || name.includes("newsletter") || name.includes("drip") ||
+      name.includes("sequence") || name.includes("nurture")) {
+    return "campaigns";
+  }
+  
+  // Review/Reputation tasks -> Review Engine
+  if (name.includes("review") || name.includes("reputation") || name.includes("testimonial") ||
+      name.includes("google business") || name.includes("gbp")) {
+    return "review-engine";
+  }
+  
+  // Social Media tasks -> Calendar
+  if (name.includes("social") || name.includes("instagram") || name.includes("facebook post") ||
+      name.includes("linkedin") || name.includes("twitter") || name.includes("tiktok")) {
+    return "calendar";
+  }
+  
+  // Analytics/Reporting tasks -> Reports Review
+  if (name.includes("report") || name.includes("analytics") || name.includes("dashboard") ||
+      name.includes("metrics") || name.includes("performance")) {
+    return "reports-review";
+  }
+  
+  // Branding tasks -> Brand Assets
+  if (name.includes("brand") || name.includes("logo") || name.includes("style guide") ||
+      name.includes("color") || name.includes("font")) {
+    return "brand-assets";
+  }
+  
+  // Onboarding/Setup tasks -> Onboarding
+  if (name.includes("onboard") || name.includes("setup") || name.includes("kickoff") ||
+      name.includes("intake") || name.includes("welcome")) {
+    return "onboarding";
+  }
+  
+  // Design/Deliverable tasks -> Deliverables
+  if (name.includes("design") || name.includes("deliverable") || name.includes("creative") ||
+      name.includes("graphic") || name.includes("banner")) {
+    return "deliverables";
+  }
+  
+  // Case study tasks -> Case Studies
+  if (name.includes("case study") || name.includes("success story")) {
+    return "case-studies";
+  }
+  
+  // Website tasks -> SEO Dashboard (for audits) or Quality Assurance
+  if (name.includes("website") || name.includes("landing page") || name.includes("web page")) {
+    return "seo-dashboard";
+  }
+  
+  // Fall back to category mapping
+  return taskCategoryToSection[category] || "client-tasks";
 };
 
 interface ClientAccount {
@@ -628,26 +719,8 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
                                     <Button
                                       variant="default"
                                       onClick={() => {
-                                        const category = task.category.toLowerCase();
-                                        const taskName = task.name.toLowerCase();
-                                        
-                                        // Determine the best section based on task category and name
-                                        let targetSection: AdminSection = taskCategoryToSection[category] || "client-tasks";
-                                        
-                                        // Override based on task name keywords
-                                        if (taskName.includes("blog") || taskName.includes("content") || taskName.includes("article")) {
-                                          targetSection = "content-review";
-                                        } else if (taskName.includes("ad") || taskName.includes("campaign")) {
-                                          targetSection = "ad-generator";
-                                        } else if (taskName.includes("seo") || taskName.includes("keyword")) {
-                                          targetSection = "seo-dashboard";
-                                        } else if (taskName.includes("email")) {
-                                          targetSection = "campaigns";
-                                        } else if (taskName.includes("review")) {
-                                          targetSection = "review-engine";
-                                        } else if (taskName.includes("report")) {
-                                          targetSection = "reports-review";
-                                        }
+                                        // Use enhanced routing function
+                                        const targetSection = getTargetSectionForTask(task.name, task.category);
                                         
                                         if (onNavigateToSection) {
                                           onNavigateToSection(targetSection, { 
