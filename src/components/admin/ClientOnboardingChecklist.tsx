@@ -646,6 +646,7 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
                 type="datetime-local"
                 value={meetingDate}
                 onChange={(e) => setMeetingDate(e.target.value)}
+                className="block w-full [color-scheme:dark] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
               />
             </div>
           </div>
