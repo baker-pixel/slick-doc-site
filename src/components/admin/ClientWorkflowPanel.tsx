@@ -124,7 +124,13 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
-  const [selectedTaskForCompletion, setSelectedTaskForCompletion] = useState<ClientTask | null>(null);
+  const [selectedTaskForCompletion, setSelectedTaskForCompletion] = useState<{
+    id: string;
+    name: string;
+    client_account_id: string;
+    category: string;
+    client_accounts?: { business_name: string };
+  } | null>(null);
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
 
   const selectedClient = useMemo(() => 
@@ -661,9 +667,12 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
                                       size="sm"
                                       onClick={() => {
                                         setSelectedTaskForCompletion({
-                                          ...task,
+                                          id: task.id,
+                                          name: task.name,
+                                          client_account_id: task.client_account_id,
+                                          category: task.category,
                                           client_accounts: selectedClient ? { business_name: selectedClient.business_name } : undefined
-                                        } as any);
+                                        });
                                         setIsCompletionModalOpen(true);
                                       }}
                                     >
