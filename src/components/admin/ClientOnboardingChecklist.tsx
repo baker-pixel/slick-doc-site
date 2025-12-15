@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,14 +12,21 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import {
   CheckCircle2,
   Circle,
   ChevronRight,
   Calendar,
+  CalendarIcon,
   FileText,
   Image,
   MessageSquare,
@@ -72,7 +80,8 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
   const [messageModalOpen, setMessageModalOpen] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState("Kickoff Strategy Call");
-  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingDay, setMeetingDay] = useState<Date | undefined>(undefined);
+  const [meetingTime, setMeetingTime] = useState("09:00");
   const [messageContent, setMessageContent] = useState("");
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
@@ -155,27 +164,32 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
 
   // Action handlers
   const handleScheduleMeeting = async () => {
-    if (!selectedClient || !meetingDate) return;
+    if (!selectedClient || !meetingDay || !meetingTime) return;
     setActionLoading("kickoff");
     try {
+      const [hours, minutes] = meetingTime.split(":").map((n) => Number(n));
+      const scheduledAt = new Date(meetingDay);
+      scheduledAt.setHours(hours || 0, minutes || 0, 0, 0);
+
       const { error } = await supabase.from("client_meetings").insert({
         client_account_id: selectedClient.id,
         title: meetingTitle,
-        scheduled_at: new Date(meetingDate).toISOString(),
+        scheduled_at: scheduledAt.toISOString(),
         meeting_type: "kickoff",
         status: "scheduled",
         duration_minutes: 60,
       });
       if (error) throw error;
-      
-      // Update onboarding record
-      await supabase.from("client_onboarding")
+
+      await supabase
+        .from("client_onboarding")
         .update({ kickoff_scheduled_at: new Date().toISOString() })
         .eq("client_account_id", selectedClient.id);
-      
+
       toast.success("Kickoff meeting scheduled!");
       setMeetingModalOpen(false);
-      setMeetingDate("");
+      setMeetingDay(undefined);
+      setMeetingTime("09:00");
       await fetchOnboardingData(selectedClient.id);
     } catch (err) {
       console.error(err);
@@ -639,24 +653,53 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
                 onChange={(e) => setMeetingTitle(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="meetingDate">Date & Time</Label>
-              <Input
-                id="meetingDate"
-                type="datetime-local"
-                value={meetingDate}
-                onChange={(e) => setMeetingDate(e.target.value)}
-                className="block w-full [color-scheme:dark] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !meetingDay && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {meetingDay ? format(meetingDay, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarPicker
+                      mode="single"
+                      selected={meetingDay}
+                      onSelect={setMeetingDay}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="meetingTime">Time</Label>
+                <Input
+                  id="meetingTime"
+                  type="time"
+                  value={meetingTime}
+                  onChange={(e) => setMeetingTime(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMeetingModalOpen(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleScheduleMeeting} 
-              disabled={!meetingDate || actionLoading === "kickoff"}
+            <Button
+              onClick={handleScheduleMeeting}
+              disabled={!meetingDay || !meetingTime || actionLoading === "kickoff"}
             >
               {actionLoading === "kickoff" ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
