@@ -205,19 +205,25 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     if (!selectedClient) return;
     setActionLoading("brand_assets");
     try {
-      // Send a message requesting brand assets
-      const { error } = await supabase.from("client_messages").insert({
-        client_account_id: selectedClient.id,
-        sender_type: "admin",
-        sender_name: "Account Team",
-        message: `Hi ${selectedClient.business_name} team! 👋\n\nTo get started on your marketing materials, we'll need the following brand assets:\n\n• Logo files (PNG and SVG preferred)\n• Brand colors (hex codes)\n• Brand fonts\n• Any existing marketing materials\n• Product/service photos\n\nPlease upload these to your Brand Assets tab in the client portal, or reply to this message with any questions!\n\nBest,\nYour Marketing Team`,
+      // Send a message requesting brand assets via admin edge function
+      const resp = await supabase.functions.invoke("admin", {
+        body: {
+          action: "send_message",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient.id,
+            sender_name: "Account Team",
+            message: `Hi ${selectedClient.business_name} team! 👋\n\nTo get started on your marketing materials, we'll need the following brand assets:\n\n• Logo files (PNG and SVG preferred)\n• Brand colors (hex codes)\n• Brand fonts\n• Any existing marketing materials\n• Product/service photos\n\nPlease upload these to your Brand Assets tab in the client portal, or reply to this message with any questions!\n\nBest,\nYour Marketing Team`,
+          },
+        },
       });
-      if (error) throw error;
+      if (resp.error) throw resp.error;
+      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
       toast.success("Brand assets request sent!");
       await fetchOnboardingData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to send request");
+      toast.error(err?.message ? `Failed to send request: ${err.message}` : "Failed to send request");
     } finally {
       setActionLoading(null);
     }
@@ -227,20 +233,26 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     if (!selectedClient || !messageContent.trim()) return;
     setActionLoading("welcome_message");
     try {
-      const { error } = await supabase.from("client_messages").insert({
-        client_account_id: selectedClient.id,
-        sender_type: "admin",
-        sender_name: "Account Team",
-        message: messageContent,
+      const resp = await supabase.functions.invoke("admin", {
+        body: {
+          action: "send_message",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient.id,
+            sender_name: "Account Team",
+            message: messageContent,
+          },
+        },
       });
-      if (error) throw error;
+      if (resp.error) throw resp.error;
+      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
       toast.success("Welcome message sent!");
       setMessageModalOpen(false);
       setMessageContent("");
       await fetchOnboardingData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to send message");
+      toast.error(err?.message ? `Failed to send message: ${err.message}` : "Failed to send message");
     } finally {
       setActionLoading(null);
     }
@@ -277,23 +289,35 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     setActionLoading("intake_form");
     try {
       // Send intake form request via message
-      const { error } = await supabase.from("client_messages").insert({
-        client_account_id: selectedClient.id,
-        sender_type: "admin",
-        sender_name: "Account Team",
-        message: `Hi ${selectedClient.business_name} team!\n\nTo better understand your business and marketing goals, please complete our intake questionnaire.\n\nThis helps us:\n• Understand your target audience\n• Identify your main competitors\n• Learn about your current marketing efforts\n• Set clear goals for our partnership\n\nPlease visit the Gap Analysis page to complete the form, or let us know if you have any questions!\n\nBest,\nYour Marketing Team`,
+      const resp = await supabase.functions.invoke("admin", {
+        body: {
+          action: "send_message",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient.id,
+            sender_name: "Account Team",
+            message: `Hi ${selectedClient.business_name} team!\n\nTo better understand your business and marketing goals, please complete our intake questionnaire.\n\nThis helps us:\n• Understand your target audience\n• Identify your main competitors\n• Learn about your current marketing efforts\n• Set clear goals for our partnership\n\nPlease visit the Gap Analysis page to complete the form, or let us know if you have any questions!\n\nBest,\nYour Marketing Team`,
+          },
+        },
       });
-      if (error) throw error;
+      if (resp.error) throw resp.error;
+      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
       
-      await supabase.from("client_onboarding")
-        .update({ intake_form_sent_at: new Date().toISOString() })
-        .eq("client_account_id", selectedClient.id);
+      await supabase.functions.invoke("admin", {
+        body: {
+          action: "update",
+          password: adminPassword,
+          table: "client_onboarding",
+          id: selectedClient.id,
+          data: { intake_form_sent_at: new Date().toISOString() },
+        },
+      });
       
       toast.success("Intake form request sent!");
       await fetchOnboardingData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to send intake form");
+      toast.error(err?.message ? `Failed to send intake form: ${err.message}` : "Failed to send intake form");
     } finally {
       setActionLoading(null);
     }
