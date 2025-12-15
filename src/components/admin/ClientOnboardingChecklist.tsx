@@ -262,23 +262,31 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     if (!selectedClient || !projectName.trim()) return;
     setActionLoading("project_setup");
     try {
-      const { error } = await supabase.from("client_projects").insert({
-        client_account_id: selectedClient.id,
-        name: projectName,
-        description: projectDescription,
-        status: "in_progress",
-        progress_percentage: 0,
-        start_date: new Date().toISOString().split("T")[0],
+      const resp = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_project",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient.id,
+            name: projectName,
+            description: projectDescription || null,
+            status: "in_progress",
+            progress_percentage: 0,
+          },
+        },
       });
-      if (error) throw error;
+
+      if (resp.error) throw resp.error;
+      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
+
       toast.success("Project created!");
       setProjectModalOpen(false);
       setProjectName("");
       setProjectDescription("");
       await fetchOnboardingData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to create project");
+      toast.error(err?.message ? `Failed to create project: ${err.message}` : "Failed to create project");
     } finally {
       setActionLoading(null);
     }
