@@ -408,9 +408,16 @@ export function ClientTasksPanel() {
                   <Card key={task.id} className="p-3 cursor-pointer hover:shadow-md transition-shadow opacity-75" onClick={() => { setSelectedTask(task); setDetailsOpen(true); }}>
                     <div className="font-medium text-sm line-clamp-2">{task.name}</div>
                     <div className="text-xs text-muted-foreground mt-1">{task.client_accounts?.business_name}</div>
-                    <div className="flex items-center gap-1 mt-2">
-                      {getAutomationIcon(task.automation_type)}
-                      <span className="text-xs capitalize">{task.category}</span>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center gap-1">
+                        {getAutomationIcon(task.automation_type)}
+                        <span className="text-xs capitalize">{task.category}</span>
+                      </div>
+                      {task.automation_type !== "MANUAL" && (
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); runAutomation(task); }} disabled={runningTasks.has(task.id)} title="Re-run automation">
+                          {runningTasks.has(task.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -460,12 +467,13 @@ export function ClientTasksPanel() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {task.status !== "completed" && task.automation_type !== "MANUAL" && (
+                      {task.automation_type !== "MANUAL" && (
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => runAutomation(task)}
                           disabled={runningTasks.has(task.id)}
+                          title={task.status === "completed" ? "Re-run automation" : "Run automation"}
                         >
                           {runningTasks.has(task.id) ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
