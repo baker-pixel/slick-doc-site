@@ -22,6 +22,7 @@ type AutomationType =
   | "setup_retargeting_audiences"
   | "setup_retention_automations"
   | "generate_monthly_report"
+  | "generate_report"
   | "email_sequence"
   | "content_generation"
   | "report"
@@ -163,6 +164,7 @@ serve(async (req) => {
         result = await setupRetentionAutomations(supabase, client);
         break;
       case "generate_monthly_report":
+      case "generate_report":
         result = await generateMonthlyReport(supabase, client);
         break;
       case "email_sequence":
