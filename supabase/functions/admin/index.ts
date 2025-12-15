@@ -204,6 +204,25 @@ Deno.serve(async (req) => {
           );
         }
         
+        // Special handling for client_onboarding - use upsert since record may not exist
+        if (table === "client_onboarding") {
+          const { data: updated, error } = await supabase
+            .from("client_onboarding")
+            .upsert(
+              { client_account_id: id, ...data, updated_at: new Date().toISOString() },
+              { onConflict: "client_account_id" }
+            )
+            .select()
+            .maybeSingle();
+          
+          if (error) throw error;
+          console.log(`Upserted client_onboarding for client: ${id}`);
+          return new Response(
+            JSON.stringify({ data: updated }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
         const { data: updated, error } = await supabase
           .from(table)
           .update(data)
