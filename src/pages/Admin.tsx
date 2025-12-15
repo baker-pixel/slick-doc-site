@@ -66,6 +66,7 @@ import QualityAssurancePanel from "@/components/admin/QualityAssurancePanel";
 import BeforeAfterShowcasePanel from "@/components/admin/BeforeAfterShowcasePanel";
 import SalesProposalPanel from "@/components/admin/SalesProposalPanel";
 import FeatureGuidePanel from "@/components/admin/FeatureGuidePanel";
+import { ClientPhaseTracker } from "@/components/admin/ClientPhaseTracker";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1035,6 +1036,7 @@ const Admin = () => {
       case "clients":
         return (
           <div className="space-y-6">
+            <ClientPhaseTracker adminPassword={storedPassword} />
             <ClientOnboardingChecklist adminPassword={storedPassword} />
             <ClientManagementPanel adminPassword={storedPassword} />
           </div>
