@@ -69,6 +69,7 @@ import FeatureGuidePanel from "@/components/admin/FeatureGuidePanel";
 import { ClientPhaseTracker } from "@/components/admin/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/ClientProgressTracker";
 import { ReviewWorkflowPanel } from "@/components/admin/ReviewWorkflowPanel";
+import { ClientWorkflowPanel } from "@/components/admin/ClientWorkflowPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1000,6 +1001,8 @@ const Admin = () => {
 
   const renderActiveSection = () => {
     switch (activeSection) {
+      case "client-workflow":
+        return <ClientWorkflowPanel adminPassword={storedPassword} />;
       case "pipeline":
         return <PipelineDashboard adminPassword={storedPassword} />;
       case "alerts":
@@ -1116,6 +1119,7 @@ const Admin = () => {
 
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
+      "client-workflow": "Client Workflow",
       pipeline: "Pipeline Dashboard",
       alerts: "Automation Alerts",
       "quick-actions": "Quick Actions",
