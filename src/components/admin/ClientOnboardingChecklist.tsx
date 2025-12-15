@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { ProjectSetupWizard } from "./ProjectSetupWizard";
 
 interface OnboardingStep {
   id: string;
@@ -83,8 +84,6 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
   const [meetingDay, setMeetingDay] = useState<Date | undefined>(undefined);
   const [meetingTime, setMeetingTime] = useState("09:00");
   const [messageContent, setMessageContent] = useState("");
-  const [projectName, setProjectName] = useState("");
-  const [projectDescription, setProjectDescription] = useState("");
 
   useEffect(() => {
     fetchNewClients();
@@ -258,40 +257,6 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     }
   };
 
-  const handleCreateProject = async () => {
-    if (!selectedClient || !projectName.trim()) return;
-    setActionLoading("project_setup");
-    try {
-      const resp = await supabase.functions.invoke("admin", {
-        body: {
-          action: "create_project",
-          password: adminPassword,
-          data: {
-            client_account_id: selectedClient.id,
-            name: projectName,
-            description: projectDescription || null,
-            status: "in_progress",
-            progress_percentage: 0,
-          },
-        },
-      });
-
-      if (resp.error) throw resp.error;
-      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
-
-      toast.success("Project created!");
-      setProjectModalOpen(false);
-      setProjectName("");
-      setProjectDescription("");
-      await fetchOnboardingData(selectedClient.id);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message ? `Failed to create project: ${err.message}` : "Failed to create project");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const handleSendIntakeForm = async () => {
     if (!selectedClient) return;
     setActionLoading("intake_form");
@@ -384,8 +349,6 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
         setMessageModalOpen(true);
         break;
       case "project_setup":
-        setProjectName(selectedClient?.tier === "foundation" ? "Local SEO Setup" : "Marketing Campaign Launch");
-        setProjectDescription(`Initial ${selectedClient?.tier} tier project for ${selectedClient?.business_name}`);
         setProjectModalOpen(true);
         break;
       case "intake_form":
@@ -783,51 +746,20 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
         </DialogContent>
       </Dialog>
 
-      {/* Create Project Modal */}
-      <Dialog open={projectModalOpen} onOpenChange={setProjectModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create First Project</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="projectName">Project Name</Label>
-              <Input
-                id="projectName"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder="e.g., Local SEO Setup"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="projectDescription">Description</Label>
-              <Textarea
-                id="projectDescription"
-                value={projectDescription}
-                onChange={(e) => setProjectDescription(e.target.value)}
-                rows={3}
-                placeholder="Project description..."
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProjectModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleCreateProject} 
-              disabled={!projectName.trim() || actionLoading === "project_setup"}
-            >
-              {actionLoading === "project_setup" ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <ClipboardList className="h-4 w-4 mr-2" />
-              )}
-              Create Project
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Project Setup Wizard */}
+      {selectedClient && (
+        <ProjectSetupWizard
+          open={projectModalOpen}
+          onClose={() => setProjectModalOpen(false)}
+          client={{
+            id: selectedClient.id,
+            business_name: selectedClient.business_name,
+            tier: selectedClient.tier,
+          }}
+          adminPassword={adminPassword}
+          onSuccess={() => fetchOnboardingData(selectedClient.id)}
+        />
+      )}
     </Card>
   );
 }
