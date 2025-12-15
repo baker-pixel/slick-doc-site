@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Calendar, Clock, Link as LinkIcon, RefreshCw, Video, Phone, Users, Search, Edit2, ExternalLink } from "lucide-react";
+import { Calendar, Clock, Link as LinkIcon, RefreshCw, Video, Phone, Users, Search, Edit2, ExternalLink, Plus, Loader2 } from "lucide-react";
 
 interface ClientMeeting {
   id: string;
@@ -34,21 +34,44 @@ interface ClientMeeting {
   };
 }
 
+interface ClientAccount {
+  id: string;
+  business_name: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
 const ClientMeetingsAdminPanel = () => {
   const [meetings, setMeetings] = useState<ClientMeeting[]>([]);
+  const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingMeeting, setEditingMeeting] = useState<ClientMeeting | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [editForm, setEditForm] = useState({
     status: "",
+    meeting_link: "",
+    notes: ""
+  });
+  const [createForm, setCreateForm] = useState({
+    client_account_id: "",
+    title: "",
+    description: "",
+    meeting_type: "video",
+    scheduled_date: "",
+    scheduled_time: "",
+    duration_minutes: "30",
     meeting_link: "",
     notes: ""
   });
 
   useEffect(() => {
     fetchMeetings();
+    fetchClients();
     
     const channel = supabase
       .channel('admin-meetings-changes')
@@ -61,6 +84,20 @@ const ClientMeetingsAdminPanel = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const fetchClients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('client_accounts')
+        .select('id, business_name, email, first_name, last_name')
+        .order('business_name');
+      
+      if (error) throw error;
+      setClients(data || []);
+    } catch (error: any) {
+      console.error("Error fetching clients:", error);
+    }
+  };
 
   const fetchMeetings = async () => {
     try {
@@ -128,6 +165,58 @@ const ClientMeetingsAdminPanel = () => {
     }
   };
 
+  const handleCreateMeeting = async () => {
+    if (!createForm.client_account_id || !createForm.title || !createForm.scheduled_date || !createForm.scheduled_time) {
+      toast({ title: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const scheduledAt = new Date(`${createForm.scheduled_date}T${createForm.scheduled_time}`).toISOString();
+      
+      const { error } = await supabase
+        .from('client_meetings')
+        .insert({
+          client_account_id: createForm.client_account_id,
+          title: createForm.title,
+          description: createForm.description || null,
+          meeting_type: createForm.meeting_type,
+          scheduled_at: scheduledAt,
+          duration_minutes: parseInt(createForm.duration_minutes),
+          meeting_link: createForm.meeting_link || null,
+          notes: createForm.notes || null,
+          status: 'scheduled',
+          booked_by: 'Admin'
+        });
+
+      if (error) throw error;
+
+      toast({ title: "Meeting created successfully" });
+      setCreateDialogOpen(false);
+      setCreateForm({
+        client_account_id: "",
+        title: "",
+        description: "",
+        meeting_type: "video",
+        scheduled_date: "",
+        scheduled_time: "",
+        duration_minutes: "30",
+        meeting_link: "",
+        notes: ""
+      });
+      fetchMeetings();
+    } catch (error: any) {
+      toast({
+        title: "Error creating meeting",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'scheduled': return 'bg-blue-500/10 text-blue-500';
@@ -176,10 +265,16 @@ const ClientMeetingsAdminPanel = () => {
               {upcomingCount} upcoming · {todayCount} today
             </p>
           </div>
-          <Button onClick={fetchMeetings} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Schedule Meeting
+            </Button>
+            <Button onClick={fetchMeetings} variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -370,6 +465,170 @@ const ClientMeetingsAdminPanel = () => {
               </Button>
               <Button onClick={handleUpdateMeeting}>
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Meeting Dialog */}
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Schedule New Meeting
+              </DialogTitle>
+              <DialogDescription>
+                Create a new meeting with a client
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Client *</Label>
+                <Select 
+                  value={createForm.client_account_id} 
+                  onValueChange={(value) => setCreateForm({ ...createForm, client_account_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.business_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Meeting Title *</Label>
+                <Input
+                  placeholder="e.g., Bi-Weekly Strategy Call"
+                  value={createForm.title}
+                  onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  placeholder="Meeting agenda or description..."
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  rows={2}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Date *</Label>
+                  <Input
+                    type="date"
+                    value={createForm.scheduled_date}
+                    onChange={(e) => setCreateForm({ ...createForm, scheduled_date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Time *</Label>
+                  <Input
+                    type="time"
+                    value={createForm.scheduled_time}
+                    onChange={(e) => setCreateForm({ ...createForm, scheduled_time: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Meeting Type</Label>
+                  <Select 
+                    value={createForm.meeting_type} 
+                    onValueChange={(value) => setCreateForm({ ...createForm, meeting_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="video">
+                        <div className="flex items-center gap-2">
+                          <Video className="h-4 w-4" /> Video Call
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="phone">
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4" /> Phone Call
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="in_person">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4" /> In Person
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Duration</Label>
+                  <Select 
+                    value={createForm.duration_minutes} 
+                    onValueChange={(value) => setCreateForm({ ...createForm, duration_minutes: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="45">45 minutes</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                      <SelectItem value="90">1.5 hours</SelectItem>
+                      <SelectItem value="120">2 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Meeting Link</Label>
+                <div className="relative">
+                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="https://zoom.us/j/... or https://meet.google.com/..."
+                    value={createForm.meeting_link}
+                    onChange={(e) => setCreateForm({ ...createForm, meeting_link: e.target.value })}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  placeholder="Any additional notes..."
+                  value={createForm.notes}
+                  onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateDialogOpen(false)} disabled={isCreating}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateMeeting} disabled={isCreating}>
+                {isCreating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Schedule Meeting
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
