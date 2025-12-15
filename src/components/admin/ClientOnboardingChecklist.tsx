@@ -318,14 +318,21 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     if (!selectedClient) return;
     setActionLoading("first_deliverable");
     try {
-      const { error } = await supabase.from("deliverables").insert({
-        client_account_id: selectedClient.id,
-        title: `${selectedClient.tier === "foundation" ? "Local SEO" : "Marketing"} Audit Report`,
-        description: "Initial audit report with findings and recommendations",
-        category: "report",
-        status: "pending_review",
+      const response = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_deliverable",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient.id,
+            title: `${selectedClient.tier === "foundation" ? "Local SEO" : "Marketing"} Audit Report`,
+            description: "Initial audit report with findings and recommendations",
+            category: "report",
+          },
+        },
       });
-      if (error) throw error;
+      if (response.error) throw response.error;
+      const result = response.data;
+      if (result?.error) throw new Error(result.error);
       toast.success("Deliverable added!");
       await fetchOnboardingData(selectedClient.id);
     } catch (err) {
