@@ -1353,6 +1353,85 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "generate_client_tasks": {
+        const { client_id } = data || {};
+        
+        if (!client_id) {
+          return new Response(
+            JSON.stringify({ error: "client_id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get client info
+        const { data: client, error: clientError } = await supabase
+          .from("client_accounts")
+          .select("id, tier, business_name, email")
+          .eq("id", client_id)
+          .single();
+
+        if (clientError || !client) {
+          return new Response(
+            JSON.stringify({ error: "Client not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Get task templates for this tier
+        const { data: templates, error: templatesError } = await supabase
+          .from("task_templates")
+          .select("*")
+          .eq("tier", client.tier)
+          .eq("is_active", true)
+          .order("order_index");
+
+        if (templatesError) throw templatesError;
+
+        if (!templates || templates.length === 0) {
+          return new Response(
+            JSON.stringify({ error: `No task templates found for tier: ${client.tier}` }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Create tasks from templates
+        const tasksToInsert = templates.map((t: any) => ({
+          client_account_id: client_id,
+          task_template_id: t.id,
+          name: t.name,
+          description: t.description,
+          instructions: t.instructions,
+          category: t.category,
+          automation_type: t.automation_type,
+          status: "pending",
+        }));
+
+        const { data: insertedTasks, error: insertError } = await supabase
+          .from("client_tasks")
+          .insert(tasksToInsert)
+          .select();
+
+        if (insertError) throw insertError;
+
+        // Create onboarding record if not exists
+        await supabase
+          .from("client_onboarding")
+          .upsert(
+            { client_account_id: client_id },
+            { onConflict: "client_account_id" }
+          );
+
+        console.log(`Generated ${insertedTasks?.length || 0} tasks for client: ${client.business_name}`);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            tasksGenerated: insertedTasks?.length || 0,
+            client: client.business_name 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
