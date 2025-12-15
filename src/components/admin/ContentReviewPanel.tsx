@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2 } from "lucide-react";
+import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Plus } from "lucide-react";
 
 interface GeneratedContent {
   id: string;
@@ -30,6 +30,8 @@ interface GeneratedContent {
 interface ClientAccount {
   id: string;
   business_name: string;
+  industry: string | null;
+  tier: string;
 }
 
 export const ContentReviewPanel = () => {
@@ -46,6 +48,13 @@ export const ContentReviewPanel = () => {
   const [publishingContent, setPublishingContent] = useState<GeneratedContent | null>(null);
   const [sendToClient, setSendToClient] = useState(true);
   const [isPublishing, setIsPublishing] = useState(false);
+  
+  // Content generation state
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generateClientId, setGenerateClientId] = useState<string>("");
+  const [generateContentType, setGenerateContentType] = useState<string>("blog_post");
+  const [generateTopic, setGenerateTopic] = useState<string>("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -60,7 +69,7 @@ export const ContentReviewPanel = () => {
         .order("created_at", { ascending: false }),
       supabase
         .from("client_accounts")
-        .select("id, business_name")
+        .select("id, business_name, industry, tier")
         .order("business_name"),
     ]);
 
@@ -217,6 +226,45 @@ export const ContentReviewPanel = () => {
     }
   };
 
+  const handleGenerateContent = async () => {
+    if (!generateClientId || !generateTopic.trim()) {
+      toast({ title: "Please select a client and enter a topic", variant: "destructive" });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      const client = clients.find(c => c.id === generateClientId);
+      
+      const { data, error } = await supabase.functions.invoke("run-automation", {
+        body: {
+          clientId: generateClientId,
+          jobType: "content_generation",
+          inputData: {
+            contentType: generateContentType,
+            topic: generateTopic,
+            businessName: client?.business_name,
+            industry: client?.industry
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Content generated!", description: "New content has been created and is ready for review." });
+      setGenerateModalOpen(false);
+      setGenerateTopic("");
+      setGenerateClientId("");
+      fetchData();
+
+    } catch (error: any) {
+      toast({ title: "Error generating content", description: error.message, variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const filteredContents = contents.filter((c) => {
     if (selectedClient !== "all" && c.client_id !== selectedClient) return false;
     if (selectedType !== "all" && c.content_type !== selectedType) return false;
@@ -230,10 +278,16 @@ export const ContentReviewPanel = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Content Review</h2>
-        <Button onClick={fetchData} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setGenerateModalOpen(true)} size="sm">
+            <Sparkles className="w-4 h-4 mr-2" />
+            Generate Content
+          </Button>
+          <Button onClick={fetchData} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -522,6 +576,95 @@ export const ContentReviewPanel = () => {
             </Button>
             <Button onClick={handleSaveEdit}>
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Content Dialog */}
+      <Dialog open={generateModalOpen} onOpenChange={setGenerateModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Generate New Content
+            </DialogTitle>
+            <DialogDescription>
+              Create AI-generated content tailored to your client's industry and needs.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Client</label>
+              <Select value={generateClientId} onValueChange={setGenerateClientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.business_name} {client.industry && `(${client.industry})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Content Type</label>
+              <Select value={generateContentType} onValueChange={setGenerateContentType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select content type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="blog_post">Blog Post</SelectItem>
+                  <SelectItem value="social_post">Social Media Post</SelectItem>
+                  <SelectItem value="email_copy">Email Copy</SelectItem>
+                  <SelectItem value="ad_copy">Ad Copy</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Topic / Brief</label>
+              <Textarea
+                value={generateTopic}
+                onChange={(e) => setGenerateTopic(e.target.value)}
+                placeholder="Describe what the content should be about..."
+                className="min-h-[100px]"
+              />
+            </div>
+            
+            {generateClientId && (
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <p className="text-muted-foreground">
+                  Content will be generated for{" "}
+                  <span className="font-medium text-foreground">
+                    {clients.find(c => c.id === generateClientId)?.business_name}
+                  </span>
+                  {clients.find(c => c.id === generateClientId)?.industry && (
+                    <> in the <span className="font-medium text-foreground">{clients.find(c => c.id === generateClientId)?.industry}</span> industry</>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setGenerateModalOpen(false)} disabled={isGenerating}>
+              Cancel
+            </Button>
+            <Button onClick={handleGenerateContent} disabled={isGenerating || !generateClientId || !generateTopic.trim()}>
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate Content
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
