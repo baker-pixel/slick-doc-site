@@ -1068,7 +1068,7 @@ const Admin = () => {
       case "client-messages":
         return <ClientMessagesAdminPanel />;
       case "client-meetings":
-        return <ClientMeetingsAdminPanel />;
+        return <ClientMeetingsAdminPanel onNavigate={setActiveSection} />;
       case "client-requests":
         return <ClientRequestsAdminPanel />;
       case "brand-assets":

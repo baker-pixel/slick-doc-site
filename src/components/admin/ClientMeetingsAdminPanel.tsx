@@ -42,7 +42,11 @@ interface ClientAccount {
   last_name: string | null;
 }
 
-const ClientMeetingsAdminPanel = () => {
+interface ClientMeetingsAdminPanelProps {
+  onNavigate?: (section: "client-workflow") => void;
+}
+
+const ClientMeetingsAdminPanel = ({ onNavigate }: ClientMeetingsAdminPanelProps) => {
   const [meetings, setMeetings] = useState<ClientMeeting[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,11 +263,11 @@ const ClientMeetingsAdminPanel = () => {
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={() => window.history.back()}
+            onClick={() => onNavigate?.("client-workflow")}
             className="w-fit gap-2 text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
+            Back to Client Workflow
           </Button>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
