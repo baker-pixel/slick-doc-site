@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
   CheckCircle2,
   Circle,
   ChevronRight,
@@ -17,6 +27,7 @@ import {
   Users,
   Loader2,
   Sparkles,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -54,6 +65,17 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
   const [onboardingData, setOnboardingData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [loadingSteps, setLoadingSteps] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  // Modal states
+  const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [meetingTitle, setMeetingTitle] = useState("Kickoff Strategy Call");
+  const [meetingDate, setMeetingDate] = useState("");
+  const [messageContent, setMessageContent] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
 
   useEffect(() => {
     fetchNewClients();
@@ -129,6 +151,205 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
   const handleClientSelect = async (client: ClientAccount) => {
     setSelectedClient(client);
     await fetchOnboardingData(client.id);
+  };
+
+  // Action handlers
+  const handleScheduleMeeting = async () => {
+    if (!selectedClient || !meetingDate) return;
+    setActionLoading("kickoff");
+    try {
+      const { error } = await supabase.from("client_meetings").insert({
+        client_account_id: selectedClient.id,
+        title: meetingTitle,
+        scheduled_at: new Date(meetingDate).toISOString(),
+        meeting_type: "kickoff",
+        status: "scheduled",
+        duration_minutes: 60,
+      });
+      if (error) throw error;
+      
+      // Update onboarding record
+      await supabase.from("client_onboarding")
+        .update({ kickoff_scheduled_at: new Date().toISOString() })
+        .eq("client_account_id", selectedClient.id);
+      
+      toast.success("Kickoff meeting scheduled!");
+      setMeetingModalOpen(false);
+      setMeetingDate("");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to schedule meeting");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRequestAssets = async () => {
+    if (!selectedClient) return;
+    setActionLoading("brand_assets");
+    try {
+      // Send a message requesting brand assets
+      const { error } = await supabase.from("client_messages").insert({
+        client_account_id: selectedClient.id,
+        sender_type: "admin",
+        sender_name: "Account Team",
+        message: `Hi ${selectedClient.business_name} team! 👋\n\nTo get started on your marketing materials, we'll need the following brand assets:\n\n• Logo files (PNG and SVG preferred)\n• Brand colors (hex codes)\n• Brand fonts\n• Any existing marketing materials\n• Product/service photos\n\nPlease upload these to your Brand Assets tab in the client portal, or reply to this message with any questions!\n\nBest,\nYour Marketing Team`,
+      });
+      if (error) throw error;
+      toast.success("Brand assets request sent!");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send request");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSendWelcome = async () => {
+    if (!selectedClient || !messageContent.trim()) return;
+    setActionLoading("welcome_message");
+    try {
+      const { error } = await supabase.from("client_messages").insert({
+        client_account_id: selectedClient.id,
+        sender_type: "admin",
+        sender_name: "Account Team",
+        message: messageContent,
+      });
+      if (error) throw error;
+      toast.success("Welcome message sent!");
+      setMessageModalOpen(false);
+      setMessageContent("");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send message");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!selectedClient || !projectName.trim()) return;
+    setActionLoading("project_setup");
+    try {
+      const { error } = await supabase.from("client_projects").insert({
+        client_account_id: selectedClient.id,
+        name: projectName,
+        description: projectDescription,
+        status: "in_progress",
+        progress_percentage: 0,
+        start_date: new Date().toISOString().split("T")[0],
+      });
+      if (error) throw error;
+      toast.success("Project created!");
+      setProjectModalOpen(false);
+      setProjectName("");
+      setProjectDescription("");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to create project");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSendIntakeForm = async () => {
+    if (!selectedClient) return;
+    setActionLoading("intake_form");
+    try {
+      // Send intake form request via message
+      const { error } = await supabase.from("client_messages").insert({
+        client_account_id: selectedClient.id,
+        sender_type: "admin",
+        sender_name: "Account Team",
+        message: `Hi ${selectedClient.business_name} team!\n\nTo better understand your business and marketing goals, please complete our intake questionnaire.\n\nThis helps us:\n• Understand your target audience\n• Identify your main competitors\n• Learn about your current marketing efforts\n• Set clear goals for our partnership\n\nPlease visit the Gap Analysis page to complete the form, or let us know if you have any questions!\n\nBest,\nYour Marketing Team`,
+      });
+      if (error) throw error;
+      
+      await supabase.from("client_onboarding")
+        .update({ intake_form_sent_at: new Date().toISOString() })
+        .eq("client_account_id", selectedClient.id);
+      
+      toast.success("Intake form request sent!");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send intake form");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleConfigureDashboard = async () => {
+    if (!selectedClient) return;
+    setActionLoading("analytics_setup");
+    try {
+      await supabase.from("client_onboarding")
+        .update({ dashboard_created_at: new Date().toISOString() })
+        .eq("client_account_id", selectedClient.id);
+      
+      toast.success("Dashboard configured!");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to configure dashboard");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAddDeliverable = async () => {
+    if (!selectedClient) return;
+    setActionLoading("first_deliverable");
+    try {
+      const { error } = await supabase.from("deliverables").insert({
+        client_account_id: selectedClient.id,
+        title: `${selectedClient.tier === "foundation" ? "Local SEO" : "Marketing"} Audit Report`,
+        description: "Initial audit report with findings and recommendations",
+        category: "report",
+        status: "pending_review",
+      });
+      if (error) throw error;
+      toast.success("Deliverable added!");
+      await fetchOnboardingData(selectedClient.id);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to add deliverable");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleStepAction = (stepId: string) => {
+    switch (stepId) {
+      case "kickoff":
+        setMeetingModalOpen(true);
+        break;
+      case "brand_assets":
+        handleRequestAssets();
+        break;
+      case "welcome_message":
+        setMessageContent(`Hi ${selectedClient?.business_name} team! 👋\n\nWelcome aboard! We're thrilled to have you as a partner.\n\nOver the next 30 days, here's what you can expect:\n• Week 1: Discovery and asset collection\n• Week 2: Strategy development\n• Week 3: Initial implementation\n• Week 4: First results review\n\nYou can access your client portal anytime to:\n• View project progress\n• Send us messages\n• Review and approve content\n• Access reports and analytics\n\nDon't hesitate to reach out if you have any questions!\n\nBest,\nYour Marketing Team`);
+        setMessageModalOpen(true);
+        break;
+      case "project_setup":
+        setProjectName(selectedClient?.tier === "foundation" ? "Local SEO Setup" : "Marketing Campaign Launch");
+        setProjectDescription(`Initial ${selectedClient?.tier} tier project for ${selectedClient?.business_name}`);
+        setProjectModalOpen(true);
+        break;
+      case "intake_form":
+        handleSendIntakeForm();
+        break;
+      case "analytics_setup":
+        handleConfigureDashboard();
+        break;
+      case "first_deliverable":
+        handleAddDeliverable();
+        break;
+    }
   };
 
   const getOnboardingSteps = (): OnboardingStep[] => {
@@ -350,8 +571,18 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
                           <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
                         </div>
                         {!step.isComplete && step.actionLabel && (
-                          <Button size="sm" variant="outline" className="flex-shrink-0">
-                            {step.actionLabel}
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="flex-shrink-0"
+                            disabled={actionLoading === step.id}
+                            onClick={() => handleStepAction(step.id)}
+                          >
+                            {actionLoading === step.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              step.actionLabel
+                            )}
                           </Button>
                         )}
                       </div>
@@ -392,6 +623,133 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           </div>
         )}
       </CardContent>
+
+      {/* Schedule Meeting Modal */}
+      <Dialog open={meetingModalOpen} onOpenChange={setMeetingModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schedule Kickoff Meeting</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="meetingTitle">Meeting Title</Label>
+              <Input
+                id="meetingTitle"
+                value={meetingTitle}
+                onChange={(e) => setMeetingTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="meetingDate">Date & Time</Label>
+              <Input
+                id="meetingDate"
+                type="datetime-local"
+                value={meetingDate}
+                onChange={(e) => setMeetingDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMeetingModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleScheduleMeeting} 
+              disabled={!meetingDate || actionLoading === "kickoff"}
+            >
+              {actionLoading === "kickoff" ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Calendar className="h-4 w-4 mr-2" />
+              )}
+              Schedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Message Modal */}
+      <Dialog open={messageModalOpen} onOpenChange={setMessageModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send Welcome Message</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="messageContent">Message</Label>
+              <Textarea
+                id="messageContent"
+                value={messageContent}
+                onChange={(e) => setMessageContent(e.target.value)}
+                rows={10}
+                placeholder="Enter your welcome message..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMessageModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSendWelcome} 
+              disabled={!messageContent.trim() || actionLoading === "welcome_message"}
+            >
+              {actionLoading === "welcome_message" ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Send Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Project Modal */}
+      <Dialog open={projectModalOpen} onOpenChange={setProjectModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create First Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="projectName">Project Name</Label>
+              <Input
+                id="projectName"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="e.g., Local SEO Setup"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projectDescription">Description</Label>
+              <Textarea
+                id="projectDescription"
+                value={projectDescription}
+                onChange={(e) => setProjectDescription(e.target.value)}
+                rows={3}
+                placeholder="Project description..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleCreateProject} 
+              disabled={!projectName.trim() || actionLoading === "project_setup"}
+            >
+              {actionLoading === "project_setup" ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <ClipboardList className="h-4 w-4 mr-2" />
+              )}
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
