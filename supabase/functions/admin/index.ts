@@ -1011,12 +1011,98 @@ Deno.serve(async (req) => {
           );
         }
 
+        // For audit reports, auto-populate with gap analysis data
+        let auditContent: string | null = null;
+        if (category === "report" && title.toLowerCase().includes("audit")) {
+          // Get client info to find their gap analysis
+          const { data: client } = await supabase
+            .from("client_accounts")
+            .select("email, business_name")
+            .eq("id", client_account_id)
+            .single();
+
+          if (client) {
+            // Find gap analysis by email or business name
+            const { data: gapAnalysis } = await supabase
+              .from("gap_analysis_submissions")
+              .select("*")
+              .or(`email.eq.${client.email},business_name.ilike.%${client.business_name}%`)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (gapAnalysis?.ai_analysis) {
+              const analysis = gapAnalysis.ai_analysis as {
+                executive_summary?: string;
+                identified_gaps?: Array<{ category: string; gap: string; severity: string; recommendation: string }>;
+                recommendations?: Array<{ priority: number; action: string; impact: string; timeframe: string }>;
+                strengths?: string[];
+              };
+
+              // Build audit report content
+              const sections = [];
+              
+              sections.push(`# Marketing Audit Report for ${gapAnalysis.business_name}\n`);
+              sections.push(`*Prepared on ${new Date().toLocaleDateString()}*\n`);
+              
+              // Executive Summary
+              if (analysis.executive_summary) {
+                sections.push(`## Executive Summary\n\n${analysis.executive_summary}\n`);
+              }
+              
+              // Key Strengths
+              if (analysis.strengths && analysis.strengths.length > 0) {
+                sections.push(`## Current Strengths\n\n${analysis.strengths.map(s => `- ${s}`).join('\n')}\n`);
+              }
+              
+              // Identified Gaps
+              if (analysis.identified_gaps && analysis.identified_gaps.length > 0) {
+                sections.push(`## Identified Gaps\n`);
+                analysis.identified_gaps.forEach((gap, idx) => {
+                  sections.push(`### ${idx + 1}. ${gap.category}\n`);
+                  sections.push(`**Issue:** ${gap.gap}\n`);
+                  sections.push(`**Severity:** ${gap.severity}\n`);
+                  sections.push(`**Recommendation:** ${gap.recommendation}\n`);
+                });
+              }
+              
+              // Priority Recommendations
+              if (analysis.recommendations && analysis.recommendations.length > 0) {
+                sections.push(`## Priority Recommendations\n`);
+                analysis.recommendations.forEach((rec, idx) => {
+                  sections.push(`### Priority ${rec.priority}: ${rec.action}\n`);
+                  sections.push(`- **Expected Impact:** ${rec.impact}`);
+                  sections.push(`- **Timeframe:** ${rec.timeframe}\n`);
+                });
+              }
+              
+              // Business Context from inputs
+              sections.push(`## Business Context\n`);
+              if (gapAnalysis.top_business_goals) {
+                sections.push(`**Goals:** ${gapAnalysis.top_business_goals}\n`);
+              }
+              if (gapAnalysis.monthly_marketing_budget) {
+                sections.push(`**Budget:** ${gapAnalysis.monthly_marketing_budget}\n`);
+              }
+              if (gapAnalysis.top_competitors) {
+                sections.push(`**Key Competitors:** ${gapAnalysis.top_competitors}\n`);
+              }
+              if (gapAnalysis.unique_differentiator) {
+                sections.push(`**Differentiator:** ${gapAnalysis.unique_differentiator}\n`);
+              }
+              
+              auditContent = sections.join('\n');
+              console.log(`Generated audit content from gap analysis for ${client.business_name}`);
+            }
+          }
+        }
+
         const { data: deliverable, error } = await supabase
           .from("deliverables")
           .insert({
             client_account_id,
             title,
-            description: description || null,
+            description: auditContent || description || null,
             category: category || "general",
             file_url: file_url || null,
             file_name: file_name || null,
@@ -1027,9 +1113,9 @@ Deno.serve(async (req) => {
           .single();
 
         if (error) throw error;
-        console.log(`Created deliverable: ${title}`);
+        console.log(`Created deliverable: ${title}${auditContent ? ' (with audit content)' : ''}`);
         return new Response(
-          JSON.stringify({ data: deliverable }),
+          JSON.stringify({ data: deliverable, hasAuditContent: !!auditContent }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
