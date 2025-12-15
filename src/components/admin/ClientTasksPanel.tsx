@@ -115,17 +115,23 @@ export function ClientTasksPanel() {
     setRunningTasks(prev => new Set([...prev, task.id]));
 
     try {
-      // Map task category to job type
+      // Map task category to valid job types (must match DB check constraint)
       const jobTypeMap: Record<string, string> = {
         email: "email_sequence",
+        lead_nurturing: "email_sequence",
         content: "content_generation",
         analytics: "report",
-        onboarding: "onboarding",
-        reviews: "review_setup",
-        seo: "seo_audit",
+        reporting: "generate_report",
+        onboarding: "custom",
+        reviews: "setup_review_system",
+        seo: "run_seo_audit",
+        crm: "add_to_crm",
+        ads: "custom",
+        funnel: "custom",
+        retention: "email_sequence",
       };
 
-      const jobType = jobTypeMap[task.category] || "content_generation";
+      const jobType = jobTypeMap[task.category] || "custom";
 
       const { data, error } = await supabase.functions.invoke("run-automation", {
         body: {
