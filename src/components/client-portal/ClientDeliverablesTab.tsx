@@ -12,8 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { toast } from "@/hooks/use-toast";
-import { Package, Star, Download, Eye, MessageSquare, CheckCircle, XCircle, RotateCcw } from "lucide-react";
+import { Package, Star, Download, Eye, MessageSquare, CheckCircle, XCircle, RotateCcw, ChevronDown, FileText } from "lucide-react";
 import { format } from "date-fns";
 
 interface Deliverable {
@@ -44,13 +49,68 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   rejected: { label: "Rejected", variant: "outline", icon: XCircle },
 };
 
+// Simple markdown renderer for audit reports
+function renderMarkdown(content: string) {
+  const lines = content.split('\n');
+  const elements: JSX.Element[] = [];
+  let key = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (line.startsWith('# ')) {
+      elements.push(<h1 key={key++} className="text-2xl font-bold text-foreground mt-4 mb-2">{line.slice(2)}</h1>);
+    } else if (line.startsWith('## ')) {
+      elements.push(<h2 key={key++} className="text-xl font-semibold text-foreground mt-6 mb-2 border-b pb-1">{line.slice(3)}</h2>);
+    } else if (line.startsWith('### ')) {
+      elements.push(<h3 key={key++} className="text-lg font-medium text-foreground mt-4 mb-1">{line.slice(4)}</h3>);
+    } else if (line.startsWith('- ')) {
+      elements.push(<li key={key++} className="text-sm text-muted-foreground ml-4">{line.slice(2)}</li>);
+    } else if (line.startsWith('**') && line.includes(':**')) {
+      const [label, ...rest] = line.split(':**');
+      const value = rest.join(':**');
+      elements.push(
+        <p key={key++} className="text-sm mb-1">
+          <span className="font-medium text-foreground">{label.replace(/\*\*/g, '')}:</span>
+          <span className="text-muted-foreground">{value.replace(/\*\*/g, '')}</span>
+        </p>
+      );
+    } else if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+      elements.push(<p key={key++} className="text-sm italic text-muted-foreground mb-2">{line.slice(1, -1)}</p>);
+    } else if (line.trim()) {
+      elements.push(<p key={key++} className="text-sm text-muted-foreground mb-2">{line}</p>);
+    }
+  }
+
+  return elements;
+}
+
+// Check if content is markdown (audit report)
+function isMarkdownContent(content: string | null): boolean {
+  if (!content) return false;
+  return content.startsWith('# ') || content.includes('\n## ') || content.includes('\n### ');
+}
+
 export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTabProps) {
   const queryClient = useQueryClient();
   const [selectedDeliverable, setSelectedDeliverable] = useState<Deliverable | null>(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [revisionNotes, setRevisionNotes] = useState("");
+
+  const toggleReport = (id: string) => {
+    setExpandedReports(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const { data: deliverables, isLoading } = useQuery({
     queryKey: ["client-deliverables", clientAccountId],
@@ -176,6 +236,8 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
           {deliverables.map((deliverable) => {
             const config = statusConfig[deliverable.status] || statusConfig.pending_review;
             const StatusIcon = config.icon;
+            const hasMarkdown = isMarkdownContent(deliverable.description);
+            const isExpanded = expandedReports.has(deliverable.id);
 
             return (
               <Card key={deliverable.id}>
@@ -183,15 +245,34 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
+                        {hasMarkdown && <FileText className="h-4 w-4 text-primary" />}
                         <h3 className="font-semibold text-foreground">{deliverable.title}</h3>
                         <Badge variant={config.variant} className="gap-1">
                           <StatusIcon className="h-3 w-3" />
                           {config.label}
                         </Badge>
                       </div>
+                      
                       {deliverable.description && (
-                        <p className="text-sm text-muted-foreground mb-2">{deliverable.description}</p>
+                        hasMarkdown ? (
+                          <Collapsible open={isExpanded} onOpenChange={() => toggleReport(deliverable.id)}>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="gap-2 text-primary hover:text-primary/80 p-0 h-auto mb-2">
+                                <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                {isExpanded ? 'Hide Report' : 'View Full Report'}
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="mt-3 p-4 bg-muted/50 rounded-lg border max-h-[500px] overflow-y-auto">
+                                {renderMarkdown(deliverable.description)}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        ) : (
+                          <p className="text-sm text-muted-foreground mb-2">{deliverable.description}</p>
+                        )
                       )}
+                      
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span>Submitted {format(new Date(deliverable.submitted_at), "MMM d, yyyy")}</span>
                         <Badge variant="outline" className="text-xs">{deliverable.category}</Badge>
