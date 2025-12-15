@@ -50,6 +50,7 @@ export type AdminSection =
   | "analytics"
   | "activity-feed"
   | "feature-guide"
+  | "review-workflow"
   | "contacts"
   | "gap-analysis"
   | "pdf-leads"
@@ -98,9 +99,12 @@ interface AdminSidebarProps {
 
 import { List, BookOpen as BookOpenIcon } from "lucide-react";
 
+import { PlayCircle } from "lucide-react";
+
 const mainNavItems = [
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
   { id: "alerts" as const, label: "Alerts", icon: Bell },
+  { id: "review-workflow" as const, label: "Review Workflow", icon: PlayCircle },
   { id: "quick-actions" as const, label: "Quick Actions", icon: Zap },
   { id: "calendar" as const, label: "Calendar", icon: CalendarIcon },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },

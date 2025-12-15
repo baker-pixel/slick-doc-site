@@ -68,6 +68,7 @@ import SalesProposalPanel from "@/components/admin/SalesProposalPanel";
 import FeatureGuidePanel from "@/components/admin/FeatureGuidePanel";
 import { ClientPhaseTracker } from "@/components/admin/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/ClientProgressTracker";
+import { ReviewWorkflowPanel } from "@/components/admin/ReviewWorkflowPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1003,6 +1004,8 @@ const Admin = () => {
         return <PipelineDashboard adminPassword={storedPassword} />;
       case "alerts":
         return <AutomationAlertsPanel />;
+      case "review-workflow":
+        return <ReviewWorkflowPanel adminPassword={storedPassword} />;
       case "quick-actions":
         return <QuickActionsPanel />;
       case "calendar":
@@ -1120,6 +1123,7 @@ const Admin = () => {
       analytics: "Analytics",
       "activity-feed": "Activity Feed",
       "feature-guide": "Feature Guide",
+      "review-workflow": "Review Workflow",
       contacts: "Contact Submissions",
       "gap-analysis": "Gap Analysis",
       "pdf-leads": "PDF Leads",
