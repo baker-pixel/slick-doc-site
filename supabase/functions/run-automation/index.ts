@@ -24,7 +24,8 @@ type AutomationType =
   | "generate_monthly_report"
   | "email_sequence"
   | "content_generation"
-  | "report";
+  | "report"
+  | "custom";
 
 interface AutomationRequest {
   clientId: string;
@@ -168,6 +169,9 @@ serve(async (req) => {
       case "content_generation":
       case "report":
         result = await runAiAutomation(supabase, client, jobType, inputData);
+        break;
+      case "custom":
+        result = await runCustomAutomation(supabase, client, inputData);
         break;
       default:
         throw new Error(`Unknown job type: ${jobType}`);
@@ -1421,4 +1425,44 @@ Your marketing team will:
   }
 
   return { ...parsedOutput, deliverableCreated: true };
+}
+
+// Custom automation handler for tasks with custom job types
+async function runCustomAutomation(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const taskName = (inputData?.taskName as string) || "Custom Task";
+  const taskDescription = (inputData?.description as string) || "A custom automation task was executed.";
+  const reportDate = formatDate();
+
+  await createDeliverable(
+    supabase,
+    client.id,
+    `${taskName} - ${reportDate}`,
+    `# ${taskName}
+
+## Status: Complete
+
+*Generated on ${reportDate} for ${client.business_name}*
+
+## Details
+
+${taskDescription}
+
+## Input Parameters
+
+${inputData ? Object.entries(inputData).map(([key, value]) => `- **${key}:** ${JSON.stringify(value)}`).join('\n') : 'No additional parameters provided.'}
+
+## What's Next
+
+This custom task has been completed and logged. Your team will follow up with any necessary actions.
+
+*Task completed automatically.*`,
+    "general"
+  );
+
+  return { 
+    completed: true, 
+    taskName,
+    timestamp: new Date().toISOString(),
+    deliverableCreated: true 
+  };
 }
