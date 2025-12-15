@@ -26,6 +26,7 @@ interface Client {
   business_name: string;
   email: string;
   tier: string;
+  industry: string | null;
 }
 
 interface QuickAction {
@@ -97,7 +98,7 @@ export function QuickActionsPanel() {
     
     const [templatesRes, clientsRes, queueRes, contentRes, allContentRes] = await Promise.all([
       supabase.from("email_templates").select("id, name, slug, subject, category").eq("is_active", true),
-      supabase.from("client_accounts").select("id, business_name, email, tier").eq("status", "active"),
+      supabase.from("client_accounts").select("id, business_name, email, tier, industry").eq("status", "active"),
       supabase.from("email_queue").select("id").eq("status", "pending"),
       supabase.from("generated_content").select("id").gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
       supabase.from("generated_content").select("id, title, content, content_type, status, created_at").order("created_at", { ascending: false }).limit(20)
@@ -322,7 +323,8 @@ export function QuickActionsPanel() {
           inputData: {
             contentType,
             topic: contentTopic,
-            businessName: client?.business_name
+            businessName: client?.business_name,
+            industry: client?.industry
           }
         }
       });

@@ -1244,8 +1244,17 @@ async function runAiAutomation(supabase: any, client: ClientData, jobType: strin
       userPrompt = `Create a ${client.tier}-tier email sequence for ${client.business_name}. Additional context: ${JSON.stringify(inputData || {})}`;
       break;
     case "content_generation":
-      systemPrompt = `You are a digital marketing content expert. Create engaging content.\n\nOutput JSON: { "content_pieces": [{ "type": "blog_post | social_post | ad_copy", "title": "string", "content": "string", "platform": "string" }] }`;
-      userPrompt = `Create ${client.tier}-tier content for ${client.business_name}. Context: ${JSON.stringify(inputData || {})}`;
+      const industryContext = client.industry ? `The business is in the ${client.industry} industry.` : "";
+      systemPrompt = `You are a digital marketing content expert specializing in creating industry-specific, engaging content. Create content that speaks directly to the target audience and incorporates industry best practices and terminology.\n\n${industryContext}\n\nOutput JSON: { "content_pieces": [{ "type": "blog_post | social_post | ad_copy", "title": "string", "content": "string", "platform": "string", "target_audience": "string", "key_message": "string" }] }`;
+      userPrompt = `Create ${client.tier}-tier content for ${client.business_name}${client.industry ? ` (${client.industry} industry)` : ""}. 
+      
+Make sure the content:
+- Uses industry-specific language and terminology
+- Addresses common pain points in the ${client.industry || "their"} industry
+- Includes relevant calls-to-action
+- Is optimized for the target platform
+
+Context: ${JSON.stringify(inputData || {})}`;
       break;
     case "report":
       systemPrompt = `You are a marketing analytics expert. Generate an insightful performance report.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
