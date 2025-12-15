@@ -409,16 +409,18 @@ export default function ClientMeetingsTab({ clientAccountId, clientName }: Clien
                     <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       {meeting.meeting_type === "video" ? (
                         <Video className="h-6 w-6 text-primary" />
+                      ) : meeting.meeting_type === "kickoff" ? (
+                        <CalendarIcon className="h-6 w-6 text-primary" />
                       ) : (
                         <Phone className="h-6 w-6 text-primary" />
                       )}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-medium">{meeting.title}</h4>
                         {getStatusBadge(meeting.status, meeting.scheduled_at)}
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <CalendarIcon className="h-3.5 w-3.5" />
                           {format(new Date(meeting.scheduled_at), "EEEE, MMMM d, yyyy")}
@@ -429,15 +431,25 @@ export default function ClientMeetingsTab({ clientAccountId, clientName }: Clien
                         </span>
                       </div>
                       {meeting.description && (
-                        <p className="text-sm text-muted-foreground mt-2">{meeting.description}</p>
+                        <p className="text-sm text-muted-foreground">{meeting.description}</p>
                       )}
+                      
+                      {/* Agency contact info */}
+                      <div className="pt-2 border-t mt-2 space-y-1">
+                        <p className="text-xs font-medium text-foreground">Agency Contact</p>
+                        <p className="text-xs text-muted-foreground">
+                          📧 hello@orangedoor.com • 📞 (555) 123-4567
+                        </p>
+                      </div>
+                      
                       {meeting.meeting_link && (
                         <a
                           href={meeting.meeting_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-primary hover:underline mt-2 inline-block"
+                          className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                         >
+                          <Video className="h-3.5 w-3.5" />
                           Join Meeting →
                         </a>
                       )}
