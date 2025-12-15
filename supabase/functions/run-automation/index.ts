@@ -513,7 +513,45 @@ async function runKeywordGapAnalysis(supabase: any, client: ClientData) {
     results: gapResults,
   });
 
-  return { completed: true, results: gapResults };
+  // Create a deliverable so client can view the results
+  const reportDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const markdownReport = `# Keyword Gap Analysis Report
+
+## Summary
+
+*Generated on ${reportDate} for ${client.business_name}*
+
+**Total Keyword Opportunities Found:** ${gapResults.totalOpportunities}
+
+## Top Keyword Opportunities
+
+These are keywords your competitors rank for that you should target:
+
+${gapResults.topKeywords.map(kw => `- **${kw}**`).join('\n')}
+
+## Competitor Analysis
+
+${gapResults.competitorKeywords.map((c: { name: string; keywords: number }) => `### ${c.name}
+- Ranking for approximately **${c.keywords} keywords** you're missing`).join('\n\n')}
+
+## Recommendations
+
+Based on this analysis, we recommend:
+- Creating content targeting the top keyword opportunities
+- Optimizing existing pages for related terms
+- Building backlinks to improve domain authority
+
+*Your marketing team will develop a content strategy based on these findings.*`;
+
+  await supabase.from("deliverables").insert({
+    client_account_id: client.id,
+    title: `Keyword Gap Analysis - ${reportDate}`,
+    description: markdownReport,
+    category: "report",
+    status: "pending_review",
+  });
+
+  return { completed: true, results: gapResults, deliverableCreated: true };
 }
 
 async function setupLeadAutomations(supabase: any, client: ClientData) {
