@@ -29,6 +29,8 @@ interface ClientMeeting {
   client_accounts?: {
     business_name: string;
     email: string;
+    first_name: string | null;
+    last_name: string | null;
   };
 }
 
@@ -68,7 +70,9 @@ const ClientMeetingsAdminPanel = () => {
           *,
           client_accounts (
             business_name,
-            email
+            email,
+            first_name,
+            last_name
           )
         `)
         .order('scheduled_at', { ascending: true });
@@ -215,6 +219,7 @@ const ClientMeetingsAdminPanel = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Client</TableHead>
+                  <TableHead>Contact</TableHead>
                   <TableHead>Meeting</TableHead>
                   <TableHead>Date & Time</TableHead>
                   <TableHead>Type</TableHead>
@@ -224,12 +229,22 @@ const ClientMeetingsAdminPanel = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredMeetings.map((meeting) => (
+                {filteredMeetings.map((meeting) => {
+                  const clientName = [meeting.client_accounts?.first_name, meeting.client_accounts?.last_name].filter(Boolean).join(' ');
+                  return (
                   <TableRow key={meeting.id}>
                     <TableCell>
                       <div>
                         <p className="font-medium">{meeting.client_accounts?.business_name}</p>
-                        <p className="text-xs text-muted-foreground">{meeting.client_accounts?.email}</p>
+                        {clientName && <p className="text-xs text-muted-foreground">{clientName}</p>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="text-sm">{meeting.client_accounts?.email}</p>
+                        {meeting.booked_by && (
+                          <p className="text-xs text-muted-foreground">Booked by: {meeting.booked_by}</p>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -283,12 +298,14 @@ const ClientMeetingsAdminPanel = () => {
                         variant="ghost" 
                         size="sm"
                         onClick={() => openEditDialog(meeting)}
+                        title="Edit meeting"
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
