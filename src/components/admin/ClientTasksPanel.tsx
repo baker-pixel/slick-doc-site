@@ -10,8 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, CheckCircle, Play, Eye, ClipboardList, Zap, User, Clock, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle, Play, Eye, ClipboardList, Zap, User, Clock, RefreshCw, LayoutGrid, List } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { TaskCompletionModal } from "./TaskCompletionModal";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ClientTask {
   id: string;
@@ -40,8 +42,11 @@ export function ClientTasksPanel() {
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [automationFilter, setAutomationFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedTask, setSelectedTask] = useState<ClientTask | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
+  const [taskToComplete, setTaskToComplete] = useState<ClientTask | null>(null);
   const [runningTasks, setRunningTasks] = useState<Set<string>>(new Set());
   const [runningAll, setRunningAll] = useState(false);
   const [clients, setClients] = useState<{ id: string; business_name: string }[]>([]);
@@ -243,6 +248,16 @@ export function ClientTasksPanel() {
                 Run All Pending ({stats.automatable})
               </Button>
             )}
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")} className="w-auto">
+              <TabsList className="grid w-[140px] grid-cols-2">
+                <TabsTrigger value="table" className="flex items-center gap-1">
+                  <List className="h-4 w-4" />
+                </TabsTrigger>
+                <TabsTrigger value="kanban" className="flex items-center gap-1">
+                  <LayoutGrid className="h-4 w-4" />
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
             <Button size="sm" variant="outline" onClick={fetchTasks}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -320,7 +335,84 @@ export function ClientTasksPanel() {
           <div className="text-center py-8 text-muted-foreground">
             No tasks found. Tasks are automatically created when you add clients.
           </div>
+        ) : viewMode === "kanban" ? (
+          /* Kanban View */
+          <div className="grid grid-cols-3 gap-4">
+            {/* Pending Column */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                <span className="font-semibold">Pending</span>
+                <Badge variant="secondary">{filteredTasks.filter(t => t.status === "pending").length}</Badge>
+              </div>
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {filteredTasks.filter(t => t.status === "pending").slice(0, 20).map(task => (
+                  <Card key={task.id} className="p-3 cursor-pointer hover:shadow-md transition-shadow" onClick={() => { setSelectedTask(task); setDetailsOpen(true); }}>
+                    <div className="font-medium text-sm line-clamp-2">{task.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{task.client_accounts?.business_name}</div>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center gap-1">
+                        {getAutomationIcon(task.automation_type)}
+                        <span className="text-xs capitalize">{task.category}</span>
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-green-600" onClick={(e) => { e.stopPropagation(); setTaskToComplete(task); setCompletionModalOpen(true); }}>
+                        <CheckCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+            
+            {/* In Progress Column */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <span className="font-semibold">In Progress</span>
+                <Badge variant="secondary">{filteredTasks.filter(t => t.status === "in_progress").length}</Badge>
+              </div>
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {filteredTasks.filter(t => t.status === "in_progress").slice(0, 20).map(task => (
+                  <Card key={task.id} className="p-3 cursor-pointer hover:shadow-md transition-shadow" onClick={() => { setSelectedTask(task); setDetailsOpen(true); }}>
+                    <div className="font-medium text-sm line-clamp-2">{task.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{task.client_accounts?.business_name}</div>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center gap-1">
+                        {getAutomationIcon(task.automation_type)}
+                        <span className="text-xs capitalize">{task.category}</span>
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-green-600" onClick={(e) => { e.stopPropagation(); setTaskToComplete(task); setCompletionModalOpen(true); }}>
+                        <CheckCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+            
+            {/* Completed Column */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <span className="font-semibold">Completed</span>
+                <Badge variant="secondary">{filteredTasks.filter(t => t.status === "completed").length}</Badge>
+              </div>
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {filteredTasks.filter(t => t.status === "completed").slice(0, 20).map(task => (
+                  <Card key={task.id} className="p-3 cursor-pointer hover:shadow-md transition-shadow opacity-75" onClick={() => { setSelectedTask(task); setDetailsOpen(true); }}>
+                    <div className="font-medium text-sm line-clamp-2">{task.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{task.client_accounts?.business_name}</div>
+                    <div className="flex items-center gap-1 mt-2">
+                      {getAutomationIcon(task.automation_type)}
+                      <span className="text-xs capitalize">{task.category}</span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </div>
         ) : (
+          /* Table View */
           <Table>
             <TableHeader>
               <TableRow>
@@ -380,7 +472,8 @@ export function ClientTasksPanel() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => updateTaskStatus(task.id, "completed")}
+                          className="text-green-600 border-green-600 hover:bg-green-50"
+                          onClick={() => { setTaskToComplete(task); setCompletionModalOpen(true); }}
                         >
                           <CheckCircle className="h-4 w-4" />
                         </Button>
@@ -463,11 +556,31 @@ export function ClientTasksPanel() {
                       Run Automation
                     </Button>
                   )}
+                  {selectedTask.status !== "completed" && (
+                    <Button 
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => { 
+                        setTaskToComplete(selectedTask); 
+                        setCompletionModalOpen(true); 
+                        setDetailsOpen(false);
+                      }}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Complete
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
           </DialogContent>
         </Dialog>
+
+        <TaskCompletionModal
+          open={completionModalOpen}
+          onOpenChange={setCompletionModalOpen}
+          task={taskToComplete}
+          onComplete={fetchTasks}
+        />
       </CardContent>
     </Card>
   );
