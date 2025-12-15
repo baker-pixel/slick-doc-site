@@ -1,10 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Download, Image, Type, Palette, FileText, Copy, Check, ExternalLink } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Download, Image, Type, Palette, FileText, Copy, Check, ExternalLink, Upload, Plus, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface BrandAsset {
@@ -47,6 +51,16 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadForm, setUploadForm] = useState({
+    name: "",
+    asset_type: "logo",
+    description: "",
+    colorValue: "",
+  });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchAssets();
@@ -77,6 +91,98 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       return data.publicUrl;
     }
     return null;
+  };
+
+  const handleUpload = async () => {
+    if (!uploadForm.name.trim()) {
+      toast({ title: "Please enter an asset name", variant: "destructive" });
+      return;
+    }
+
+    if (uploadForm.asset_type === "color" && !uploadForm.colorValue.trim()) {
+      toast({ title: "Please enter a color value", variant: "destructive" });
+      return;
+    }
+
+    if (uploadForm.asset_type !== "color" && !selectedFile) {
+      toast({ title: "Please select a file to upload", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      let filePath: string | null = null;
+      
+      // Upload file if not a color asset
+      if (selectedFile && uploadForm.asset_type !== "color") {
+        const fileExt = selectedFile.name.split(".").pop();
+        const fileName = `${clientAccountId}/${Date.now()}-${uploadForm.name.replace(/\s+/g, "-")}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from("brand-assets")
+          .upload(fileName, selectedFile);
+
+        if (uploadError) throw uploadError;
+        filePath = fileName;
+      }
+
+      // Create the brand asset record
+      const metadata = uploadForm.asset_type === "color" 
+        ? { hex: uploadForm.colorValue, value: uploadForm.colorValue }
+        : {};
+
+      const { error: insertError } = await supabase
+        .from("brand_assets")
+        .insert({
+          client_account_id: clientAccountId,
+          name: uploadForm.name,
+          description: uploadForm.description || null,
+          asset_type: uploadForm.asset_type,
+          category: uploadForm.asset_type === "logo" ? "logos" : 
+                   uploadForm.asset_type === "color" ? "colors" :
+                   uploadForm.asset_type === "font" ? "fonts" : "guidelines",
+          file_path: filePath,
+          metadata,
+        });
+
+      if (insertError) throw insertError;
+
+      toast({ title: "Asset uploaded successfully!" });
+      setUploadDialogOpen(false);
+      setUploadForm({ name: "", asset_type: "logo", description: "", colorValue: "" });
+      setSelectedFile(null);
+      fetchAssets();
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (assetId: string, filePath: string | null) => {
+    if (!confirm("Are you sure you want to delete this asset?")) return;
+
+    try {
+      // Delete from storage if file exists
+      if (filePath) {
+        await supabase.storage.from("brand-assets").remove([filePath]);
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from("brand_assets")
+        .delete()
+        .eq("id", assetId);
+
+      if (error) throw error;
+      
+      toast({ title: "Asset deleted" });
+      fetchAssets();
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      toast({ title: "Failed to delete asset", variant: "destructive" });
+    }
   };
 
   const handleDownload = async (asset: BrandAsset) => {
@@ -131,19 +237,136 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">Brand Assets</h2>
-        <p className="text-muted-foreground">Access your brand logos, colors, fonts, and guidelines</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">Brand Assets</h2>
+          <p className="text-muted-foreground">Upload and manage your brand logos, colors, fonts, and guidelines</p>
+        </div>
+        <Button onClick={() => setUploadDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Upload Asset
+        </Button>
       </div>
+
+      {/* Upload Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Brand Asset</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="asset-name">Asset Name *</Label>
+              <Input
+                id="asset-name"
+                value={uploadForm.name}
+                onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                placeholder="e.g., Primary Logo, Brand Blue"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="asset-type">Asset Type *</Label>
+              <Select
+                value={uploadForm.asset_type}
+                onValueChange={(value) => setUploadForm({ ...uploadForm, asset_type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="logo">Logo</SelectItem>
+                  <SelectItem value="color">Color</SelectItem>
+                  <SelectItem value="font">Font</SelectItem>
+                  <SelectItem value="guideline">Guideline / Document</SelectItem>
+                  <SelectItem value="icon">Icon</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {uploadForm.asset_type === "color" ? (
+              <div className="space-y-2">
+                <Label htmlFor="color-value">Color Value (Hex) *</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="color-value"
+                    value={uploadForm.colorValue}
+                    onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
+                    placeholder="#FF5500"
+                  />
+                  {uploadForm.colorValue && (
+                    <div
+                      className="h-10 w-10 rounded border flex-shrink-0"
+                      style={{ backgroundColor: uploadForm.colorValue }}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>File *</Label>
+                <div 
+                  className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept={uploadForm.asset_type === "logo" ? "image/*" : 
+                            uploadForm.asset_type === "font" ? ".ttf,.otf,.woff,.woff2" : 
+                            "*"}
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  />
+                  {selectedFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FileText className="h-5 w-5 text-primary" />
+                      <span className="text-sm font-medium">{selectedFile.name}</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">Click to select a file</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Input
+                id="description"
+                value={uploadForm.description}
+                onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+                placeholder="Brief description of this asset"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpload} disabled={uploading}>
+              {uploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {assets.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Palette className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No brand assets yet</h3>
-            <p className="text-muted-foreground text-center">
-              Your brand assets will appear here once they're uploaded
+            <p className="text-muted-foreground text-center mb-4">
+              Upload your logo, brand colors, fonts, and guidelines
             </p>
+            <Button onClick={() => setUploadDialogOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Upload Your First Asset
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -189,9 +412,14 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                                 <Badge variant="secondary" className="mt-2">Primary</Badge>
                               )}
                             </div>
-                            <Button size="icon" variant="ghost" onClick={() => handleDownload(asset)}>
-                              <Download className="h-4 w-4" />
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button size="icon" variant="ghost" onClick={() => handleDownload(asset)} title="Download">
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => handleDelete(asset.id, asset.file_path)} title="Delete" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -221,18 +449,30 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                           <p className="font-medium text-sm truncate">{asset.name}</p>
                           <div className="flex items-center justify-between mt-1">
                             <code className="text-xs text-muted-foreground">{colorValue}</code>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              onClick={() => handleCopyColor(colorValue, asset.id)}
-                            >
-                              {copiedId === asset.id ? (
-                                <Check className="h-3 w-3 text-green-500" />
-                              ) : (
-                                <Copy className="h-3 w-3" />
-                              )}
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={() => handleCopyColor(colorValue, asset.id)}
+                                title="Copy color"
+                              >
+                                {copiedId === asset.id ? (
+                                  <Check className="h-3 w-3 text-green-500" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-destructive hover:text-destructive"
+                                onClick={() => handleDelete(asset.id, asset.file_path)}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -271,12 +511,17 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                                 </div>
                               )}
                             </div>
-                            {url && (
-                              <Button size="sm" variant="outline" onClick={() => handleDownload(asset)}>
-                                <Download className="h-4 w-4 mr-2" />
-                                Download
+                            <div className="flex gap-2">
+                              {url && (
+                                <Button size="sm" variant="outline" onClick={() => handleDownload(asset)}>
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download
+                                </Button>
+                              )}
+                              <Button size="sm" variant="ghost" onClick={() => handleDelete(asset.id, asset.file_path)} className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
                               </Button>
-                            )}
+                            </div>
                           </div>
                           {asset.metadata?.preview && (
                             <div className="mt-4 p-4 bg-muted/50 rounded-lg">
@@ -333,6 +578,9 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                                   </Button>
                                 </>
                               )}
+                              <Button size="sm" variant="ghost" onClick={() => handleDelete(asset.id, asset.file_path)} className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
                         </CardContent>
