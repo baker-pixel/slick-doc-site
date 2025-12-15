@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 export type AdminSection = 
+  | "client-workflow"
   | "pipeline" 
   | "alerts" 
   | "quick-actions" 
@@ -102,9 +103,10 @@ import { List, BookOpen as BookOpenIcon } from "lucide-react";
 import { PlayCircle } from "lucide-react";
 
 const mainNavItems = [
+  { id: "client-workflow" as const, label: "Client Workflow", icon: PlayCircle },
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
   { id: "alerts" as const, label: "Alerts", icon: Bell },
-  { id: "review-workflow" as const, label: "Review Workflow", icon: PlayCircle },
+  { id: "review-workflow" as const, label: "Review Workflow", icon: ClipboardCheck },
   { id: "quick-actions" as const, label: "Quick Actions", icon: Zap },
   { id: "calendar" as const, label: "Calendar", icon: CalendarIcon },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
