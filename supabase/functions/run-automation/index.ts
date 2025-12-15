@@ -444,15 +444,47 @@ async function runSeoAudit(supabase: any, client: ClientData) {
     results: auditResults,
   });
 
-  // Create a deliverable so client can view the SEO audit results
+  // Create a markdown report for the deliverable
   const reportDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const markdownReport = `# SEO Audit Report
+
+## Overall Score: ${overallScore}/100
+
+*Generated on ${reportDate} for ${client.business_name}*
+
+## Technical SEO
+**Score:** ${auditResults.technical.score}/100
+
+### Issues Found:
+${auditResults.technical.issues.map(issue => `- ${issue}`).join('\n')}
+
+## On-Page SEO
+**Score:** ${auditResults.onPage.score}/100
+
+### Issues Found:
+${auditResults.onPage.issues.map(issue => `- ${issue}`).join('\n')}
+
+## Off-Page SEO
+**Score:** ${auditResults.offPage.score}/100
+
+### Issues Found:
+${auditResults.offPage.issues.map(issue => `- ${issue}`).join('\n')}
+
+## Next Steps
+
+Based on this audit, we recommend focusing on:
+- Addressing technical issues first (meta descriptions, page speed)
+- Building more quality backlinks
+- Improving content depth on key pages
+
+*Your marketing team will review these findings and create an action plan.*`;
+
   await supabase.from("deliverables").insert({
     client_account_id: client.id,
     title: `SEO Audit Report - ${reportDate}`,
-    description: `Comprehensive SEO audit with overall score of ${overallScore}/100. Technical: ${auditResults.technical.score}, On-Page: ${auditResults.onPage.score}, Off-Page: ${auditResults.offPage.score}.`,
+    description: markdownReport,
     category: "report",
     status: "pending_review",
-    file_url: JSON.stringify(auditResults), // Store results as JSON for now
   });
 
   return { completed: true, results: auditResults, deliverableCreated: true };
