@@ -171,29 +171,31 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
       const scheduledAt = new Date(meetingDay);
       scheduledAt.setHours(hours || 0, minutes || 0, 0, 0);
 
-      const { error } = await supabase.from("client_meetings").insert({
-        client_account_id: selectedClient.id,
-        title: meetingTitle,
-        scheduled_at: scheduledAt.toISOString(),
-        meeting_type: "kickoff",
-        status: "scheduled",
-        duration_minutes: 60,
+      const resp = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_meeting",
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient.id,
+            title: meetingTitle,
+            scheduled_at: scheduledAt.toISOString(),
+            meeting_type: "kickoff",
+            duration_minutes: 60,
+          },
+        },
       });
-      if (error) throw error;
 
-      await supabase
-        .from("client_onboarding")
-        .update({ kickoff_scheduled_at: new Date().toISOString() })
-        .eq("client_account_id", selectedClient.id);
+      if (resp.error) throw resp.error;
+      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
 
       toast.success("Kickoff meeting scheduled!");
       setMeetingModalOpen(false);
       setMeetingDay(undefined);
       setMeetingTime("09:00");
       await fetchOnboardingData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to schedule meeting");
+      toast.error(err?.message ? `Failed to schedule meeting: ${err.message}` : "Failed to schedule meeting");
     } finally {
       setActionLoading(null);
     }

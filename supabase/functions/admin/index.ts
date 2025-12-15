@@ -39,6 +39,66 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create_meeting": {
+        const {
+          client_account_id,
+          title,
+          scheduled_at,
+          meeting_type = "kickoff",
+          duration_minutes = 60,
+          meeting_link = null,
+          description = null,
+          notes = null,
+        } = data || {};
+
+        if (!client_account_id || !title || !scheduled_at) {
+          return new Response(
+            JSON.stringify({ error: "client_account_id, title, and scheduled_at are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: meeting, error } = await supabase
+          .from("client_meetings")
+          .insert({
+            client_account_id,
+            title,
+            scheduled_at,
+            meeting_type,
+            duration_minutes,
+            meeting_link,
+            description,
+            notes,
+            status: "scheduled",
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Record kickoff in onboarding + client record (best-effort)
+        await supabase
+          .from("client_onboarding")
+          .upsert(
+            {
+              client_account_id,
+              kickoff_scheduled_at: scheduled_at,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "client_account_id" }
+          );
+
+        await supabase
+          .from("client_accounts")
+          .update({ kickoff_scheduled_at: scheduled_at })
+          .eq("id", client_account_id);
+
+        return new Response(
+          JSON.stringify({ data: meeting }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "fetch": {
         // Fetch all admin data in one call
         const [contactsResult, gapResult, pdfResult] = await Promise.all([
