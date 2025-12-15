@@ -24,6 +24,7 @@ import { QuickStartChecklist } from "@/components/admin/QuickStartChecklist";
 import { EmailAdminPanel } from "@/components/admin/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel";
+import { ClientOnboardingChecklist } from "@/components/admin/ClientOnboardingChecklist";
 import { SOPManagementPanel } from "@/components/admin/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/AutomationJobsPanel";
 import { ContentReviewPanel } from "@/components/admin/ContentReviewPanel";
@@ -1032,7 +1033,12 @@ const Admin = () => {
       case "campaigns":
         return <CampaignSenderPanel />;
       case "clients":
-        return <ClientManagementPanel adminPassword={storedPassword} />;
+        return (
+          <div className="space-y-6">
+            <ClientOnboardingChecklist adminPassword={storedPassword} />
+            <ClientManagementPanel adminPassword={storedPassword} />
+          </div>
+        );
       case "client-projects":
         return <ClientProjectsAdminPanel />;
       case "client-analytics":
