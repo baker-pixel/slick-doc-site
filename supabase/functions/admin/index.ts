@@ -1540,6 +1540,48 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "getClientTasks": {
+        const { data: tasks, error } = await supabase
+          .from("client_tasks")
+          .select("*, client_accounts(business_name)")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        console.log(`Fetched ${tasks?.length || 0} client tasks`);
+        return new Response(
+          JSON.stringify({ tasks }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "getClients": {
+        const { data: clients, error } = await supabase
+          .from("client_accounts")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        console.log(`Fetched ${clients?.length || 0} clients`);
+        return new Response(
+          JSON.stringify({ clients }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "getDeliverables": {
+        const { data: deliverables, error } = await supabase
+          .from("deliverables")
+          .select("*, client_accounts(business_name)")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        console.log(`Fetched ${deliverables?.length || 0} deliverables`);
+        return new Response(
+          JSON.stringify({ deliverables }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Invalid action" }),
