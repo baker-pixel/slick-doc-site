@@ -119,14 +119,19 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
       const gapAnalyses = ((gapRes.data as any)?.data || []) as Array<any>;
       const clients = ((clientsRes.data as any)?.data || []) as Array<any>;
 
-      // Create a set of client emails for quick lookup
-      const clientEmails = new Set(clients.map((c: any) => c.email?.toLowerCase()));
+      // Create a map of client accounts by email+business_name for lookup
+      const clientAccountsMap = new Map<string, any>();
+      clients.forEach((c: any) => {
+        const key = `${c.email?.toLowerCase()}_${c.business_name?.toLowerCase()}`;
+        clientAccountsMap.set(key, c);
+      });
 
       // Build unified leads list
       const allLeads: Lead[] = [];
 
       // Add gap analysis submissions (these are the primary leads we care about)
       gapAnalyses.forEach((gap: any) => {
+        const lookupKey = `${gap.email?.toLowerCase()}_${gap.business_name?.toLowerCase()}`;
         allLeads.push({
           id: gap.id,
           first_name: gap.first_name || "",
@@ -136,7 +141,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
           status: gap.status || "submitted",
           created_at: gap.created_at,
           source: "gap_analysis",
-          has_client_account: clientEmails.has(gap.email?.toLowerCase()),
+          has_client_account: clientAccountsMap.has(lookupKey),
           ai_analysis: gap.ai_analysis,
         });
       });
@@ -145,6 +150,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
       const gapEmails = new Set(gapAnalyses.map((g: any) => g.email?.toLowerCase()));
       contacts.forEach((contact: any) => {
         if (!gapEmails.has(contact.email?.toLowerCase())) {
+          const lookupKey = `${contact.email?.toLowerCase()}_${contact.business_name?.toLowerCase()}`;
           allLeads.push({
             id: contact.id,
             first_name: contact.first_name || "",
@@ -154,7 +160,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
             status: contact.status || "new",
             created_at: contact.created_at,
             source: "contact",
-            has_client_account: clientEmails.has(contact.email?.toLowerCase()),
+            has_client_account: clientAccountsMap.has(lookupKey),
           });
         }
       });
