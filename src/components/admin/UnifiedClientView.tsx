@@ -27,6 +27,7 @@ import {
   Eye,
   Plus,
   Minus,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -536,15 +537,19 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                     <div
                       key={task.id}
                       className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg border",
+                        "flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors",
                         task.status === "completed" && "opacity-60 bg-muted/30"
                       )}
+                      onClick={() => onNavigateToSection?.("client-tasks")}
                     >
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 shrink-0"
-                        onClick={() => task.status === "completed" ? reopenTask(task.id) : completeTask(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          task.status === "completed" ? reopenTask(task.id) : completeTask(task.id);
+                        }}
                       >
                         {task.status === "completed" ? (
                           <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -565,11 +570,12 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                         <Badge variant="secondary" className="bg-violet-100 text-violet-700">AI</Badge>
                       )}
                       {task.status === "completed" && (
-                        <Button variant="ghost" size="sm" onClick={() => reopenTask(task.id)} className="gap-1">
+                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); reopenTask(task.id); }} className="gap-1">
                           <RotateCcw className="w-3 h-3" />
                           Reopen
                         </Button>
                       )}
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
                   ))}
                 </div>
