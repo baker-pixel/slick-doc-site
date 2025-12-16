@@ -35,7 +35,6 @@ interface ClientTask {
   due_date: string | null;
   client_account_id: string;
   assigned_to: string | null;
-  team_member_id: string | null;
   client_accounts?: {
     business_name: string;
   };
@@ -60,7 +59,7 @@ export function BatchOperationsPanel({ adminPassword }: BatchOperationsPanelProp
         `)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as ClientTask[];
+      return (data || []) as unknown as ClientTask[];
     }
   });
 
@@ -169,11 +168,11 @@ export function BatchOperationsPanel({ adminPassword }: BatchOperationsPanelProp
     batchUpdateMutation.mutate({ taskIds, updates });
   };
 
-  const handleBatchAssign = (teamMemberId: string) => {
+  const handleBatchAssign = (memberName: string) => {
     const taskIds = Array.from(selectedTasks);
     batchUpdateMutation.mutate({ 
       taskIds, 
-      updates: { team_member_id: teamMemberId || null } 
+      updates: { assigned_to: memberName || null } 
     });
   };
 

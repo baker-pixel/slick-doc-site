@@ -27,7 +27,7 @@ interface TeamMember {
   name: string;
   email: string;
   role: string;
-  avatar_url: string | null;
+  photo_url?: string | null;
 }
 
 export function TeamPerformanceMetrics({ adminPassword }: TeamPerformanceMetricsProps) {
@@ -45,7 +45,7 @@ export function TeamPerformanceMetrics({ adminPassword }: TeamPerformanceMetrics
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
-      return data as TeamMember[];
+      return (data || []).map((m: any) => ({ ...m, photo_url: m.photo_url })) as TeamMember[];
     }
   });
 
@@ -78,7 +78,7 @@ export function TeamPerformanceMetrics({ adminPassword }: TeamPerformanceMetrics
   // Calculate performance metrics per team member
   const performanceData = useMemo(() => {
     return teamMembers.map(member => {
-      const memberTasks = allTasks.filter(t => t.team_member_id === member.id);
+      const memberTasks = allTasks.filter(t => t.assigned_to === member.name);
       const completedTasks = memberTasks.filter(t => t.status === "completed");
       const onTimeTasks = completedTasks.filter(t => {
         if (!t.due_date || !t.completed_at) return true;
@@ -248,7 +248,7 @@ export function TeamPerformanceMetrics({ adminPassword }: TeamPerformanceMetrics
                       #{index + 1}
                     </div>
                     <Avatar className="h-12 w-12">
-                      <AvatarImage src={data.member.avatar_url || undefined} />
+                      <AvatarImage src={data.member.photo_url || undefined} />
                       <AvatarFallback>
                         {data.member.name.split(" ").map(n => n[0]).join("")}
                       </AvatarFallback>
@@ -333,7 +333,7 @@ export function TeamPerformanceMetrics({ adminPassword }: TeamPerformanceMetrics
                   {performanceData.slice(0, 5).map(data => (
                     <div key={data.member.id} className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={data.member.avatar_url || undefined} />
+                        <AvatarImage src={data.member.photo_url || undefined} />
                         <AvatarFallback className="text-xs">
                           {data.member.name.split(" ").map(n => n[0]).join("")}
                         </AvatarFallback>
@@ -379,7 +379,7 @@ export function TeamPerformanceMetrics({ adminPassword }: TeamPerformanceMetrics
                         <td className="p-3">
                           <div className="flex items-center gap-2">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={data.member.avatar_url || undefined} />
+                              <AvatarImage src={data.member.photo_url || undefined} />
                               <AvatarFallback className="text-xs">
                                 {data.member.name.split(" ").map(n => n[0]).join("")}
                               </AvatarFallback>

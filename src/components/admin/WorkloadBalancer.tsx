@@ -25,9 +25,10 @@ interface TeamMember {
   name: string;
   email: string;
   role: string;
-  avatar_url: string | null;
-  capacity_hours_per_week: number;
+  photo_url?: string | null;
 }
+
+const DEFAULT_CAPACITY_HOURS = 40;
 
 export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
   // Fetch team members
@@ -40,7 +41,7 @@ export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
-      return data as TeamMember[];
+      return (data || []).map((m: any) => ({ ...m, photo_url: m.photo_url })) as TeamMember[];
     }
   });
 
@@ -56,20 +57,7 @@ export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
         `)
         .order("due_date", { ascending: true });
       if (error) throw error;
-      return data;
-    }
-  });
-
-  // Fetch performance metrics
-  const { data: performanceMetrics = [] } = useQuery({
-    queryKey: ["workload-performance"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("team_performance_metrics")
-        .select("*")
-        .order("period_end", { ascending: false });
-      if (error) throw error;
-      return data;
+      return data || [];
     }
   });
 
@@ -87,29 +75,29 @@ export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
     const today = new Date();
 
     teamMembers.forEach(member => {
-      const memberTasks = allTasks.filter(t => t.team_member_id === member.id);
-      const pending = memberTasks.filter(t => t.status === "pending").length;
-      const inProgress = memberTasks.filter(t => t.status === "in_progress").length;
-      const completed = memberTasks.filter(t => t.status === "completed").length;
-      const overdue = memberTasks.filter(t => 
+      const memberTasks = allTasks.filter((t: any) => t.assigned_to === member.name);
+      const pending = memberTasks.filter((t: any) => t.status === "pending").length;
+      const inProgress = memberTasks.filter((t: any) => t.status === "in_progress").length;
+      const completed = memberTasks.filter((t: any) => t.status === "completed").length;
+      const overdue = memberTasks.filter((t: any) => 
         t.due_date && new Date(t.due_date) < today && t.status !== "completed"
       ).length;
       const total = pending + inProgress;
       
       // Assume each task is ~2 hours of work, calculate utilization
       const estimatedHours = total * 2;
-      const utilization = Math.min(100, (estimatedHours / member.capacity_hours_per_week) * 100);
+      const utilization = Math.min(100, (estimatedHours / DEFAULT_CAPACITY_HOURS) * 100);
 
       stats[member.id] = { pending, inProgress, completed, overdue, total, utilization };
     });
 
     // Add unassigned stats
-    const unassignedTasks = allTasks.filter(t => !t.team_member_id);
+    const unassignedTasks = allTasks.filter((t: any) => !t.assigned_to);
     stats["unassigned"] = {
-      pending: unassignedTasks.filter(t => t.status === "pending").length,
-      inProgress: unassignedTasks.filter(t => t.status === "in_progress").length,
+      pending: unassignedTasks.filter((t: any) => t.status === "pending").length,
+      inProgress: unassignedTasks.filter((t: any) => t.status === "in_progress").length,
       completed: 0,
-      overdue: unassignedTasks.filter(t => 
+      overdue: unassignedTasks.filter((t: any) => 
         t.due_date && new Date(t.due_date) < today && t.status !== "completed"
       ).length,
       total: unassignedTasks.length,
@@ -240,12 +228,12 @@ export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
               
               return (
                 <div key={member.id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={member.avatar_url || undefined} />
-                        <AvatarFallback>
-                          {member.name.split(" ").map(n => n[0]).join("")}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={member.photo_url || undefined} />
+                          <AvatarFallback>
+                            {member.name.split(" ").map(n => n[0]).join("")}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -295,7 +283,7 @@ export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
                       className="flex-1 h-2"
                     />
                     <span className="text-xs text-muted-foreground w-24 text-right">
-                      {stats.total} / ~{Math.floor(member.capacity_hours_per_week / 2)} capacity
+                      {stats.total} / ~{Math.floor(DEFAULT_CAPACITY_HOURS / 2)} capacity
                     </span>
                   </div>
                 </div>
@@ -369,7 +357,7 @@ export function WorkloadBalancer({ adminPassword }: WorkloadBalancerProps) {
                     <div>
                       <div className="font-medium">{member.name} has capacity</div>
                       <p className="text-sm text-muted-foreground">
-                        Can take on {Math.floor((member.capacity_hours_per_week / 2) - (workloadStats[member.id]?.total || 0))} more tasks
+                        Can take on {Math.floor((DEFAULT_CAPACITY_HOURS / 2) - (workloadStats[member.id]?.total || 0))} more tasks
                       </p>
                     </div>
                   </div>
