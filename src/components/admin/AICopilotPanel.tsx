@@ -99,23 +99,30 @@ export function AICopilotPanel() {
   const [output, setOutput] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [copied, setCopied] = useState(false);
+  const [shouldScrollToOutput, setShouldScrollToOutput] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to output when it appears
+  // Scroll to output when generation completes
+  const scrollToOutput = () => {
+    setTimeout(() => {
+      const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer && outputRef.current) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const outputRect = outputRef.current.getBoundingClientRect();
+        const scrollTop = scrollContainer.scrollTop + (outputRect.top - containerRect.top) - 20;
+        scrollContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
+      }
+    }, 200);
+  };
+
+  // Trigger scroll when shouldScrollToOutput is set
   useEffect(() => {
-    if (output && outputRef.current && scrollAreaRef.current) {
-      setTimeout(() => {
-        const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-        if (scrollContainer && outputRef.current) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const outputRect = outputRef.current.getBoundingClientRect();
-          const scrollTop = scrollContainer.scrollTop + (outputRect.top - containerRect.top) - 20;
-          scrollContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
-        }
-      }, 150);
+    if (shouldScrollToOutput && output) {
+      scrollToOutput();
+      setShouldScrollToOutput(false);
     }
-  }, [output]);
+  }, [shouldScrollToOutput, output]);
 
   useEffect(() => {
     fetchClients();
@@ -215,6 +222,7 @@ export function AICopilotPanel() {
     } finally {
       setIsLoading(false);
       setActiveCommand(null);
+      setShouldScrollToOutput(true);
     }
   };
 
@@ -293,6 +301,7 @@ export function AICopilotPanel() {
     } finally {
       setIsLoading(false);
       setActiveCommand(null);
+      setShouldScrollToOutput(true);
     }
   };
 
