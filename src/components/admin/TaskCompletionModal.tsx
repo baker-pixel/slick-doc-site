@@ -1,14 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, CheckCircle, FileUp, Bell, Package } from "lucide-react";
+import { Loader2, CheckCircle, Bell, Package } from "lucide-react";
 
 interface TaskCompletionModalProps {
   open: boolean;
@@ -26,6 +25,73 @@ interface TaskCompletionModalProps {
   onComplete: () => void;
 }
 
+// Generate deliverable title options based on task name and category
+const generateDeliverableTitles = (taskName: string, category: string, businessName?: string): string[] => {
+  const titles: string[] = [];
+  const cleanTaskName = taskName.replace(/^(Create|Build|Design|Develop|Write|Setup|Configure|Implement|Add|Update)\s+/i, '');
+  
+  // Add task-based title
+  titles.push(`${cleanTaskName} - Completed`);
+  titles.push(`${taskName} Deliverable`);
+  
+  // Category-specific suggestions
+  switch (category.toLowerCase()) {
+    case 'seo':
+      titles.push('SEO Audit Report', 'Keyword Research Document', 'SEO Recommendations', 'Technical SEO Analysis', 'Backlink Report');
+      break;
+    case 'content':
+      titles.push('Content Strategy Document', 'Blog Post Draft', 'Content Calendar', 'Copy Revision', 'Social Media Content');
+      break;
+    case 'design':
+      titles.push('Design Mockup', 'Brand Assets Package', 'UI/UX Design', 'Logo Design', 'Marketing Collateral');
+      break;
+    case 'development':
+      titles.push('Website Update', 'Feature Implementation', 'Bug Fix Report', 'Performance Optimization', 'Code Review');
+      break;
+    case 'marketing':
+      titles.push('Marketing Campaign Assets', 'Ad Creative Package', 'Email Campaign', 'Marketing Strategy', 'Campaign Report');
+      break;
+    case 'ads':
+      titles.push('Ad Campaign Setup', 'Ad Creative Package', 'PPC Report', 'Ad Performance Analysis', 'Landing Page');
+      break;
+    case 'email':
+      titles.push('Email Sequence', 'Newsletter Design', 'Email Template', 'Email Campaign Report', 'Automation Setup');
+      break;
+    case 'analytics':
+      titles.push('Analytics Report', 'Performance Dashboard', 'Monthly Metrics Report', 'Conversion Analysis', 'Traffic Report');
+      break;
+    case 'onboarding':
+      titles.push('Onboarding Documentation', 'Welcome Package', 'Setup Guide', 'Account Configuration', 'Training Materials');
+      break;
+    default:
+      titles.push('Project Deliverable', 'Task Completion Report', 'Work Summary', 'Progress Update');
+  }
+  
+  // Add business-specific option if available
+  if (businessName) {
+    titles.push(`${businessName} - ${category.charAt(0).toUpperCase() + category.slice(1)} Update`);
+  }
+  
+  return [...new Set(titles)]; // Remove duplicates
+};
+
+// Map task category to deliverable category
+const mapTaskCategoryToDeliverableCategory = (taskCategory: string): string => {
+  const mapping: Record<string, string> = {
+    'seo': 'seo',
+    'content': 'content',
+    'design': 'design',
+    'development': 'development',
+    'marketing': 'marketing',
+    'ads': 'marketing',
+    'email': 'marketing',
+    'analytics': 'report',
+    'onboarding': 'general',
+    'general': 'general',
+  };
+  return mapping[taskCategory.toLowerCase()] || 'general';
+};
+
 export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, onComplete }: TaskCompletionModalProps) {
   const [loading, setLoading] = useState(false);
   const [createDeliverable, setCreateDeliverable] = useState(true);
@@ -34,6 +100,19 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
   const [deliverableDescription, setDeliverableDescription] = useState("");
   const [deliverableCategory, setDeliverableCategory] = useState("general");
   const [completionNotes, setCompletionNotes] = useState("");
+
+  // Generate title options based on task
+  const deliverableTitleOptions = useMemo(() => {
+    if (!task) return [];
+    return generateDeliverableTitles(task.name, task.category, task.client_accounts?.business_name);
+  }, [task]);
+
+  // Auto-set category based on task category when modal opens
+  useMemo(() => {
+    if (task && open) {
+      setDeliverableCategory(mapTaskCategoryToDeliverableCategory(task.category));
+    }
+  }, [task, open]);
 
   const getErrorMessage = (err: unknown) => {
     if (!err) return "Unknown error";
@@ -196,11 +275,18 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
               <div className="space-y-3 ml-6">
                 <div className="space-y-2">
                   <Label>Deliverable Title *</Label>
-                  <Input
-                    placeholder="e.g., Website Homepage Design v1"
-                    value={deliverableTitle}
-                    onChange={(e) => setDeliverableTitle(e.target.value)}
-                  />
+                  <Select value={deliverableTitle} onValueChange={setDeliverableTitle}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a deliverable title..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {deliverableTitleOptions.map((title) => (
+                        <SelectItem key={title} value={title}>
+                          {title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
