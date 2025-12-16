@@ -104,10 +104,16 @@ export function AICopilotPanel() {
 
   // Auto-scroll to output when it appears
   useEffect(() => {
-    if (output && outputRef.current) {
+    if (output && outputRef.current && scrollAreaRef.current) {
       setTimeout(() => {
-        outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
+        const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+        if (scrollContainer && outputRef.current) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const outputRect = outputRef.current.getBoundingClientRect();
+          const scrollTop = scrollContainer.scrollTop + (outputRect.top - containerRect.top) - 20;
+          scrollContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
+        }
+      }, 150);
     }
   }, [output]);
 
@@ -357,7 +363,7 @@ export function AICopilotPanel() {
           )}
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1" ref={scrollAreaRef}>
           <div className="p-4 space-y-4">
             <div>
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
