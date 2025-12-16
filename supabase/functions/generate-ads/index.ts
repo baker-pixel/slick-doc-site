@@ -213,11 +213,18 @@ Return ONLY valid JSON in this exact format:
     // Parse the JSON response
     let parsedAds;
     try {
-      // Remove markdown code blocks if present
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // Remove markdown code blocks if present (handle various formats)
+      let cleanContent = content.trim();
+      // Remove opening code fence with optional language identifier
+      cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, '');
+      // Remove closing code fence
+      cleanContent = cleanContent.replace(/\s*```$/i, '');
+      cleanContent = cleanContent.trim();
+      
       parsedAds = JSON.parse(cleanContent);
     } catch (parseError) {
       console.error("Failed to parse AI response:", content);
+      console.error("Parse error:", parseError);
       throw new Error("Failed to parse AI response");
     }
 
