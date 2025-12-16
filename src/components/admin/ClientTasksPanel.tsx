@@ -56,6 +56,31 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     fetchClients();
   }, []);
 
+  useEffect(() => {
+    // If we navigated here from the Home page, open the task details automatically.
+    const taskId = (() => {
+      try {
+        return sessionStorage.getItem("admin:selectedTaskId");
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!taskId) return;
+
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    setSelectedTask(task);
+    setDetailsOpen(true);
+
+    try {
+      sessionStorage.removeItem("admin:selectedTaskId");
+    } catch {
+      // ignore
+    }
+  }, [tasks]);
+
   const fetchTasks = async () => {
     setLoading(true);
     const { data, error } = await supabase
