@@ -1266,16 +1266,18 @@ const Admin = () => {
             {activeSection === "home" ? (
               !selectedClient ? (
                 <AdminClientSelector
+                  adminPassword={storedPassword}
                   onSelectClient={handleSelectClient}
                   onAddClient={() => {
                     setActiveSection("clients");
                   }}
                 />
               ) : (
-                <UnifiedClientView client={selectedClient} />
+                <UnifiedClientView client={selectedClient} adminPassword={storedPassword} />
               )
             ) : needsClientSelection ? (
               <AdminClientSelector
+                adminPassword={storedPassword}
                 onSelectClient={handleSelectClient}
                 onAddClient={() => {
                   setActiveSection("clients");
@@ -1283,7 +1285,7 @@ const Admin = () => {
               />
             ) : selectedClient && !isGlobalSection ? (
               /* Show unified client view when a client is selected */
-              <UnifiedClientView client={selectedClient} />
+              <UnifiedClientView client={selectedClient} adminPassword={storedPassword} />
             ) : (
               <>
                 {activeSection === "pipeline" && (
