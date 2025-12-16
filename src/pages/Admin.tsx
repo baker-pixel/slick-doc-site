@@ -74,6 +74,7 @@ import { OrangeDoorDashboard } from "@/components/admin/OrangeDoorDashboard";
 import { AICopilotPanel } from "@/components/admin/AICopilotPanel";
 import { AdminClientSelector } from "@/components/admin/AdminClientSelector";
 import { SelectedClientHeader } from "@/components/admin/SelectedClientHeader";
+import { UnifiedClientView } from "@/components/admin/UnifiedClientView";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1269,6 +1270,9 @@ const Admin = () => {
                   setActiveSection("clients");
                 }}
               />
+            ) : selectedClient && !isGlobalSection ? (
+              /* Show unified client view when a client is selected */
+              <UnifiedClientView client={selectedClient} />
             ) : (
               <>
                 {activeSection === "pipeline" && (
