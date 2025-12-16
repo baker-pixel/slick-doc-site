@@ -106,10 +106,12 @@ interface SavedCampaign {
   goal: string;
   location: string;
   industry: string;
+  budget?: string;
   platform: string;
   status: string;
   created_at: string;
   client_account_id?: string;
+  client_name?: string;
   generated_ads: GeneratedAd[];
   ab_variants?: ABVariant[];
   performance_predictions?: PerformancePredictions;
@@ -189,6 +191,13 @@ export default function AIAdGenerator() {
     fetchTemplates();
   }, []);
 
+  // Refetch campaigns when client changes
+  useEffect(() => {
+    if (selectedClientId) {
+      fetchSavedCampaigns(selectedClientId);
+    }
+  }, [selectedClientId]);
+
   const fetchClients = async () => {
     const { data, error } = await supabase
       .from("client_accounts")
@@ -197,15 +206,29 @@ export default function AIAdGenerator() {
     if (!error && data) setClients(data);
   };
 
-  const fetchSavedCampaigns = async () => {
-    const { data, error } = await supabase
+  const fetchSavedCampaigns = async (clientId?: string) => {
+    let query = supabase
       .from("ad_campaigns")
-      .select("*")
+      .select(`
+        *,
+        client_accounts (
+          business_name
+        )
+      `)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
+    
+    // Filter by client if one is selected
+    if (clientId) {
+      query = query.eq("client_account_id", clientId);
+    }
+    
+    const { data, error } = await query;
+    
     if (!error && data) {
       setSavedCampaigns(data.map(c => ({
         ...c,
+        client_name: (c.client_accounts as { business_name: string } | null)?.business_name,
         generated_ads: (c.generated_ads as unknown as GeneratedAd[]) || [],
         ab_variants: (c.ab_variants as unknown as ABVariant[]) || [],
         performance_predictions: c.performance_predictions as unknown as PerformancePredictions,
@@ -315,7 +338,7 @@ export default function AIAdGenerator() {
       }
       
       toast.success("Campaign saved successfully!");
-      fetchSavedCampaigns();
+      fetchSavedCampaigns(selectedClientId || undefined);
     } catch (error) {
       console.error("Error saving campaign:", error);
       toast.error("Failed to save campaign");
@@ -328,7 +351,7 @@ export default function AIAdGenerator() {
     setGoal(campaign.goal);
     setLocation(campaign.location);
     setIndustry(campaign.industry);
-    setBudget(budget || "");
+    setBudget(campaign.budget || "");
     setPlatform(campaign.platform as "google" | "meta" | "both");
     setCampaignName(campaign.name);
     setSelectedClientId(campaign.client_account_id || "");
@@ -353,7 +376,7 @@ export default function AIAdGenerator() {
         .eq("id", id);
       if (error) throw error;
       toast.success("Campaign deleted");
-      fetchSavedCampaigns();
+      fetchSavedCampaigns(selectedClientId || undefined);
     } catch (error) {
       toast.error("Failed to delete campaign");
     }
@@ -367,7 +390,7 @@ export default function AIAdGenerator() {
         .eq("id", id);
       if (error) throw error;
       toast.success(`Campaign ${newStatus === 'active' ? 'activated' : newStatus === 'paused' ? 'paused' : 'updated'}`);
-      fetchSavedCampaigns();
+      fetchSavedCampaigns(selectedClientId || undefined);
     } catch (error) {
       toast.error("Failed to update campaign status");
     }
@@ -566,9 +589,39 @@ ${ad.videoScriptOutline}
             <DialogContent className="max-w-3xl">
               <DialogHeader>
                 <DialogTitle>Saved Campaigns</DialogTitle>
-                <DialogDescription>View, manage and push your ad campaigns to platforms</DialogDescription>
+                <DialogDescription>
+                  View, manage and push your ad campaigns to platforms
+                  {selectedClientId && clients.find(c => c.id === selectedClientId) && (
+                    <span className="ml-2 text-primary">
+                      (Showing campaigns for {clients.find(c => c.id === selectedClientId)?.business_name})
+                    </span>
+                  )}
+                </DialogDescription>
               </DialogHeader>
-              <ScrollArea className="h-[500px]">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <Label className="text-sm">Filter by Client:</Label>
+                <Select 
+                  value={selectedClientId || "__all__"} 
+                  onValueChange={(v) => {
+                    const newClientId = v === "__all__" ? "" : v;
+                    setSelectedClientId(newClientId);
+                    fetchSavedCampaigns(newClientId || undefined);
+                  }}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All clients" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Clients</SelectItem>
+                    {clients.map(client => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.business_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <ScrollArea className="h-[450px]">
                 {savedCampaigns.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No saved campaigns yet</p>
                 ) : (
@@ -609,9 +662,14 @@ ${ad.videoScriptOutline}
                                 {campaign.scheduled_end_date && `End: ${new Date(campaign.scheduled_end_date).toLocaleDateString()}`}
                               </p>
                             )}
-                            <div className="flex gap-1 mt-2">
+                            <div className="flex gap-1 mt-2 flex-wrap">
                               <Badge variant="outline" className="text-xs">{campaign.platform}</Badge>
-                              {campaign.client_account_id && (
+                              {campaign.client_name ? (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Building2 className="h-3 w-3 mr-1" />
+                                  {campaign.client_name}
+                                </Badge>
+                              ) : campaign.client_account_id && (
                                 <Badge variant="secondary" className="text-xs">
                                   <Building2 className="h-3 w-3 mr-1" />
                                   Client linked
