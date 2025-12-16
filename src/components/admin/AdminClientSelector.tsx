@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Search, Building2, Users, Plus, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface ClientAccount {
@@ -21,11 +22,12 @@ interface ClientAccount {
 }
 
 interface AdminClientSelectorProps {
+  adminPassword: string;
   onSelectClient: (client: ClientAccount) => void;
   onAddClient: () => void;
 }
 
-export function AdminClientSelector({ onSelectClient, onAddClient }: AdminClientSelectorProps) {
+export function AdminClientSelector({ adminPassword, onSelectClient, onAddClient }: AdminClientSelectorProps) {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -34,34 +36,44 @@ export function AdminClientSelector({ onSelectClient, onAddClient }: AdminClient
   useEffect(() => {
     fetchClients();
     fetchPendingTasks();
-  }, []);
+  }, [adminPassword]);
 
   const fetchClients = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("client_accounts")
-      .select("*")
-      .order("business_name");
 
-    if (!error && data) {
-      setClients(data);
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "getClients", password: adminPassword },
+    });
+
+    if (res.error) {
+      setClients([]);
+      toast({ title: "Couldn't load clients", description: "Admin access not authorized." });
+      setIsLoading(false);
+      return;
     }
+
+    const list = (res.data?.clients || []) as ClientAccount[];
+    setClients(list);
     setIsLoading(false);
   };
 
   const fetchPendingTasks = async () => {
-    const { data } = await supabase
-      .from("client_tasks")
-      .select("client_account_id")
-      .eq("status", "pending");
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_tasks", password: adminPassword },
+    });
 
-    if (data) {
-      const counts: Record<string, number> = {};
-      data.forEach((task) => {
+    if (res.error) return;
+
+    const rows = (res.data?.data || []) as Array<{ client_account_id: string; status: string }>;
+    const counts: Record<string, number> = {};
+
+    rows
+      .filter((t) => t.status === "pending")
+      .forEach((task) => {
         counts[task.client_account_id] = (counts[task.client_account_id] || 0) + 1;
       });
-      setPendingTaskCounts(counts);
-    }
+
+    setPendingTaskCounts(counts);
   };
 
   const filteredClients = clients.filter(

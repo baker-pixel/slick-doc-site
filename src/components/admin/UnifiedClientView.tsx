@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   Circle,
   Clock,
-  FileText,
   MessageSquare,
   FolderKanban,
   BarChart3,
@@ -19,8 +18,6 @@ import {
   Loader2,
   AlertCircle,
   Calendar,
-  DollarSign,
-  Star,
   TrendingUp,
   Package,
 } from "lucide-react";
@@ -40,6 +37,7 @@ interface SelectedClient {
 
 interface UnifiedClientViewProps {
   client: SelectedClient;
+  adminPassword: string;
 }
 
 interface Task {
@@ -84,7 +82,7 @@ interface Meeting {
   meeting_type: string;
 }
 
-export function UnifiedClientView({ client }: UnifiedClientViewProps) {
+export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -112,59 +110,85 @@ export function UnifiedClientView({ client }: UnifiedClientViewProps) {
   };
 
   const fetchTasks = async () => {
-    const { data } = await supabase
-      .from("client_tasks")
-      .select("*")
-      .eq("client_account_id", client.id)
-      .order("created_at", { ascending: false });
-    if (data) setTasks(data);
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_tasks", password: adminPassword },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as Task[];
+      setTasks(rows.filter((t) => (t as any).client_account_id === client.id));
+    }
   };
 
   const fetchDeliverables = async () => {
-    const { data } = await supabase
-      .from("deliverables")
-      .select("*")
-      .eq("client_account_id", client.id)
-      .order("submitted_at", { ascending: false });
-    if (data) setDeliverables(data);
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "deliverables", password: adminPassword },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as any[];
+      // keep newest first
+      const filtered = rows
+        .filter((d) => d.client_account_id === client.id)
+        .sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+      setDeliverables(filtered);
+    }
   };
 
   const fetchMessages = async () => {
-    const { data } = await supabase
-      .from("client_messages")
-      .select("*")
-      .eq("client_account_id", client.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (data) setMessages(data);
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "get_messages", password: adminPassword, data: { client_account_id: client.id } },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as Message[];
+      // API returns ascending; store as newest first
+      setMessages(rows.slice().reverse());
+    }
   };
 
   const fetchProjects = async () => {
-    const { data } = await supabase
-      .from("client_projects")
-      .select("*")
-      .eq("client_account_id", client.id)
-      .order("created_at", { ascending: false });
-    if (data) setProjects(data);
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_projects", password: adminPassword },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as any[];
+      const filtered = rows
+        .filter((p) => p.client_account_id === client.id)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setProjects(filtered);
+    }
   };
 
   const fetchMeetings = async () => {
-    const { data } = await supabase
-      .from("client_meetings")
-      .select("*")
-      .eq("client_account_id", client.id)
-      .gte("scheduled_at", new Date().toISOString())
-      .order("scheduled_at", { ascending: true })
-      .limit(5);
-    if (data) setMeetings(data);
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_meetings", password: adminPassword },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as any[];
+      const upcoming = rows
+        .filter((m) => m.client_account_id === client.id)
+        .filter((m) => new Date(m.scheduled_at) >= new Date())
+        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+        .slice(0, 5);
+
+      setMeetings(upcoming);
+    }
   };
 
   const completeTask = async (taskId: string) => {
-    await supabase
-      .from("client_tasks")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", taskId);
-    
+    await supabase.functions.invoke("admin", {
+      body: {
+        action: "update",
+        table: "client_tasks",
+        id: taskId,
+        data: { status: "completed", completed_at: new Date().toISOString() },
+        password: adminPassword,
+      },
+    });
+
     toast({ title: "Task completed!" });
     fetchTasks();
   };
@@ -173,19 +197,24 @@ export function UnifiedClientView({ client }: UnifiedClientViewProps) {
     if (!newMessage.trim()) return;
     setSendingMessage(true);
 
-    const { error } = await supabase.from("client_messages").insert({
-      client_account_id: client.id,
-      message: newMessage,
-      sender_type: "admin",
-      sender_name: "Team",
-      is_read: true,
+    const res = await supabase.functions.invoke("admin", {
+      body: {
+        action: "send_message",
+        password: adminPassword,
+        data: {
+          client_account_id: client.id,
+          message: newMessage,
+          sender_name: "Agency Team",
+        },
+      },
     });
 
-    if (!error) {
+    if (!res.error) {
       setNewMessage("");
       fetchMessages();
       toast({ title: "Message sent!" });
     }
+
     setSendingMessage(false);
   };
 
