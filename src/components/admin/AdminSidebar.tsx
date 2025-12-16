@@ -87,6 +87,7 @@ interface AdminSidebarProps {
 // Daily Work - The essentials
 const dailyWorkItems = [
   { id: "home" as const, label: "Home", icon: Home },
+  { id: "client-workflow" as const, label: "Client Workflow", icon: PlayCircle },
   { id: "clients" as const, label: "Clients", icon: Briefcase },
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
   { id: "contacts" as const, label: "Leads", icon: Users },
@@ -95,7 +96,6 @@ const dailyWorkItems = [
 
 // All other sections grouped into collapsible "More Tools"
 const moreToolsItems = [
-  { id: "client-workflow" as const, label: "Client Workflow" },
   { id: "review-workflow" as const, label: "Review Workflow" },
   { id: "quick-actions" as const, label: "Quick Actions" },
   { id: "calendar" as const, label: "Calendar" },
