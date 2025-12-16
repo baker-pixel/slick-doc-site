@@ -106,11 +106,23 @@ const ALLOWED_JOB_TYPES: AutomationType[] = [
 ];
 
 function normalizeJobType(raw: unknown): AutomationType {
-  const normalized = String(raw ?? "").trim().toLowerCase().replace(/-/g, "_");
+  const normalized = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
   if (!normalized) throw new Error("Missing jobType");
 
-  if (ALLOWED_JOB_TYPES.includes(normalized as AutomationType)) {
-    return normalized as AutomationType;
+  // Backward/legacy aliases sent by older UI/task templates
+  const aliasMap: Record<string, AutomationType> = {
+    build_comprehensive_kpi_dashboards: "create_kpi_dashboard",
+    comprehensive_kpi_dashboards: "create_kpi_dashboard",
+    kpi_dashboard: "create_kpi_dashboard",
+  };
+
+  const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);
+
+  if (ALLOWED_JOB_TYPES.includes(resolved)) {
+    return resolved;
   }
 
   throw new Error(`Unsupported jobType: ${normalized}`);
