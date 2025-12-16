@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
@@ -99,6 +99,17 @@ export function AICopilotPanel() {
   const [output, setOutput] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [copied, setCopied] = useState(false);
+  const outputRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to output when it appears
+  useEffect(() => {
+    if (output && outputRef.current) {
+      setTimeout(() => {
+        outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    }
+  }, [output]);
 
   useEffect(() => {
     fetchClients();
@@ -418,7 +429,7 @@ export function AICopilotPanel() {
             </div>
 
             {output && (
-              <div className="pt-4 border-t">
+              <div ref={outputRef} className="pt-4 border-t">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold">Generated Output</h3>
                   <div className="flex gap-2">
