@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,9 @@ import {
   Zap,
   RefreshCw,
   Send,
+  Building2,
+  ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,69 +40,53 @@ interface QuickCommand {
   description: string;
   icon: React.ReactNode;
   prompt: string;
-  category: "content" | "email" | "reporting";
   navigateTo?: { section: AdminSection; hash?: string };
 }
 
 const quickCommands: QuickCommand[] = [
   {
-    id: "weekly-activity",
-    label: "Generate Weekly Activity",
-    description: "Create a summary of this week's marketing activities",
-    icon: <Calendar className="w-4 h-4" />,
+    id: "social-batch",
+    label: "Social Media Posts",
+    description: "Generate 10 ready-to-post social updates",
+    icon: <Send className="w-5 h-5" />,
     prompt:
-      "Generate a comprehensive weekly activity report for {clientName}. Include social media engagement, content published, email campaigns sent, website traffic highlights, and key wins for the week.",
-    category: "reporting",
+      "Create 10 social media posts for {clientName} in the {industry} industry. Mix of formats: 3 tips/educational, 2 testimonial requests, 2 service highlights, 2 engagement questions, 1 company culture. Each post should be platform-ready with hashtag suggestions.",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
   {
     id: "gbp-posts",
-    label: "Create 5 GBP Posts",
-    description: "Generate Google Business Profile posts",
-    icon: <MapPin className="w-4 h-4" />,
+    label: "Google Business Posts",
+    description: "5 GBP posts with CTAs",
+    icon: <MapPin className="w-5 h-5" />,
     prompt:
       "Create 5 engaging Google Business Profile posts for {clientName} in the {industry} industry. Each post should be under 300 characters, include a call-to-action, and cover different topics: 1) Service highlight, 2) Customer testimonial prompt, 3) Seasonal/timely content, 4) Behind-the-scenes, 5) Special offer or promotion.",
-    category: "content",
-    navigateTo: { section: "quick-actions", hash: "#generated-content" },
-  },
-  {
-    id: "service-pages",
-    label: "Draft 2 Service Pages",
-    description: "Create SEO-optimized service page content",
-    icon: <FileText className="w-4 h-4" />,
-    prompt:
-      "Write 2 SEO-optimized service page drafts for {clientName}. Each page should include: H1 headline, meta description (155 chars), 3-4 sections with H2 headings, benefits-focused copy, and a clear CTA. Focus on their core services in the {industry} industry.",
-    category: "content",
-    navigateTo: { section: "quick-actions", hash: "#generated-content" },
-  },
-  {
-    id: "churn-email",
-    label: "Write Churn-Risk Email",
-    description: "Re-engagement email for at-risk clients",
-    icon: <Mail className="w-4 h-4" />,
-    prompt:
-      "Write a warm, professional re-engagement email for {clientName} who may be at risk of churning. The email should: acknowledge their value as a client, highlight recent wins or progress, address potential concerns proactively, and include a soft CTA for a check-in call.",
-    category: "email",
-    navigateTo: { section: "quick-actions", hash: "#generated-content" },
-  },
-  {
-    id: "social-batch",
-    label: "Create Social Media Batch",
-    description: "Generate 10 social posts for the month",
-    icon: <Send className="w-4 h-4" />,
-    prompt:
-      "Create 10 social media posts for {clientName} in the {industry} industry. Mix of formats: 3 tips/educational, 2 testimonial requests, 2 service highlights, 2 engagement questions, 1 company culture. Each post should be platform-ready with hashtag suggestions.",
-    category: "content",
     navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
   {
     id: "email-newsletter",
-    label: "Draft Monthly Newsletter",
-    description: "Create a newsletter template",
-    icon: <Mail className="w-4 h-4" />,
+    label: "Monthly Newsletter",
+    description: "Draft a complete newsletter",
+    icon: <Mail className="w-5 h-5" />,
     prompt:
       "Draft a monthly email newsletter for {clientName}'s customers. Include: compelling subject line, 1 main feature story about their services, 2-3 quick tips related to {industry}, a customer spotlight section placeholder, and seasonal/timely content.",
-    category: "email",
     navigateTo: { section: "quick-actions", hash: "#generated-content" },
+  },
+  {
+    id: "service-pages",
+    label: "Service Page Copy",
+    description: "SEO-optimized web content",
+    icon: <FileText className="w-5 h-5" />,
+    prompt:
+      "Write 2 SEO-optimized service page drafts for {clientName}. Each page should include: H1 headline, meta description (155 chars), 3-4 sections with H2 headings, benefits-focused copy, and a clear CTA. Focus on their core services in the {industry} industry.",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
+  },
+  {
+    id: "weekly-activity",
+    label: "Weekly Report",
+    description: "Summary of marketing activities",
+    icon: <Calendar className="w-5 h-5" />,
+    prompt:
+      "Generate a comprehensive weekly activity report for {clientName}. Include social media engagement, content published, email campaigns sent, website traffic highlights, and key wins for the week.",
   },
 ];
 
@@ -116,33 +103,8 @@ export function AICopilotPanel({
   const [output, setOutput] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [copied, setCopied] = useState(false);
-  const [shouldScrollToOutput, setShouldScrollToOutput] = useState(false);
+  const [showCustom, setShowCustom] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
-  
-
-  // Scroll to output when generation completes
-  const scrollToOutput = () => {
-    // wait for layout + Radix viewport
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const viewport = outputRef.current?.closest(
-          '[data-radix-scroll-area-viewport]'
-        ) as HTMLElement | null;
-        if (!viewport || !outputRef.current) return;
-
-        const top = Math.max(0, outputRef.current.offsetTop - 20);
-        viewport.scrollTo({ top, behavior: "smooth" });
-      });
-    });
-  };
-
-  // Trigger scroll when shouldScrollToOutput is set
-  useEffect(() => {
-    if (shouldScrollToOutput && output) {
-      scrollToOutput();
-      setShouldScrollToOutput(false);
-    }
-  }, [shouldScrollToOutput, output]);
 
   useEffect(() => {
     fetchClients();
@@ -162,19 +124,21 @@ export function AICopilotPanel({
 
   const selectedClient = clients.find((c) => c.id === selectedClientId);
 
-  const executeCommand = async (command: QuickCommand) => {
-    if (!selectedClientId) {
-      toast({
-        title: "Select a client",
-        description: "Please select a client before running commands",
-        variant: "destructive",
+  const scrollToOutput = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
-      return;
-    }
+    });
+  };
+
+  const executeCommand = async (command: QuickCommand) => {
+    if (!selectedClientId) return;
 
     setIsLoading(true);
     setActiveCommand(command.id);
     setOutput("");
+    setShowCustom(false);
 
     const prompt = command.prompt
       .replace(/{clientName}/g, selectedClient?.business_name || "the client")
@@ -186,7 +150,7 @@ export function AICopilotPanel({
           messages: [
             {
               role: "system",
-              content: `You are a professional marketing strategist and content creator. Create high-quality, actionable content that is ready to use. Be specific, creative, and professional.`,
+              content: `You are a professional marketing strategist and content creator for ${selectedClient?.business_name}. Create high-quality, actionable content that is ready to use. Be specific, creative, and professional.`,
             },
             { role: "user", content: prompt },
           ],
@@ -195,7 +159,6 @@ export function AICopilotPanel({
 
       if (response.error) throw response.error;
 
-      // Handle streaming response
       let finalContent = "";
       const reader = response.data.getReader?.();
       if (reader) {
@@ -224,15 +187,13 @@ export function AICopilotPanel({
             }
           }
         }
-
         finalContent = result;
       } else {
-        // Non-streaming fallback
         finalContent = response.data?.choices?.[0]?.message?.content || "No response generated";
         setOutput(finalContent);
       }
 
-      // Persist results for commands that map to an Admin section
+      // Save to generated_content if command has a destination
       if (finalContent.trim() && command.navigateTo) {
         const contentType = (() => {
           switch (command.id) {
@@ -242,7 +203,6 @@ export function AICopilotPanel({
               return "other";
             case "service-pages":
               return "blog_post";
-            case "churn-email":
             case "email-newsletter":
               return "email";
             default:
@@ -265,48 +225,39 @@ export function AICopilotPanel({
       }
 
       toast({
-        title: "Content generated",
-        description: `${command.label} completed successfully`,
+        title: "Done!",
+        description: `${command.label} ready for ${selectedClient?.business_name}`,
       });
 
-      // If this command has a destination in the Admin, jump there automatically
+      // Navigate to results
       if (command.navigateTo) {
         if (command.navigateTo.hash) window.location.hash = command.navigateTo.hash;
         onNavigateToSection?.(command.navigateTo.section);
         setIsOpen(false);
+      } else {
+        scrollToOutput();
       }
     } catch (error) {
       console.error("AI command error:", error);
       toast({
         title: "Generation failed",
-        description: "Unable to generate content. Please try again.",
+        description: "Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
       setActiveCommand(null);
-      // Only auto-scroll inside the panel when we're staying on the panel.
-      if (!command.navigateTo) setShouldScrollToOutput(true);
     }
   };
 
   const executeCustomPrompt = async () => {
-    if (!customPrompt.trim()) return;
-
-    if (!selectedClientId) {
-      toast({
-        title: "Select a client",
-        description: "Please select a client for context",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!customPrompt.trim() || !selectedClientId) return;
 
     setIsLoading(true);
     setActiveCommand("custom");
     setOutput("");
 
-    const contextualPrompt = `For ${selectedClient?.business_name}${selectedClient?.industry ? ` in the ${selectedClient.industry} industry` : ""}: ${customPrompt}`;
+    const contextualPrompt = `For ${selectedClient?.business_name}${selectedClient?.industry ? ` (${selectedClient.industry})` : ""}: ${customPrompt}`;
 
     try {
       const response = await supabase.functions.invoke("chat", {
@@ -314,7 +265,7 @@ export function AICopilotPanel({
           messages: [
             {
               role: "system",
-              content: `You are a professional marketing strategist helping manage marketing for local businesses. Provide actionable, specific content and advice.`,
+              content: `You are a professional marketing strategist for ${selectedClient?.business_name}. Provide actionable, specific content and advice.`,
             },
             { role: "user", content: contextualPrompt },
           ],
@@ -344,9 +295,7 @@ export function AICopilotPanel({
                   result += content;
                   setOutput(result);
                 }
-              } catch {
-                // Skip malformed JSON
-              }
+              } catch {}
             }
           }
         }
@@ -355,17 +304,17 @@ export function AICopilotPanel({
       }
 
       setCustomPrompt("");
+      scrollToOutput();
     } catch (error) {
       console.error("Custom prompt error:", error);
       toast({
         title: "Request failed",
-        description: "Unable to process request. Please try again.",
+        description: "Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
       setActiveCommand(null);
-      setShouldScrollToOutput(true);
     }
   };
 
@@ -373,18 +322,13 @@ export function AICopilotPanel({
     await navigator.clipboard.writeText(output);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    toast({ title: "Copied to clipboard" });
+    toast({ title: "Copied!" });
   };
 
-  const getCategoryColor = (category: QuickCommand["category"]) => {
-    switch (category) {
-      case "content":
-        return "bg-primary/10 text-primary border-primary/20";
-      case "email":
-        return "bg-blue-500/10 text-blue-600 border-blue-500/20";
-      case "reporting":
-        return "bg-green-500/10 text-green-600 border-green-500/20";
-    }
+  const clearClient = () => {
+    setSelectedClientId("");
+    setOutput("");
+    setShowCustom(false);
   };
 
   return (
@@ -397,144 +341,194 @@ export function AICopilotPanel({
           <Sparkles className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col p-0">
-        <SheetHeader className="p-6 pb-4 border-b">
+      <SheetContent className="w-full sm:max-w-md flex flex-col p-0">
+        {/* Header */}
+        <SheetHeader className="p-5 pb-4 border-b bg-gradient-to-r from-violet-500/10 to-purple-500/10">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-              <Zap className="h-5 w-5 text-primary-foreground" />
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+              <Zap className="h-5 w-5 text-white" />
             </div>
             <div>
               <SheetTitle className="text-left">AI Copilot</SheetTitle>
-              <p className="text-sm text-muted-foreground">Your marketing command center</p>
+              <p className="text-xs text-muted-foreground">One client at a time</p>
             </div>
           </div>
         </SheetHeader>
 
-        <div className="p-4 border-b bg-muted/30">
-          <label className="text-sm font-medium mb-2 block">Select Client</label>
-          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose a client..." />
-            </SelectTrigger>
-            <SelectContent>
-              {clients.map((client) => (
-                <SelectItem key={client.id} value={client.id}>
-                  <div className="flex items-center gap-2">
-                    <span>{client.business_name}</span>
-                    <Badge variant="outline" className="text-xs">
-                      {client.tier}
-                    </Badge>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedClient && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Industry: {selectedClient.industry || "Not specified"}
-            </p>
-          )}
-        </div>
-
         <ScrollArea className="flex-1">
-          <div className="p-4 space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                Quick Commands
-              </h3>
-              <div className="grid gap-2">
-                {quickCommands.map((command) => (
-                  <Card
-                    key={command.id}
-                    className={cn(
-                      "cursor-pointer transition-all hover:shadow-md hover:border-primary/40",
-                      activeCommand === command.id && "border-primary ring-1 ring-primary/20"
-                    )}
-                    onClick={() => !isLoading && executeCommand(command)}
+          <div className="p-5">
+            {/* Step 1: No client selected */}
+            {!selectedClientId ? (
+              <div className="space-y-4">
+                <div className="text-center py-8">
+                  <div className="mx-auto h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                    <Building2 className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-1">Select a Client</h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    Choose who you're working on today
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {clients.map((client) => (
+                    <Card
+                      key={client.id}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setSelectedClientId(client.id)}
+                    >
+                      <CardContent className="p-4 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{client.business_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {client.industry || "No industry"} • {client.tier}
+                          </p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Step 2: Client selected - show actions */
+              <div className="space-y-5">
+                {/* Client header */}
+                <div className="flex items-start justify-between">
+                  <button
+                    onClick={clearClient}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <CardContent className="p-3">
-                      <div className="flex items-start gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                    <ArrowLeft className="h-4 w-4" />
+                    Change
+                  </button>
+                </div>
+
+                <Card className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-violet-500/20">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                        {selectedClient?.business_name?.charAt(0) || "?"}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-lg">{selectedClient?.business_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedClient?.industry || "No industry"} • {selectedClient?.tier}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Quick commands */}
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                    What do you need?
+                  </h3>
+                  <div className="grid gap-2">
+                    {quickCommands.map((command) => (
+                      <button
+                        key={command.id}
+                        onClick={() => executeCommand(command)}
+                        disabled={isLoading}
+                        className={cn(
+                          "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all",
+                          "hover:bg-muted/50 hover:border-primary/30",
+                          activeCommand === command.id && "bg-primary/5 border-primary/40",
+                          isLoading && activeCommand !== command.id && "opacity-50"
+                        )}
+                      >
+                        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                           {activeCommand === command.id && isLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
                           ) : (
                             command.icon
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm">{command.label}</span>
-                            <Badge
-                              variant="outline"
-                              className={cn("text-[10px] px-1.5", getCategoryColor(command.category))}
-                            >
-                              {command.category}
-                            </Badge>
-                          </div>
-                          <CardDescription className="text-xs line-clamp-1">
+                          <p className="font-medium text-sm">{command.label}</p>
+                          <p className="text-xs text-muted-foreground truncate">
                             {command.description}
-                          </CardDescription>
+                          </p>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <h3 className="text-sm font-semibold mb-3">Custom Request</h3>
-              <div className="space-y-2">
-                <Textarea
-                  placeholder="Ask anything... e.g., 'Write a follow-up email for their website project'"
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  className="min-h-[80px] resize-none"
-                />
-                <Button
-                  className="w-full"
-                  onClick={executeCustomPrompt}
-                  disabled={isLoading || !customPrompt.trim()}
-                >
-                  {isLoading && activeCommand === "custom" ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4 mr-2" />
-                  )}
-                  Send Request
-                </Button>
-              </div>
-            </div>
-
-            {output && (
-              <div ref={outputRef} className="pt-4 border-t">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold">Generated Output</h3>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setOutput("")}
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={copyToClipboard}
-                    >
-                      {copied ? (
-                        <Check className="w-4 h-4 text-green-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </Button>
+                        {command.navigateTo && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                            Auto-save
+                          </Badge>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-4 text-sm whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-                  {output}
+
+                {/* Custom request toggle */}
+                <div>
+                  {!showCustom ? (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setShowCustom(true)}
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Ask something custom
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder={`Ask anything about ${selectedClient?.business_name}...`}
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                        className="min-h-[80px] resize-none"
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowCustom(false);
+                            setCustomPrompt("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1"
+                          onClick={executeCustomPrompt}
+                          disabled={isLoading || !customPrompt.trim()}
+                        >
+                          {isLoading && activeCommand === "custom" ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4 mr-2" />
+                          )}
+                          Send
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Output */}
+                {output && (
+                  <div ref={outputRef} className="pt-4 border-t">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-medium">Result</h3>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOutput("")}>
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyToClipboard}>
+                          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-4 text-sm whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                      {output}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
