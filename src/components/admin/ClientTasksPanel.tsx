@@ -201,9 +201,10 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
       pending: "bg-yellow-500",
       in_progress: "bg-blue-500",
       completed: "bg-green-500",
+      sent_to_client: "bg-purple-500",
       cancelled: "bg-gray-500",
     };
-    return <Badge className={styles[status] || "bg-gray-500"}>{status.replace("_", " ")}</Badge>;
+    return <Badge className={styles[status] || "bg-gray-500"}>{status.replace(/_/g, " ")}</Badge>;
   };
 
   const getAutomationIcon = (type: string) => {
@@ -221,10 +222,11 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     return true;
   });
 
+  const doneStatuses = ["completed", "sent_to_client"];
   const stats = {
     total: filteredTasks.length,
     pending: filteredTasks.filter(t => t.status === "pending").length,
-    completed: filteredTasks.filter(t => t.status === "completed").length,
+    completed: filteredTasks.filter(t => doneStatuses.includes(t.status)).length,
     automatable: filteredTasks.filter(t => t.automation_type !== "MANUAL" && t.status === "pending").length,
   };
 
@@ -318,6 +320,7 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="sent_to_client">Sent to Client</SelectItem>
             </SelectContent>
           </Select>
           <Select value={automationFilter} onValueChange={setAutomationFilter}>
@@ -396,15 +399,15 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
               </div>
             </div>
             
-            {/* Completed Column */}
+            {/* Completed / Sent to Client Column */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b">
                 <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span className="font-semibold">Completed</span>
-                <Badge variant="secondary">{filteredTasks.filter(t => t.status === "completed").length}</Badge>
+                <span className="font-semibold">Done</span>
+                <Badge variant="secondary">{filteredTasks.filter(t => doneStatuses.includes(t.status)).length}</Badge>
               </div>
               <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {filteredTasks.filter(t => t.status === "completed").slice(0, 20).map(task => (
+                {filteredTasks.filter(t => doneStatuses.includes(t.status)).slice(0, 20).map(task => (
                   <Card key={task.id} className="p-3 cursor-pointer hover:shadow-md transition-shadow opacity-75" onClick={() => { setSelectedTask(task); setDetailsOpen(true); }}>
                     <div className="font-medium text-sm line-clamp-2">{task.name}</div>
                     <div className="text-xs text-muted-foreground mt-1">{task.client_accounts?.business_name}</div>
@@ -482,7 +485,7 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
                           )}
                         </Button>
                       )}
-                      {task.status === "pending" && (
+                      {!doneStatuses.includes(task.status) && task.status !== "in_progress" && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -557,10 +560,11 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="sent_to_client">Sent to Client</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
-                  {selectedTask.automation_type !== "MANUAL" && selectedTask.status !== "completed" && (
+                  {selectedTask.automation_type !== "MANUAL" && !doneStatuses.includes(selectedTask.status) && (
                     <Button onClick={() => runAutomation(selectedTask)} disabled={runningTasks.has(selectedTask.id)}>
                       {runningTasks.has(selectedTask.id) ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -570,7 +574,7 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
                       Run Automation
                     </Button>
                   )}
-                  {selectedTask.status !== "completed" && (
+                  {!doneStatuses.includes(selectedTask.status) && (
                     <Button 
                       className="bg-green-600 hover:bg-green-700"
                       onClick={() => { 
