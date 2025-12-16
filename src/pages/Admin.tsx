@@ -71,6 +71,7 @@ import ClientProgressTracker from "@/components/admin/ClientProgressTracker";
 import { ReviewWorkflowPanel } from "@/components/admin/ReviewWorkflowPanel";
 import { ClientWorkflowPanel } from "@/components/admin/ClientWorkflowPanel";
 import { OrangeDoorDashboard } from "@/components/admin/OrangeDoorDashboard";
+import { AICopilotPanel } from "@/components/admin/AICopilotPanel";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -1235,6 +1236,8 @@ const Admin = () => {
             {renderActiveSection()}
           </main>
         </SidebarInset>
+        
+        <AICopilotPanel />
       </div>
 
       {showOnboarding && (
