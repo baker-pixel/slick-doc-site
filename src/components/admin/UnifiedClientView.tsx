@@ -21,6 +21,12 @@ import {
   TrendingUp,
   Package,
   ExternalLink,
+  RotateCcw,
+  ThumbsUp,
+  Edit3,
+  Eye,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -193,6 +199,67 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
 
     toast({ title: "Task completed!" });
     fetchTasks();
+  };
+
+  const reopenTask = async (taskId: string) => {
+    await supabase.functions.invoke("admin", {
+      body: {
+        action: "update",
+        table: "client_tasks",
+        id: taskId,
+        data: { status: "pending", completed_at: null },
+        password: adminPassword,
+      },
+    });
+
+    toast({ title: "Task reopened" });
+    fetchTasks();
+  };
+
+  const updateDeliverable = async (deliverableId: string, status: string) => {
+    await supabase.functions.invoke("admin", {
+      body: {
+        action: "update",
+        table: "deliverables",
+        id: deliverableId,
+        data: { status, reviewed_at: new Date().toISOString() },
+        password: adminPassword,
+      },
+    });
+
+    toast({ title: status === "approved" ? "Deliverable approved!" : "Revision requested" });
+    fetchDeliverables();
+  };
+
+  const markMessageRead = async (messageId: string) => {
+    await supabase.functions.invoke("admin", {
+      body: {
+        action: "update",
+        table: "client_messages",
+        id: messageId,
+        data: { is_read: true },
+        password: adminPassword,
+      },
+    });
+    fetchMessages();
+  };
+
+  const updateProjectProgress = async (projectId: string, progress: number) => {
+    await supabase.functions.invoke("admin", {
+      body: {
+        action: "update",
+        table: "client_projects",
+        id: projectId,
+        data: { 
+          progress_percentage: progress,
+          status: progress >= 100 ? "completed" : "in_progress"
+        },
+        password: adminPassword,
+      },
+    });
+
+    toast({ title: progress >= 100 ? "Project completed!" : "Progress updated" });
+    fetchProjects();
   };
 
   const sendMessage = async () => {
@@ -470,15 +537,14 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                       key={task.id}
                       className={cn(
                         "flex items-center gap-3 p-3 rounded-lg border",
-                        task.status === "completed" && "opacity-60"
+                        task.status === "completed" && "opacity-60 bg-muted/30"
                       )}
                     >
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 shrink-0"
-                        onClick={() => task.status !== "completed" && completeTask(task.id)}
-                        disabled={task.status === "completed"}
+                        onClick={() => task.status === "completed" ? reopenTask(task.id) : completeTask(task.id)}
                       >
                         {task.status === "completed" ? (
                           <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -497,6 +563,12 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                       <Badge variant="outline">{task.category}</Badge>
                       {task.automation_type !== "MANUAL" && (
                         <Badge variant="secondary" className="bg-violet-100 text-violet-700">AI</Badge>
+                      )}
+                      {task.status === "completed" && (
+                        <Button variant="ghost" size="sm" onClick={() => reopenTask(task.id)} className="gap-1">
+                          <RotateCcw className="w-3 h-3" />
+                          Reopen
+                        </Button>
                       )}
                     </div>
                   ))}
@@ -521,20 +593,43 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                   <div className="space-y-2">
                     {deliverables.map((d) => (
                       <div key={d.id} className="flex items-center justify-between p-3 rounded-lg border">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium">{d.title}</p>
                           <p className="text-sm text-muted-foreground">
                             {format(new Date(d.submitted_at), "MMM d, yyyy")} • {d.category}
                           </p>
                         </div>
-                        <Badge
-                          variant={
-                            d.status === "approved" ? "default" :
-                            d.status === "pending_review" ? "secondary" : "outline"
-                          }
-                        >
-                          {d.status.replace("_", " ")}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {d.status === "pending_review" ? (
+                            <>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="gap-1 text-green-600 border-green-200 hover:bg-green-50"
+                                onClick={() => updateDeliverable(d.id, "approved")}
+                              >
+                                <ThumbsUp className="w-3 h-3" />
+                                Approve
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="gap-1"
+                                onClick={() => updateDeliverable(d.id, "revision_requested")}
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                Request Revision
+                              </Button>
+                            </>
+                          ) : (
+                            <Badge
+                              variant={d.status === "approved" ? "default" : "outline"}
+                              className={d.status === "approved" ? "bg-green-100 text-green-700" : ""}
+                            >
+                              {d.status.replace("_", " ")}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -548,7 +643,22 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
         <TabsContent value="messages">
           <Card>
             <CardHeader>
-              <CardTitle>Messages</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Messages</CardTitle>
+                {unreadMessages > 0 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      messages.filter(m => !m.is_read && m.sender_type === "client").forEach(m => markMessageRead(m.id));
+                    }}
+                    className="gap-1"
+                  >
+                    <Eye className="w-3 h-3" />
+                    Mark all read
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <ScrollArea className="h-[400px] pr-4">
@@ -560,9 +670,11 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                       <div
                         key={msg.id}
                         className={cn(
-                          "p-3 rounded-lg",
-                          msg.sender_type === "client" ? "bg-muted/50" : "bg-primary/10 ml-8"
+                          "p-3 rounded-lg relative",
+                          msg.sender_type === "client" ? "bg-muted/50" : "bg-primary/10 ml-8",
+                          !msg.is_read && msg.sender_type === "client" && "border-l-4 border-l-primary"
                         )}
+                        onClick={() => !msg.is_read && msg.sender_type === "client" && markMessageRead(msg.id)}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium">
@@ -571,6 +683,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                           <span className="text-xs text-muted-foreground">
                             {format(new Date(msg.created_at), "MMM d, h:mm a")}
                           </span>
+                          {!msg.is_read && msg.sender_type === "client" && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">New</Badge>
+                          )}
                         </div>
                         <p className="text-sm">{msg.message}</p>
                       </div>
@@ -615,23 +730,49 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                   <div className="space-y-3">
                     {projects.map((project) => (
                       <div key={project.id} className="p-4 rounded-lg border">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between mb-3">
                           <p className="font-medium">{project.name}</p>
                           <Badge
-                            variant={project.status === "in_progress" ? "default" : "secondary"}
+                            variant={project.status === "completed" ? "default" : project.status === "in_progress" ? "secondary" : "outline"}
+                            className={project.status === "completed" ? "bg-green-100 text-green-700" : ""}
                           >
                             {project.status.replace("_", " ")}
                           </Badge>
                         </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary transition-all"
-                            style={{ width: `${project.progress_percentage || 0}%` }}
-                          />
+                        <div className="flex items-center gap-3">
+                          <Button 
+                            variant="outline" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => updateProjectProgress(project.id, Math.max(0, (project.progress_percentage || 0) - 10))}
+                            disabled={project.progress_percentage === 0}
+                          >
+                            <Minus className="w-4 h-4" />
+                          </Button>
+                          <div className="flex-1">
+                            <div className="h-3 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full transition-all",
+                                  project.progress_percentage === 100 ? "bg-green-500" : "bg-primary"
+                                )}
+                                style={{ width: `${project.progress_percentage || 0}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 text-center">
+                              {project.progress_percentage || 0}% complete
+                            </p>
+                          </div>
+                          <Button 
+                            variant="outline" 
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => updateProjectProgress(project.id, Math.min(100, (project.progress_percentage || 0) + 10))}
+                            disabled={project.progress_percentage === 100}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {project.progress_percentage || 0}% complete
-                        </p>
                       </div>
                     ))}
                   </div>
