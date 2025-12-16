@@ -50,6 +50,14 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
   return data.choices?.[0]?.message?.content || '';
 }
 
+// Map our content types to DB-allowed values
+const contentTypeMap: Record<string, string> = {
+  'google_post': 'other',
+  'social_post': 'social_post',
+  'email_newsletter': 'email',
+  'blog_post': 'blog_post',
+};
+
 async function generateContent(supabase: any, client: ClientData, contentType: string): Promise<any> {
   const systemPrompt = `You are a professional marketing content writer for ${client.business_name}${client.industry ? ` in the ${client.industry} industry` : ''}. Create engaging, professional content.`;
   
@@ -81,17 +89,19 @@ async function generateContent(supabase: any, client: ClientData, contentType: s
   console.log(`Generating ${contentType} for ${client.business_name}...`);
   
   const content = await callAI(prompt, systemPrompt);
+  const dbContentType = contentTypeMap[contentType] || 'other';
   
   const { data, error } = await supabase
     .from('generated_content')
     .insert({
-      client_account_id: client.id,
-      content_type: contentType,
+      client_id: client.id,
+      content_type: dbContentType,
       title,
       content,
-      status: 'pending_review',
+      status: 'draft',
       metadata: {
         generated_at: new Date().toISOString(),
+        original_type: contentType,
         model: 'google/gemini-2.5-flash',
       },
     })
@@ -141,7 +151,7 @@ Format it professionally with clear headers.`;
     .from('client_reports')
     .insert({
       client_id: client.id,
-      report_type: 'performance',
+      report_type: 'monthly',
       report_period_start: reportPeriodStart.toISOString().split('T')[0],
       report_period_end: new Date().toISOString().split('T')[0],
       metrics: {
