@@ -306,13 +306,13 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
         setOnboarding(onboardingRes.data);
 
         // Find first incomplete task
-        const firstIncomplete = clientTasks.findIndex((t: ClientTask) => t.status !== "completed");
+        const firstIncomplete = clientTasks.findIndex((t: ClientTask) => !doneTaskStatuses.includes(t.status));
         setCurrentTaskIndex(firstIncomplete >= 0 ? firstIncomplete : clientTasks.length - 1);
 
         // Determine current phase based on data
         if (!onboardingRes.data?.onboarding_completed_at) {
           setCurrentPhase("onboarding");
-        } else if (clientTasks.some((t: ClientTask) => t.status !== "completed")) {
+        } else if (clientTasks.some((t: ClientTask) => !doneTaskStatuses.includes(t.status))) {
           setCurrentPhase("tasks");
         } else if (clientDeliverables.some((d: Deliverable) => d.status === "pending_review")) {
           setCurrentPhase("deliverables");
@@ -330,6 +330,8 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
   }, [selectedClientId, adminPassword]);
 
   // Calculate phase completion
+  const doneTaskStatuses = ["completed", "sent_to_client"];
+
   const phaseProgress = useMemo(() => {
     const onboardingSteps = onboarding ? [
       onboarding.intake_form_sent_at,
@@ -343,7 +345,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
     ] : [];
     const completedOnboarding = onboardingSteps.filter(Boolean).length;
     
-    const completedTasks = tasks.filter(t => t.status === "completed").length;
+    const completedTasks = tasks.filter(t => doneTaskStatuses.includes(t.status)).length;
     const completedDeliverables = deliverables.filter(d => d.status === "approved").length;
     const pendingReview = deliverables.filter(d => d.status === "pending_review").length;
 
@@ -378,7 +380,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
         setTasks(clientTasks);
         
         // Find first incomplete task
-        const firstIncomplete = clientTasks.findIndex((t: ClientTask) => t.status !== "completed");
+        const firstIncomplete = clientTasks.findIndex((t: ClientTask) => !doneTaskStatuses.includes(t.status));
         setCurrentTaskIndex(firstIncomplete >= 0 ? firstIncomplete : clientTasks.length - 1);
         
         // Also refresh deliverables
@@ -652,7 +654,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
               <CardHeader>
                 <CardTitle>Tasks</CardTitle>
                 <CardDescription>
-                  {tasks.filter(t => t.status !== "completed").length} of {tasks.length} tasks remaining
+                  {tasks.filter(t => !doneTaskStatuses.includes(t.status)).length} of {tasks.length} tasks remaining
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -662,7 +664,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
                     <div className="space-y-3">
                       {tasks.map((task, index) => {
                         const isCurrentTask = index === currentTaskIndex;
-                        const isCompleted = task.status === "completed";
+                        const isCompleted = doneTaskStatuses.includes(task.status);
                         const isLocked = index > currentTaskIndex && !isCompleted;
 
                         return (
