@@ -1253,8 +1253,8 @@ const Admin = () => {
             </Button>
           </header>
           
-          {/* Client Header - shown when a client is selected and on client-specific sections */}
-          {selectedClient && !isGlobalSection && (
+          {/* Client Header - shown when a client is selected (on home or client-specific sections) */}
+          {selectedClient && (activeSection === "home" || !isGlobalSection) && (
             <SelectedClientHeader 
               client={selectedClient} 
               onChangeClient={handleClearClient} 
