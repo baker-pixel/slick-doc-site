@@ -70,6 +70,7 @@ import { ClientPhaseTracker } from "@/components/admin/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/ClientProgressTracker";
 import { ReviewWorkflowPanel } from "@/components/admin/ReviewWorkflowPanel";
 import { ClientWorkflowPanel } from "@/components/admin/ClientWorkflowPanel";
+import { OrangeDoorDashboard } from "@/components/admin/OrangeDoorDashboard";
 import { cn } from "@/lib/utils";
 interface ContactSubmission {
   id: string;
@@ -186,7 +187,7 @@ const Admin = () => {
   const [pdfLeads, setPdfLeads] = useState<PdfLead[]>([]);
   const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<AdminSection>("pipeline");
+  const [activeSection, setActiveSection] = useState<AdminSection>("home");
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Check if user has seen onboarding
@@ -1001,6 +1002,13 @@ const Admin = () => {
 
   const renderActiveSection = () => {
     switch (activeSection) {
+      case "home":
+        return (
+          <OrangeDoorDashboard 
+            onNavigate={(section) => setActiveSection(section as AdminSection)}
+            onAddClient={() => setActiveSection("clients")}
+          />
+        );
       case "client-workflow":
         return <ClientWorkflowPanel 
           adminPassword={storedPassword} 
@@ -1128,6 +1136,7 @@ const Admin = () => {
 
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
+      home: "Dashboard",
       "client-workflow": "Client Workflow",
       pipeline: "Pipeline Dashboard",
       alerts: "Automation Alerts",
@@ -1215,11 +1224,13 @@ const Admin = () => {
               />
             )}
             
-            <AdminStatsCards
-              contactsCount={contacts.length}
-              gapAnalysesCount={gapAnalyses.length}
-              pdfLeadsCount={pdfLeads.length}
-            />
+            {activeSection !== "home" && (
+              <AdminStatsCards
+                contactsCount={contacts.length}
+                gapAnalysesCount={gapAnalyses.length}
+                pdfLeadsCount={pdfLeads.length}
+              />
+            )}
             
             {renderActiveSection()}
           </main>
