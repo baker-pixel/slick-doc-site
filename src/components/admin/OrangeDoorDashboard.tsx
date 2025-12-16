@@ -4,12 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Users, DollarSign, Bot, AlertTriangle, 
   Plus, RefreshCw, Flag, ChevronRight,
-  Activity, Zap
+  Activity, Zap, Calendar, CalendarDays, CalendarRange
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { format, differenceInDays } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
@@ -59,6 +65,7 @@ export function OrangeDoorDashboard({
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [alerts, setAlerts] = useState<{ type: 'red' | 'yellow' | 'warning'; message: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [runningBatch, setRunningBatch] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -207,12 +214,44 @@ export function OrangeDoorDashboard({
     }
   };
 
-  const handleRunBatch = async () => {
+  const handleRunBatch = async (batchType: 'daily' | 'weekly' | 'monthly') => {
+    setRunningBatch(batchType);
+    
+    const descriptions = {
+      daily: 'Processing automated tasks, social posts, and review responses...',
+      weekly: 'Generating content, email campaigns, and processing weekly tasks...',
+      monthly: 'Running full reports, strategy analysis, and all automated tasks...',
+    };
+
     toast({
-      title: "Running Monthly AI Batch",
-      description: "This will process all active clients..."
+      title: `Running ${batchType.charAt(0).toUpperCase() + batchType.slice(1)} AI Batch`,
+      description: descriptions[batchType],
     });
-    // Trigger batch process
+
+    try {
+      const { data, error } = await supabase.functions.invoke('run-ai-batch', {
+        body: { batchType },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Batch Complete",
+        description: `Processed ${data.results?.processed || 0} clients. Tasks: ${data.results?.tasksCreated || 0}, Content: ${data.results?.contentGenerated || 0}, Reports: ${data.results?.reportsCreated || 0}`,
+      });
+
+      // Refresh dashboard data
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Batch error:', error);
+      toast({
+        title: "Batch Error",
+        description: error instanceof Error ? error.message : "Failed to run batch process",
+        variant: "destructive",
+      });
+    } finally {
+      setRunningBatch(null);
+    }
   };
 
   const handleFlagClient = (clientId: string) => {
@@ -264,9 +303,39 @@ export function OrangeDoorDashboard({
         <Button onClick={onAddClient} className="gap-2 bg-primary hover:bg-primary/90">
           <Plus className="w-4 h-4" /> Add New Client
         </Button>
-        <Button variant="outline" onClick={handleRunBatch} className="gap-2">
-          <RefreshCw className="w-4 h-4" /> Run Monthly AI Batch
-        </Button>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="gap-2" disabled={runningBatch !== null}>
+              <RefreshCw className={`w-4 h-4 ${runningBatch ? 'animate-spin' : ''}`} />
+              {runningBatch ? `Running ${runningBatch}...` : 'Run AI Batch'}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => handleRunBatch('daily')} className="gap-2">
+              <Calendar className="w-4 h-4" />
+              <div>
+                <p className="font-medium">Daily Batch</p>
+                <p className="text-xs text-muted-foreground">Social posts, review responses, lead follow-ups</p>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleRunBatch('weekly')} className="gap-2">
+              <CalendarDays className="w-4 h-4" />
+              <div>
+                <p className="font-medium">Weekly Batch</p>
+                <p className="text-xs text-muted-foreground">Content, email campaigns, SEO audits</p>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleRunBatch('monthly')} className="gap-2">
+              <CalendarRange className="w-4 h-4" />
+              <div>
+                <p className="font-medium">Monthly Batch</p>
+                <p className="text-xs text-muted-foreground">Full reports, strategy review, competitor analysis</p>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <Button variant="outline" onClick={() => onNavigate('client-health')} className="gap-2">
           <Flag className="w-4 h-4" /> Flag Client for Review
         </Button>
