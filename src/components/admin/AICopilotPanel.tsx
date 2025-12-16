@@ -92,12 +92,15 @@ const quickCommands: QuickCommand[] = [
 
 export function AICopilotPanel({
   onNavigateToSection,
+  selectedClientId: propSelectedClientId,
 }: {
   onNavigateToSection?: (section: AdminSection) => void;
+  selectedClientId?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [internalSelectedClientId, setInternalSelectedClientId] = useState<string>("");
+  const selectedClientId = propSelectedClientId || internalSelectedClientId;
   const [isLoading, setIsLoading] = useState(false);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [output, setOutput] = useState<string>("");
@@ -326,7 +329,7 @@ export function AICopilotPanel({
   };
 
   const clearClient = () => {
-    setSelectedClientId("");
+    setInternalSelectedClientId("");
     setOutput("");
     setShowCustom(false);
   };
@@ -375,7 +378,7 @@ export function AICopilotPanel({
                     <Card
                       key={client.id}
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => setSelectedClientId(client.id)}
+                      onClick={() => setInternalSelectedClientId(client.id)}
                     >
                       <CardContent className="p-4 flex items-center justify-between">
                         <div>
