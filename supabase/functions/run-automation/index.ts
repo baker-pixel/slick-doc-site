@@ -34,7 +34,8 @@ type AutomationType =
 interface AutomationRequest {
   clientId: string;
   taskId?: string;
-  jobType: AutomationType;
+  // Accept string here because callers may send legacy/slightly different slugs (e.g. hyphens)
+  jobType: string;
   inputData?: Record<string, unknown>;
 }
 
@@ -78,6 +79,43 @@ function formatDate() {
   return new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+const ALLOWED_JOB_TYPES: AutomationType[] = [
+  "send_intake_form",
+  "add_to_crm",
+  "schedule_kickoff",
+  "run_page_speed_test",
+  "create_google_review_link",
+  "create_review_qr_code",
+  "setup_review_automation",
+  "send_review_scripts",
+  "create_kpi_dashboard",
+  "run_seo_audit",
+  "run_keyword_gap_analysis",
+  "setup_lead_automations",
+  "setup_retargeting_audiences",
+  "setup_retention_automations",
+  "generate_monthly_report",
+  "generate_report",
+  "email_sequence",
+  "content_generation",
+  "report",
+  "custom",
+  "add_segmentation_logic_to_funnel_steps",
+  "build_renewal_reminder_sequence",
+  "build_review_to_case_study_workflow",
+];
+
+function normalizeJobType(raw: unknown): AutomationType {
+  const normalized = String(raw ?? "").trim().toLowerCase().replace(/-/g, "_");
+  if (!normalized) throw new Error("Missing jobType");
+
+  if (ALLOWED_JOB_TYPES.includes(normalized as AutomationType)) {
+    return normalized as AutomationType;
+  }
+
+  throw new Error(`Unsupported jobType: ${normalized}`);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -89,8 +127,15 @@ serve(async (req) => {
   );
 
   try {
-    const { clientId, taskId, jobType, inputData }: AutomationRequest = await req.json();
-    console.log(`Running ${jobType} automation for client ${clientId}`);
+    const body: AutomationRequest = await req.json();
+    const clientId = body.clientId;
+    const taskId = body.taskId;
+    const inputData = body.inputData;
+
+    const jobTypeRaw = body.jobType;
+    const jobType = normalizeJobType(jobTypeRaw);
+
+    console.log(`Running automation: rawJobType=${jobTypeRaw} normalizedJobType=${jobType} client=${clientId}`);
 
     // Get client info
     const { data: client, error: clientError } = await supabase
