@@ -20,11 +20,14 @@ import {
   ClipboardCheck,
   Loader2,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Bot,
+  Play
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { TaskCompletionModal } from "./TaskCompletionModal";
+import TaskExecutionModal from "./TaskExecutionModal";
 import { AdminSection } from "./AdminSidebar";
 
 interface ClientWorkflowPanelProps {
@@ -231,6 +234,16 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
     client_accounts?: { business_name: string };
   } | null>(null);
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+  const [selectedTaskForExecution, setSelectedTaskForExecution] = useState<{
+    id: string;
+    name: string;
+    description?: string;
+    instructions?: string;
+    category: string;
+    automation_type: string;
+    client_account_id: string;
+  } | null>(null);
+  const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
 
   const selectedClient = useMemo(() => 
     clients.find(c => c.id === selectedClientId), 
@@ -723,9 +736,30 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
                                   </Badge>
                                 ) : isCurrentTask ? (
                                   <>
-                                    {/* Work on Task - navigates to appropriate tool */}
+                                    {/* Run Automatically - AI executes the task */}
                                     <Button
                                       variant="default"
+                                      onClick={() => {
+                                        setSelectedTaskForExecution({
+                                          id: task.id,
+                                          name: task.name,
+                                          description: task.description || undefined,
+                                          instructions: task.instructions || undefined,
+                                          category: task.category,
+                                          automation_type: task.automation_type,
+                                          client_account_id: task.client_account_id
+                                        });
+                                        setIsExecutionModalOpen(true);
+                                      }}
+                                    >
+                                      <Bot className="h-4 w-4 mr-2" />
+                                      Run Automatically
+                                    </Button>
+
+                                    {/* Work on Task - navigates to appropriate tool */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
                                       onClick={() => {
                                         // Use enhanced routing function
                                         const targetSection = getTargetSectionForTask(task.name, task.category);
@@ -739,12 +773,12 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
                                       }}
                                     >
                                       <ExternalLink className="h-4 w-4 mr-2" />
-                                      Work on Task
+                                      Work Manually
                                     </Button>
                                     
                                     {/* Mark Complete - opens completion modal */}
                                     <Button
-                                      variant="outline"
+                                      variant="ghost"
                                       size="sm"
                                       onClick={() => {
                                         setSelectedTaskForCompletion({
@@ -902,6 +936,25 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
         adminPassword={adminPassword}
         task={selectedTaskForCompletion}
         onComplete={handleTaskCompleted}
+      />
+
+      {/* Task Execution Modal */}
+      <TaskExecutionModal
+        isOpen={isExecutionModalOpen}
+        onClose={() => setIsExecutionModalOpen(false)}
+        task={selectedTaskForExecution}
+        clientName={selectedClient?.business_name || "Unknown Client"}
+        onTaskCompleted={() => {
+          setIsExecutionModalOpen(false);
+          // Refresh tasks
+          supabase.functions.invoke("admin", {
+            body: { action: "getClientTasks", password: adminPassword },
+          }).then(({ data }) => {
+            if (data?.tasks) {
+              setTasks(data.tasks.filter((t: ClientTask) => t.client_account_id === selectedClientId));
+            }
+          });
+        }}
       />
     </div>
   );
