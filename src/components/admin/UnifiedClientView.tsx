@@ -20,6 +20,7 @@ import {
   Calendar,
   TrendingUp,
   Package,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -38,6 +39,7 @@ interface SelectedClient {
 interface UnifiedClientViewProps {
   client: SelectedClient;
   adminPassword: string;
+  onNavigateToSection?: (section: string) => void;
 }
 
 interface Task {
@@ -82,7 +84,7 @@ interface Meeting {
   meeting_type: string;
 }
 
-export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewProps) {
+export function UnifiedClientView({ client, adminPassword, onNavigateToSection }: UnifiedClientViewProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -341,10 +343,17 @@ export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewPr
             {/* Upcoming Meetings */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  Upcoming Meetings
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Upcoming Meetings
+                  </CardTitle>
+                  {onNavigateToSection && (
+                    <Button variant="ghost" size="sm" onClick={() => onNavigateToSection("client-meetings")} className="gap-1 text-xs">
+                      View All <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {meetings.length === 0 ? (
@@ -352,7 +361,7 @@ export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewPr
                 ) : (
                   <div className="space-y-2">
                     {meetings.slice(0, 3).map((meeting) => (
-                      <div key={meeting.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                      <div key={meeting.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors" onClick={() => onNavigateToSection?.("client-meetings")}>
                         <div>
                           <p className="text-sm font-medium">{meeting.title}</p>
                           <p className="text-xs text-muted-foreground">
@@ -370,10 +379,17 @@ export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewPr
             {/* Priority Tasks */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Priority Tasks
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Priority Tasks
+                  </CardTitle>
+                  {onNavigateToSection && (
+                    <Button variant="ghost" size="sm" onClick={() => onNavigateToSection("client-tasks")} className="gap-1 text-xs">
+                      View All <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {tasks.filter((t) => t.status === "pending").length === 0 ? (
@@ -387,12 +403,12 @@ export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewPr
                       .filter((t) => t.status === "pending")
                       .slice(0, 3)
                       .map((task) => (
-                        <div key={task.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                        <div key={task.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors" onClick={() => onNavigateToSection?.("client-tasks")}>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{task.name}</p>
                             <p className="text-xs text-muted-foreground">{task.category}</p>
                           </div>
-                          <Button size="sm" variant="ghost" onClick={() => completeTask(task.id)}>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); completeTask(task.id); }}>
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -405,7 +421,14 @@ export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewPr
             {/* Recent Activity */}
             <Card className="md:col-span-2">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Recent Messages</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Recent Messages</CardTitle>
+                  {onNavigateToSection && (
+                    <Button variant="ghost" size="sm" onClick={() => onNavigateToSection("client-messages")} className="gap-1 text-xs">
+                      View All <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {messages.length === 0 ? (
@@ -413,7 +436,7 @@ export function UnifiedClientView({ client, adminPassword }: UnifiedClientViewPr
                 ) : (
                   <div className="space-y-3">
                     {messages.slice(0, 4).map((msg) => (
-                      <div key={msg.id} className={cn("p-3 rounded-lg", msg.sender_type === "client" ? "bg-muted/50" : "bg-primary/5")}>
+                      <div key={msg.id} className={cn("p-3 rounded-lg cursor-pointer hover:opacity-80 transition-opacity", msg.sender_type === "client" ? "bg-muted/50" : "bg-primary/5")} onClick={() => onNavigateToSection?.("client-messages")}>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium">
                             {msg.sender_type === "client" ? client.business_name : "Team"}

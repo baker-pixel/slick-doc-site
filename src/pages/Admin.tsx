@@ -1273,7 +1273,7 @@ const Admin = () => {
                   }}
                 />
               ) : (
-                <UnifiedClientView client={selectedClient} adminPassword={storedPassword} />
+                <UnifiedClientView client={selectedClient} adminPassword={storedPassword} onNavigateToSection={setActiveSection as (section: string) => void} />
               )
             ) : needsClientSelection ? (
               <AdminClientSelector
@@ -1285,7 +1285,7 @@ const Admin = () => {
               />
             ) : selectedClient && !isGlobalSection ? (
               /* Show unified client view when a client is selected */
-              <UnifiedClientView client={selectedClient} adminPassword={storedPassword} />
+              <UnifiedClientView client={selectedClient} adminPassword={storedPassword} onNavigateToSection={setActiveSection as (section: string) => void} />
             ) : (
               <>
                 {activeSection === "pipeline" && (
