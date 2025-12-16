@@ -101,19 +101,22 @@ export function AICopilotPanel() {
   const [copied, setCopied] = useState(false);
   const [shouldScrollToOutput, setShouldScrollToOutput] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
 
   // Scroll to output when generation completes
   const scrollToOutput = () => {
-    setTimeout(() => {
-      const scrollContainer = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer && outputRef.current) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const outputRect = outputRef.current.getBoundingClientRect();
-        const scrollTop = scrollContainer.scrollTop + (outputRect.top - containerRect.top) - 20;
-        scrollContainer.scrollTo({ top: scrollTop, behavior: 'smooth' });
-      }
-    }, 200);
+    // wait for layout + Radix viewport
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const viewport = outputRef.current?.closest(
+          '[data-radix-scroll-area-viewport]'
+        ) as HTMLElement | null;
+        if (!viewport || !outputRef.current) return;
+
+        const top = Math.max(0, outputRef.current.offsetTop - 20);
+        viewport.scrollTo({ top, behavior: "smooth" });
+      });
+    });
   };
 
   // Trigger scroll when shouldScrollToOutput is set
@@ -372,7 +375,7 @@ export function AICopilotPanel() {
           )}
         </div>
 
-        <ScrollArea className="flex-1" ref={scrollAreaRef}>
+        <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             <div>
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
