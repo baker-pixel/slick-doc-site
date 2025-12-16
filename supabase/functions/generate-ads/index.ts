@@ -11,23 +11,95 @@ serve(async (req) => {
   }
 
   try {
-    const { 
-      goal, 
-      location, 
-      industry, 
-      budget, 
-      platform, 
+    const {
+      // Ad generation
+      goal,
+      location,
+      industry,
+      budget,
+      platform,
       additionalInfo,
       competitorUrls,
       generateVariants,
       includePredictions,
       includeBudgetRecs,
-      generateLandingPage
+      generateLandingPage,
+
+      // Image-only generation
+      generateImageOnly,
+      imagePrompt,
     } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
+    }
+
+    // Image-only generation path (used by AIAdGenerator to create creative images)
+    if (generateImageOnly) {
+      if (!imagePrompt || typeof imagePrompt !== "string" || !imagePrompt.trim()) {
+        return new Response(JSON.stringify({ error: "imagePrompt is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("Generating image for prompt:", imagePrompt.slice(0, 120));
+
+      const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-image-preview",
+          messages: [
+            {
+              role: "user",
+              content: imagePrompt,
+            },
+          ],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!imgResp.ok) {
+        const errorText = await imgResp.text();
+        console.error("AI image gateway error:", imgResp.status, errorText);
+        return new Response(JSON.stringify({ error: "AI image generation failed" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imgData = await imgResp.json();
+      const url = imgData?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+      if (!url) {
+        console.error("AI image response missing image_url:", imgData);
+        return new Response(JSON.stringify({ error: "AI image response missing image" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ imageUrl: url }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate required fields for ad generation
+    if (!goal || !location || !industry || !platform) {
+      return new Response(
+        JSON.stringify({
+          error: "Missing required fields: goal, location, industry, platform",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Build competitor analysis section
