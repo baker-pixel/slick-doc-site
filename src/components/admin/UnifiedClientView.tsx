@@ -471,12 +471,30 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                       .filter((t) => t.status === "pending")
                       .slice(0, 3)
                       .map((task) => (
-                        <div key={task.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors" onClick={() => onNavigateToSection?.("client-tasks")}>
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
+                          onClick={() => {
+                            try {
+                              sessionStorage.setItem("admin:selectedTaskId", task.id);
+                            } catch {
+                              // ignore
+                            }
+                            onNavigateToSection?.("client-tasks");
+                          }}
+                        >
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{task.name}</p>
                             <p className="text-xs text-muted-foreground">{task.category}</p>
                           </div>
-                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); completeTask(task.id); }}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              completeTask(task.id);
+                            }}
+                          >
                             <CheckCircle2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -540,7 +558,14 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                         "flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors",
                         task.status === "completed" && "opacity-60 bg-muted/30"
                       )}
-                      onClick={() => onNavigateToSection?.("client-tasks")}
+                      onClick={() => {
+                        try {
+                          sessionStorage.setItem("admin:selectedTaskId", task.id);
+                        } catch {
+                          // ignore
+                        }
+                        onNavigateToSection?.("client-tasks");
+                      }}
                     >
                       <Button
                         variant="ghost"
