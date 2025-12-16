@@ -32,7 +32,7 @@ interface TeamMember {
   name: string;
   email: string;
   role: string;
-  photo_url: string | null;
+  photo_url?: string | null;
   is_active: boolean;
 }
 
@@ -278,7 +278,7 @@ export function TeamAssignmentBoard({ adminPassword }: TeamAssignmentBoardProps)
                 className="flex items-center gap-2"
               >
                 <Avatar className="h-5 w-5">
-                  <AvatarImage src={member.avatar_url || undefined} />
+                  <AvatarImage src={member.photo_url || undefined} />
                   <AvatarFallback className="text-xs">
                     {member.name.split(" ").map(n => n[0]).join("")}
                   </AvatarFallback>
@@ -310,7 +310,7 @@ export function TeamAssignmentBoard({ adminPassword }: TeamAssignmentBoardProps)
               onDragOver={handleDragOver}
             >
               {tasksByStatus[column.id]?.map(task => {
-                const assignedMember = task.team_member_id ? getMemberById(task.team_member_id) : null;
+                const assignedMember = task.assigned_to ? teamMembers.find(m => m.name === task.assigned_to) : null;
                 const isOverdue = task.due_date && new Date(task.due_date) < new Date();
                 
                 return (
@@ -324,11 +324,11 @@ export function TeamAssignmentBoard({ adminPassword }: TeamAssignmentBoardProps)
                       <div className="flex items-start justify-between mb-2">
                         <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                         <Select
-                          value={task.team_member_id || "unassigned"}
+                          value={task.assigned_to || "unassigned"}
                           onValueChange={(value) => 
                             updateTaskMutation.mutate({ 
                               taskId: task.id, 
-                              teamMemberId: value === "unassigned" ? "" : value 
+                              assignedTo: value === "unassigned" ? "" : value 
                             })
                           }
                         >
@@ -338,7 +338,7 @@ export function TeamAssignmentBoard({ adminPassword }: TeamAssignmentBoardProps)
                           <SelectContent>
                             <SelectItem value="unassigned">Unassigned</SelectItem>
                             {teamMembers.map(m => (
-                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                              <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -364,7 +364,7 @@ export function TeamAssignmentBoard({ adminPassword }: TeamAssignmentBoardProps)
                       {assignedMember && (
                         <div className="flex items-center gap-2 mt-2 pt-2 border-t">
                           <Avatar className="h-5 w-5">
-                            <AvatarImage src={assignedMember.avatar_url || undefined} />
+                            <AvatarImage src={assignedMember.photo_url || undefined} />
                             <AvatarFallback className="text-xs">
                               {assignedMember.name.split(" ").map(n => n[0]).join("")}
                             </AvatarFallback>
