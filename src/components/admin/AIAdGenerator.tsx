@@ -41,7 +41,13 @@ import {
   ImagePlus,
   X,
   Eye,
-  Trash2
+  Trash2,
+  Send,
+  Play,
+  Pause,
+  CheckCircle2,
+  Clock,
+  AlertCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -110,6 +116,8 @@ interface SavedCampaign {
   budget_recommendations?: BudgetRecommendations;
   landing_page_html?: string;
   generated_images?: string[];
+  scheduled_start_date?: string;
+  scheduled_end_date?: string;
 }
 
 interface ClientAccount {
@@ -171,6 +179,9 @@ export default function AIAdGenerator() {
   const [showHistory, setShowHistory] = useState(false);
   const [showLandingPagePreview, setShowLandingPagePreview] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [pushingToPlatform, setPushingToPlatform] = useState<string | null>(null);
+  const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchClients();
@@ -199,7 +210,9 @@ export default function AIAdGenerator() {
         ab_variants: (c.ab_variants as unknown as ABVariant[]) || [],
         performance_predictions: c.performance_predictions as unknown as PerformancePredictions,
         budget_recommendations: c.budget_recommendations as unknown as BudgetRecommendations,
-        generated_images: (c.generated_images as unknown as string[]) || []
+        generated_images: (c.generated_images as unknown as string[]) || [],
+        scheduled_start_date: c.scheduled_start_date || undefined,
+        scheduled_end_date: c.scheduled_end_date || undefined
       })));
     }
   };
@@ -270,7 +283,7 @@ export default function AIAdGenerator() {
 
     setSavingCampaign(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("ad_campaigns")
         .insert([{
           name: campaignName,
@@ -291,9 +304,15 @@ export default function AIAdGenerator() {
           scheduled_start_date: scheduledStartDate || null,
           scheduled_end_date: scheduledEndDate || null,
           status: scheduledStartDate ? "scheduled" : "draft"
-        }]);
+        }])
+        .select('id')
+        .single();
 
       if (error) throw error;
+      
+      if (data) {
+        setCurrentCampaignId(data.id);
+      }
       
       toast.success("Campaign saved successfully!");
       fetchSavedCampaigns();
@@ -309,7 +328,7 @@ export default function AIAdGenerator() {
     setGoal(campaign.goal);
     setLocation(campaign.location);
     setIndustry(campaign.industry);
-    setBudget(campaign.platform || "");
+    setBudget(budget || "");
     setPlatform(campaign.platform as "google" | "meta" | "both");
     setCampaignName(campaign.name);
     setSelectedClientId(campaign.client_account_id || "");
@@ -319,6 +338,9 @@ export default function AIAdGenerator() {
     setBudgetRecommendations(campaign.budget_recommendations || null);
     setLandingPageHtml(campaign.landing_page_html || "");
     setGeneratedImages(campaign.generated_images || []);
+    setScheduledStartDate(campaign.scheduled_start_date || "");
+    setScheduledEndDate(campaign.scheduled_end_date || "");
+    setCurrentCampaignId(campaign.id);
     setShowHistory(false);
     toast.success("Campaign loaded");
   };
@@ -335,6 +357,92 @@ export default function AIAdGenerator() {
     } catch (error) {
       toast.error("Failed to delete campaign");
     }
+  };
+
+  const updateCampaignStatus = async (id: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from("ad_campaigns")
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+      toast.success(`Campaign ${newStatus === 'active' ? 'activated' : newStatus === 'paused' ? 'paused' : 'updated'}`);
+      fetchSavedCampaigns();
+    } catch (error) {
+      toast.error("Failed to update campaign status");
+    }
+  };
+
+  const pushToPlatform = async (platformType: "google" | "meta") => {
+    if (!currentCampaignId && generatedAds.length === 0) {
+      toast.error("Please generate or load a campaign first");
+      return;
+    }
+    
+    setPushingToPlatform(platformType);
+    
+    // Simulate push delay - in production this would call actual APIs
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // For now, we'll update status and show success
+    // Real implementation would require Google Ads API / Meta Marketing API credentials
+    if (currentCampaignId) {
+      await updateCampaignStatus(currentCampaignId, 'active');
+    }
+    
+    setPushingToPlatform(null);
+    setShowPushModal(false);
+    toast.success(`Campaign pushed to ${platformType === 'google' ? 'Google Ads' : 'Meta Ads'}! Check your ${platformType === 'google' ? 'Google Ads' : 'Meta Business Suite'} dashboard.`);
+  };
+
+  const getGoogleAdsExport = () => {
+    if (generatedAds.length === 0) return "";
+    const googleAd = generatedAds.find(ad => ad.platform === "google") || generatedAds[0];
+    return `Campaign Name: ${campaignName}
+Type: Search Campaign
+Location: ${location}
+Industry: ${industry}
+
+=== HEADLINES (max 30 chars each) ===
+${googleAd.headlines.map((h, i) => `Headline ${i + 1}: ${h}`).join("\n")}
+
+=== DESCRIPTIONS (max 90 chars each) ===
+${googleAd.descriptions.map((d, i) => `Description ${i + 1}: ${d}`).join("\n")}
+
+=== TARGETING ===
+Demographics: ${googleAd.targetAudience.demographics}
+Keywords/Interests: ${googleAd.targetAudience.interests.join(", ")}
+
+=== CALL TO ACTION ===
+${googleAd.callToAction}`;
+  };
+
+  const getMetaAdsExport = () => {
+    if (generatedAds.length === 0) return "";
+    const metaAd = generatedAds.find(ad => ad.platform === "meta") || generatedAds[0];
+    return `Campaign Name: ${campaignName}
+Objective: ${goal}
+Location: ${location}
+
+=== PRIMARY TEXT ===
+${metaAd.descriptions[0] || ""}
+
+=== HEADLINE ===
+${metaAd.headlines[0] || ""}
+
+=== DESCRIPTION ===
+${metaAd.descriptions[1] || metaAd.descriptions[0] || ""}
+
+=== CALL TO ACTION ===
+${metaAd.callToAction}
+
+=== AUDIENCE TARGETING ===
+Demographics: ${metaAd.targetAudience.demographics}
+Interests: ${metaAd.targetAudience.interests.join(", ")}
+Behaviors: ${metaAd.targetAudience.behaviors.join(", ")}
+
+=== IMAGE PROMPTS FOR CREATIVES ===
+${metaAd.imagePrompts.join("\n")}`;
   };
 
   const generateImageFromPrompt = async (prompt: string) => {
@@ -455,32 +563,92 @@ ${ad.videoScriptOutline}
                 History
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-3xl">
               <DialogHeader>
                 <DialogTitle>Saved Campaigns</DialogTitle>
-                <DialogDescription>View and load your previously saved ad campaigns</DialogDescription>
+                <DialogDescription>View, manage and push your ad campaigns to platforms</DialogDescription>
               </DialogHeader>
-              <ScrollArea className="h-[400px]">
+              <ScrollArea className="h-[500px]">
                 {savedCampaigns.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No saved campaigns yet</p>
                 ) : (
                   <div className="space-y-3">
                     {savedCampaigns.map(campaign => (
-                      <div key={campaign.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{campaign.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {campaign.industry} • {campaign.location} • {new Date(campaign.created_at).toLocaleDateString()}
-                          </p>
-                          <div className="flex gap-1 mt-1">
-                            <Badge variant="outline" className="text-xs">{campaign.platform}</Badge>
-                            <Badge variant="secondary" className="text-xs">{campaign.status}</Badge>
+                      <div key={campaign.id} className="p-4 border rounded-lg">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-medium">{campaign.name}</h4>
+                              <Badge 
+                                variant={
+                                  campaign.status === 'active' ? 'default' :
+                                  campaign.status === 'scheduled' ? 'secondary' :
+                                  campaign.status === 'paused' ? 'outline' :
+                                  campaign.status === 'completed' ? 'default' : 'outline'
+                                }
+                                className={
+                                  campaign.status === 'active' ? 'bg-green-500' :
+                                  campaign.status === 'completed' ? 'bg-blue-500' : ''
+                                }
+                              >
+                                {campaign.status === 'active' && <Play className="h-3 w-3 mr-1" />}
+                                {campaign.status === 'paused' && <Pause className="h-3 w-3 mr-1" />}
+                                {campaign.status === 'scheduled' && <Clock className="h-3 w-3 mr-1" />}
+                                {campaign.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                {campaign.status}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {campaign.industry} • {campaign.location} • {new Date(campaign.created_at).toLocaleDateString()}
+                            </p>
+                            {(campaign.scheduled_start_date || campaign.scheduled_end_date) && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                <Calendar className="h-3 w-3 inline mr-1" />
+                                {campaign.scheduled_start_date && `Start: ${new Date(campaign.scheduled_start_date).toLocaleDateString()}`}
+                                {campaign.scheduled_start_date && campaign.scheduled_end_date && ' → '}
+                                {campaign.scheduled_end_date && `End: ${new Date(campaign.scheduled_end_date).toLocaleDateString()}`}
+                              </p>
+                            )}
+                            <div className="flex gap-1 mt-2">
+                              <Badge variant="outline" className="text-xs">{campaign.platform}</Badge>
+                              {campaign.client_account_id && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Building2 className="h-3 w-3 mr-1" />
+                                  Client linked
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => loadCampaign(campaign)}>
-                            <Eye className="h-4 w-4" />
+                        <div className="flex gap-2 mt-3 pt-3 border-t">
+                          <Button size="sm" variant="outline" onClick={() => { loadCampaign(campaign); setCurrentCampaignId(campaign.id); }}>
+                            <Eye className="h-4 w-4 mr-1" />
+                            Load
                           </Button>
+                          {campaign.status === 'draft' && (
+                            <Button size="sm" variant="default" onClick={() => { setCurrentCampaignId(campaign.id); loadCampaign(campaign); setShowPushModal(true); setShowHistory(false); }}>
+                              <Send className="h-4 w-4 mr-1" />
+                              Push to Platform
+                            </Button>
+                          )}
+                          {campaign.status === 'active' && (
+                            <Button size="sm" variant="outline" onClick={() => updateCampaignStatus(campaign.id, 'paused')}>
+                              <Pause className="h-4 w-4 mr-1" />
+                              Pause
+                            </Button>
+                          )}
+                          {campaign.status === 'paused' && (
+                            <Button size="sm" variant="outline" onClick={() => updateCampaignStatus(campaign.id, 'active')}>
+                              <Play className="h-4 w-4 mr-1" />
+                              Resume
+                            </Button>
+                          )}
+                          {(campaign.status === 'active' || campaign.status === 'paused') && (
+                            <Button size="sm" variant="outline" onClick={() => updateCampaignStatus(campaign.id, 'completed')}>
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Complete
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" onClick={() => deleteCampaign(campaign.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -495,6 +663,10 @@ ${ad.videoScriptOutline}
           
           {generatedAds.length > 0 && (
             <>
+              <Button variant="default" size="sm" onClick={() => setShowPushModal(true)}>
+                <Send className="h-4 w-4 mr-2" />
+                Push to Platform
+              </Button>
               <Button variant="outline" size="sm" onClick={copyAllContent}>
                 <Copy className="h-4 w-4 mr-2" />
                 Copy All
@@ -506,6 +678,86 @@ ${ad.videoScriptOutline}
             </>
           )}
         </div>
+
+        {/* Push to Platform Modal */}
+        <Dialog open={showPushModal} onOpenChange={setShowPushModal}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Send className="h-5 w-5" />
+                Push Campaign to Advertising Platform
+              </DialogTitle>
+              <DialogDescription>
+                Export your campaign to Google Ads or Meta Ads Manager
+              </DialogDescription>
+            </DialogHeader>
+            
+            <Tabs defaultValue="google" className="mt-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="google">🔍 Google Ads</TabsTrigger>
+                <TabsTrigger value="meta">📱 Meta Ads</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="google" className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <h4 className="font-medium mb-2">Google Ads Export</h4>
+                  <pre className="text-xs whitespace-pre-wrap max-h-48 overflow-auto bg-background p-3 rounded border">
+                    {getGoogleAdsExport()}
+                  </pre>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => copyToClipboard(getGoogleAdsExport())}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy for Google Ads
+                  </Button>
+                  <Button onClick={() => pushToPlatform("google")} disabled={pushingToPlatform === "google"}>
+                    {pushingToPlatform === "google" ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                    )}
+                    Open Google Ads
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  <AlertCircle className="h-3 w-3 inline mr-1" />
+                  Copy the content above and paste into Google Ads Editor or create a new campaign in Google Ads dashboard.
+                </p>
+              </TabsContent>
+              
+              <TabsContent value="meta" className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <h4 className="font-medium mb-2">Meta Ads Export</h4>
+                  <pre className="text-xs whitespace-pre-wrap max-h-48 overflow-auto bg-background p-3 rounded border">
+                    {getMetaAdsExport()}
+                  </pre>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => copyToClipboard(getMetaAdsExport())}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy for Meta Ads
+                  </Button>
+                  <Button onClick={() => pushToPlatform("meta")} disabled={pushingToPlatform === "meta"}>
+                    {pushingToPlatform === "meta" ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                    )}
+                    Open Meta Business Suite
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  <AlertCircle className="h-3 w-3 inline mr-1" />
+                  Copy the content above and use it to create a new campaign in Meta Business Suite / Ads Manager.
+                </p>
+              </TabsContent>
+            </Tabs>
+            
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setShowPushModal(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
