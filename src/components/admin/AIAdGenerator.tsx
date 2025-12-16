@@ -533,12 +533,12 @@ ${ad.videoScriptOutline}
 
             <div className="space-y-2">
               <Label htmlFor="client">Link to Client (optional)</Label>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+              <Select value={selectedClientId || "__none__"} onValueChange={(v) => setSelectedClientId(v === "__none__" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No client</SelectItem>
+                  <SelectItem value="__none__">No client</SelectItem>
                   {clients.map(client => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.business_name}
@@ -613,12 +613,12 @@ ${ad.videoScriptOutline}
 
             <div className="space-y-2">
               <Label>Ad Template (optional)</Label>
-              <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+              <Select value={selectedTemplate || "__none__"} onValueChange={(v) => setSelectedTemplate(v === "__none__" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select template" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No template</SelectItem>
+                  <SelectItem value="__none__">No template</SelectItem>
                   {templates.map(template => (
                     <SelectItem key={template.id} value={template.id}>
                       {template.name} ({template.platform})
