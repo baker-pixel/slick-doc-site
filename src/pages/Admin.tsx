@@ -1262,9 +1262,20 @@ const Admin = () => {
           )}
           
           <main className="flex-1 p-6">
-            {/* Show client selector when needed */}
-            {needsClientSelection ? (
-              <AdminClientSelector 
+            {/* Home becomes the default "work a client" journey */}
+            {activeSection === "home" ? (
+              !selectedClient ? (
+                <AdminClientSelector
+                  onSelectClient={handleSelectClient}
+                  onAddClient={() => {
+                    setActiveSection("clients");
+                  }}
+                />
+              ) : (
+                <UnifiedClientView client={selectedClient} />
+              )
+            ) : needsClientSelection ? (
+              <AdminClientSelector
                 onSelectClient={handleSelectClient}
                 onAddClient={() => {
                   setActiveSection("clients");
@@ -1276,20 +1287,20 @@ const Admin = () => {
             ) : (
               <>
                 {activeSection === "pipeline" && (
-                  <QuickStartChecklist 
-                    onNavigate={setActiveSection as (section: string) => void} 
+                  <QuickStartChecklist
+                    onNavigate={setActiveSection as (section: string) => void}
                     password={storedPassword}
                   />
                 )}
-                
-                {activeSection !== "home" && isGlobalSection && (
+
+                {isGlobalSection && (
                   <AdminStatsCards
                     contactsCount={contacts.length}
                     gapAnalysesCount={gapAnalyses.length}
                     pdfLeadsCount={pdfLeads.length}
                   />
                 )}
-                
+
                 {renderActiveSection()}
               </>
             )}
