@@ -72,7 +72,21 @@ import { ReviewWorkflowPanel } from "@/components/admin/ReviewWorkflowPanel";
 import { ClientWorkflowPanel } from "@/components/admin/ClientWorkflowPanel";
 import { OrangeDoorDashboard } from "@/components/admin/OrangeDoorDashboard";
 import { AICopilotPanel } from "@/components/admin/AICopilotPanel";
+import { AdminClientSelector } from "@/components/admin/AdminClientSelector";
+import { SelectedClientHeader } from "@/components/admin/SelectedClientHeader";
 import { cn } from "@/lib/utils";
+
+interface SelectedClient {
+  id: string;
+  business_name: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  tier: string;
+  status: string;
+  industry: string | null;
+}
+
 interface ContactSubmission {
   id: string;
   first_name: string;
@@ -190,6 +204,7 @@ const Admin = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<AdminSection>("home");
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null);
 
   // Check if user has seen onboarding
   useEffect(() => {
@@ -1191,6 +1206,26 @@ const Admin = () => {
     return titles[activeSection];
   };
 
+  // Sections that don't require a client selection
+  const globalSections: AdminSection[] = [
+    "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", 
+    "emails", "templates", "sequences", "campaigns", "alerts",
+    "sops", "task-templates", "settings", "analytics", "feature-guide",
+    "clients", "team-directory", "onboarding", "integrations", "calendar",
+    "quick-actions", "activity-feed", "review-workflow", "client-workflow"
+  ];
+
+  const isGlobalSection = globalSections.includes(activeSection);
+  const needsClientSelection = !isGlobalSection && !selectedClient;
+
+  const handleSelectClient = (client: SelectedClient) => {
+    setSelectedClient(client);
+  };
+
+  const handleClearClient = () => {
+    setSelectedClient(null);
+  };
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -1217,27 +1252,50 @@ const Admin = () => {
             </Button>
           </header>
           
+          {/* Client Header - shown when a client is selected and on client-specific sections */}
+          {selectedClient && !isGlobalSection && (
+            <SelectedClientHeader 
+              client={selectedClient} 
+              onChangeClient={handleClearClient} 
+            />
+          )}
+          
           <main className="flex-1 p-6">
-            {activeSection === "pipeline" && (
-              <QuickStartChecklist 
-                onNavigate={setActiveSection as (section: string) => void} 
-                password={storedPassword}
+            {/* Show client selector when needed */}
+            {needsClientSelection ? (
+              <AdminClientSelector 
+                onSelectClient={handleSelectClient}
+                onAddClient={() => {
+                  setActiveSection("clients");
+                }}
               />
+            ) : (
+              <>
+                {activeSection === "pipeline" && (
+                  <QuickStartChecklist 
+                    onNavigate={setActiveSection as (section: string) => void} 
+                    password={storedPassword}
+                  />
+                )}
+                
+                {activeSection !== "home" && isGlobalSection && (
+                  <AdminStatsCards
+                    contactsCount={contacts.length}
+                    gapAnalysesCount={gapAnalyses.length}
+                    pdfLeadsCount={pdfLeads.length}
+                  />
+                )}
+                
+                {renderActiveSection()}
+              </>
             )}
-            
-            {activeSection !== "home" && (
-              <AdminStatsCards
-                contactsCount={contacts.length}
-                gapAnalysesCount={gapAnalyses.length}
-                pdfLeadsCount={pdfLeads.length}
-              />
-            )}
-            
-            {renderActiveSection()}
           </main>
         </SidebarInset>
         
-        <AICopilotPanel onNavigateToSection={(section) => setActiveSection(section)} />
+        <AICopilotPanel 
+          onNavigateToSection={(section) => setActiveSection(section)} 
+          selectedClientId={selectedClient?.id}
+        />
       </div>
 
       {showOnboarding && (
