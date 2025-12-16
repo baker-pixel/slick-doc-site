@@ -55,6 +55,181 @@ export type Database = {
           },
         ]
       }
+      ad_campaign_analytics: {
+        Row: {
+          ad_campaign_id: string
+          clicks: number | null
+          conversions: number | null
+          cpa: number | null
+          cpc: number | null
+          created_at: string
+          ctr: number | null
+          id: string
+          impressions: number | null
+          notes: string | null
+          platform: string | null
+          recorded_date: string
+          roas: number | null
+          spend: number | null
+        }
+        Insert: {
+          ad_campaign_id: string
+          clicks?: number | null
+          conversions?: number | null
+          cpa?: number | null
+          cpc?: number | null
+          created_at?: string
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          notes?: string | null
+          platform?: string | null
+          recorded_date: string
+          roas?: number | null
+          spend?: number | null
+        }
+        Update: {
+          ad_campaign_id?: string
+          clicks?: number | null
+          conversions?: number | null
+          cpa?: number | null
+          cpc?: number | null
+          created_at?: string
+          ctr?: number | null
+          id?: string
+          impressions?: number | null
+          notes?: string | null
+          platform?: string | null
+          recorded_date?: string
+          roas?: number | null
+          spend?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_campaign_analytics_ad_campaign_id_fkey"
+            columns: ["ad_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_campaigns: {
+        Row: {
+          ab_variants: Json | null
+          additional_info: string | null
+          budget: string | null
+          budget_recommendations: Json | null
+          client_account_id: string | null
+          competitor_urls: string[] | null
+          created_at: string
+          generated_ads: Json
+          generated_images: Json | null
+          goal: string
+          id: string
+          industry: string
+          landing_page_html: string | null
+          location: string
+          name: string
+          performance_predictions: Json | null
+          platform: string
+          scheduled_end_date: string | null
+          scheduled_start_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ab_variants?: Json | null
+          additional_info?: string | null
+          budget?: string | null
+          budget_recommendations?: Json | null
+          client_account_id?: string | null
+          competitor_urls?: string[] | null
+          created_at?: string
+          generated_ads?: Json
+          generated_images?: Json | null
+          goal: string
+          id?: string
+          industry: string
+          landing_page_html?: string | null
+          location: string
+          name: string
+          performance_predictions?: Json | null
+          platform?: string
+          scheduled_end_date?: string | null
+          scheduled_start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ab_variants?: Json | null
+          additional_info?: string | null
+          budget?: string | null
+          budget_recommendations?: Json | null
+          client_account_id?: string | null
+          competitor_urls?: string[] | null
+          created_at?: string
+          generated_ads?: Json
+          generated_images?: Json | null
+          goal?: string
+          id?: string
+          industry?: string
+          landing_page_html?: string | null
+          location?: string
+          name?: string
+          performance_predictions?: Json | null
+          platform?: string
+          scheduled_end_date?: string | null
+          scheduled_start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_campaigns_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_templates: {
+        Row: {
+          ad_type: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          platform: string
+          template_config: Json
+          updated_at: string
+        }
+        Insert: {
+          ad_type: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          platform: string
+          template_config: Json
+          updated_at?: string
+        }
+        Update: {
+          ad_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          platform?: string
+          template_config?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       admin_settings: {
         Row: {
           created_at: string
