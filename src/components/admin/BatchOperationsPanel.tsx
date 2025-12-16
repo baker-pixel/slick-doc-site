@@ -271,14 +271,14 @@ export function BatchOperationsPanel({ adminPassword }: BatchOperationsPanelProp
                     <SelectItem value="completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select onValueChange={handleBatchAssign}>
+                <Select onValueChange={(val) => handleBatchAssign(val === "__unassign__" ? "" : val)}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue placeholder="Assign To" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassign</SelectItem>
+                    <SelectItem value="__unassign__">Unassign</SelectItem>
                     {teamMembers.map(member => (
-                      <SelectItem key={member.id} value={member.id}>
+                      <SelectItem key={member.id} value={member.name}>
                         {member.name}
                       </SelectItem>
                     ))}
