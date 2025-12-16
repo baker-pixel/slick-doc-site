@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +33,32 @@ import {
   Presentation,
   ChevronRight,
   Calendar,
+  TrendingUp,
+  TrendingDown,
+  Target,
+  Lightbulb,
+  AlertTriangle,
+  CheckCircle,
+  BarChart3,
+  Zap,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
+  Users,
+  Globe,
+  Mail,
+  Search,
+  Share2,
+  DollarSign,
+  Percent,
+  MousePointerClick,
+  Timer,
+  Award,
+  ThumbsUp,
+  AlertCircle,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -100,6 +128,395 @@ const categoryConfig: Record<string, { icon: React.ComponentType<{ className?: s
   general: { icon: Package, label: "Deliverable" },
 };
 
+// Parse JSON content from description
+function parseReportContent(content: string | null): { 
+  isJson: boolean; 
+  data: Record<string, unknown> | null;
+  markdown: string | null;
+} {
+  if (!content) return { isJson: false, data: null, markdown: null };
+  
+  try {
+    const parsed = JSON.parse(content);
+    return { isJson: true, data: parsed, markdown: null };
+  } catch {
+    return { isJson: false, data: null, markdown: content };
+  }
+}
+
+// Format metric value for display
+function formatMetricValue(value: unknown): string {
+  if (typeof value === 'number') {
+    if (value > 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value > 1000) return `${(value / 1000).toFixed(1)}K`;
+    return value.toLocaleString();
+  }
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null) {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+// Get icon for metric type
+function getMetricIcon(key: string): React.ComponentType<{ className?: string }> {
+  const lowerKey = key.toLowerCase();
+  if (lowerKey.includes('traffic') || lowerKey.includes('visitor') || lowerKey.includes('session')) return Users;
+  if (lowerKey.includes('conversion') || lowerKey.includes('lead')) return Target;
+  if (lowerKey.includes('revenue') || lowerKey.includes('spend') || lowerKey.includes('cost') || lowerKey.includes('cpa') || lowerKey.includes('cpc')) return DollarSign;
+  if (lowerKey.includes('rate') || lowerKey.includes('ctr') || lowerKey.includes('percentage')) return Percent;
+  if (lowerKey.includes('click')) return MousePointerClick;
+  if (lowerKey.includes('time') || lowerKey.includes('duration')) return Timer;
+  if (lowerKey.includes('email') || lowerKey.includes('open')) return Mail;
+  if (lowerKey.includes('social') || lowerKey.includes('engagement')) return Share2;
+  if (lowerKey.includes('seo') || lowerKey.includes('search') || lowerKey.includes('ranking')) return Search;
+  if (lowerKey.includes('score')) return Award;
+  if (lowerKey.includes('bounce')) return ArrowDownRight;
+  return BarChart3;
+}
+
+// Collapsible section component
+function CollapsibleSection({ 
+  title, 
+  icon: Icon, 
+  children, 
+  defaultOpen = true,
+  count,
+  color = "primary"
+}: { 
+  title: string; 
+  icon: React.ComponentType<{ className?: string }>; 
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  count?: number;
+  color?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  const colorClasses: Record<string, string> = {
+    primary: "bg-primary/10 text-primary",
+    emerald: "bg-emerald-500/10 text-emerald-600",
+    amber: "bg-amber-500/10 text-amber-600",
+    blue: "bg-blue-500/10 text-blue-600",
+    purple: "bg-purple-500/10 text-purple-600",
+  };
+  
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <span className="font-semibold text-foreground">{title}</span>
+          {count !== undefined && (
+            <Badge variant="secondary" className="ml-2">{count}</Badge>
+          )}
+        </div>
+        {isOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+      </button>
+      {isOpen && <div className="p-4 border-t">{children}</div>}
+    </div>
+  );
+}
+
+// Metric card component
+function MetricCard({ label, value, change, isPositive }: { 
+  label: string; 
+  value: unknown; 
+  change?: number;
+  isPositive?: boolean;
+}) {
+  const Icon = getMetricIcon(label);
+  const displayValue = formatMetricValue(value);
+  
+  // Handle nested objects
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return (
+      <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">{label.replace(/_/g, ' ')}</span>
+        </div>
+        <div className="grid gap-2">
+          {Object.entries(value as Record<string, unknown>).map(([key, val]) => (
+            <div key={key} className="flex justify-between text-sm">
+              <span className="text-muted-foreground">{key.replace(/_/g, ' ')}</span>
+              <span className="font-medium text-foreground">{formatMetricValue(val)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="bg-muted/30 rounded-lg p-4 flex flex-col">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <span className="text-sm text-muted-foreground">{label.replace(/_/g, ' ')}</span>
+      </div>
+      <div className="flex items-end justify-between">
+        <span className="text-2xl font-bold text-foreground">{displayValue}</span>
+        {change !== undefined && (
+          <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
+            {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+            {Math.abs(change)}%
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Insight card component
+function InsightCard({ insight, index }: { insight: string; index: number }) {
+  return (
+    <div className="flex gap-3 p-3 bg-blue-500/5 rounded-lg border border-blue-500/10">
+      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center">
+        <span className="text-xs font-semibold text-blue-600">{index + 1}</span>
+      </div>
+      <p className="text-sm text-foreground leading-relaxed">{insight}</p>
+    </div>
+  );
+}
+
+// Recommendation card component
+function RecommendationCard({ recommendation }: { recommendation: Record<string, unknown> }) {
+  const priority = recommendation.priority as string || 'medium';
+  const priorityColors: Record<string, { bg: string; text: string; badge: string }> = {
+    high: { bg: 'bg-red-500/5', text: 'text-red-600', badge: 'bg-red-500/10 text-red-600' },
+    medium: { bg: 'bg-amber-500/5', text: 'text-amber-600', badge: 'bg-amber-500/10 text-amber-600' },
+    low: { bg: 'bg-blue-500/5', text: 'text-blue-600', badge: 'bg-blue-500/10 text-blue-600' },
+  };
+  const colors = priorityColors[priority] || priorityColors.medium;
+  
+  return (
+    <div className={`p-4 rounded-lg border ${colors.bg}`}>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2">
+          <Zap className={`h-4 w-4 ${colors.text}`} />
+          <Badge className={colors.badge}>{priority} priority</Badge>
+        </div>
+      </div>
+      <p className="text-sm font-medium text-foreground mb-2">
+        {recommendation.action as string}
+      </p>
+      {recommendation.expected_impact && (
+        <div className="flex items-start gap-2 mt-3 p-2 bg-emerald-500/5 rounded border border-emerald-500/10">
+          <ArrowUpRight className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <span className="text-xs text-emerald-700 dark:text-emerald-400">
+            {recommendation.expected_impact as string}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Issue card for SEO audits
+function IssueCard({ issue, severity = 'warning' }: { issue: string; severity?: string }) {
+  const severityConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
+    error: { icon: AlertCircle, color: 'text-red-500' },
+    warning: { icon: AlertTriangle, color: 'text-amber-500' },
+    info: { icon: Info, color: 'text-blue-500' },
+  };
+  const config = severityConfig[severity] || severityConfig.warning;
+  const Icon = config.icon;
+  
+  return (
+    <div className="flex items-start gap-2 p-2 bg-muted/50 rounded">
+      <Icon className={`h-4 w-4 ${config.color} flex-shrink-0 mt-0.5`} />
+      <span className="text-sm text-foreground">{issue}</span>
+    </div>
+  );
+}
+
+// Score display component
+function ScoreDisplay({ score, label }: { score: number; label: string }) {
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return { text: 'text-emerald-600', bg: 'bg-emerald-500' };
+    if (score >= 60) return { text: 'text-amber-600', bg: 'bg-amber-500' };
+    return { text: 'text-red-600', bg: 'bg-red-500' };
+  };
+  const colors = getScoreColor(score);
+  
+  return (
+    <div className="text-center p-4 bg-muted/30 rounded-lg">
+      <div className={`text-3xl font-bold ${colors.text} mb-1`}>{score}</div>
+      <div className="text-xs text-muted-foreground mb-2">{label}</div>
+      <Progress value={score} className="h-2" />
+    </div>
+  );
+}
+
+// Report viewer component
+function ReportViewer({ deliverable }: { deliverable: Deliverable }) {
+  const { isJson, data, markdown } = parseReportContent(deliverable.description);
+  
+  if (!isJson && markdown) {
+    // Render markdown content
+    return (
+      <div className="prose prose-sm max-w-none dark:prose-invert">
+        {renderMarkdown(markdown)}
+      </div>
+    );
+  }
+  
+  if (!data) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+        <p>No report content available</p>
+      </div>
+    );
+  }
+  
+  // Extract common report sections
+  const metrics = data.metrics as Record<string, unknown> | undefined;
+  const insights = data.insights as string[] | undefined;
+  const recommendations = data.recommendations as Record<string, unknown>[] | undefined;
+  const executiveSummary = data.executive_summary as string | undefined;
+  const results = data.results as Record<string, unknown> | undefined;
+  
+  return (
+    <div className="space-y-6">
+      {/* Executive Summary */}
+      {executiveSummary && (
+        <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-6 border border-primary/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Award className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-foreground">Executive Summary</h3>
+          </div>
+          <p className="text-sm text-foreground leading-relaxed">{executiveSummary}</p>
+        </div>
+      )}
+      
+      {/* SEO Audit Results */}
+      {results && (
+        <CollapsibleSection title="Audit Results" icon={Search} color="purple">
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            {Object.entries(results).map(([key, value]) => {
+              const section = value as { score?: number; issues?: string[] };
+              if (section.score !== undefined) {
+                return (
+                  <ScoreDisplay 
+                    key={key} 
+                    score={section.score} 
+                    label={key.replace(/([A-Z])/g, ' $1').trim()} 
+                  />
+                );
+              }
+              return null;
+            })}
+          </div>
+          
+          {Object.entries(results).map(([key, value]) => {
+            const section = value as { score?: number; issues?: string[] };
+            if (section.issues && section.issues.length > 0) {
+              return (
+                <div key={key} className="mb-4 last:mb-0">
+                  <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    {key.replace(/([A-Z])/g, ' $1').trim()} Issues
+                  </h4>
+                  <div className="space-y-2">
+                    {section.issues.map((issue, idx) => (
+                      <IssueCard key={idx} issue={issue} />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </CollapsibleSection>
+      )}
+      
+      {/* Metrics Section */}
+      {metrics && Object.keys(metrics).length > 0 && (
+        <CollapsibleSection 
+          title="Key Metrics" 
+          icon={BarChart3} 
+          count={Object.keys(metrics).length}
+          color="emerald"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(metrics).map(([key, value]) => {
+              // Extract change percentage if available
+              let change: number | undefined;
+              let isPositive: boolean | undefined;
+              
+              if (typeof value === 'object' && value !== null) {
+                const obj = value as Record<string, unknown>;
+                if (obj.change_percentage !== undefined) {
+                  change = obj.change_percentage as number;
+                  isPositive = change >= 0;
+                }
+              }
+              
+              return (
+                <MetricCard 
+                  key={key} 
+                  label={key} 
+                  value={value}
+                  change={change}
+                  isPositive={isPositive}
+                />
+              );
+            })}
+          </div>
+        </CollapsibleSection>
+      )}
+      
+      {/* Insights Section */}
+      {insights && insights.length > 0 && (
+        <CollapsibleSection 
+          title="Key Insights" 
+          icon={Lightbulb} 
+          count={insights.length}
+          color="blue"
+        >
+          <div className="space-y-3">
+            {insights.map((insight, index) => (
+              <InsightCard key={index} insight={insight} index={index} />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+      
+      {/* Recommendations Section */}
+      {recommendations && recommendations.length > 0 && (
+        <CollapsibleSection 
+          title="Recommendations" 
+          icon={Target} 
+          count={recommendations.length}
+          color="amber"
+        >
+          <div className="grid gap-4">
+            {recommendations.map((rec, index) => (
+              <RecommendationCard key={index} recommendation={rec} />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+      
+      {/* Deliverable Created Badge */}
+      {data.deliverableCreated && (
+        <div className="flex items-center gap-2 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+          <CheckCircle className="h-5 w-5 text-emerald-600" />
+          <span className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">
+            This report has been finalized and delivered
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Markdown renderer for audit reports
 function renderMarkdown(content: string) {
   const lines = content.split('\n');
@@ -158,11 +575,6 @@ function renderMarkdown(content: string) {
   }
 
   return elements;
-}
-
-function isMarkdownContent(content: string | null): boolean {
-  if (!content) return false;
-  return content.startsWith('# ') || content.includes('\n## ') || content.includes('\n### ');
 }
 
 export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTabProps) {
@@ -264,6 +676,20 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
 
   const pendingCount = deliverables?.filter(d => d.status === "pending_review").length || 0;
 
+  // Check if deliverable has viewable content
+  const hasViewableContent = (deliverable: Deliverable) => {
+    if (!deliverable.description) return false;
+    // Check for JSON or markdown
+    try {
+      JSON.parse(deliverable.description);
+      return true;
+    } catch {
+      return deliverable.description.startsWith('# ') || 
+             deliverable.description.includes('\n## ') || 
+             deliverable.description.length > 100;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -326,7 +752,7 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
             const StatusIcon = status.icon;
             const category = categoryConfig[deliverable.category] || categoryConfig.general;
             const CategoryIcon = category.icon;
-            const hasMarkdown = isMarkdownContent(deliverable.description);
+            const canView = hasViewableContent(deliverable);
             const isPending = deliverable.status === "pending_review";
 
             return (
@@ -402,7 +828,7 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
 
                         {/* Actions */}
                         <div className="flex flex-col items-end gap-2">
-                          {hasMarkdown && (
+                          {canView && (
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -448,35 +874,80 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
         </div>
       )}
 
-      {/* Report Viewer Dialog */}
+      {/* Enhanced Report Viewer Dialog */}
       <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] p-0 gap-0">
-          <DialogHeader className="px-6 py-4 border-b bg-muted/30">
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              {selectedDeliverable?.title}
-            </DialogTitle>
-            <DialogDescription>
-              Submitted on {selectedDeliverable && format(new Date(selectedDeliverable.submitted_at), "MMMM d, yyyy")}
-            </DialogDescription>
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <FileText className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl">{selectedDeliverable?.title}</DialogTitle>
+                  <DialogDescription className="flex items-center gap-2 mt-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Submitted on {selectedDeliverable && format(new Date(selectedDeliverable.submitted_at), "MMMM d, yyyy")}
+                    {selectedDeliverable?.category && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <Badge variant="outline" className="text-xs">
+                          {categoryConfig[selectedDeliverable.category]?.label || selectedDeliverable.category}
+                        </Badge>
+                      </>
+                    )}
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
           </DialogHeader>
-          <ScrollArea className="max-h-[calc(85vh-120px)]">
+          <ScrollArea className="max-h-[calc(90vh-180px)]">
             <div className="p-6">
-              {selectedDeliverable?.description && renderMarkdown(selectedDeliverable.description)}
+              {selectedDeliverable && <ReportViewer deliverable={selectedDeliverable} />}
             </div>
           </ScrollArea>
           <div className="px-6 py-4 border-t bg-muted/30 flex justify-between items-center">
-            <Button variant="outline" onClick={() => setIsReportOpen(false)}>
-              Close
-            </Button>
-            {selectedDeliverable?.status === "pending_review" && (
-              <Button onClick={() => {
-                setIsReportOpen(false);
-                if (selectedDeliverable) openReviewDialog(selectedDeliverable);
-              }}>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Review This Deliverable
-              </Button>
+            {selectedDeliverable?.status === "pending_review" ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Ready to provide feedback on this report?
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setIsReportOpen(false)}>
+                    Close
+                  </Button>
+                  <Button onClick={() => {
+                    setIsReportOpen(false);
+                    if (selectedDeliverable) openReviewDialog(selectedDeliverable);
+                  }} className="gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Review & Approve
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  {selectedDeliverable?.rating && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">Your rating:</span>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-4 w-4 ${
+                            star <= selectedDeliverable.rating! 
+                              ? "fill-amber-400 text-amber-400" 
+                              : "text-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button variant="outline" onClick={() => setIsReportOpen(false)}>
+                  Close
+                </Button>
+              </>
             )}
           </div>
         </DialogContent>
@@ -487,24 +958,28 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Review Deliverable</DialogTitle>
-            <DialogDescription>{selectedDeliverable?.title}</DialogDescription>
+            <DialogDescription>
+              Approve this deliverable or request revisions
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-5 pt-2">
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">How would you rate this deliverable?</Label>
-              <div className="flex items-center gap-2">
+
+          <div className="space-y-6 py-4">
+            {/* Rating */}
+            <div className="space-y-2">
+              <Label>Rate this deliverable (optional)</Label>
+              <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
                     type="button"
                     onClick={() => setRating(star)}
-                    className="p-1 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-primary rounded"
+                    className="p-1 hover:scale-110 transition-transform"
                   >
                     <Star
-                      className={`h-8 w-8 transition-colors ${
+                      className={`h-8 w-8 ${
                         star <= rating 
                           ? "fill-amber-400 text-amber-400" 
-                          : "text-muted-foreground/40 hover:text-amber-300"
+                          : "text-muted-foreground/30 hover:text-amber-400/50"
                       }`}
                     />
                   </button>
@@ -512,52 +987,63 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
               </div>
             </div>
 
+            {/* Feedback */}
             <div className="space-y-2">
               <Label htmlFor="feedback">Feedback (optional)</Label>
               <Textarea
                 id="feedback"
+                placeholder="Share your thoughts on this deliverable..."
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Share any comments about this deliverable..."
                 rows={3}
-                className="resize-none"
               />
             </div>
 
+            <Separator />
+
+            {/* Revision Notes */}
             <div className="space-y-2">
-              <Label htmlFor="revisionNotes">Revision Notes</Label>
-              <p className="text-xs text-muted-foreground">If you need changes, describe them below</p>
+              <Label htmlFor="revisions" className="flex items-center gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Request Revisions
+              </Label>
               <Textarea
-                id="revisionNotes"
+                id="revisions"
+                placeholder="Describe the changes you'd like to see..."
                 value={revisionNotes}
                 onChange={(e) => setRevisionNotes(e.target.value)}
-                placeholder="Describe what changes you'd like made..."
                 rows={3}
-                className="resize-none"
               />
+              <p className="text-xs text-muted-foreground">
+                Fill this in only if you need changes. Leave empty to approve.
+              </p>
             </div>
+          </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button variant="outline" onClick={closeReviewDialog}>
-                Cancel
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={handleRequestRevision}
-                disabled={reviewMutation.isPending || !revisionNotes.trim()}
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Request Revision
-              </Button>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={closeReviewDialog}>
+              Cancel
+            </Button>
+            {revisionNotes.trim() ? (
               <Button 
-                onClick={handleApprove} 
+                variant="secondary" 
+                onClick={handleRequestRevision}
                 disabled={reviewMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="gap-2"
               >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
+                <RotateCcw className="h-4 w-4" />
+                Request Revisions
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleApprove}
+                disabled={reviewMutation.isPending}
+                className="gap-2"
+              >
+                <CheckCircle2 className="h-4 w-4" />
                 Approve
               </Button>
-            </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
