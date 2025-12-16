@@ -301,10 +301,10 @@ export function AICopilotPanel() {
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
         <Button
-          className="fixed right-4 bottom-4 z-50 h-14 w-14 rounded-full shadow-lg"
+          className="fixed right-6 bottom-24 z-50 h-12 w-12 rounded-full shadow-lg bg-gradient-to-br from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 border-0"
           size="icon"
         >
-          <Sparkles className="h-6 w-6" />
+          <Sparkles className="h-5 w-5" />
         </Button>
       </SheetTrigger>
       <SheetContent className="w-full sm:max-w-lg flex flex-col p-0">
