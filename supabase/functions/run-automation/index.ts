@@ -16,6 +16,7 @@ type AutomationType =
   | "setup_review_automation"
   | "send_review_scripts"
   | "create_kpi_dashboard"
+  | "create_analytics_dashboard" // legacy DB enum/constraint value
   | "run_seo_audit"
   | "run_keyword_gap_analysis"
   | "setup_lead_automations"
@@ -88,7 +89,9 @@ const ALLOWED_JOB_TYPES: AutomationType[] = [
   "create_review_qr_code",
   "setup_review_automation",
   "send_review_scripts",
+  // Both are accepted; DB constraint currently allows create_analytics_dashboard
   "create_kpi_dashboard",
+  "create_analytics_dashboard",
   "run_seo_audit",
   "run_keyword_gap_analysis",
   "setup_lead_automations",
@@ -113,10 +116,12 @@ function normalizeJobType(raw: unknown): AutomationType {
   if (!normalized) throw new Error("Missing jobType");
 
   // Backward/legacy aliases sent by older UI/task templates
+  // NOTE: DB check constraint currently allows `create_analytics_dashboard` (not `create_kpi_dashboard`).
   const aliasMap: Record<string, AutomationType> = {
-    build_comprehensive_kpi_dashboards: "create_kpi_dashboard",
-    comprehensive_kpi_dashboards: "create_kpi_dashboard",
-    kpi_dashboard: "create_kpi_dashboard",
+    build_comprehensive_kpi_dashboards: "create_analytics_dashboard",
+    comprehensive_kpi_dashboards: "create_analytics_dashboard",
+    kpi_dashboard: "create_analytics_dashboard",
+    create_kpi_dashboard: "create_analytics_dashboard",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);
@@ -206,6 +211,7 @@ serve(async (req) => {
         result = await sendReviewScripts(supabase, client);
         break;
       case "create_kpi_dashboard":
+      case "create_analytics_dashboard":
         result = await createKpiDashboard(supabase, client);
         break;
       case "run_seo_audit":
