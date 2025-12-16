@@ -94,13 +94,31 @@ export function QuickActionsPanel() {
     fetchData();
   }, []);
 
+  const scrollToGeneratedContent = () => {
+    // wait for section render + list render
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        generatedContentRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+  };
+
   useEffect(() => {
     if (window.location.hash === "#generated-content") {
-      setTimeout(() => {
-        generatedContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 150);
+      // run once immediately
+      scrollToGeneratedContent();
     }
-  }, [isLoading]);
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash === "#generated-content" && !isLoading) {
+      // run again after data load + render
+      setTimeout(scrollToGeneratedContent, 250);
+    }
+  }, [isLoading, generatedContentList.length]);
 
   const fetchData = async () => {
     setIsLoading(true);
