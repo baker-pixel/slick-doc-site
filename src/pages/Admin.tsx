@@ -1237,7 +1237,7 @@ const Admin = () => {
           </main>
         </SidebarInset>
         
-        <AICopilotPanel />
+        <AICopilotPanel onNavigateToSection={(section) => setActiveSection(section)} />
       </div>
 
       {showOnboarding && (

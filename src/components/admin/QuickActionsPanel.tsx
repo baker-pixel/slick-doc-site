@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,7 @@ interface GeneratedContentItem {
 }
 
 export function QuickActionsPanel() {
+  const generatedContentRef = useRef<HTMLDivElement>(null);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [generatedContentList, setGeneratedContentList] = useState<GeneratedContentItem[]>([]);
@@ -92,6 +93,14 @@ export function QuickActionsPanel() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (window.location.hash === "#generated-content") {
+      setTimeout(() => {
+        generatedContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    }
+  }, [isLoading]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -507,7 +516,7 @@ export function QuickActionsPanel() {
       </div>
 
       {/* Generated Content Library */}
-      <div>
+      <div id="generated-content" ref={generatedContentRef}>
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           Generated Content

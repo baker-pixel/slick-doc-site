@@ -8,18 +8,19 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  Sparkles, 
-  Calendar, 
-  FileText, 
-  Mail, 
-  MapPin, 
-  Loader2, 
-  Copy, 
+import type { AdminSection } from "@/components/admin/AdminSidebar";
+import {
+  Sparkles,
+  Calendar,
+  FileText,
+  Mail,
+  MapPin,
+  Loader2,
+  Copy,
   Check,
   Zap,
   RefreshCw,
-  Send
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ interface QuickCommand {
   icon: React.ReactNode;
   prompt: string;
   category: "content" | "email" | "reporting";
+  navigateTo?: { section: AdminSection; hash?: string };
 }
 
 const quickCommands: QuickCommand[] = [
@@ -45,7 +47,8 @@ const quickCommands: QuickCommand[] = [
     label: "Generate Weekly Activity",
     description: "Create a summary of this week's marketing activities",
     icon: <Calendar className="w-4 h-4" />,
-    prompt: "Generate a comprehensive weekly activity report for {clientName}. Include social media engagement, content published, email campaigns sent, website traffic highlights, and key wins for the week.",
+    prompt:
+      "Generate a comprehensive weekly activity report for {clientName}. Include social media engagement, content published, email campaigns sent, website traffic highlights, and key wins for the week.",
     category: "reporting",
   },
   {
@@ -53,44 +56,58 @@ const quickCommands: QuickCommand[] = [
     label: "Create 5 GBP Posts",
     description: "Generate Google Business Profile posts",
     icon: <MapPin className="w-4 h-4" />,
-    prompt: "Create 5 engaging Google Business Profile posts for {clientName} in the {industry} industry. Each post should be under 300 characters, include a call-to-action, and cover different topics: 1) Service highlight, 2) Customer testimonial prompt, 3) Seasonal/timely content, 4) Behind-the-scenes, 5) Special offer or promotion.",
+    prompt:
+      "Create 5 engaging Google Business Profile posts for {clientName} in the {industry} industry. Each post should be under 300 characters, include a call-to-action, and cover different topics: 1) Service highlight, 2) Customer testimonial prompt, 3) Seasonal/timely content, 4) Behind-the-scenes, 5) Special offer or promotion.",
     category: "content",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
   {
     id: "service-pages",
     label: "Draft 2 Service Pages",
     description: "Create SEO-optimized service page content",
     icon: <FileText className="w-4 h-4" />,
-    prompt: "Write 2 SEO-optimized service page drafts for {clientName}. Each page should include: H1 headline, meta description (155 chars), 3-4 sections with H2 headings, benefits-focused copy, and a clear CTA. Focus on their core services in the {industry} industry.",
+    prompt:
+      "Write 2 SEO-optimized service page drafts for {clientName}. Each page should include: H1 headline, meta description (155 chars), 3-4 sections with H2 headings, benefits-focused copy, and a clear CTA. Focus on their core services in the {industry} industry.",
     category: "content",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
   {
     id: "churn-email",
     label: "Write Churn-Risk Email",
     description: "Re-engagement email for at-risk clients",
     icon: <Mail className="w-4 h-4" />,
-    prompt: "Write a warm, professional re-engagement email for {clientName} who may be at risk of churning. The email should: acknowledge their value as a client, highlight recent wins or progress, address potential concerns proactively, and include a soft CTA for a check-in call.",
+    prompt:
+      "Write a warm, professional re-engagement email for {clientName} who may be at risk of churning. The email should: acknowledge their value as a client, highlight recent wins or progress, address potential concerns proactively, and include a soft CTA for a check-in call.",
     category: "email",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
   {
     id: "social-batch",
     label: "Create Social Media Batch",
     description: "Generate 10 social posts for the month",
     icon: <Send className="w-4 h-4" />,
-    prompt: "Create 10 social media posts for {clientName} in the {industry} industry. Mix of formats: 3 tips/educational, 2 testimonial requests, 2 service highlights, 2 engagement questions, 1 company culture. Each post should be platform-ready with hashtag suggestions.",
+    prompt:
+      "Create 10 social media posts for {clientName} in the {industry} industry. Mix of formats: 3 tips/educational, 2 testimonial requests, 2 service highlights, 2 engagement questions, 1 company culture. Each post should be platform-ready with hashtag suggestions.",
     category: "content",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
   {
     id: "email-newsletter",
     label: "Draft Monthly Newsletter",
     description: "Create a newsletter template",
     icon: <Mail className="w-4 h-4" />,
-    prompt: "Draft a monthly email newsletter for {clientName}'s customers. Include: compelling subject line, 1 main feature story about their services, 2-3 quick tips related to {industry}, a customer spotlight section placeholder, and seasonal/timely content.",
+    prompt:
+      "Draft a monthly email newsletter for {clientName}'s customers. Include: compelling subject line, 1 main feature story about their services, 2-3 quick tips related to {industry}, a customer spotlight section placeholder, and seasonal/timely content.",
     category: "email",
+    navigateTo: { section: "quick-actions", hash: "#generated-content" },
   },
 ];
 
-export function AICopilotPanel() {
+export function AICopilotPanel({
+  onNavigateToSection,
+}: {
+  onNavigateToSection?: (section: AdminSection) => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
@@ -179,6 +196,7 @@ export function AICopilotPanel() {
       if (response.error) throw response.error;
 
       // Handle streaming response
+      let finalContent = "";
       const reader = response.data.getReader?.();
       if (reader) {
         const decoder = new TextDecoder();
@@ -206,15 +224,57 @@ export function AICopilotPanel() {
             }
           }
         }
+
+        finalContent = result;
       } else {
         // Non-streaming fallback
-        setOutput(response.data?.choices?.[0]?.message?.content || "No response generated");
+        finalContent = response.data?.choices?.[0]?.message?.content || "No response generated";
+        setOutput(finalContent);
+      }
+
+      // Persist results for commands that map to an Admin section
+      if (finalContent.trim() && command.navigateTo) {
+        const contentType = (() => {
+          switch (command.id) {
+            case "social-batch":
+              return "social_post";
+            case "gbp-posts":
+              return "other";
+            case "service-pages":
+              return "blog_post";
+            case "churn-email":
+            case "email-newsletter":
+              return "email";
+            default:
+              return "other";
+          }
+        })();
+
+        await supabase.from("generated_content").insert({
+          client_id: selectedClientId,
+          title: `${command.label} — ${selectedClient?.business_name ?? "Client"}`,
+          content: finalContent,
+          content_type: contentType,
+          status: "draft",
+          metadata: {
+            source: "ai_copilot",
+            command_id: command.id,
+            generated_at: new Date().toISOString(),
+          },
+        });
       }
 
       toast({
         title: "Content generated",
         description: `${command.label} completed successfully`,
       });
+
+      // If this command has a destination in the Admin, jump there automatically
+      if (command.navigateTo) {
+        if (command.navigateTo.hash) window.location.hash = command.navigateTo.hash;
+        onNavigateToSection?.(command.navigateTo.section);
+        setIsOpen(false);
+      }
     } catch (error) {
       console.error("AI command error:", error);
       toast({
@@ -225,7 +285,8 @@ export function AICopilotPanel() {
     } finally {
       setIsLoading(false);
       setActiveCommand(null);
-      setShouldScrollToOutput(true);
+      // Only auto-scroll inside the panel when we're staying on the panel.
+      if (!command.navigateTo) setShouldScrollToOutput(true);
     }
   };
 
