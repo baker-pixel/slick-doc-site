@@ -356,18 +356,9 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
   }, [onboarding, tasks, deliverables]);
 
   const isPhaseUnlocked = (phase: WorkflowPhase): boolean => {
-    switch (phase) {
-      case "onboarding":
-        return true;
-      case "tasks":
-        return phaseProgress.onboarding === 100;
-      case "deliverables":
-        return phaseProgress.tasks === 100;
-      case "review":
-        return phaseProgress.deliverables >= 50; // Allow review once half delivered
-      default:
-        return false;
-    }
+    // All phases are accessible to admins - they can work on any phase regardless of progress
+    // The progress indicators still show completion status for reference
+    return true;
   };
 
   const handleTaskCompleted = () => {
