@@ -492,10 +492,17 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                             variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation();
-                              completeTask(task.id);
+                              try {
+                                sessionStorage.setItem("admin:selectedTaskId", task.id);
+                              } catch {
+                                // ignore
+                              }
+                              onNavigateToSection?.("client-tasks");
                             }}
+                            className="gap-1"
                           >
-                            <CheckCircle2 className="w-4 h-4" />
+                            <Eye className="w-4 h-4" />
+                            <span className="hidden sm:inline">Open</span>
                           </Button>
                         </div>
                       ))}
@@ -573,14 +580,16 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                         className="h-8 w-8 shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
-                          task.status === "completed" ? reopenTask(task.id) : completeTask(task.id);
+                          try {
+                            sessionStorage.setItem("admin:selectedTaskId", task.id);
+                          } catch {
+                            // ignore
+                          }
+                          onNavigateToSection?.("client-tasks");
                         }}
+                        title="Open task"
                       >
-                        {task.status === "completed" ? (
-                          <CheckCircle2 className="w-5 h-5 text-green-500" />
-                        ) : (
-                          <Circle className="w-5 h-5" />
-                        )}
+                        <Eye className="w-5 h-5" />
                       </Button>
                       <div className="flex-1 min-w-0">
                         <p className={cn("font-medium", task.status === "completed" && "line-through")}>
