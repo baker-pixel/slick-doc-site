@@ -489,6 +489,50 @@ function CollapsibleSection({
   );
 }
 
+// Parse inline markdown (bold, italic) within text
+function parseInlineMarkdown(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let keyIndex = 0;
+  
+  while (remaining.length > 0) {
+    // Look for **bold** pattern
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+    // Look for *italic* pattern (not at start of line for bullet)
+    const italicMatch = remaining.match(/(?<!\*)\*([^*]+)\*(?!\*)/);
+    
+    let nextMatch: { index: number; length: number; content: string; type: 'bold' | 'italic' } | null = null;
+    
+    if (boldMatch && boldMatch.index !== undefined) {
+      nextMatch = { index: boldMatch.index, length: boldMatch[0].length, content: boldMatch[1], type: 'bold' };
+    }
+    if (italicMatch && italicMatch.index !== undefined) {
+      if (!nextMatch || italicMatch.index < nextMatch.index) {
+        nextMatch = { index: italicMatch.index, length: italicMatch[0].length, content: italicMatch[1], type: 'italic' };
+      }
+    }
+    
+    if (nextMatch) {
+      // Add text before the match
+      if (nextMatch.index > 0) {
+        parts.push(remaining.slice(0, nextMatch.index));
+      }
+      // Add the formatted text
+      if (nextMatch.type === 'bold') {
+        parts.push(<strong key={keyIndex++} className="font-semibold text-foreground">{nextMatch.content}</strong>);
+      } else {
+        parts.push(<em key={keyIndex++} className="italic text-muted-foreground">{nextMatch.content}</em>);
+      }
+      remaining = remaining.slice(nextMatch.index + nextMatch.length);
+    } else {
+      parts.push(remaining);
+      break;
+    }
+  }
+  
+  return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
+
 // Markdown renderer with modern styling
 function renderMarkdown(content: string) {
   const lines = content.split('\n');
@@ -501,26 +545,27 @@ function renderMarkdown(content: string) {
     if (line.startsWith('# ')) {
       elements.push(
         <h1 key={key++} className="text-3xl font-bold text-foreground mt-10 mb-5 first:mt-0 tracking-tight">
-          {line.slice(2)}
+          {parseInlineMarkdown(line.slice(2))}
         </h1>
       );
     } else if (line.startsWith('## ')) {
       elements.push(
         <h2 key={key++} className="text-2xl font-semibold text-foreground mt-12 mb-4 pb-3 border-b border-border/50">
-          {line.slice(3)}
+          {parseInlineMarkdown(line.slice(3))}
         </h2>
       );
     } else if (line.startsWith('### ')) {
       elements.push(
         <h3 key={key++} className="text-xl font-medium text-foreground mt-8 mb-3">
-          {line.slice(4)}
+          {parseInlineMarkdown(line.slice(4))}
         </h3>
       );
-    } else if (line.startsWith('- ')) {
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      // Handle both dash and asterisk bullet points
       elements.push(
         <div key={key++} className="flex items-start gap-3 mb-3 ml-2">
           <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/50 mt-2.5 flex-shrink-0" />
-          <span className="text-foreground leading-relaxed">{line.slice(2)}</span>
+          <span className="text-foreground leading-relaxed">{parseInlineMarkdown(line.slice(2))}</span>
         </div>
       );
     } else if (line.startsWith('**') && line.includes(':**')) {
@@ -529,19 +574,13 @@ function renderMarkdown(content: string) {
       elements.push(
         <div key={key++} className="flex gap-3 mb-3 py-3 px-4 bg-muted/30 rounded-xl">
           <span className="font-semibold text-foreground">{label.replace(/\*\*/g, '')}:</span>
-          <span className="text-muted-foreground">{value.replace(/\*\*/g, '')}</span>
+          <span className="text-muted-foreground">{parseInlineMarkdown(value.replace(/\*\*/g, ''))}</span>
         </div>
-      );
-    } else if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
-      elements.push(
-        <p key={key++} className="text-muted-foreground italic mb-5 pl-5 border-l-2 border-primary/30 py-1">
-          {line.slice(1, -1)}
-        </p>
       );
     } else if (line.trim()) {
       elements.push(
         <p key={key++} className="text-foreground mb-4 leading-relaxed text-lg">
-          {line}
+          {parseInlineMarkdown(line)}
         </p>
       );
     }
