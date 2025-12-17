@@ -2708,6 +2708,67 @@ export type Database = {
         }
         Relationships: []
       }
+      project_comments: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          id: string
+          is_read: boolean | null
+          message: string
+          milestone_id: string | null
+          project_id: string
+          sender_name: string | null
+          sender_type: string
+          user_id: string | null
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message: string
+          milestone_id?: string | null
+          project_id: string
+          sender_name?: string | null
+          sender_type: string
+          user_id?: string | null
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          milestone_id?: string | null
+          project_id?: string
+          sender_name?: string | null
+          sender_type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_comments_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_comments_milestone_id_fkey"
+            columns: ["milestone_id"]
+            isOneToOne: false
+            referencedRelation: "project_milestones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_comments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "client_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_milestones: {
         Row: {
           completed_at: string | null
@@ -2745,6 +2806,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "client_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_update_requests: {
+        Row: {
+          client_account_id: string
+          created_at: string
+          id: string
+          message: string | null
+          project_id: string
+          requested_by: string | null
+          responded_at: string | null
+          response: string | null
+          status: string
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          project_id: string
+          requested_by?: string | null
+          responded_at?: string | null
+          response?: string | null
+          status?: string
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          project_id?: string
+          requested_by?: string | null
+          responded_at?: string | null
+          response?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_update_requests_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_update_requests_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "client_projects"
