@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
@@ -12,10 +12,13 @@ import {
   Search,
   Bell,
   CheckCircle,
-  Circle
+  Circle,
+  ChevronRight
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { motion } from "framer-motion";
+import WinDetailModal from "./WinDetailModal";
 
 interface Notification {
   id: string;
@@ -37,6 +40,8 @@ interface ClientNotificationsTabProps {
 export default function ClientNotificationsTab({ clientAccountId }: ClientNotificationsTabProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     if (clientAccountId) {
@@ -97,6 +102,14 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
     }
   };
 
+  const handleNotificationClick = (notification: Notification) => {
+    setSelectedNotification(notification);
+    setModalOpen(true);
+    if (!notification.is_read) {
+      markAsRead(notification.id);
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case "ranking": return <Search className="h-5 w-5" />;
@@ -147,7 +160,7 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
         <div className="flex items-center gap-3">
           <Bell className="h-6 w-6 text-primary" />
           <div>
-            <h2 className="text-xl font-semibold">Notifications</h2>
+            <h2 className="text-xl font-semibold">Wins & Updates</h2>
             <p className="text-sm text-muted-foreground">
               Your marketing wins and achievements
             </p>
@@ -166,69 +179,91 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
       {notifications.length === 0 ? (
         <Card className="p-8 text-center">
           <Trophy className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No notifications yet</h3>
+          <h3 className="text-lg font-semibold mb-2">No wins yet</h3>
           <p className="text-muted-foreground">
             We'll notify you when you achieve marketing milestones
           </p>
         </Card>
       ) : (
         <div className="space-y-3">
-          {notifications.map(notification => (
-            <Card 
-              key={notification.id} 
-              className={`transition-all hover:shadow-md cursor-pointer ${
-                notification.is_read ? "opacity-75" : "border-primary/30 shadow-sm"
-              }`}
-              onClick={() => !notification.is_read && markAsRead(notification.id)}
+          {notifications.map((notification, index) => (
+            <motion.div
+              key={notification.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
             >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-lg border ${getTypeColor(notification.notification_type)}`}>
-                    {getTypeIcon(notification.notification_type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {!notification.is_read && (
-                        <Circle className="h-2 w-2 fill-primary text-primary" />
+              <Card 
+                className={`transition-all hover:shadow-lg hover:scale-[1.01] cursor-pointer group ${
+                  notification.is_read ? "opacity-80" : "border-primary/30 shadow-sm"
+                }`}
+                onClick={() => handleNotificationClick(notification)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <motion.div 
+                      className={`p-3 rounded-lg border ${getTypeColor(notification.notification_type)}`}
+                      whileHover={{ scale: 1.1, rotate: 5 }}
+                      transition={{ type: "spring", stiffness: 400 }}
+                    >
+                      {getTypeIcon(notification.notification_type)}
+                    </motion.div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {!notification.is_read && (
+                          <motion.div
+                            animate={{ scale: [1, 1.2, 1] }}
+                            transition={{ duration: 1, repeat: Infinity }}
+                          >
+                            <Circle className="h-2 w-2 fill-primary text-primary" />
+                          </motion.div>
+                        )}
+                        <h4 className="font-semibold truncate">{notification.title}</h4>
+                        <Badge variant="outline" className={getPriorityColor(notification.priority)}>
+                          {notification.priority}
+                        </Badge>
+                      </div>
+                      {notification.description && (
+                        <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
+                          {notification.description}
+                        </p>
                       )}
-                      <h4 className="font-semibold">{notification.title}</h4>
-                      <Badge variant="outline" className={getPriorityColor(notification.priority)}>
-                        {notification.priority}
-                      </Badge>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        {notification.metric && notification.metric_value && (
+                          <>
+                            <span className="font-medium text-primary">
+                              {notification.metric}: {notification.is_positive ? "+" : ""}{notification.metric_value}
+                            </span>
+                            <span>•</span>
+                          </>
+                        )}
+                        <span>
+                          {new Date(notification.created_at).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </span>
+                      </div>
                     </div>
-                    {notification.description && (
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {notification.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      {notification.metric && notification.metric_value && (
-                        <>
-                          <span className="font-medium">
-                            {notification.metric}: {notification.is_positive ? "+" : ""}{notification.metric_value}
-                          </span>
-                          <span>•</span>
-                        </>
+                    <div className="flex items-center gap-2">
+                      {notification.is_read && (
+                        <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                       )}
-                      <span>
-                        {new Date(notification.created_at).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </div>
                   </div>
-                  {notification.is_read && (
-                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </motion.div>
           ))}
         </div>
       )}
+
+      <WinDetailModal
+        notification={selectedNotification}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
     </div>
   );
 }
