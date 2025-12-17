@@ -1540,7 +1540,7 @@ Deno.serve(async (req) => {
         const { data: tasks, error } = await supabase
           .from("client_tasks")
           .select("*, client_accounts(business_name)")
-          .order("created_at", { ascending: false });
+          .order("order_index", { ascending: true });
 
         if (error) throw error;
         console.log(`Fetched ${tasks?.length || 0} client tasks`);

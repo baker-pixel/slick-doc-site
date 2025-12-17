@@ -175,6 +175,7 @@ interface ClientTask {
   completed_at: string | null;
   created_at: string;
   client_account_id: string;
+  order_index?: number;
 }
 
 interface Deliverable {
@@ -293,7 +294,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
         const clientTasks = (tasksRes.data?.tasks || [])
           .filter((t: ClientTask) => t.client_account_id === selectedClientId)
           .sort((a: ClientTask, b: ClientTask) => 
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            (a.order_index || 0) - (b.order_index || 0)
           );
         
         const clientDeliverables = (deliverablesRes.data?.deliverables || [])
