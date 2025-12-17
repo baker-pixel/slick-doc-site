@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield, UserMinus, Building2 } from "lucide-react";
+import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield, UserMinus, Building2, Wand2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
 import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
@@ -149,6 +149,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   });
   const [isScheduling, setIsScheduling] = useState(false);
 
+  // AI generation for schedule dialog
+  const [aiEmailPrompt, setAiEmailPrompt] = useState("");
+  const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
+
   // Fetch clients
   useEffect(() => {
     const fetchClients = async () => {
@@ -197,6 +201,43 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
 
   const optimalTime = useMemo(() => getNextOptimalTime(scheduleForm.timezone), [scheduleForm.timezone]);
 
+  const generateEmailWithAI = async () => {
+    if (!aiEmailPrompt.trim()) {
+      toast({ title: "Add a description", description: "Describe what the email should say.", variant: "destructive" });
+      return;
+    }
+
+    setIsGeneratingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-email-template", {
+        body: {
+          templateType: "custom",
+          purpose: aiEmailPrompt,
+          tone: "professional",
+          clientName: selectedClient?.business_name,
+          industry: undefined,
+          customInstructions: aiEmailPrompt,
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.subject || !data?.htmlContent) throw new Error("AI returned an invalid response");
+
+      setScheduleForm((prev) => ({
+        ...prev,
+        subject: data.subject,
+        htmlContent: data.htmlContent,
+      }));
+
+      toast({ title: "Generated email", description: "Subject and HTML content filled in." });
+    } catch (e: any) {
+      console.error("generateEmailWithAI error:", e);
+      toast({ title: "AI generation failed", description: e.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setIsGeneratingEmail(false);
+    }
+  };
+
   const handleScheduleEmail = async () => {
     if (!scheduleForm.recipientEmail || !scheduleForm.subject || !scheduleForm.htmlContent) {
       toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
@@ -239,6 +280,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
         scheduleTime: "10:00",
         useOptimalTime: true,
       });
+      setAiEmailPrompt("");
       fetchEmailData();
     } catch (error) {
       console.error("Error scheduling email:", error);
@@ -1234,8 +1276,28 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
             </div>
 
             {/* HTML Content */}
-            <div className="space-y-2">
-              <Label htmlFor="htmlContent">HTML Content *</Label>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="htmlContent">HTML Content *</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={generateEmailWithAI}
+                  disabled={isGeneratingEmail || !aiEmailPrompt.trim()}
+                >
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  {isGeneratingEmail ? "Generating..." : "AI Generate"}
+                </Button>
+              </div>
+
+              <Textarea
+                placeholder="Describe what you want the email to say (used for AI generation)..."
+                value={aiEmailPrompt}
+                onChange={(e) => setAiEmailPrompt(e.target.value)}
+                className="min-h-[90px]"
+              />
+
               <Textarea
                 id="htmlContent"
                 placeholder="<div>Your email content...</div>"
