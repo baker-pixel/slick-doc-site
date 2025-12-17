@@ -1,17 +1,17 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter, Sparkles, Loader2, Wand2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
@@ -43,6 +43,25 @@ const CATEGORIES = [
   { value: "engagement", label: "Engagement" },
 ];
 
+const TEMPLATE_TYPES = [
+  { value: "welcome", label: "Welcome Email" },
+  { value: "followup", label: "Follow-up" },
+  { value: "report", label: "Report Delivery" },
+  { value: "promotion", label: "Promotional" },
+  { value: "newsletter", label: "Newsletter" },
+  { value: "reminder", label: "Reminder" },
+  { value: "reengagement", label: "Re-engagement" },
+  { value: "thankyou", label: "Thank You" },
+];
+
+const TONES = [
+  { value: "professional", label: "Professional" },
+  { value: "friendly", label: "Friendly & Casual" },
+  { value: "urgent", label: "Urgent" },
+  { value: "celebratory", label: "Celebratory" },
+  { value: "educational", label: "Educational" },
+];
+
 const getCategoryColor = (category: string) => {
   switch (category) {
     case "transactional": return "bg-blue-500/10 text-blue-600 border-blue-200";
@@ -65,6 +84,17 @@ export function EmailTemplatesPanel() {
   const [editingTemplate, setEditingTemplate] = useState<Partial<EmailTemplate>>({});
   const [previewHtml, setPreviewHtml] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  
+  // AI Generation state
+  const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiForm, setAiForm] = useState({
+    templateType: "followup",
+    industry: "",
+    tone: "professional",
+    purpose: "",
+    customInstructions: "",
+  });
 
   const fetchTemplates = async () => {
     setIsLoading(true);
@@ -254,14 +284,75 @@ export function EmailTemplatesPanel() {
     setIsPreviewOpen(true);
   };
 
+  const generateWithAI = async () => {
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-email-template", {
+        body: aiForm,
+      });
+
+      if (error) throw error;
+      if (!data?.success || !data?.template) {
+        throw new Error(data?.error || "Failed to generate template");
+      }
+
+      // Save the generated template to the database
+      const { error: saveError } = await supabase
+        .from("email_templates")
+        .insert([{
+          name: data.template.name,
+          slug: data.template.slug + "_" + Date.now(),
+          subject: data.template.subject,
+          html_content: data.template.html_content,
+          description: data.template.description,
+          variables: data.template.variables,
+          category: data.template.category,
+          is_active: true,
+        }]);
+
+      if (saveError) throw saveError;
+
+      toast({ title: "Template generated!", description: `Created: ${data.template.name}` });
+      setIsAiDialogOpen(false);
+      setAiForm({
+        templateType: "followup",
+        industry: "",
+        tone: "professional",
+        purpose: "",
+        customInstructions: "",
+      });
+      fetchTemplates();
+    } catch (error: any) {
+      console.error("AI generation error:", error);
+      toast({ 
+        title: "Generation failed", 
+        description: error.message || "Failed to generate template",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const regenerateTemplate = async (template: EmailTemplate) => {
+    setAiForm({
+      templateType: "followup",
+      industry: "",
+      tone: "professional",
+      purpose: template.description || "",
+      customInstructions: `Regenerate and improve the template: ${template.name}`,
+    });
+    setIsAiDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold">Email Templates</h2>
           <p className="text-muted-foreground">Create and manage custom email templates</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-[180px]">
               <Filter className="w-4 h-4 mr-2" />
@@ -276,6 +367,10 @@ export function EmailTemplatesPanel() {
           <Button variant="outline" onClick={fetchTemplates} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
+          </Button>
+          <Button variant="secondary" onClick={() => setIsAiDialogOpen(true)}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            AI Generate
           </Button>
           <Button onClick={() => openEditor()}>
             <Plus className="w-4 h-4 mr-2" />
@@ -354,13 +449,16 @@ export function EmailTemplatesPanel() {
                     Updated {format(new Date(template.updated_at), "MMM d, yyyy")}
                   </span>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openPreview(template)}>
+                    <Button variant="ghost" size="sm" onClick={() => openPreview(template)} title="Preview">
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => duplicateTemplate(template)}>
+                    <Button variant="ghost" size="sm" onClick={() => regenerateTemplate(template)} title="AI Regenerate">
+                      <Wand2 className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => duplicateTemplate(template)} title="Duplicate">
                       <Copy className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => openEditor(template)}>
+                    <Button variant="ghost" size="sm" onClick={() => openEditor(template)} title="Edit">
                       <Edit className="w-4 h-4" />
                     </Button>
                     <AlertDialog>
@@ -578,6 +676,93 @@ export function EmailTemplatesPanel() {
             <Button onClick={() => { setIsPreviewOpen(false); openEditor(selectedTemplate!); }}>
               <Edit className="w-4 h-4 mr-2" />
               Edit Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Generation Dialog */}
+      <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              AI Template Generator
+            </DialogTitle>
+            <DialogDescription>
+              Generate a professional email template using AI
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Template Type</Label>
+              <Select value={aiForm.templateType} onValueChange={v => setAiForm({ ...aiForm, templateType: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEMPLATE_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Tone</Label>
+              <Select value={aiForm.tone} onValueChange={v => setAiForm({ ...aiForm, tone: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TONES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Industry (optional)</Label>
+              <Input
+                value={aiForm.industry}
+                onChange={e => setAiForm({ ...aiForm, industry: e.target.value })}
+                placeholder="e.g., Real estate, Healthcare, Retail..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Purpose (optional)</Label>
+              <Textarea
+                value={aiForm.purpose}
+                onChange={e => setAiForm({ ...aiForm, purpose: e.target.value })}
+                placeholder="Describe what this email should accomplish..."
+                rows={2}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Custom Instructions (optional)</Label>
+              <Textarea
+                value={aiForm.customInstructions}
+                onChange={e => setAiForm({ ...aiForm, customInstructions: e.target.value })}
+                placeholder="Any specific requirements or content to include..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAiDialogOpen(false)} disabled={isGenerating}>
+              Cancel
+            </Button>
+            <Button onClick={generateWithAI} disabled={isGenerating}>
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate Template
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

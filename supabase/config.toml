@@ -83,3 +83,6 @@ verify_jwt = false
 
 [functions.run-ai-batch]
 verify_jwt = false
+
+[functions.generate-email-template]
+verify_jwt = false
