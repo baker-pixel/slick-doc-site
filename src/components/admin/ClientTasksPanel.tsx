@@ -30,6 +30,7 @@ interface ClientTask {
   notes: string | null;
   output_data: Record<string, unknown> | null;
   created_at: string;
+  order_index?: number;
   client_accounts?: {
     business_name: string;
     tier: string;
@@ -92,7 +93,7 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
           tier
         )
       `)
-      .order("created_at", { ascending: false })
+      .order("order_index", { ascending: true })
       .limit(200);
 
     if (error) {

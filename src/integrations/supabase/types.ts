@@ -1429,6 +1429,7 @@ export type Database = {
           instructions: string | null
           name: string
           notes: string | null
+          order_index: number | null
           output_data: Json | null
           status: string
           task_template_id: string | null
@@ -1449,6 +1450,7 @@ export type Database = {
           instructions?: string | null
           name: string
           notes?: string | null
+          order_index?: number | null
           output_data?: Json | null
           status?: string
           task_template_id?: string | null
@@ -1469,6 +1471,7 @@ export type Database = {
           instructions?: string | null
           name?: string
           notes?: string | null
+          order_index?: number | null
           output_data?: Json | null
           status?: string
           task_template_id?: string | null
