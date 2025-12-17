@@ -75,6 +75,7 @@ import { AICopilotPanel } from "@/components/admin/AICopilotPanel";
 import { AdminClientSelector } from "@/components/admin/AdminClientSelector";
 import { SelectedClientHeader } from "@/components/admin/SelectedClientHeader";
 import { UnifiedClientView } from "@/components/admin/UnifiedClientView";
+import { AdminHomeDashboard } from "@/components/admin/AdminHomeDashboard";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1213,7 +1214,8 @@ const Admin = () => {
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "onboarding", "integrations", "calendar",
-    "quick-actions", "activity-feed", "review-workflow", "client-workflow"
+    "quick-actions", "activity-feed", "review-workflow", "client-workflow",
+    "lead-scoring", "ad-generator", "sales-proposals", "automation"
   ];
 
   const isGlobalSection = globalSections.includes(activeSection);
@@ -1262,15 +1264,29 @@ const Admin = () => {
           )}
           
           <main className="flex-1 p-6">
-            {/* Home becomes the default "work a client" journey */}
+            {/* Home becomes the dashboard overview or client work */}
             {activeSection === "home" ? (
               !selectedClient ? (
-                <AdminClientSelector
+                <AdminHomeDashboard
                   adminPassword={storedPassword}
-                  onSelectClient={handleSelectClient}
-                  onAddClient={() => {
-                    setActiveSection("clients");
+                  onSelectClient={(clientId, businessName) => {
+                    // Find the full client object
+                    supabase.from("client_accounts").select("*").eq("id", clientId).single().then(({ data }) => {
+                      if (data) {
+                        setSelectedClient({
+                          id: data.id,
+                          business_name: data.business_name,
+                          email: data.email,
+                          first_name: data.first_name,
+                          last_name: data.last_name,
+                          tier: data.tier,
+                          status: data.status,
+                          industry: data.industry,
+                        });
+                      }
+                    });
                   }}
+                  onNavigateToSection={setActiveSection as (section: string) => void}
                 />
               ) : (
                 <UnifiedClientView client={selectedClient} adminPassword={storedPassword} onNavigateToSection={setActiveSection as (section: string) => void} />
