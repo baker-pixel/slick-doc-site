@@ -224,7 +224,7 @@ function InsightCard({ insight, index }: { insight: string; index: number }) {
       <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
         <span className="text-sm font-bold text-white">{index + 1}</span>
       </div>
-      <p className="text-foreground leading-relaxed pt-2 flex-1">{insight}</p>
+      <p className="text-foreground leading-relaxed pt-2 flex-1">{parseInlineMarkdown(insight)}</p>
     </motion.div>
   );
 }
@@ -281,7 +281,7 @@ function RecommendationCard({ recommendation, index }: { recommendation: Record<
             </Badge>
           </div>
           <p className="text-foreground font-medium leading-relaxed text-lg mb-4">
-            {recommendation.action as string || recommendation.title as string || 'Recommendation'}
+            {parseInlineMarkdown((recommendation.action as string) || (recommendation.title as string) || 'Recommendation')}
           </p>
           {recommendation.expected_impact && (
             <div className="flex items-start gap-3 p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
@@ -404,7 +404,7 @@ function IssueCard({ issue, severity = 'warning', index }: { issue: string; seve
       <div className={`p-2 rounded-lg ${config.iconBg}`}>
         <Icon className={`h-4 w-4 ${config.iconColor}`} />
       </div>
-      <span className="text-foreground leading-relaxed pt-0.5">{issue}</span>
+      <span className="text-foreground leading-relaxed pt-0.5">{parseInlineMarkdown(issue)}</span>
     </motion.div>
   );
 }
@@ -492,17 +492,16 @@ function CollapsibleSection({
 // Parse inline markdown (bold, italic) within text
 function parseInlineMarkdown(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  let remaining = text;
+  // Remove simple bracket wrappers like [Your Website Link]
+  let remaining = text.replace(/\[([^\]]+)\]/g, '$1');
   let keyIndex = 0;
-  
+
   while (remaining.length > 0) {
-    // Look for **bold** pattern
     const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-    // Look for *italic* pattern (not at start of line for bullet)
     const italicMatch = remaining.match(/(?<!\*)\*([^*]+)\*(?!\*)/);
-    
+
     let nextMatch: { index: number; length: number; content: string; type: 'bold' | 'italic' } | null = null;
-    
+
     if (boldMatch && boldMatch.index !== undefined) {
       nextMatch = { index: boldMatch.index, length: boldMatch[0].length, content: boldMatch[1], type: 'bold' };
     }
@@ -511,25 +510,32 @@ function parseInlineMarkdown(text: string): React.ReactNode {
         nextMatch = { index: italicMatch.index, length: italicMatch[0].length, content: italicMatch[1], type: 'italic' };
       }
     }
-    
+
     if (nextMatch) {
-      // Add text before the match
       if (nextMatch.index > 0) {
         parts.push(remaining.slice(0, nextMatch.index));
       }
-      // Add the formatted text
       if (nextMatch.type === 'bold') {
-        parts.push(<strong key={keyIndex++} className="font-semibold text-foreground">{nextMatch.content}</strong>);
+        parts.push(
+          <strong key={keyIndex++} className="font-semibold text-foreground">
+            {nextMatch.content}
+          </strong>
+        );
       } else {
-        parts.push(<em key={keyIndex++} className="italic text-muted-foreground">{nextMatch.content}</em>);
+        parts.push(
+          <em key={keyIndex++} className="italic text-muted-foreground">
+            {nextMatch.content}
+          </em>
+        );
       }
       remaining = remaining.slice(nextMatch.index + nextMatch.length);
     } else {
-      parts.push(remaining);
+      // Strip any leftover * markers so they never display literally
+      parts.push(remaining.replace(/\*\*/g, '').replace(/\*/g, ''));
       break;
     }
   }
-  
+
   return parts.length === 1 ? parts[0] : <>{parts}</>;
 }
 
@@ -688,7 +694,7 @@ export function ReportViewer({ deliverable }: ReportViewerProps) {
               </div>
               <h2 className="text-2xl font-bold text-foreground">Executive Summary</h2>
             </div>
-            <p className="text-lg text-foreground leading-relaxed">{executiveSummary}</p>
+            <p className="text-lg text-foreground leading-relaxed">{parseInlineMarkdown(executiveSummary)}</p>
           </div>
         </motion.div>
       )}
