@@ -94,21 +94,9 @@ const dailyWorkItems = [
   { id: "alerts" as const, label: "Alerts", icon: Bell },
 ];
 
-// All other sections grouped into collapsible "More Tools"
-const moreToolsItems = [
-  { id: "review-workflow" as const, label: "Review Workflow" },
-  { id: "quick-actions" as const, label: "Quick Actions" },
-  { id: "calendar" as const, label: "Calendar" },
-  { id: "analytics" as const, label: "Analytics" },
-  { id: "activity-feed" as const, label: "Activity Feed" },
-  { id: "gap-analysis" as const, label: "Gap Analysis" },
-  { id: "pdf-leads" as const, label: "PDF Leads" },
-  { id: "lead-scoring" as const, label: "Lead Scoring" },
-  { id: "emails" as const, label: "Email Admin" },
-  { id: "templates" as const, label: "Email Templates" },
-  { id: "sequences" as const, label: "Sequences" },
-  { id: "campaigns" as const, label: "Campaigns" },
-  { id: "client-tasks" as const, label: "Client Tasks" },
+// Client Work - Tasks, deliverables, communications
+const clientWorkItems = [
+  { id: "client-tasks" as const, label: "Tasks" },
   { id: "deliverables" as const, label: "Deliverables" },
   { id: "client-projects" as const, label: "Projects" },
   { id: "client-messages" as const, label: "Messages" },
@@ -116,44 +104,41 @@ const moreToolsItems = [
   { id: "client-requests" as const, label: "Requests" },
 ];
 
+// Marketing & Sales
+const marketingItems = [
+  { id: "gap-analysis" as const, label: "Gap Analysis" },
+  { id: "pdf-leads" as const, label: "PDF Leads" },
+  { id: "lead-scoring" as const, label: "Lead Scoring" },
+  { id: "emails" as const, label: "Email Center" },
+  { id: "campaigns" as const, label: "Campaigns" },
+  { id: "ad-generator" as const, label: "AI Ad Generator" },
+  { id: "sales-proposals" as const, label: "Proposals" },
+];
+
+// Config & Settings
 const configItems = [
-  { id: "onboarding" as const, label: "Onboarding Setup" },
-  { id: "task-templates" as const, label: "Task Templates" },
-  { id: "automation" as const, label: "Automation Jobs" },
+  { id: "team-directory" as const, label: "Team" },
+  { id: "task-templates" as const, label: "Templates" },
+  { id: "automation" as const, label: "Automation" },
   { id: "integrations" as const, label: "Integrations" },
   { id: "sops" as const, label: "SOPs" },
-  { id: "client-analytics" as const, label: "Client Analytics" },
-  { id: "client-invoices" as const, label: "Invoices" },
-  { id: "client-documents" as const, label: "Documents" },
-  { id: "brand-assets" as const, label: "Brand Assets" },
-  { id: "team-directory" as const, label: "Team Directory" },
-  { id: "service-agreements" as const, label: "Agreements" },
-  { id: "content-review" as const, label: "Content Review" },
-  { id: "reports-review" as const, label: "Reports Review" },
-  { id: "seo-dashboard" as const, label: "SEO Dashboard" },
-  { id: "marketing-os" as const, label: "Marketing OS" },
-  { id: "review-engine" as const, label: "Review Engine" },
-  { id: "win-notifications" as const, label: "Win Notifications" },
-  { id: "ad-generator" as const, label: "AI Ad Generator" },
-  { id: "case-studies" as const, label: "Case Studies" },
-  { id: "client-health" as const, label: "Client Health" },
-  { id: "website-personalization" as const, label: "Personalization" },
-  { id: "quality-assurance" as const, label: "QA Checks" },
-  { id: "before-after" as const, label: "Before & After" },
-  { id: "sales-proposals" as const, label: "Sales Proposals" },
-  { id: "feature-guide" as const, label: "Feature Guide" },
+  { id: "feature-guide" as const, label: "Guide" },
   { id: "settings" as const, label: "Settings" },
 ];
 
 export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarProps) {
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
-  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
+  const [clientWorkOpen, setClientWorkOpen] = useState(false);
+  const [marketingOpen, setMarketingOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
   // Auto-expand if active section is in a collapsed group
   useEffect(() => {
-    if (moreToolsItems.some(item => item.id === activeSection)) {
-      setMoreToolsOpen(true);
+    if (clientWorkItems.some(item => item.id === activeSection)) {
+      setClientWorkOpen(true);
+    }
+    if (marketingItems.some(item => item.id === activeSection)) {
+      setMarketingOpen(true);
     }
     if (configItems.some(item => item.id === activeSection)) {
       setConfigOpen(true);
@@ -221,14 +206,14 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* More Tools - Collapsible */}
+        {/* Client Work - Collapsible */}
         <SidebarGroup>
-          <Collapsible open={moreToolsOpen} onOpenChange={setMoreToolsOpen}>
+          <Collapsible open={clientWorkOpen} onOpenChange={setClientWorkOpen}>
             <CollapsibleTrigger asChild>
               <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1.5 flex items-center justify-between group-data-[collapsible=icon]:justify-center">
-                <span className="group-data-[collapsible=icon]:hidden">More Tools</span>
+                <span className="group-data-[collapsible=icon]:hidden">Client Work</span>
                 <FolderOpen className="h-4 w-4 hidden group-data-[collapsible=icon]:block" />
-                {moreToolsOpen ? (
+                {clientWorkOpen ? (
                   <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
                 ) : (
                   <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
@@ -238,7 +223,42 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {moreToolsItems.map((item) => (
+                  {clientWorkItems.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        isActive={activeSection === item.id}
+                        onClick={() => onSectionChange(item.id)}
+                        tooltip={item.label}
+                        className="pl-4"
+                      >
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        {/* Marketing & Sales - Collapsible */}
+        <SidebarGroup>
+          <Collapsible open={marketingOpen} onOpenChange={setMarketingOpen}>
+            <CollapsibleTrigger asChild>
+              <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1.5 flex items-center justify-between group-data-[collapsible=icon]:justify-center">
+                <span className="group-data-[collapsible=icon]:hidden">Marketing</span>
+                <FolderOpen className="h-4 w-4 hidden group-data-[collapsible=icon]:block" />
+                {marketingOpen ? (
+                  <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
+                )}
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {marketingItems.map((item) => (
                     <SidebarMenuItem key={item.id}>
                       <SidebarMenuButton
                         isActive={activeSection === item.id}
@@ -261,7 +281,7 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
           <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
             <CollapsibleTrigger asChild>
               <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent rounded-md px-2 py-1.5 flex items-center justify-between group-data-[collapsible=icon]:justify-center">
-                <span className="group-data-[collapsible=icon]:hidden">Config & Settings</span>
+                <span className="group-data-[collapsible=icon]:hidden">Settings</span>
                 <Settings className="h-4 w-4 hidden group-data-[collapsible=icon]:block" />
                 {configOpen ? (
                   <ChevronDown className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
