@@ -12,10 +12,19 @@ import {
   MessageSquare,
   Calendar,
   ArrowRight,
-  Activity
+  Activity,
+  ChevronDown,
+  Building2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, subDays, isAfter } from "date-fns";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface DashboardStats {
   totalClients: number;
@@ -65,10 +74,23 @@ export function AdminHomeDashboard({
     clientsNeedingAttention: [],
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [allClients, setAllClients] = useState<Array<{ id: string; business_name: string; tier: string }>>([]);
 
   useEffect(() => {
     fetchDashboardStats();
   }, [adminPassword]);
+
+  useEffect(() => {
+    fetchAllClients();
+  }, []);
+
+  const fetchAllClients = async () => {
+    const { data } = await supabase
+      .from("client_accounts")
+      .select("id, business_name, tier")
+      .order("business_name", { ascending: true });
+    setAllClients(data || []);
+  };
 
   const fetchDashboardStats = async () => {
     setIsLoading(true);
@@ -167,15 +189,36 @@ export function AdminHomeDashboard({
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Welcome Back</h1>
           <p className="text-muted-foreground">Here's what's happening today</p>
         </div>
-        <Button onClick={() => onNavigateToSection("clients")} variant="outline" className="gap-2">
-          <Users className="w-4 h-4" />
-          Manage Clients
-        </Button>
+        <div className="flex items-center gap-3">
+          <Select onValueChange={(value) => {
+            const client = allClients.find(c => c.id === value);
+            if (client) onSelectClient(client.id, client.business_name);
+          }}>
+            <SelectTrigger className="w-[220px]">
+              <Building2 className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Jump to client..." />
+            </SelectTrigger>
+            <SelectContent>
+              {allClients.map((client) => (
+                <SelectItem key={client.id} value={client.id}>
+                  <div className="flex items-center gap-2">
+                    <span>{client.business_name}</span>
+                    <Badge variant="secondary" className="text-xs ml-1">{client.tier}</Badge>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => onNavigateToSection("clients")} variant="outline" className="gap-2">
+            <Users className="w-4 h-4" />
+            Manage Clients
+          </Button>
+        </div>
       </div>
 
       {/* Quick Stats Grid */}
