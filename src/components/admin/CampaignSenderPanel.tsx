@@ -11,8 +11,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2, Building2 } from "lucide-react";
+import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2, Building2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
+
+// Variable descriptions for tooltips
+const VARIABLE_DESCRIPTIONS: Record<string, string> = {
+  firstName: "Recipient's first name",
+  lastName: "Recipient's last name",
+  businessName: "Recipient's business/company name",
+  email: "Recipient's email address",
+  websiteUrl: "Recipient's website URL",
+  schedulingLink: "Link to schedule a call or meeting",
+  reportLink: "Link to view a marketing report",
+  unsubscribeLink: "Link to unsubscribe from emails",
+  dashboardLink: "Link to client dashboard",
+  phoneNumber: "Recipient's phone number",
+  industry: "Recipient's industry",
+  serviceTier: "Client's service tier/package",
+  projectName: "Name of current project",
+  meetingDate: "Date of scheduled meeting",
+  meetingTime: "Time of scheduled meeting",
+  resumeToken: "Token to resume gap analysis",
+};
 
 interface EmailTemplate {
   id: string;
@@ -497,16 +518,28 @@ export function CampaignSenderPanel() {
                   <CardDescription>Fill in the dynamic content</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {Object.keys(variableValues).map(key => (
-                    <div key={key} className="space-y-1">
-                      <Label className="text-sm">{`{{${key}}}`}</Label>
-                      <Input
-                        value={variableValues[key]}
-                        onChange={e => setVariableValues({ ...variableValues, [key]: e.target.value })}
-                        placeholder={`Enter ${key}...`}
-                      />
-                    </div>
-                  ))}
+                  <TooltipProvider>
+                    {Object.keys(variableValues).map(key => (
+                      <div key={key} className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm">{`{{${key}}}`}</Label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">{VARIABLE_DESCRIPTIONS[key] || `Custom variable: ${key}`}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <Input
+                          value={variableValues[key]}
+                          onChange={e => setVariableValues({ ...variableValues, [key]: e.target.value })}
+                          placeholder={VARIABLE_DESCRIPTIONS[key] || `Enter ${key}...`}
+                        />
+                      </div>
+                    ))}
+                  </TooltipProvider>
                 </CardContent>
               </Card>
             )}
