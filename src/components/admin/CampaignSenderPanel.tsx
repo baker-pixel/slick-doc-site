@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2, Building2, Info } from "lucide-react";
+import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2, Building2, Info, Sparkles, Wand2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 
@@ -111,6 +111,13 @@ export function CampaignSenderPanel() {
   // Client selection state
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+
+  // Custom email state (AI generated)
+  const [useCustomEmail, setUseCustomEmail] = useState(false);
+  const [customSubject, setCustomSubject] = useState("");
+  const [customHtml, setCustomHtml] = useState("");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const selectedClient = useMemo(() => 
     clients.find(c => c.id === selectedClientId), 
@@ -349,16 +356,68 @@ export function CampaignSenderPanel() {
   };
 
   const openPreview = () => {
-    if (!selectedTemplate) return;
-    
     const sampleRecipient = getRecipients()[0] || { email: "sample@example.com", firstName: "John" };
-    const html = replaceVariables(selectedTemplate.html_content, sampleRecipient);
-    setPreviewHtml(html);
+    
+    if (useCustomEmail) {
+      const html = replaceVariables(customHtml, sampleRecipient);
+      setPreviewHtml(html);
+    } else if (selectedTemplate) {
+      const html = replaceVariables(selectedTemplate.html_content, sampleRecipient);
+      setPreviewHtml(html);
+    } else {
+      return;
+    }
     setIsPreviewOpen(true);
   };
 
+  const generateAIEmail = async () => {
+    if (!aiPrompt.trim()) {
+      toast({ title: "Please describe the email you want", variant: "destructive" });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-email-template", {
+        body: {
+          templateType: "custom",
+          purpose: aiPrompt,
+          tone: "professional",
+          clientName: selectedClient?.business_name,
+          industry: selectedClient?.industry,
+          customInstructions: aiPrompt
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.subject && data?.htmlContent) {
+        setCustomSubject(data.subject);
+        setCustomHtml(data.htmlContent);
+        toast({ title: "Email generated!", description: "Review and edit as needed" });
+      } else {
+        throw new Error("Invalid response from AI");
+      }
+    } catch (error: any) {
+      console.error("AI generation error:", error);
+      toast({ 
+        title: "Failed to generate email", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const sendCampaign = async () => {
-    if (!selectedTemplate) {
+    // Validate email content
+    if (useCustomEmail) {
+      if (!customSubject.trim() || !customHtml.trim()) {
+        toast({ title: "Please generate or enter email content", variant: "destructive" });
+        return;
+      }
+    } else if (!selectedTemplate) {
       toast({ title: "Please select a template", variant: "destructive" });
       return;
     }
@@ -369,18 +428,20 @@ export function CampaignSenderPanel() {
       return;
     }
 
-    // Check for unfilled variables
-    const unfilledVars = Object.entries(variableValues)
-      .filter(([_, value]) => !value.trim())
-      .map(([key]) => key);
-    
-    if (unfilledVars.length > 0) {
-      toast({ 
-        title: "Missing variable values", 
-        description: `Please fill in: ${unfilledVars.join(", ")}`,
-        variant: "destructive" 
-      });
-      return;
+    // Check for unfilled variables (only for templates)
+    if (!useCustomEmail) {
+      const unfilledVars = Object.entries(variableValues)
+        .filter(([_, value]) => !value.trim())
+        .map(([key]) => key);
+      
+      if (unfilledVars.length > 0) {
+        toast({ 
+          title: "Missing variable values", 
+          description: `Please fill in: ${unfilledVars.join(", ")}`,
+          variant: "destructive" 
+        });
+        return;
+      }
     }
 
     setIsSending(true);
@@ -398,15 +459,21 @@ export function CampaignSenderPanel() {
       const emailsToQueue = recipients.map(recipient => ({
         recipient_email: recipient.email,
         recipient_name: [recipient.firstName, recipient.lastName].filter(Boolean).join(" ") || null,
-        subject: replaceVariables(selectedTemplate.subject, recipient),
-        html_content: replaceVariables(selectedTemplate.html_content, recipient),
+        subject: useCustomEmail 
+          ? replaceVariables(customSubject, recipient)
+          : replaceVariables(selectedTemplate!.subject, recipient),
+        html_content: useCustomEmail 
+          ? replaceVariables(customHtml, recipient)
+          : replaceVariables(selectedTemplate!.html_content, recipient),
         scheduled_for: scheduledFor.toISOString(),
         status: isScheduled ? "scheduled" : "pending",
-        metadata: {
-          template_id: selectedTemplate.id,
-          template_slug: selectedTemplate.slug,
-          campaign_sent_at: new Date().toISOString()
-        }
+        metadata: useCustomEmail 
+          ? { custom_email: true, campaign_sent_at: new Date().toISOString() }
+          : {
+              template_id: selectedTemplate!.id,
+              template_slug: selectedTemplate!.slug,
+              campaign_sent_at: new Date().toISOString()
+            }
       }));
 
       const { error } = await supabase
@@ -423,6 +490,9 @@ export function CampaignSenderPanel() {
       // Reset form
       setSelectedTemplate(null);
       setVariableValues({});
+      setCustomSubject("");
+      setCustomHtml("");
+      setAiPrompt("");
       if (recipientSource === "manual") {
         setManualRecipients([{ email: "", firstName: "" }]);
       }
@@ -502,51 +572,122 @@ export function CampaignSenderPanel() {
 
         <TabsContent value="compose" className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Template Selection */}
+            {/* Template or Custom Email */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Select Template
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {useCustomEmail ? <Sparkles className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                    {useCustomEmail ? "AI Generated Email" : "Select Template"}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground">AI Generate</Label>
+                    <Switch
+                      checked={useCustomEmail}
+                      onCheckedChange={(checked) => {
+                        setUseCustomEmail(checked);
+                        if (checked) {
+                          setSelectedTemplate(null);
+                        } else {
+                          setCustomSubject("");
+                          setCustomHtml("");
+                          setAiPrompt("");
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Select 
-                  value={selectedTemplate?.id || ""} 
-                  onValueChange={handleTemplateSelect}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a template..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map(t => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{t.name}</span>
-                          <Badge variant="outline" className="text-xs">{t.category}</Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedTemplate && (
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Subject</Label>
-                      <p className="font-medium">{selectedTemplate.subject}</p>
+                {useCustomEmail ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Describe your email</Label>
+                      <Textarea
+                        placeholder="E.g., A follow-up email thanking the client for their meeting and summarizing next steps..."
+                        value={aiPrompt}
+                        onChange={e => setAiPrompt(e.target.value)}
+                        rows={3}
+                      />
+                      <Button 
+                        onClick={generateAIEmail} 
+                        disabled={isGenerating || !aiPrompt.trim()}
+                        className="w-full"
+                      >
+                        {isGenerating ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-4 h-4 mr-2" />
+                        )}
+                        Generate Email
+                      </Button>
                     </div>
-                    <Button variant="outline" size="sm" onClick={openPreview}>
-                      <Eye className="w-4 h-4 mr-2" />
-                      Preview
-                    </Button>
-                  </div>
+
+                    {customSubject && (
+                      <div className="space-y-3 pt-2 border-t">
+                        <div className="space-y-2">
+                          <Label>Subject</Label>
+                          <Input
+                            value={customSubject}
+                            onChange={e => setCustomSubject(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>HTML Content</Label>
+                          <Textarea
+                            value={customHtml}
+                            onChange={e => setCustomHtml(e.target.value)}
+                            rows={6}
+                            className="font-mono text-xs"
+                          />
+                        </div>
+                        <Button variant="outline" size="sm" onClick={openPreview}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          Preview
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Select 
+                      value={selectedTemplate?.id || ""} 
+                      onValueChange={handleTemplateSelect}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map(t => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <div className="flex items-center gap-2">
+                              <span>{t.name}</span>
+                              <Badge variant="outline" className="text-xs">{t.category}</Badge>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {selectedTemplate && (
+                      <div className="space-y-3 pt-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Subject</Label>
+                          <p className="font-medium">{selectedTemplate.subject}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={openPreview}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          Preview
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
 
             {/* Variable Values */}
-            {selectedTemplate && Object.keys(variableValues).length > 0 && (
+            {!useCustomEmail && selectedTemplate && Object.keys(variableValues).length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Template Variables</CardTitle>
@@ -729,11 +870,18 @@ export function CampaignSenderPanel() {
 
           {/* Send Button */}
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={openPreview} disabled={!selectedTemplate}>
+            <Button 
+              variant="outline" 
+              onClick={openPreview} 
+              disabled={useCustomEmail ? !customHtml : !selectedTemplate}
+            >
               <Eye className="w-4 h-4 mr-2" />
               Preview
             </Button>
-            <Button onClick={sendCampaign} disabled={isSending || !selectedTemplate}>
+            <Button 
+              onClick={sendCampaign} 
+              disabled={isSending || (useCustomEmail ? (!customSubject || !customHtml) : !selectedTemplate)}
+            >
               {isSending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
