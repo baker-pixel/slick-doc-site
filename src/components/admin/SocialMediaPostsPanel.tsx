@@ -173,19 +173,14 @@ export default function SocialMediaPostsPanel() {
 
   // Generate AI content
   const generateAIContent = async () => {
-    if (!selectedClient) {
-      toast({ title: "Please select a client first", variant: "destructive" });
-      return;
-    }
-
     setIsGeneratingContent(true);
     try {
-      const client = clients.find((c) => c.id === selectedClient);
+      const client = selectedClient ? clients.find((c) => c.id === selectedClient) : null;
       
       const { data, error } = await supabase.functions.invoke("generate-social-content", {
         body: {
-          clientName: client?.business_name || "a business",
-          industry: client?.industry || "business",
+          clientName: client?.business_name || contentTopic || "a business",
+          industry: client?.industry || "marketing",
           platform: newPost.platform,
           topic: contentTopic,
         },
@@ -206,18 +201,13 @@ export default function SocialMediaPostsPanel() {
 
   // Generate AI images (multiple options)
   const generateAIImages = async () => {
-    if (!selectedClient) {
-      toast({ title: "Please select a client first", variant: "destructive" });
-      return;
-    }
-
     setIsGeneratingImages(true);
     setGeneratedImages([]);
     setSelectedImage(null);
     
     try {
-      const client = clients.find((c) => c.id === selectedClient);
-      const prompt = imagePrompt || `Professional marketing image for ${client?.business_name} in the ${client?.industry || "business"} industry`;
+      const client = selectedClient ? clients.find((c) => c.id === selectedClient) : null;
+      const prompt = imagePrompt || `Professional marketing image for ${client?.business_name || contentTopic || "a modern business"} in the ${client?.industry || "marketing"} industry`;
 
       const { data, error } = await supabase.functions.invoke("generate-social-image", {
         body: {
@@ -424,7 +414,7 @@ export default function SocialMediaPostsPanel() {
                   size="lg"
                   className="w-full"
                   onClick={generateBoth}
-                  disabled={isGeneratingContent || isGeneratingImages || !selectedClient}
+                  disabled={isGeneratingContent || isGeneratingImages}
                 >
                   {(isGeneratingContent || isGeneratingImages) ? (
                     <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
