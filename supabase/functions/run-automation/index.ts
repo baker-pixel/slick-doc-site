@@ -122,6 +122,7 @@ function normalizeJobType(raw: unknown): AutomationType {
     comprehensive_kpi_dashboards: "create_analytics_dashboard",
     kpi_dashboard: "create_analytics_dashboard",
     create_kpi_dashboard: "create_analytics_dashboard",
+    send_client_intake_form: "send_intake_form",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);
