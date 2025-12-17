@@ -12,9 +12,15 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Plus, Trash2, Edit, Target, Milestone } from "lucide-react";
+import { Plus, Trash2, Edit, Target, Milestone, Sparkles, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+
+interface ClientAccountWithTier {
+  id: string;
+  business_name: string;
+  tier: string;
+}
 
 interface ClientAccount {
   id: string;
@@ -48,6 +54,8 @@ interface ClientProject {
 export function ClientProjectsAdminPanel() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
+  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
+  const [selectedClientForAI, setSelectedClientForAI] = useState<string>("");
   const [editingProject, setEditingProject] = useState<ClientProject | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -85,11 +93,39 @@ export function ClientProjectsAdminPanel() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('client_accounts')
-        .select('id, business_name')
+        .select('id, business_name, tier')
         .order('business_name');
 
       if (error) throw error;
-      return data as ClientAccount[];
+      return data as ClientAccountWithTier[];
+    },
+  });
+
+  const generateProjectsMutation = useMutation({
+    mutationFn: async (clientAccountId: string) => {
+      const { data, error } = await supabase.functions.invoke('generate-client-projects', {
+        body: { clientAccountId }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
+      toast.success(`Generated ${data.projectsCreated} projects with milestones!`);
+      setIsAIDialogOpen(false);
+      setSelectedClientForAI("");
+    },
+    onError: (error: Error) => {
+      console.error('AI generation error:', error);
+      if (error.message.includes('Rate limit')) {
+        toast.error("Rate limit exceeded. Please wait a moment and try again.");
+      } else if (error.message.includes('credits')) {
+        toast.error("AI credits exhausted. Please add funds to continue.");
+      } else {
+        toast.error("Failed to generate projects: " + error.message);
+      }
     },
   });
 
@@ -318,18 +354,92 @@ export function ClientProjectsAdminPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold">Client Projects</h2>
           <p className="text-muted-foreground">Manage projects and milestones for clients.</p>
         </div>
-        <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsOpen(open); }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Project
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          {/* AI Generate Projects Button */}
+          <Dialog open={isAIDialogOpen} onOpenChange={setIsAIDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Sparkles className="h-4 w-4 mr-2" />
+                AI Generate Projects
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  Generate Projects with AI
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <p className="text-sm text-muted-foreground">
+                  AI will analyze the client's tier and SOPs to generate appropriate projects with milestones.
+                </p>
+                <div className="space-y-2">
+                  <Label>Select Client</Label>
+                  <Select value={selectedClientForAI} onValueChange={setSelectedClientForAI}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a client..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.business_name} 
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            {client.tier}
+                          </Badge>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedClientForAI && (
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                    <p className="font-medium">What AI will generate:</p>
+                    <ul className="mt-2 space-y-1 text-muted-foreground">
+                      <li>• 3-5 projects based on {clients?.find(c => c.id === selectedClientForAI)?.tier} tier</li>
+                      <li>• Milestones with weekly due dates</li>
+                      <li>• Categories from SOP action items</li>
+                    </ul>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsAIDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => selectedClientForAI && generateProjectsMutation.mutate(selectedClientForAI)}
+                    disabled={!selectedClientForAI || generateProjectsMutation.isPending}
+                  >
+                    {generateProjectsMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Generate Projects
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual Create Project Button */}
+          <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsOpen(open); }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Project
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{editingProject ? 'Edit Project' : 'Create New Project'}</DialogTitle>
@@ -395,6 +505,7 @@ export function ClientProjectsAdminPanel() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Milestone Dialog */}

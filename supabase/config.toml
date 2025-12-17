@@ -95,3 +95,6 @@ verify_jwt = false
 
 [functions.detect-inactive-leads]
 verify_jwt = false
+
+[functions.generate-client-projects]
+verify_jwt = false
