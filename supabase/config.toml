@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.generate-email-template]
 verify_jwt = false
+
+[functions.generate-social-image]
+verify_jwt = false
