@@ -123,6 +123,25 @@ function getContentTypeConfig(type: string) {
   return contentTypeConfig[normalizedType] || contentTypeConfig.default;
 }
 
+// Helpers to clean markdown-style asterisks/brackets from text
+function cleanMarkdownMarks(text: string): string {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/(?<!\*)\*(?!\*)/g, '')
+    .replace(/\[([^\]]+)\]/g, '$1');
+}
+
+function deepCleanStrings(value: any): any {
+  if (typeof value === 'string') return cleanMarkdownMarks(value);
+  if (Array.isArray(value)) return value.map(deepCleanStrings);
+  if (value && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = deepCleanStrings(v);
+    return out;
+  }
+  return value;
+}
+
 // Helper to parse JSON content safely
 function parseContentSafely(content: string | null): any {
   if (!content) return null;
@@ -136,9 +155,10 @@ function parseContentSafely(content: string | null): any {
 // Smart content renderer component
 function ContentRenderer({ content, contentType }: { content: string | null; contentType: string }) {
   if (!content) return null;
-  
-  const parsed = parseContentSafely(content);
-  
+
+  const parsedRaw = parseContentSafely(content);
+  const parsed = deepCleanStrings(parsedRaw);
+
   // If it's a string (not JSON), render it nicely
   if (typeof parsed === 'string') {
     // Check if it looks like HTML
