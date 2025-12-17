@@ -29,7 +29,8 @@ import {
   ImageIcon,
   Wand2,
   Download,
-  Check
+  Check,
+  Pencil
 } from "lucide-react";
 
 interface Client {
@@ -68,6 +69,7 @@ export default function SocialMediaPostsPanel() {
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<SocialPost | null>(null);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
@@ -163,12 +165,64 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
+  // Update post mutation
+  const updatePost = useMutation({
+    mutationFn: async ({ id, post, imageUrl }: { id: string; post: typeof newPost; imageUrl?: string }) => {
+      const { error } = await supabase
+        .from("content_calendar")
+        .update({
+          title: post.title,
+          content: post.content,
+          platform: post.platform,
+          scheduled_for: post.scheduledFor || new Date().toISOString(),
+          status: post.scheduledFor ? "scheduled" : "draft",
+          metadata: { image_url: imageUrl || null, client_id: selectedClient },
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["social-posts"] });
+      setIsCreateOpen(false);
+      setEditingPost(null);
+      resetForm();
+      toast({ title: "Post updated successfully" });
+    },
+    onError: (error) => {
+      toast({ title: "Error updating post", description: error.message, variant: "destructive" });
+    },
+  });
+
   const resetForm = () => {
     setNewPost({ title: "", content: "", platform: "facebook", scheduledFor: "" });
     setGeneratedImages([]);
     setSelectedImage(null);
     setImagePrompt("");
     setContentTopic("");
+    setEditingPost(null);
+  };
+
+  const openEditDialog = (post: SocialPost) => {
+    const imageUrl = (post.metadata as { image_url?: string } | null)?.image_url;
+    setEditingPost(post);
+    setNewPost({
+      title: post.title || "",
+      content: post.content,
+      platform: post.platform,
+      scheduledFor: post.scheduled_for ? new Date(post.scheduled_for).toISOString().slice(0, 16) : "",
+    });
+    if (imageUrl) {
+      setSelectedImage(imageUrl);
+    }
+    setIsCreateOpen(true);
+  };
+
+  const handleSave = () => {
+    if (editingPost) {
+      updatePost.mutate({ id: editingPost.id, post: newPost, imageUrl: selectedImage || undefined });
+    } else {
+      createPost.mutate({ ...newPost, imageUrl: selectedImage || undefined });
+    }
   };
 
   // Generate AI content
@@ -305,14 +359,23 @@ export default function SocialMediaPostsPanel() {
                 <Copy className="h-4 w-4" />
               </Button>
               {post.status !== "published" && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="text-green-500 hover:text-green-600"
-                  onClick={() => updatePostStatus.mutate({ id: post.id, status: "published" })}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => openEditDialog(post)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-green-500 hover:text-green-600"
+                    onClick={() => updatePostStatus.mutate({ id: post.id, status: "published" })}
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </>
               )}
               <Button
                 size="icon"
@@ -358,8 +421,8 @@ export default function SocialMediaPostsPanel() {
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Create AI-Powered Social Post</DialogTitle>
-                <DialogDescription>Generate engaging content and images with AI</DialogDescription>
+                <DialogTitle>{editingPost ? "Edit Social Post" : "Create AI-Powered Social Post"}</DialogTitle>
+                <DialogDescription>{editingPost ? "Update your post content and settings" : "Generate engaging content and images with AI"}</DialogDescription>
               </DialogHeader>
               <div className="space-y-5 py-4">
                 {/* Platform Selection */}
@@ -552,10 +615,10 @@ export default function SocialMediaPostsPanel() {
                   </Button>
                   <Button
                     className="flex-1"
-                    onClick={() => createPost.mutate({ ...newPost, imageUrl: selectedImage || undefined })}
-                    disabled={!newPost.content || createPost.isPending}
+                    onClick={handleSave}
+                    disabled={!newPost.content || createPost.isPending || updatePost.isPending}
                   >
-                    {newPost.scheduledFor ? "Schedule Post" : "Save as Draft"}
+                    {editingPost ? "Update Post" : newPost.scheduledFor ? "Schedule Post" : "Save as Draft"}
                   </Button>
                 </div>
               </div>
