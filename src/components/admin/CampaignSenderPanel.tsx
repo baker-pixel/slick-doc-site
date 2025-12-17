@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2 } from "lucide-react";
+import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2, Building2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface EmailTemplate {
@@ -39,10 +39,20 @@ interface QueuedEmail {
   status: string;
   scheduled_for: string;
   created_at: string;
+  metadata: any;
+}
+
+interface ClientAccount {
+  id: string;
+  business_name: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
 }
 
 const RECIPIENT_SOURCES = [
   { value: "manual", label: "Enter manually" },
+  { value: "client", label: "Selected Client" },
   { value: "gap_analysis", label: "Gap Analysis Submissions" },
   { value: "contact_submissions", label: "Contact Form Submissions" },
   { value: "pdf_leads", label: "PDF Download Leads" },
@@ -64,11 +74,32 @@ export function CampaignSenderPanel() {
   const [previewHtml, setPreviewHtml] = useState("");
   const [queuedEmails, setQueuedEmails] = useState<QueuedEmail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Client selection state
+  const [clients, setClients] = useState<ClientAccount[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+
+  const selectedClient = useMemo(() => 
+    clients.find(c => c.id === selectedClientId), 
+    [clients, selectedClientId]
+  );
 
   useEffect(() => {
     fetchTemplates();
     fetchQueuedEmails();
+    fetchClients();
   }, []);
+
+  const fetchClients = async () => {
+    const { data, error } = await supabase
+      .from("client_accounts")
+      .select("id, business_name, email, first_name, last_name")
+      .order("business_name");
+
+    if (!error && data) {
+      setClients(data);
+    }
+  };
 
   const fetchTemplates = async () => {
     const { data, error } = await supabase
@@ -87,23 +118,48 @@ export function CampaignSenderPanel() {
 
   const fetchQueuedEmails = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("email_queue")
       .select("*")
       .in("status", ["pending", "scheduled"])
       .order("scheduled_for", { ascending: true })
       .limit(50);
 
+    const { data, error } = await query;
+
     if (!error && data) {
-      setQueuedEmails(data);
+      // Filter by selected client if one is selected
+      if (selectedClientId && selectedClient) {
+        const filteredEmails = data.filter(e => 
+          e.recipient_email.toLowerCase() === selectedClient.email.toLowerCase() ||
+          (e.metadata as any)?.client_id === selectedClientId
+        );
+        setQueuedEmails(filteredEmails);
+      } else {
+        setQueuedEmails(data);
+      }
     }
     setIsLoading(false);
   };
 
+  // Refetch when client changes
+  useEffect(() => {
+    if (selectedClientId) {
+      fetchQueuedEmails();
+    }
+  }, [selectedClientId]);
+
   const fetchSourceRecipients = async (source: string) => {
     let recipients: Recipient[] = [];
 
-    if (source === "gap_analysis") {
+    if (source === "client" && selectedClient) {
+      recipients = [{
+        email: selectedClient.email,
+        firstName: selectedClient.first_name || undefined,
+        lastName: selectedClient.last_name || undefined,
+        businessName: selectedClient.business_name
+      }];
+    } else if (source === "gap_analysis") {
       const { data } = await supabase
         .from("gap_analysis_submissions")
         .select("email, first_name, last_name, business_name")
@@ -353,9 +409,27 @@ export function CampaignSenderPanel() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Campaign Sender</h2>
-        <p className="text-muted-foreground">Send emails manually or schedule campaigns</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Campaign Sender</h2>
+          <p className="text-muted-foreground">Send emails manually or schedule campaigns for clients</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-muted-foreground" />
+          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+            <SelectTrigger className="w-[250px]">
+              <SelectValue placeholder="Select a client..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Clients</SelectItem>
+              {clients.map(client => (
+                <SelectItem key={client.id} value={client.id}>
+                  {client.business_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Tabs defaultValue="compose" className="space-y-6">
