@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield, UserMinus } from "lucide-react";
+import { RefreshCw, Search, Mail, Clock, CheckCircle, XCircle, Eye, Trash2, Send, TrendingUp, BarChart3, CalendarClock, Sparkles, Globe, Shield, UserMinus, Building2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
 import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
@@ -111,6 +111,12 @@ interface EmailAdminPanelProps {
   password: string;
 }
 
+interface ClientAccount {
+  id: string;
+  business_name: string;
+  email: string;
+}
+
 export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   const [emailQueue, setEmailQueue] = useState<EmailQueueItem[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
@@ -125,6 +131,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   const [selectedSequence, setSelectedSequence] = useState<EmailSequence | null>(null);
   const [isSequenceDialogOpen, setIsSequenceDialogOpen] = useState(false);
 
+  // Client selection state
+  const [clients, setClients] = useState<ClientAccount[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+
   // Scheduling state
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
@@ -138,6 +148,21 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     useOptimalTime: true,
   });
   const [isScheduling, setIsScheduling] = useState(false);
+
+  // Fetch clients
+  useEffect(() => {
+    const fetchClients = async () => {
+      const response = await supabase.functions.invoke("admin", {
+        body: { action: "list", table: "client_accounts", password },
+      });
+      if (response.data?.data) {
+        setClients(response.data.data);
+      }
+    };
+    fetchClients();
+  }, [password]);
+
+  const selectedClient = clients.find(c => c.id === selectedClientId);
 
   // Calculate next optimal send time
   const getNextOptimalTime = (timezone: string) => {
@@ -278,8 +303,25 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     fetchEmailData();
   }, [password]);
 
+  // Filter data by selected client (must be before filteredQueue/filteredLogs)
+  const clientFilteredQueue = useMemo(() => {
+    if (!selectedClientId || selectedClientId === "all") return emailQueue;
+    const clientEmail = selectedClient?.email?.toLowerCase();
+    return emailQueue.filter(item => 
+      item.recipient_email.toLowerCase() === clientEmail
+    );
+  }, [emailQueue, selectedClientId, selectedClient]);
+
+  const clientFilteredLogs = useMemo(() => {
+    if (!selectedClientId || selectedClientId === "all") return emailLogs;
+    const clientEmail = selectedClient?.email?.toLowerCase();
+    return emailLogs.filter(log => 
+      log.recipient_email.toLowerCase() === clientEmail
+    );
+  }, [emailLogs, selectedClientId, selectedClient]);
+
   const filteredQueue = useMemo(() => {
-    return emailQueue.filter((item) => {
+    return clientFilteredQueue.filter((item) => {
       const matchesSearch =
         queueSearch === "" ||
         item.recipient_email.toLowerCase().includes(queueSearch.toLowerCase()) ||
@@ -287,17 +329,17 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       const matchesStatus = queueStatusFilter === "all" || item.status === queueStatusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [emailQueue, queueSearch, queueStatusFilter]);
+  }, [clientFilteredQueue, queueSearch, queueStatusFilter]);
 
   const filteredLogs = useMemo(() => {
-    return emailLogs.filter((item) => {
+    return clientFilteredLogs.filter((item) => {
       return (
         logSearch === "" ||
         item.recipient_email.toLowerCase().includes(logSearch.toLowerCase()) ||
         item.subject.toLowerCase().includes(logSearch.toLowerCase())
       );
     });
-  }, [emailLogs, logSearch]);
+  }, [clientFilteredLogs, logSearch]);
 
   const handleToggleSequence = async (sequence: EmailSequence) => {
     try {
@@ -373,12 +415,12 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   };
 
   const queueStats = useMemo(() => {
-    const pending = emailQueue.filter((e) => e.status === "pending").length;
-    const scheduled = emailQueue.filter((e) => e.status === "scheduled").length;
-    const failed = emailQueue.filter((e) => e.status === "failed").length;
-    const sent = emailLogs.length;
+    const pending = clientFilteredQueue.filter((e) => e.status === "pending").length;
+    const scheduled = clientFilteredQueue.filter((e) => e.status === "scheduled").length;
+    const failed = clientFilteredQueue.filter((e) => e.status === "failed").length;
+    const sent = clientFilteredLogs.length;
     return { pending, scheduled, failed, sent };
-  }, [emailQueue, emailLogs]);
+  }, [clientFilteredQueue, clientFilteredLogs]);
 
   // Email volume over last 14 days
   const volumeData = useMemo(() => {
@@ -481,6 +523,35 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
 
   return (
     <div className="space-y-6">
+      {/* Client Selector Header */}
+      <Card className="bg-card/50 border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <Building2 className="w-5 h-5 text-muted-foreground" />
+            <div className="flex-1">
+              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                <SelectTrigger className="w-full md:w-[300px]">
+                  <SelectValue placeholder="Select a client to filter emails..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clients</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.business_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedClient && (
+              <div className="text-sm text-muted-foreground">
+                Filtering by: <span className="font-medium text-foreground">{selectedClient.email}</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-card/50 border-border/50">
