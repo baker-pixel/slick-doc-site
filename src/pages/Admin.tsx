@@ -65,6 +65,7 @@ import WebsitePersonalizationPanel from "@/components/admin/WebsitePersonalizati
 import QualityAssurancePanel from "@/components/admin/QualityAssurancePanel";
 import BeforeAfterShowcasePanel from "@/components/admin/BeforeAfterShowcasePanel";
 import SalesProposalPanel from "@/components/admin/SalesProposalPanel";
+import SocialMediaPostsPanel from "@/components/admin/SocialMediaPostsPanel";
 import FeatureGuidePanel from "@/components/admin/FeatureGuidePanel";
 import { ClientPhaseTracker } from "@/components/admin/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/ClientProgressTracker";
@@ -1145,6 +1146,8 @@ const Admin = () => {
         return <BeforeAfterShowcasePanel />;
       case "sales-proposals":
         return <SalesProposalPanel />;
+      case "social-posts":
+        return <SocialMediaPostsPanel />;
       case "settings":
         return <AdminSettingsPanel adminPassword={storedPassword} />;
       default:
@@ -1203,6 +1206,7 @@ const Admin = () => {
       "quality-assurance": "AI Quality Assurance",
       "before-after": "Before & After Showcase",
       "sales-proposals": "AI Sales Proposals",
+      "social-posts": "Social Media Posts",
       settings: "Admin Settings",
     };
     return titles[activeSection];

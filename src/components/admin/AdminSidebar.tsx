@@ -77,6 +77,7 @@ export type AdminSection =
   | "quality-assurance"
   | "before-after"
   | "sales-proposals"
+  | "social-posts"
   | "settings";
 
 interface AdminSidebarProps {
@@ -109,6 +110,7 @@ const marketingItems = [
   { id: "gap-analysis" as const, label: "Gap Analysis" },
   { id: "pdf-leads" as const, label: "PDF Leads" },
   { id: "lead-scoring" as const, label: "Lead Scoring" },
+  { id: "social-posts" as const, label: "Social Posts" },
   { id: "emails" as const, label: "Email Center" },
   { id: "campaigns" as const, label: "Campaigns" },
   { id: "ad-generator" as const, label: "AI Ad Generator" },
