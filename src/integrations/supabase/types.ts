@@ -1508,6 +1508,7 @@ export type Database = {
           email: string
           first_name: string
           id: string
+          last_activity_at: string | null
           last_name: string
           marketing_challenge: string | null
           pipeline_stage_id: string | null
@@ -1521,6 +1522,7 @@ export type Database = {
           email: string
           first_name: string
           id?: string
+          last_activity_at?: string | null
           last_name: string
           marketing_challenge?: string | null
           pipeline_stage_id?: string | null
@@ -1534,6 +1536,7 @@ export type Database = {
           email?: string
           first_name?: string
           id?: string
+          last_activity_at?: string | null
           last_name?: string
           marketing_challenge?: string | null
           pipeline_stage_id?: string | null
