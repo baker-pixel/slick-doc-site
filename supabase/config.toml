@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.generate-social-image]
 verify_jwt = false
+
+[functions.generate-social-content]
+verify_jwt = false

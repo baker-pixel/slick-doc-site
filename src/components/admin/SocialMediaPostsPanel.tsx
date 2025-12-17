@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import { 
   Send, 
   CheckCircle, 
@@ -27,7 +28,8 @@ import {
   Calendar,
   ImageIcon,
   Wand2,
-  Download
+  Download,
+  Check
 } from "lucide-react";
 
 interface Client {
@@ -62,21 +64,16 @@ const platformColors: Record<string, string> = {
   twitter: "bg-sky-500",
 };
 
-const platformPromptStyles: Record<string, string> = {
-  facebook: "casual, friendly, community-focused with emojis. Max 250 characters.",
-  instagram: "visual, trendy, with relevant hashtags. Max 150 characters + 5-10 hashtags.",
-  linkedin: "professional, insightful, thought leadership. Max 300 characters.",
-  twitter: "concise, punchy, trending. Max 280 characters with 2-3 hashtags.",
-};
-
 export default function SocialMediaPostsPanel() {
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imagePrompt, setImagePrompt] = useState("");
+  const [contentTopic, setContentTopic] = useState("");
   const [newPost, setNewPost] = useState({
     title: "",
     content: "",
@@ -124,7 +121,7 @@ export default function SocialMediaPostsPanel() {
         content_type: "social_post",
         scheduled_for: post.scheduledFor || new Date().toISOString(),
         status: post.scheduledFor ? "scheduled" : "draft",
-        metadata: post.imageUrl ? { image_url: post.imageUrl, client_id: selectedClient } : { client_id: selectedClient },
+        metadata: { image_url: post.imageUrl || null, client_id: selectedClient },
       });
       if (error) throw error;
     },
@@ -168,8 +165,10 @@ export default function SocialMediaPostsPanel() {
 
   const resetForm = () => {
     setNewPost({ title: "", content: "", platform: "facebook", scheduledFor: "" });
-    setGeneratedImage(null);
+    setGeneratedImages([]);
+    setSelectedImage(null);
     setImagePrompt("");
+    setContentTopic("");
   };
 
   // Generate AI content
@@ -182,33 +181,20 @@ export default function SocialMediaPostsPanel() {
     setIsGeneratingContent(true);
     try {
       const client = clients.find((c) => c.id === selectedClient);
-      const style = platformPromptStyles[newPost.platform];
       
-      const { data, error } = await supabase.functions.invoke("chat", {
+      const { data, error } = await supabase.functions.invoke("generate-social-content", {
         body: {
-          messages: [
-            {
-              role: "user",
-              content: `Create a compelling social media post for ${client?.business_name || "a business"} (${client?.industry || "business"} industry) for ${newPost.platform}. 
-              
-Style: ${style}
-
-The post should:
-- Be engaging and authentic
-- Include a clear call-to-action
-- Match the platform's best practices
-- Be ready to post as-is
-
-Return ONLY the post content, nothing else.`,
-            },
-          ],
+          clientName: client?.business_name || "a business",
+          industry: client?.industry || "business",
+          platform: newPost.platform,
+          topic: contentTopic,
         },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      const content = data?.choices?.[0]?.message?.content || data?.content || "";
-      setNewPost((prev) => ({ ...prev, content: content.trim() }));
+      setNewPost((prev) => ({ ...prev, content: data.content || "" }));
       toast({ title: "Content generated!" });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -218,14 +204,17 @@ Return ONLY the post content, nothing else.`,
     }
   };
 
-  // Generate AI image
-  const generateAIImage = async () => {
+  // Generate AI images (multiple options)
+  const generateAIImages = async () => {
     if (!selectedClient) {
       toast({ title: "Please select a client first", variant: "destructive" });
       return;
     }
 
-    setIsGeneratingImage(true);
+    setIsGeneratingImages(true);
+    setGeneratedImages([]);
+    setSelectedImage(null);
+    
     try {
       const client = clients.find((c) => c.id === selectedClient);
       const prompt = imagePrompt || `Professional marketing image for ${client?.business_name} in the ${client?.industry || "business"} industry`;
@@ -234,29 +223,30 @@ Return ONLY the post content, nothing else.`,
         body: {
           prompt,
           platform: newPost.platform,
+          count: 4,
         },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      if (data?.imageUrl) {
-        setGeneratedImage(data.imageUrl);
-        toast({ title: "Image generated!" });
+      if (data?.images?.length > 0) {
+        setGeneratedImages(data.images);
+        toast({ title: `${data.images.length} images generated! Pick your favorite.` });
       } else {
-        throw new Error("No image returned");
+        throw new Error("No images returned");
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      toast({ title: "Error generating image", description: message, variant: "destructive" });
+      toast({ title: "Error generating images", description: message, variant: "destructive" });
     } finally {
-      setIsGeneratingImage(false);
+      setIsGeneratingImages(false);
     }
   };
 
-  // Generate both content and image
+  // Generate both content and images
   const generateBoth = async () => {
-    await generateAIContent();
-    await generateAIImage();
+    await Promise.all([generateAIContent(), generateAIImages()]);
   };
 
   const copyToClipboard = (content: string) => {
@@ -376,76 +366,78 @@ Return ONLY the post content, nothing else.`,
                 New Post
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create AI-Powered Social Post</DialogTitle>
+                <DialogDescription>Generate engaging content and images with AI</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <div className="space-y-5 py-4">
                 {/* Platform Selection */}
-                <div className="space-y-2">
-                  <Label>Platform</Label>
-                  <Select
-                    value={newPost.platform}
-                    onValueChange={(v) => setNewPost((prev) => ({ ...prev, platform: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="facebook">
-                        <div className="flex items-center gap-2">
-                          <Facebook className="h-4 w-4" /> Facebook
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="instagram">
-                        <div className="flex items-center gap-2">
-                          <Instagram className="h-4 w-4" /> Instagram
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="linkedin">
-                        <div className="flex items-center gap-2">
-                          <Linkedin className="h-4 w-4" /> LinkedIn
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="twitter">
-                        <div className="flex items-center gap-2">
-                          <Twitter className="h-4 w-4" /> Twitter/X
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label>Title (optional)</Label>
-                  <Input
-                    value={newPost.title}
-                    onChange={(e) => setNewPost((prev) => ({ ...prev, title: e.target.value }))}
-                    placeholder="Internal reference title"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Platform</Label>
+                    <Select
+                      value={newPost.platform}
+                      onValueChange={(v) => setNewPost((prev) => ({ ...prev, platform: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="facebook">
+                          <div className="flex items-center gap-2">
+                            <Facebook className="h-4 w-4" /> Facebook
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="instagram">
+                          <div className="flex items-center gap-2">
+                            <Instagram className="h-4 w-4" /> Instagram
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="linkedin">
+                          <div className="flex items-center gap-2">
+                            <Linkedin className="h-4 w-4" /> LinkedIn
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="twitter">
+                          <div className="flex items-center gap-2">
+                            <Twitter className="h-4 w-4" /> Twitter/X
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Title (optional)</Label>
+                    <Input
+                      value={newPost.title}
+                      onChange={(e) => setNewPost((prev) => ({ ...prev, title: e.target.value }))}
+                      placeholder="Internal reference"
+                    />
+                  </div>
                 </div>
 
                 {/* AI Generate Both Button */}
                 <Button
                   type="button"
                   variant="default"
+                  size="lg"
                   className="w-full"
                   onClick={generateBoth}
-                  disabled={isGeneratingContent || isGeneratingImage || !selectedClient}
+                  disabled={isGeneratingContent || isGeneratingImages || !selectedClient}
                 >
-                  {(isGeneratingContent || isGeneratingImage) ? (
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  {(isGeneratingContent || isGeneratingImages) ? (
+                    <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
                   ) : (
-                    <Wand2 className="h-4 w-4 mr-2" />
+                    <Wand2 className="h-5 w-5 mr-2" />
                   )}
-                  Generate Content & Image with AI
+                  Generate Content & Images with AI
                 </Button>
 
                 {/* Content Section */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Content</Label>
+                    <Label className="text-base font-semibold">Content</Label>
                     <Button
                       type="button"
                       variant="outline"
@@ -461,11 +453,18 @@ Return ONLY the post content, nothing else.`,
                       Generate Text
                     </Button>
                   </div>
+                  <Input
+                    value={contentTopic}
+                    onChange={(e) => setContentTopic(e.target.value)}
+                    placeholder="Topic or theme (optional) - e.g., 'holiday sale', 'new service launch'"
+                    className="text-sm"
+                  />
                   <Textarea
                     value={newPost.content}
                     onChange={(e) => setNewPost((prev) => ({ ...prev, content: e.target.value }))}
-                    placeholder="Write your post content or generate with AI..."
+                    placeholder="Your post content will appear here..."
                     rows={4}
+                    className="resize-none"
                   />
                   <p className="text-xs text-muted-foreground text-right">
                     {newPost.content.length} characters
@@ -473,39 +472,74 @@ Return ONLY the post content, nothing else.`,
                 </div>
 
                 {/* Image Section */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Image</Label>
+                    <Label className="text-base font-semibold">Image</Label>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={generateAIImage}
-                      disabled={isGeneratingImage || !selectedClient}
+                      onClick={generateAIImages}
+                      disabled={isGeneratingImages || !selectedClient}
                     >
-                      {isGeneratingImage ? (
+                      {isGeneratingImages ? (
                         <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
                         <ImageIcon className="h-4 w-4 mr-2" />
                       )}
-                      Generate Image
+                      Generate 4 Options
                     </Button>
                   </div>
                   <Input
                     value={imagePrompt}
                     onChange={(e) => setImagePrompt(e.target.value)}
-                    placeholder="Describe the image you want (optional - will auto-generate based on client)"
+                    placeholder="Describe the image (optional) - e.g., 'team working together', 'happy customers'"
+                    className="text-sm"
                   />
-                  {generatedImage && (
-                    <div className="relative rounded-lg overflow-hidden border">
-                      <img src={generatedImage} alt="Generated" className="w-full h-48 object-cover" />
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <Button size="icon" variant="secondary" onClick={() => downloadImage(generatedImage)}>
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button size="icon" variant="secondary" onClick={() => setGeneratedImage(null)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                  
+                  {isGeneratingImages && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="aspect-square bg-muted rounded-lg animate-pulse flex items-center justify-center">
+                          <RefreshCw className="h-6 w-6 text-muted-foreground animate-spin" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {generatedImages.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Click to select an image:</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {generatedImages.map((img, index) => (
+                          <div
+                            key={index}
+                            onClick={() => setSelectedImage(img)}
+                            className={cn(
+                              "relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all",
+                              selectedImage === img 
+                                ? "border-primary ring-2 ring-primary ring-offset-2" 
+                                : "border-transparent hover:border-muted-foreground/50"
+                            )}
+                          >
+                            <img src={img} alt={`Option ${index + 1}`} className="w-full h-full object-cover" />
+                            {selectedImage === img && (
+                              <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
+                                <Check className="h-4 w-4" />
+                              </div>
+                            )}
+                            <div className="absolute bottom-2 left-2">
+                              <Button
+                                size="icon"
+                                variant="secondary"
+                                className="h-7 w-7"
+                                onClick={(e) => { e.stopPropagation(); downloadImage(img); }}
+                              >
+                                <Download className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -522,13 +556,13 @@ Return ONLY the post content, nothing else.`,
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-4">
+                <div className="flex gap-2 pt-2">
                   <Button variant="outline" className="flex-1" onClick={() => setIsCreateOpen(false)}>
                     Cancel
                   </Button>
                   <Button
                     className="flex-1"
-                    onClick={() => createPost.mutate({ ...newPost, imageUrl: generatedImage || undefined })}
+                    onClick={() => createPost.mutate({ ...newPost, imageUrl: selectedImage || undefined })}
                     disabled={!newPost.content || createPost.isPending}
                   >
                     {newPost.scheduledFor ? "Schedule Post" : "Save as Draft"}
