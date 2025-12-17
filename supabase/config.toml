@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.generate-social-content]
 verify_jwt = false
+
+[functions.detect-inactive-leads]
+verify_jwt = false
