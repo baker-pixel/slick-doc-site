@@ -28,6 +28,9 @@ import {
   Plus,
   Minus,
   ChevronRight,
+  ChevronDown,
+  Target,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -79,8 +82,24 @@ interface Message {
 interface Project {
   id: string;
   name: string;
+  description: string | null;
   status: string;
   progress_percentage: number | null;
+  start_date: string | null;
+  target_end_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Milestone {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  due_date: string | null;
+  status: string;
+  completed_at: string | null;
+  sort_order: number;
 }
 
 interface Meeting {
@@ -96,11 +115,13 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAllData();
@@ -113,6 +134,7 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       fetchDeliverables(),
       fetchMessages(),
       fetchProjects(),
+      fetchMilestones(),
       fetchMeetings(),
     ]);
     setIsLoading(false);
@@ -167,7 +189,28 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
         .filter((p) => p.client_account_id === client.id)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setProjects(filtered);
+      
+      // Auto-expand first in-progress project
+      const inProgress = filtered.find((p: Project) => p.status === "in_progress");
+      if (inProgress) {
+        setExpandedProject(inProgress.id);
+      }
     }
+  };
+
+  const fetchMilestones = async () => {
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "project_milestones", password: adminPassword },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as any[];
+      setMilestones(rows.sort((a, b) => a.sort_order - b.sort_order));
+    }
+  };
+
+  const getProjectMilestones = (projectId: string) => {
+    return milestones.filter((m) => m.project_id === projectId);
   };
 
   const fetchMeetings = async () => {
@@ -759,62 +802,234 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
         <TabsContent value="projects">
           <Card>
             <CardHeader>
-              <CardTitle>Projects</CardTitle>
-              <CardDescription>{projects.length} total projects</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Projects</CardTitle>
+                  <CardDescription>
+                    {projects.length} total projects • {projects.filter(p => p.status === "in_progress").length} in progress
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[500px] pr-4">
+              <ScrollArea className="h-[600px] pr-4">
                 {projects.length === 0 ? (
                   <p className="text-center py-8 text-muted-foreground">No projects yet</p>
                 ) : (
-                  <div className="space-y-3">
-                    {projects.map((project) => (
-                      <div key={project.id} className="p-4 rounded-lg border">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="font-medium">{project.name}</p>
-                          <Badge
-                            variant={project.status === "completed" ? "default" : project.status === "in_progress" ? "secondary" : "outline"}
-                            className={project.status === "completed" ? "bg-green-100 text-green-700" : ""}
+                  <div className="space-y-4">
+                    {projects.map((project) => {
+                      const projectMilestones = getProjectMilestones(project.id);
+                      const completedMilestones = projectMilestones.filter(m => m.status === "completed").length;
+                      const isExpanded = expandedProject === project.id;
+                      
+                      return (
+                        <div 
+                          key={project.id} 
+                          className={cn(
+                            "rounded-lg border transition-all",
+                            isExpanded && "ring-2 ring-primary/20"
+                          )}
+                        >
+                          {/* Project Header */}
+                          <div 
+                            className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => setExpandedProject(isExpanded ? null : project.id)}
                           >
-                            {project.status.replace("_", " ")}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={() => updateProjectProgress(project.id, Math.max(0, (project.progress_percentage || 0) - 10))}
-                            disabled={project.progress_percentage === 0}
-                          >
-                            <Minus className="w-4 h-4" />
-                          </Button>
-                          <div className="flex-1">
-                            <div className="h-3 bg-muted rounded-full overflow-hidden">
-                              <div
-                                className={cn(
-                                  "h-full transition-all",
-                                  project.progress_percentage === 100 ? "bg-green-500" : "bg-primary"
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-6 w-6 shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedProject(isExpanded ? null : project.id);
+                                    }}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="w-4 h-4" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                  <h3 className="font-semibold truncate">{project.name}</h3>
+                                  <Badge
+                                    variant={project.status === "completed" ? "default" : project.status === "in_progress" ? "secondary" : "outline"}
+                                    className={cn(
+                                      "shrink-0",
+                                      project.status === "completed" && "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                                    )}
+                                  >
+                                    {project.status.replace("_", " ")}
+                                  </Badge>
+                                </div>
+                                
+                                {project.description && (
+                                  <p className="text-sm text-muted-foreground ml-8 line-clamp-2">
+                                    {project.description}
+                                  </p>
                                 )}
-                                style={{ width: `${project.progress_percentage || 0}%` }}
-                              />
+                                
+                                {/* Quick Stats Row */}
+                                <div className="flex items-center gap-4 mt-2 ml-8 text-xs text-muted-foreground">
+                                  {project.start_date && (
+                                    <span className="flex items-center gap-1">
+                                      <CalendarDays className="w-3 h-3" />
+                                      Started: {format(new Date(project.start_date), "MMM d, yyyy")}
+                                    </span>
+                                  )}
+                                  {project.target_end_date && (
+                                    <span className={cn(
+                                      "flex items-center gap-1",
+                                      new Date(project.target_end_date) < new Date() && project.status !== "completed" && "text-destructive"
+                                    )}>
+                                      <Target className="w-3 h-3" />
+                                      Due: {format(new Date(project.target_end_date), "MMM d, yyyy")}
+                                    </span>
+                                  )}
+                                  {projectMilestones.length > 0 && (
+                                    <span className="flex items-center gap-1">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      {completedMilestones}/{projectMilestones.length} milestones
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 text-center">
-                              {project.progress_percentage || 0}% complete
-                            </p>
+                            
+                            {/* Progress Bar */}
+                            <div className="mt-3 ml-8">
+                              <div className="flex items-center gap-3">
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  className="h-7 w-7 shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateProjectProgress(project.id, Math.max(0, (project.progress_percentage || 0) - 10));
+                                  }}
+                                  disabled={project.progress_percentage === 0}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <div className="flex-1">
+                                  <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className={cn(
+                                        "h-full transition-all duration-300",
+                                        project.progress_percentage === 100 ? "bg-green-500" : "bg-primary"
+                                      )}
+                                      style={{ width: `${project.progress_percentage || 0}%` }}
+                                    />
+                                  </div>
+                                </div>
+                                <span className="text-sm font-medium w-12 text-right">
+                                  {project.progress_percentage || 0}%
+                                </span>
+                                <Button 
+                                  variant="outline" 
+                                  size="icon"
+                                  className="h-7 w-7 shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateProjectProgress(project.id, Math.min(100, (project.progress_percentage || 0) + 10));
+                                  }}
+                                  disabled={project.progress_percentage === 100}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
-                          <Button 
-                            variant="outline" 
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => updateProjectProgress(project.id, Math.min(100, (project.progress_percentage || 0) + 10))}
-                            disabled={project.progress_percentage === 100}
-                          >
-                            <Plus className="w-4 h-4" />
-                          </Button>
+                          
+                          {/* Expanded Content - Milestones */}
+                          {isExpanded && (
+                            <div className="border-t bg-muted/30 p-4">
+                              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                                <Target className="w-4 h-4" />
+                                Milestones
+                              </h4>
+                              {projectMilestones.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No milestones defined for this project</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {projectMilestones.map((milestone) => (
+                                    <div 
+                                      key={milestone.id}
+                                      className={cn(
+                                        "flex items-start gap-3 p-3 rounded-lg border bg-background",
+                                        milestone.status === "completed" && "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
+                                      )}
+                                    >
+                                      <div className="mt-0.5">
+                                        {milestone.status === "completed" ? (
+                                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                        ) : milestone.status === "in_progress" ? (
+                                          <Clock className="w-4 h-4 text-primary" />
+                                        ) : (
+                                          <Circle className="w-4 h-4 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className={cn(
+                                            "font-medium text-sm",
+                                            milestone.status === "completed" && "line-through text-muted-foreground"
+                                          )}>
+                                            {milestone.name}
+                                          </span>
+                                          <Badge 
+                                            variant="outline" 
+                                            className={cn(
+                                              "text-[10px] px-1.5",
+                                              milestone.status === "completed" && "bg-green-100 text-green-700 border-green-200",
+                                              milestone.status === "in_progress" && "bg-blue-100 text-blue-700 border-blue-200"
+                                            )}
+                                          >
+                                            {milestone.status.replace("_", " ")}
+                                          </Badge>
+                                        </div>
+                                        {milestone.description && (
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            {milestone.description}
+                                          </p>
+                                        )}
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                          {milestone.due_date && (
+                                            <span className={cn(
+                                              "flex items-center gap-1",
+                                              new Date(milestone.due_date) < new Date() && milestone.status !== "completed" && "text-destructive"
+                                            )}>
+                                              <Calendar className="w-3 h-3" />
+                                              Due: {format(new Date(milestone.due_date), "MMM d")}
+                                            </span>
+                                          )}
+                                          {milestone.completed_at && (
+                                            <span className="flex items-center gap-1 text-green-600">
+                                              <CheckCircle2 className="w-3 h-3" />
+                                              Completed: {format(new Date(milestone.completed_at), "MMM d")}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              {/* Project Meta Info */}
+                              <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
+                                <span>Created: {format(new Date(project.created_at), "MMM d, yyyy")}</span>
+                                {project.updated_at !== project.created_at && (
+                                  <span className="ml-4">Last updated: {format(new Date(project.updated_at), "MMM d, yyyy")}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </ScrollArea>
