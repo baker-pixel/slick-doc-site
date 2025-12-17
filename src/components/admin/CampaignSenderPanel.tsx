@@ -69,7 +69,19 @@ interface ClientAccount {
   email: string;
   first_name: string | null;
   last_name: string | null;
+  industry: string | null;
 }
+
+// Auto-populated variable values
+const AUTO_FILL_VARIABLES: Record<string, string> = {
+  schedulingLink: "https://calendly.com/orangedoormarketing/discovery",
+  unsubscribeLink: "{{unsubscribeLink}}", // Will be replaced by tracking system
+  dashboardLink: "https://orangedoormarketing.com/portal",
+  websiteUrl: "https://orangedoormarketing.com",
+};
+
+// Variables that come from recipient data (not editable globally)
+const RECIPIENT_VARIABLES = ["firstName", "lastName", "businessName", "email"];
 
 const RECIPIENT_SOURCES = [
   { value: "manual", label: "Enter manually" },
@@ -114,7 +126,7 @@ export function CampaignSenderPanel() {
   const fetchClients = async () => {
     const { data, error } = await supabase
       .from("client_accounts")
-      .select("id, business_name, email, first_name, last_name")
+      .select("id, business_name, email, first_name, last_name, industry")
       .order("business_name");
 
     if (!error && data) {
@@ -248,17 +260,40 @@ export function CampaignSenderPanel() {
     const template = templates.find(t => t.id === templateId);
     setSelectedTemplate(template || null);
     
-    // Initialize variable values
+    // Initialize variable values - auto-fill known variables
     if (template) {
       const initialValues: Record<string, string> = {};
       template.variables.forEach(v => {
-        if (!["firstName", "lastName", "businessName", "email"].includes(v)) {
+        // Skip recipient-specific variables (populated per-recipient)
+        if (RECIPIENT_VARIABLES.includes(v)) return;
+        
+        // Auto-fill known variables
+        if (AUTO_FILL_VARIABLES[v]) {
+          initialValues[v] = AUTO_FILL_VARIABLES[v];
+        } else if (selectedClient) {
+          // Try to populate from selected client
+          if (v === "industry" && selectedClient.industry) {
+            initialValues[v] = selectedClient.industry;
+          } else {
+            initialValues[v] = "";
+          }
+        } else {
           initialValues[v] = "";
         }
       });
       setVariableValues(initialValues);
     }
   };
+
+  // Update variables when client changes
+  useEffect(() => {
+    if (selectedTemplate && selectedClient) {
+      setVariableValues(prev => ({
+        ...prev,
+        ...(selectedClient.industry ? { industry: selectedClient.industry } : {}),
+      }));
+    }
+  }, [selectedClient, selectedTemplate]);
 
   const addManualRecipient = () => {
     setManualRecipients([...manualRecipients, { email: "", firstName: "" }]);
