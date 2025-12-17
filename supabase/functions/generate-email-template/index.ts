@@ -49,6 +49,49 @@ const TEMPLATE_TYPES: Record<string, { description: string; defaultPurpose: stri
   },
 };
 
+// Default descriptions for common variables
+function getDefaultVariableDescription(varName: string): string {
+  const descriptions: Record<string, string> = {
+    firstName: "Recipient's first name",
+    lastName: "Recipient's last name",
+    businessName: "Recipient's business/company name",
+    email: "Recipient's email address",
+    websiteUrl: "Recipient's website URL",
+    schedulingLink: "Link to schedule a call or meeting",
+    reportLink: "Link to view a marketing report",
+    unsubscribeLink: "Link to unsubscribe from emails",
+    dashboardLink: "Link to client dashboard",
+    phoneNumber: "Recipient's phone number",
+    industry: "Recipient's industry",
+    serviceTier: "Client's service tier/package",
+    projectName: "Name of current project",
+    meetingDate: "Date of scheduled meeting",
+    meetingTime: "Time of scheduled meeting",
+  };
+  return descriptions[varName] || `Value for ${varName}`;
+}
+
+function getDefaultVariableExample(varName: string): string {
+  const examples: Record<string, string> = {
+    firstName: "John",
+    lastName: "Smith",
+    businessName: "Acme Corp",
+    email: "john@acme.com",
+    websiteUrl: "https://acme.com",
+    schedulingLink: "https://calendly.com/orangedoor/30min",
+    reportLink: "https://orangedoormarketing.com/report/abc123",
+    unsubscribeLink: "https://orangedoormarketing.com/unsubscribe?token=xyz",
+    dashboardLink: "https://orangedoormarketing.com/portal",
+    phoneNumber: "(555) 123-4567",
+    industry: "Home Services",
+    serviceTier: "Growth",
+    projectName: "Q1 SEO Campaign",
+    meetingDate: "January 15, 2025",
+    meetingTime: "2:00 PM EST",
+  };
+  return examples[varName] || `Example ${varName}`;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -86,12 +129,28 @@ Return a JSON object with exactly these fields:
 HTML REQUIREMENTS:
 - Use inline styles (no external CSS)
 - Maximum width: 600px, centered
-- Use {{firstName}}, {{lastName}}, {{businessName}}, {{email}} as personalization variables
+- Use personalization variables in {{variableName}} format. Common variables include:
+  - {{firstName}}, {{lastName}} - recipient's name
+  - {{businessName}} - recipient's business name
+  - {{email}} - recipient's email
+  - {{websiteUrl}} - recipient's website
+  - {{schedulingLink}} - link to book a call
+  - {{reportLink}} - link to view a report
+  - {{unsubscribeLink}} - unsubscribe link (always include at bottom)
+  - Custom variables based on template purpose
 - Include a clear call-to-action button with orange (#F97316) background
 - Include proper spacing and typography
 - Make links use the full URL format (https://orangedoormarketing.com/...)
 - Keep emails scannable with short paragraphs
-- Mobile-friendly design`;
+- Mobile-friendly design
+- ALWAYS include {{unsubscribeLink}} at the bottom
+
+VARIABLE DOCUMENTATION:
+In your response, include a "variable_docs" field that documents each variable used, with:
+- name: the variable name without braces
+- description: what this variable represents
+- example: an example value
+- required: whether this is required for sending`;
 
     const userPrompt = `Create a ${templateType} email template with the following requirements:
 
@@ -100,6 +159,8 @@ Industry focus: ${actualIndustry}
 Tone: ${actualTone}
 ${clientName ? `Example client name: ${clientName}` : ""}
 ${customInstructions ? `Additional instructions: ${customInstructions}` : ""}
+
+IMPORTANT: Generate appropriate personalization variables based on the template type and purpose. Document all variables used.
 
 Template type description: ${templateInfo.description}
 
@@ -176,19 +237,32 @@ Remember to return valid JSON with name, slug, subject, html_content, descriptio
       }
     }
 
-    // Extract variables from the HTML content
+    // Extract variables from the HTML content and subject
     const variableRegex = /\{\{(\w+)\}\}/g;
     const variables = new Set<string>();
     let match;
-    while ((match = variableRegex.exec(templateData.html_content)) !== null) {
+    const htmlContent = templateData.html_content || "";
+    const subject = templateData.subject || "";
+    
+    while ((match = variableRegex.exec(htmlContent)) !== null) {
       variables.add(match[1]);
     }
-    while ((match = variableRegex.exec(templateData.subject)) !== null) {
+    while ((match = variableRegex.exec(subject)) !== null) {
       variables.add(match[1]);
     }
+    
+    // Build variable documentation if not provided by AI
+    const variableDocs = templateData.variable_docs || Array.from(variables).map((v: string) => ({
+      name: v,
+      description: getDefaultVariableDescription(v),
+      example: getDefaultVariableExample(v),
+      required: ["firstName", "email"].includes(v)
+    }));
+    
     templateData.variables = Array.from(variables);
+    templateData.variable_docs = variableDocs;
 
-    console.log("Generated template:", templateData.name);
+    console.log("Generated template:", templateData.name, "with variables:", templateData.variables);
 
     return new Response(JSON.stringify({ success: true, template: templateData }), {
       status: 200,

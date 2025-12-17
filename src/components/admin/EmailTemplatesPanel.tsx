@@ -11,9 +11,30 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter, Sparkles, Loader2, Wand2 } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter, Sparkles, Loader2, Wand2, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
+
+// Variable descriptions for tooltips
+const VARIABLE_DESCRIPTIONS: Record<string, string> = {
+  firstName: "Recipient's first name",
+  lastName: "Recipient's last name",
+  businessName: "Recipient's business/company name",
+  email: "Recipient's email address",
+  websiteUrl: "Recipient's website URL",
+  schedulingLink: "Link to schedule a call or meeting",
+  reportLink: "Link to view a marketing report",
+  unsubscribeLink: "Link to unsubscribe from emails",
+  dashboardLink: "Link to client dashboard",
+  phoneNumber: "Recipient's phone number",
+  industry: "Recipient's industry",
+  serviceTier: "Client's service tier/package",
+  projectName: "Name of current project",
+  meetingDate: "Date of scheduled meeting",
+  meetingTime: "Time of scheduled meeting",
+  resumeToken: "Token to resume gap analysis",
+};
 
 interface EmailTemplate {
   id: string;
@@ -431,18 +452,34 @@ export function EmailTemplatesPanel() {
                 {template.description && (
                   <p className="text-sm text-muted-foreground line-clamp-2">{template.description}</p>
                 )}
-                <div className="flex flex-wrap gap-1">
-                  {template.variables.slice(0, 3).map(v => (
-                    <Badge key={v} variant="outline" className="text-xs">
-                      {`{{${v}}}`}
-                    </Badge>
-                  ))}
-                  {template.variables.length > 3 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{template.variables.length - 3} more
-                    </Badge>
-                  )}
-                </div>
+                <TooltipProvider>
+                  <div className="flex flex-wrap gap-1">
+                    {template.variables.slice(0, 4).map(v => (
+                      <Tooltip key={v}>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="text-xs cursor-help">
+                            {`{{${v}}}`}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">{VARIABLE_DESCRIPTIONS[v] || `Custom variable: ${v}`}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                    {template.variables.length > 4 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="text-xs cursor-help">
+                            +{template.variables.length - 4} more
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">{template.variables.slice(4).map(v => `{{${v}}}`).join(", ")}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                </TooltipProvider>
 
                 <div className="flex items-center justify-between pt-2 border-t">
                   <span className="text-xs text-muted-foreground">
