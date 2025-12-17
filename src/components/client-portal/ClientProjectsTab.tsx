@@ -1,13 +1,18 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2, Calendar, Target, CheckCircle, Clock, ChevronDown, Circle, LayoutDashboard, Rocket, Flag } from "lucide-react";
-import { format } from "date-fns";
+import { 
+  Loader2, Calendar, Target, CheckCircle, Clock, ChevronDown, Circle, 
+  LayoutDashboard, Rocket, Flag, MessageCircle, Send, RefreshCw, 
+  HelpCircle, MessageSquare, Bell
+} from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PageHeader, StatCard, ModernCard, EmptyState, StatusBadge } from "./PortalUI";
+import { toast } from "sonner";
 
 interface Project {
   id: string;
@@ -30,6 +35,27 @@ interface Milestone {
   sort_order: number;
 }
 
+interface Comment {
+  id: string;
+  project_id: string;
+  milestone_id: string | null;
+  sender_type: string;
+  sender_name: string | null;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+interface UpdateRequest {
+  id: string;
+  project_id: string;
+  message: string | null;
+  status: string;
+  response: string | null;
+  responded_at: string | null;
+  created_at: string;
+}
+
 interface ClientProjectsTabProps {
   clientAccountId: string;
 }
@@ -44,8 +70,18 @@ const statusConfig: Record<string, { label: string; variant: "default" | "succes
 export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTabProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({});
+  const [comments, setComments] = useState<Record<string, Comment[]>>({});
+  const [updateRequests, setUpdateRequests] = useState<Record<string, UpdateRequest[]>>({});
   const [loading, setLoading] = useState(true);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [commentingMilestone, setCommentingMilestone] = useState<string | null>(null);
+  const [commentingProject, setCommentingProject] = useState<string | null>(null);
+  const [newComment, setNewComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [requestUpdateOpen, setRequestUpdateOpen] = useState(false);
+  const [selectedProjectForUpdate, setSelectedProjectForUpdate] = useState<Project | null>(null);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [showComments, setShowComments] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -60,9 +96,15 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_milestones' }, () => fetchProjects())
       .subscribe();
 
+    const commentsChannel = supabase
+      .channel('project-comments-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_comments' }, () => fetchComments())
+      .subscribe();
+
     return () => {
       supabase.removeChannel(projectsChannel);
       supabase.removeChannel(milestonesChannel);
+      supabase.removeChannel(commentsChannel);
     };
   }, [clientAccountId]);
 
@@ -82,6 +124,8 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
 
       if (projectsData && projectsData.length > 0) {
         const projectIds = projectsData.map((p) => p.id);
+        
+        // Fetch milestones
         const { data: milestonesData } = await supabase
           .from("project_milestones")
           .select("*")
@@ -96,11 +140,112 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
           }, {} as Record<string, Milestone[]>);
           setMilestones(grouped);
         }
+
+        // Fetch update requests
+        const { data: requestsData } = await supabase
+          .from("project_update_requests")
+          .select("*")
+          .in("project_id", projectIds)
+          .order("created_at", { ascending: false });
+
+        if (requestsData) {
+          const grouped = requestsData.reduce((acc, r) => {
+            if (!acc[r.project_id]) acc[r.project_id] = [];
+            acc[r.project_id].push(r);
+            return acc;
+          }, {} as Record<string, UpdateRequest[]>);
+          setUpdateRequests(grouped);
+        }
+
+        await fetchComments(projectIds);
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchComments = async (projectIds?: string[]) => {
+    try {
+      const ids = projectIds || projects.map(p => p.id);
+      if (ids.length === 0) return;
+
+      const { data: commentsData } = await supabase
+        .from("project_comments")
+        .select("*")
+        .in("project_id", ids)
+        .order("created_at", { ascending: true });
+
+      if (commentsData) {
+        const grouped = commentsData.reduce((acc, c) => {
+          const key = c.milestone_id || c.project_id;
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(c);
+          return acc;
+        }, {} as Record<string, Comment[]>);
+        setComments(grouped);
+      }
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+    }
+  };
+
+  const handleSubmitComment = async (projectId: string, milestoneId?: string) => {
+    if (!newComment.trim()) return;
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from("project_comments")
+        .insert({
+          project_id: projectId,
+          milestone_id: milestoneId || null,
+          client_account_id: clientAccountId,
+          sender_type: "client",
+          message: newComment.trim(),
+        });
+
+      if (error) throw error;
+
+      toast.success("Question submitted! Your team will respond soon.");
+      setNewComment("");
+      setCommentingMilestone(null);
+      setCommentingProject(null);
+      await fetchComments();
+    } catch (error) {
+      console.error("Error submitting comment:", error);
+      toast.error("Failed to submit question");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRequestUpdate = async () => {
+    if (!selectedProjectForUpdate) return;
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from("project_update_requests")
+        .insert({
+          project_id: selectedProjectForUpdate.id,
+          client_account_id: clientAccountId,
+          message: updateMessage.trim() || null,
+        });
+
+      if (error) throw error;
+
+      toast.success("Update request sent! Your team will provide an update soon.");
+      setUpdateMessage("");
+      setRequestUpdateOpen(false);
+      setSelectedProjectForUpdate(null);
+      await fetchProjects();
+    } catch (error) {
+      console.error("Error requesting update:", error);
+      toast.error("Failed to request update");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -117,6 +262,19 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
       case "in_progress": return <Clock className="h-5 w-5 text-blue-500" />;
       default: return <Circle className="h-5 w-5 text-muted-foreground" />;
     }
+  };
+
+  const getMilestoneComments = (milestoneId: string) => {
+    return comments[milestoneId] || [];
+  };
+
+  const getProjectComments = (projectId: string) => {
+    return comments[projectId] || [];
+  };
+
+  const getLatestUpdateRequest = (projectId: string) => {
+    const requests = updateRequests[projectId] || [];
+    return requests[0];
   };
 
   if (loading) {
@@ -145,7 +303,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
     <div className="space-y-8">
       <PageHeader 
         title="Your Projects" 
-        description="Track progress on all your digital marketing initiatives"
+        description="Track progress, ask questions, and request updates on your projects"
         icon={LayoutDashboard}
         badge={`${projects.length} Projects`}
       />
@@ -157,6 +315,40 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
         <StatCard label="Completed" value={completedCount} icon={CheckCircle} index={2} />
       </div>
 
+      {/* Request Update Dialog */}
+      <Dialog open={requestUpdateOpen} onOpenChange={setRequestUpdateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-primary" />
+              Request Project Update
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {selectedProjectForUpdate && (
+              <p className="text-sm text-muted-foreground">
+                Request an update on <span className="font-medium text-foreground">{selectedProjectForUpdate.name}</span>
+              </p>
+            )}
+            <Textarea
+              placeholder="Any specific questions or areas you'd like an update on? (optional)"
+              value={updateMessage}
+              onChange={(e) => setUpdateMessage(e.target.value)}
+              rows={4}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRequestUpdateOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleRequestUpdate} disabled={submitting}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                Send Request
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Projects List */}
       <div className="space-y-4">
         {projects.map((project, index) => {
@@ -164,6 +356,8 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
           const completedMilestones = projectMilestones.filter(m => m.status === 'completed').length;
           const isExpanded = expandedProject === project.id;
           const config = statusConfig[project.status] || statusConfig.pending;
+          const latestUpdate = getLatestUpdateRequest(project.id);
+          const projectCommentsList = getProjectComments(project.id);
 
           return (
             <motion.div
@@ -173,10 +367,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
               transition={{ duration: 0.4, delay: index * 0.1 }}
             >
               <ModernCard className={cn("transition-all duration-300", isExpanded && "ring-2 ring-primary/20")} padding="none">
-                <button 
-                  className="w-full p-6 text-left"
-                  onClick={() => setExpandedProject(isExpanded ? null : project.id)}
-                >
+                <div className="p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 flex-wrap mb-2">
@@ -204,7 +395,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                       </div>
 
                       {/* Meta Info */}
-                      <div className="flex flex-wrap gap-4 text-sm">
+                      <div className="flex flex-wrap gap-4 text-sm mb-4">
                         {project.start_date && (
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <Calendar className="h-4 w-4" />
@@ -224,16 +415,154 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                           </div>
                         )}
                       </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-wrap gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedProjectForUpdate(project);
+                            setRequestUpdateOpen(true);
+                          }}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Request Update
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCommentingProject(commentingProject === project.id ? null : project.id);
+                          }}
+                        >
+                          <HelpCircle className="h-4 w-4 mr-2" />
+                          Ask Question
+                        </Button>
+                        {projectCommentsList.length > 0 && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowComments(showComments === project.id ? null : project.id);
+                            }}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            {projectCommentsList.length} Comments
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Latest Update Request Status */}
+                      {latestUpdate && (
+                        <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border/50">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Bell className="h-4 w-4 text-primary" />
+                            <span className="font-medium">Latest Update Request</span>
+                            <StatusBadge 
+                              status={latestUpdate.status === 'responded' ? 'Responded' : latestUpdate.status === 'acknowledged' ? 'Acknowledged' : 'Pending'} 
+                              variant={latestUpdate.status === 'responded' ? 'success' : latestUpdate.status === 'acknowledged' ? 'info' : 'default'} 
+                            />
+                          </div>
+                          {latestUpdate.response && (
+                            <p className="mt-2 text-sm text-muted-foreground">{latestUpdate.response}</p>
+                          )}
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Requested {formatDistanceToNow(new Date(latestUpdate.created_at), { addSuffix: true })}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <motion.div
-                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
+                    <button
+                      onClick={() => setExpandedProject(isExpanded ? null : project.id)}
                       className="p-2 rounded-lg hover:bg-muted/50"
                     >
-                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                    </motion.div>
+                      <motion.div
+                        animate={{ rotate: isExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      </motion.div>
+                    </button>
                   </div>
-                </button>
+
+                  {/* Project Question Form */}
+                  <AnimatePresence>
+                    {commentingProject === project.id && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="mt-4 pt-4 border-t border-border/50"
+                      >
+                        <div className="space-y-3">
+                          <Textarea
+                            placeholder="Ask a question about this project..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            rows={3}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => setCommentingProject(null)}>
+                              Cancel
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleSubmitComment(project.id)}
+                              disabled={!newComment.trim() || submitting}
+                            >
+                              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                              Send
+                            </Button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Project Comments */}
+                  <AnimatePresence>
+                    {showComments === project.id && projectCommentsList.length > 0 && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="mt-4 pt-4 border-t border-border/50"
+                      >
+                        <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4 text-primary" />
+                          Project Discussion
+                        </h4>
+                        <div className="space-y-3 max-h-64 overflow-y-auto">
+                          {projectCommentsList.map((comment) => (
+                            <div 
+                              key={comment.id} 
+                              className={cn(
+                                "p-3 rounded-lg text-sm",
+                                comment.sender_type === 'client' 
+                                  ? "bg-primary/10 border border-primary/20 ml-8" 
+                                  : "bg-muted/50 border border-border/50 mr-8"
+                              )}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium">
+                                  {comment.sender_type === 'client' ? 'You' : comment.sender_name || 'Team'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                                </span>
+                              </div>
+                              <p className="text-muted-foreground">{comment.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
                 {/* Milestones */}
                 <AnimatePresence>
@@ -253,40 +582,130 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                           <div className="relative">
                             <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-border/50" />
                             <div className="space-y-4">
-                              {projectMilestones.map((milestone, idx) => (
-                                <motion.div 
-                                  key={milestone.id}
-                                  initial={{ opacity: 0, x: -10 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{ duration: 0.3, delay: idx * 0.1 }}
-                                  className="flex gap-4 relative"
-                                >
-                                  <div className="relative z-10 bg-background">{getMilestoneIcon(milestone.status)}</div>
-                                  <div className={cn(
-                                    "flex-1 p-4 rounded-xl border transition-all",
-                                    milestone.status === 'completed' && "bg-emerald-500/5 border-emerald-500/20",
-                                    milestone.status === 'in_progress' && "bg-blue-500/5 border-blue-500/20",
-                                    milestone.status === 'pending' && "bg-muted/30 border-border/50"
-                                  )}>
-                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                      <h5 className="font-medium text-foreground">{milestone.name}</h5>
-                                      <StatusBadge 
-                                        status={statusConfig[milestone.status]?.label || milestone.status} 
-                                        variant={statusConfig[milestone.status]?.variant || "default"} 
-                                      />
-                                    </div>
-                                    {milestone.description && (
-                                      <p className="text-sm text-muted-foreground mb-2">{milestone.description}</p>
-                                    )}
-                                    <div className="flex gap-4 text-xs text-muted-foreground">
-                                      {milestone.due_date && <span>Due: {format(new Date(milestone.due_date), "MMM d, yyyy")}</span>}
-                                      {milestone.completed_at && (
-                                        <span className="text-emerald-600">Completed: {format(new Date(milestone.completed_at), "MMM d, yyyy")}</span>
+                              {projectMilestones.map((milestone, idx) => {
+                                const milestoneComments = getMilestoneComments(milestone.id);
+                                const isCommenting = commentingMilestone === milestone.id;
+
+                                return (
+                                  <motion.div 
+                                    key={milestone.id}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ duration: 0.3, delay: idx * 0.1 }}
+                                    className="flex gap-4 relative"
+                                  >
+                                    <div className="relative z-10 bg-background">{getMilestoneIcon(milestone.status)}</div>
+                                    <div className={cn(
+                                      "flex-1 p-4 rounded-xl border transition-all",
+                                      milestone.status === 'completed' && "bg-emerald-500/5 border-emerald-500/20",
+                                      milestone.status === 'in_progress' && "bg-blue-500/5 border-blue-500/20",
+                                      milestone.status === 'pending' && "bg-muted/30 border-border/50"
+                                    )}>
+                                      <div className="flex items-start justify-between gap-2 mb-2">
+                                        <h5 className="font-medium text-foreground">{milestone.name}</h5>
+                                        <StatusBadge 
+                                          status={statusConfig[milestone.status]?.label || milestone.status} 
+                                          variant={statusConfig[milestone.status]?.variant || "default"} 
+                                        />
+                                      </div>
+                                      {milestone.description && (
+                                        <p className="text-sm text-muted-foreground mb-2">{milestone.description}</p>
                                       )}
+                                      <div className="flex gap-4 text-xs text-muted-foreground mb-3">
+                                        {milestone.due_date && <span>Due: {format(new Date(milestone.due_date), "MMM d, yyyy")}</span>}
+                                        {milestone.completed_at && (
+                                          <span className="text-emerald-600">Completed: {format(new Date(milestone.completed_at), "MMM d, yyyy")}</span>
+                                        )}
+                                      </div>
+
+                                      {/* Milestone Actions */}
+                                      <div className="flex items-center gap-2">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          className="h-8 text-xs"
+                                          onClick={() => setCommentingMilestone(isCommenting ? null : milestone.id)}
+                                        >
+                                          <MessageCircle className="h-3 w-3 mr-1" />
+                                          Ask Question
+                                        </Button>
+                                        {milestoneComments.length > 0 && (
+                                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <MessageSquare className="h-3 w-3" />
+                                            {milestoneComments.length}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Milestone Comments */}
+                                      {milestoneComments.length > 0 && (
+                                        <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
+                                          {milestoneComments.map((comment) => (
+                                            <div 
+                                              key={comment.id} 
+                                              className={cn(
+                                                "p-2 rounded-lg text-xs",
+                                                comment.sender_type === 'client' 
+                                                  ? "bg-primary/10 border border-primary/20" 
+                                                  : "bg-background border border-border/50"
+                                              )}
+                                            >
+                                              <div className="flex items-center justify-between mb-1">
+                                                <span className="font-medium">
+                                                  {comment.sender_type === 'client' ? 'You' : comment.sender_name || 'Team'}
+                                                </span>
+                                                <span className="text-muted-foreground">
+                                                  {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                                                </span>
+                                              </div>
+                                              <p className="text-muted-foreground">{comment.message}</p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Comment Form */}
+                                      <AnimatePresence>
+                                        {isCommenting && (
+                                          <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            className="mt-3 space-y-2"
+                                          >
+                                            <Textarea
+                                              placeholder="Ask a question about this milestone..."
+                                              value={newComment}
+                                              onChange={(e) => setNewComment(e.target.value)}
+                                              rows={2}
+                                              className="text-sm"
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                              <Button 
+                                                variant="ghost" 
+                                                size="sm"
+                                                className="h-7 text-xs"
+                                                onClick={() => setCommentingMilestone(null)}
+                                              >
+                                                Cancel
+                                              </Button>
+                                              <Button 
+                                                size="sm"
+                                                className="h-7 text-xs"
+                                                onClick={() => handleSubmitComment(project.id, milestone.id)}
+                                                disabled={!newComment.trim() || submitting}
+                                              >
+                                                {submitting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                                                Send
+                                              </Button>
+                                            </div>
+                                          </motion.div>
+                                        )}
+                                      </AnimatePresence>
                                     </div>
-                                  </div>
-                                </motion.div>
-                              ))}
+                                  </motion.div>
+                                );
+                              })}
                             </div>
                           </div>
                         </div>
