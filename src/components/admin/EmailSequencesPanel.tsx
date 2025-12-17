@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Json } from "@/integrations/supabase/types";
-import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3, Send, Loader2 } from "lucide-react";
+import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3, Send, Loader2, Play } from "lucide-react";
 import { format } from "date-fns";
 import { EmailSequenceAnalytics } from "./EmailSequenceAnalytics";
 
@@ -97,6 +97,14 @@ export function EmailSequencesPanel() {
   const [previewSubject, setPreviewSubject] = useState("");
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  
+  // Trigger sequence test modal
+  const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
+  const [triggerSequence, setTriggerSequence] = useState<EmailSequence | null>(null);
+  const [triggerEmail, setTriggerEmail] = useState("");
+  const [triggerName, setTriggerName] = useState("");
+  const [triggerBusiness, setTriggerBusiness] = useState("");
+  const [isTriggering, setIsTriggering] = useState(false);
 
   const allTemplateOptions = [
     ...TEMPLATE_OPTIONS,
@@ -318,6 +326,42 @@ export function EmailSequencesPanel() {
     }
   };
 
+  const openTriggerModal = (sequence: EmailSequence) => {
+    setTriggerSequence(sequence);
+    setTriggerEmail("");
+    setTriggerName("");
+    setTriggerBusiness("");
+    setIsTriggerModalOpen(true);
+  };
+
+  const triggerSequenceTest = async () => {
+    if (!triggerSequence || !triggerEmail) {
+      toast({ title: "Enter recipient email", variant: "destructive" });
+      return;
+    }
+    setIsTriggering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("queue-sequence-emails", {
+        body: {
+          triggerType: triggerSequence.trigger_type,
+          recipientEmail: triggerEmail,
+          recipientName: triggerName || "Test User",
+          businessName: triggerBusiness || "Test Business",
+        },
+      });
+      if (error) throw error;
+      toast({ 
+        title: "Sequence triggered!", 
+        description: `Queued ${data?.queued || 0} emails for ${triggerEmail}` 
+      });
+      setIsTriggerModalOpen(false);
+    } catch (error: any) {
+      toast({ title: "Error triggering sequence", description: error.message, variant: "destructive" });
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -412,6 +456,14 @@ export function EmailSequencesPanel() {
                     Updated {format(new Date(sequence.updated_at), "MMM d, yyyy")}
                   </span>
                   <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openTriggerModal(sequence)}
+                      title="Trigger Test"
+                    >
+                      <Play className="w-4 h-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -757,6 +809,63 @@ export function EmailSequencesPanel() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trigger Sequence Test Modal */}
+      <Dialog open={isTriggerModalOpen} onOpenChange={setIsTriggerModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Trigger Sequence Test</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              This will queue all emails in the <strong>{triggerSequence?.name}</strong> sequence for the recipient below.
+            </p>
+            <div className="space-y-2">
+              <Label>Recipient Email *</Label>
+              <Input
+                type="email"
+                placeholder="test@example.com"
+                value={triggerEmail}
+                onChange={e => setTriggerEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Recipient Name</Label>
+              <Input
+                placeholder="John Doe"
+                value={triggerName}
+                onChange={e => setTriggerName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Business Name</Label>
+              <Input
+                placeholder="Acme Inc"
+                value={triggerBusiness}
+                onChange={e => setTriggerBusiness(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTriggerModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={triggerSequenceTest} disabled={isTriggering || !triggerEmail}>
+              {isTriggering ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Triggering...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Trigger Sequence
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
