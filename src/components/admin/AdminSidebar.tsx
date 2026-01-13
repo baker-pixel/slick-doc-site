@@ -10,6 +10,7 @@ import {
   PlayCircle,
   FolderOpen,
   Home,
+  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -30,6 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 export type AdminSection = 
   | "home"
   | "client-workflow"
+  | "automation-center"
   | "pipeline" 
   | "alerts" 
   | "quick-actions" 
@@ -88,6 +90,7 @@ interface AdminSidebarProps {
 // Daily Work - The essentials
 const dailyWorkItems = [
   { id: "home" as const, label: "Home", icon: Home },
+  { id: "automation-center" as const, label: "Automation Center", icon: Zap },
   { id: "client-workflow" as const, label: "Client Workflow", icon: PlayCircle },
   { id: "clients" as const, label: "Clients", icon: Briefcase },
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
