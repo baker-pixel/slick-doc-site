@@ -11,6 +11,10 @@ import {
   FolderOpen,
   Home,
   Zap,
+  ClipboardCheck,
+  FileText,
+  Heart,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,6 +36,8 @@ export type AdminSection =
   | "home"
   | "client-workflow"
   | "automation-center"
+  | "sop-command-center"
+  | "daily-digest"
   | "pipeline" 
   | "alerts" 
   | "quick-actions" 
@@ -75,6 +81,8 @@ export type AdminSection =
   | "ad-generator"
   | "case-studies"
   | "client-health"
+  | "workload-balancer"
+  | "team-performance"
   | "website-personalization"
   | "quality-assurance"
   | "before-after"
@@ -90,7 +98,9 @@ interface AdminSidebarProps {
 // Daily Work - The essentials
 const dailyWorkItems = [
   { id: "home" as const, label: "Home", icon: Home },
+  { id: "daily-digest" as const, label: "Daily Digest", icon: FileText },
   { id: "automation-center" as const, label: "Automation Center", icon: Zap },
+  { id: "sop-command-center" as const, label: "SOP Command", icon: ClipboardCheck },
   { id: "client-workflow" as const, label: "Client Workflow", icon: PlayCircle },
   { id: "clients" as const, label: "Clients", icon: Briefcase },
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
@@ -123,6 +133,9 @@ const marketingItems = [
 // Config & Settings
 const configItems = [
   { id: "team-directory" as const, label: "Team" },
+  { id: "team-performance" as const, label: "Team Performance" },
+  { id: "workload-balancer" as const, label: "Workload" },
+  { id: "client-health" as const, label: "Client Health" },
   { id: "task-templates" as const, label: "Templates" },
   { id: "automation" as const, label: "Automation" },
   { id: "integrations" as const, label: "Integrations" },
