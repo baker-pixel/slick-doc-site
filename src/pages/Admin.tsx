@@ -27,6 +27,7 @@ import { ClientManagementPanel } from "@/components/admin/ClientManagementPanel"
 import { ClientOnboardingChecklist } from "@/components/admin/ClientOnboardingChecklist";
 import { SOPManagementPanel } from "@/components/admin/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/AutomationJobsPanel";
+import { AutomationControlCenter } from "@/components/admin/AutomationControlCenter";
 import { ContentReviewPanel } from "@/components/admin/ContentReviewPanel";
 import { ReportsReviewPanel } from "@/components/admin/ReportsReviewPanel";
 import { EmailSequencesPanel } from "@/components/admin/EmailSequencesPanel";
@@ -1028,6 +1029,8 @@ const Admin = () => {
             onAddClient={() => setActiveSection("clients")}
           />
         );
+      case "automation-center":
+        return <AutomationControlCenter adminPassword={storedPassword} />;
       case "client-workflow":
         return <ClientWorkflowPanel 
           adminPassword={storedPassword} 
@@ -1158,6 +1161,7 @@ const Admin = () => {
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
       home: "Dashboard",
+      "automation-center": "Automation Control Center",
       "client-workflow": "Client Workflow",
       pipeline: "Pipeline Dashboard",
       alerts: "Automation Alerts",
@@ -1219,7 +1223,8 @@ const Admin = () => {
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "onboarding", "integrations", "calendar",
     "quick-actions", "activity-feed", "review-workflow", "client-workflow",
-    "lead-scoring", "ad-generator", "sales-proposals", "automation"
+    "lead-scoring", "ad-generator", "sales-proposals", "automation",
+    "automation-center"
   ];
 
   const isGlobalSection = globalSections.includes(activeSection);
