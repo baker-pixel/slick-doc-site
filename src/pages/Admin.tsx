@@ -78,6 +78,10 @@ import { AdminClientSelector } from "@/components/admin/AdminClientSelector";
 import { SelectedClientHeader } from "@/components/admin/SelectedClientHeader";
 import { UnifiedClientView } from "@/components/admin/UnifiedClientView";
 import { AdminHomeDashboard } from "@/components/admin/AdminHomeDashboard";
+import { SOPCommandCenter } from "@/components/admin/SOPCommandCenter";
+import { DailyDigestGenerator } from "@/components/admin/DailyDigestGenerator";
+import { TeamPerformanceMetrics } from "@/components/admin/TeamPerformanceMetrics";
+import { WorkloadBalancer } from "@/components/admin/WorkloadBalancer";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1031,6 +1035,14 @@ const Admin = () => {
         );
       case "automation-center":
         return <AutomationControlCenter adminPassword={storedPassword} />;
+      case "sop-command-center":
+        return <SOPCommandCenter adminPassword={storedPassword} />;
+      case "daily-digest":
+        return <DailyDigestGenerator adminPassword={storedPassword} />;
+      case "team-performance":
+        return <TeamPerformanceMetrics adminPassword={storedPassword} />;
+      case "workload-balancer":
+        return <WorkloadBalancer adminPassword={storedPassword} />;
       case "client-workflow":
         return <ClientWorkflowPanel 
           adminPassword={storedPassword} 
@@ -1161,7 +1173,9 @@ const Admin = () => {
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
       home: "Dashboard",
+      "daily-digest": "Daily Digest",
       "automation-center": "Automation Control Center",
+      "sop-command-center": "SOP Command Center",
       "client-workflow": "Client Workflow",
       pipeline: "Pipeline Dashboard",
       alerts: "Automation Alerts",
@@ -1188,6 +1202,8 @@ const Admin = () => {
       "client-requests": "Client Requests",
       "brand-assets": "Brand Assets",
       "team-directory": "Team Directory",
+      "team-performance": "Team Performance",
+      "workload-balancer": "Workload Balancer",
       "deliverables": "Deliverables",
       "service-agreements": "Service Agreements",
       sops: "SOP Management",
@@ -1218,13 +1234,14 @@ const Admin = () => {
 
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
-    "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", 
+    "home", "daily-digest", "pipeline", "contacts", "gap-analysis", "pdf-leads", 
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
-    "clients", "team-directory", "onboarding", "integrations", "calendar",
+    "clients", "team-directory", "team-performance", "workload-balancer",
+    "onboarding", "integrations", "calendar",
     "quick-actions", "activity-feed", "review-workflow", "client-workflow",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
-    "automation-center"
+    "automation-center", "sop-command-center", "client-health"
   ];
 
   const isGlobalSection = globalSections.includes(activeSection);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,16 +108,34 @@ export function DailyDigestGenerator({ adminPassword }: DailyDigestGeneratorProp
   // For now, skip health scores as the table isn't in types yet
   const healthScores: any[] = [];
 
+  // Fetch past digests
+  const { data: pastDigests = [], refetch: refetchDigests } = useQuery({
+    queryKey: ["past-digests"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("daily_digests")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
   const saveDigest = async (content: string) => {
-    // Save to local storage for now until types are updated
-    const digests = JSON.parse(localStorage.getItem('daily_digests') || '[]');
-    digests.unshift({
-      id: crypto.randomUUID(),
-      generated_for: format(today, "yyyy-MM-dd"),
-      content: { text: content, generated_at: new Date().toISOString() },
-      created_at: new Date().toISOString()
-    });
-    localStorage.setItem('daily_digests', JSON.stringify(digests.slice(0, 10)));
+    const { error } = await supabase
+      .from("daily_digests")
+      .insert({
+        generated_for: format(today, "yyyy-MM-dd"),
+        content: { text: content, generated_at: new Date().toISOString() }
+      });
+    
+    if (error) {
+      toast.error("Failed to save digest");
+      return;
+    }
+    
+    refetchDigests();
     toast.success("Digest saved!");
   };
 
@@ -363,21 +381,14 @@ export function DailyDigestGenerator({ adminPassword }: DailyDigestGeneratorProp
           <CardDescription>Previously generated daily digests</CardDescription>
         </CardHeader>
         <CardContent>
-          <DigestHistory />
+          <DigestHistory digests={pastDigests} />
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function DigestHistory() {
-  const [digests, setDigests] = useState<any[]>([]);
-
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem('daily_digests') || '[]');
-    setDigests(saved);
-  }, []);
-
+function DigestHistory({ digests }: { digests: any[] }) {
   if (digests.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">No previous digests found.</p>

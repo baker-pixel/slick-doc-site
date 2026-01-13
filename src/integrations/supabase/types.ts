@@ -1418,11 +1418,13 @@ export type Database = {
           assigned_to: string | null
           automation_job_id: string | null
           automation_type: string
+          blocked_reason: string | null
           category: string
           client_account_id: string
           completed_at: string | null
           completed_by: string | null
           created_at: string
+          depends_on: string[] | null
           description: string | null
           due_date: string | null
           id: string
@@ -1431,6 +1433,8 @@ export type Database = {
           notes: string | null
           order_index: number | null
           output_data: Json | null
+          sla_deadline_hours: number | null
+          started_at: string | null
           status: string
           task_template_id: string | null
           updated_at: string
@@ -1439,11 +1443,13 @@ export type Database = {
           assigned_to?: string | null
           automation_job_id?: string | null
           automation_type?: string
+          blocked_reason?: string | null
           category?: string
           client_account_id: string
           completed_at?: string | null
           completed_by?: string | null
           created_at?: string
+          depends_on?: string[] | null
           description?: string | null
           due_date?: string | null
           id?: string
@@ -1452,6 +1458,8 @@ export type Database = {
           notes?: string | null
           order_index?: number | null
           output_data?: Json | null
+          sla_deadline_hours?: number | null
+          started_at?: string | null
           status?: string
           task_template_id?: string | null
           updated_at?: string
@@ -1460,11 +1468,13 @@ export type Database = {
           assigned_to?: string | null
           automation_job_id?: string | null
           automation_type?: string
+          blocked_reason?: string | null
           category?: string
           client_account_id?: string
           completed_at?: string | null
           completed_by?: string | null
           created_at?: string
+          depends_on?: string[] | null
           description?: string | null
           due_date?: string | null
           id?: string
@@ -1473,6 +1483,8 @@ export type Database = {
           notes?: string | null
           order_index?: number | null
           output_data?: Json | null
+          sla_deadline_hours?: number | null
+          started_at?: string | null
           status?: string
           task_template_id?: string | null
           updated_at?: string
@@ -1669,6 +1681,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      daily_digests: {
+        Row: {
+          content: Json
+          created_at: string
+          generated_for: string
+          id: string
+          sent_at: string | null
+          sent_to: string[] | null
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          generated_for: string
+          id?: string
+          sent_at?: string | null
+          sent_to?: string[] | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          generated_for?: string
+          id?: string
+          sent_at?: string | null
+          sent_to?: string[] | null
+        }
+        Relationships: []
       }
       deliverables: {
         Row: {
@@ -2864,6 +2903,50 @@ export type Database = {
           },
         ]
       }
+      qa_checkpoints: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          checkpoint_name: string
+          checkpoint_type: string
+          created_at: string
+          id: string
+          is_passed: boolean | null
+          notes: string | null
+          task_id: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checkpoint_name: string
+          checkpoint_type?: string
+          created_at?: string
+          id?: string
+          is_passed?: boolean | null
+          notes?: string | null
+          task_id: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          checkpoint_name?: string
+          checkpoint_type?: string
+          created_at?: string
+          id?: string
+          is_passed?: boolean | null
+          notes?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qa_checkpoints_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "client_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qa_reports: {
         Row: {
           accessibility_issues: Json | null
@@ -3286,6 +3369,39 @@ export type Database = {
           },
         ]
       }
+      sla_configurations: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          target_hours: number
+          task_category: string
+          tier: string
+          updated_at: string
+          warning_hours: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          target_hours?: number
+          task_category: string
+          tier: string
+          updated_at?: string
+          warning_hours?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          target_hours?: number
+          task_category?: string
+          tier?: string
+          updated_at?: string
+          warning_hours?: number
+        }
+        Relationships: []
+      }
       sop_documents: {
         Row: {
           action_items: Json | null
@@ -3333,6 +3449,7 @@ export type Database = {
           automation_type: string
           category: string
           created_at: string
+          depends_on_categories: string[] | null
           description: string | null
           estimated_minutes: number | null
           frequency: string | null
@@ -3341,6 +3458,7 @@ export type Database = {
           is_active: boolean | null
           name: string
           order_index: number | null
+          sla_hours: number | null
           tier: string
           updated_at: string
         }
@@ -3348,6 +3466,7 @@ export type Database = {
           automation_type?: string
           category?: string
           created_at?: string
+          depends_on_categories?: string[] | null
           description?: string | null
           estimated_minutes?: number | null
           frequency?: string | null
@@ -3356,6 +3475,7 @@ export type Database = {
           is_active?: boolean | null
           name: string
           order_index?: number | null
+          sla_hours?: number | null
           tier: string
           updated_at?: string
         }
@@ -3363,6 +3483,7 @@ export type Database = {
           automation_type?: string
           category?: string
           created_at?: string
+          depends_on_categories?: string[] | null
           description?: string | null
           estimated_minutes?: number | null
           frequency?: string | null
@@ -3371,6 +3492,7 @@ export type Database = {
           is_active?: boolean | null
           name?: string
           order_index?: number | null
+          sla_hours?: number | null
           tier?: string
           updated_at?: string
         }
