@@ -1433,10 +1433,13 @@ export type Database = {
           notes: string | null
           order_index: number | null
           output_data: Json | null
+          priority: string | null
           sla_deadline_hours: number | null
           started_at: string | null
           status: string
           task_template_id: string | null
+          time_spent_minutes: number | null
+          timer_started_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1458,10 +1461,13 @@ export type Database = {
           notes?: string | null
           order_index?: number | null
           output_data?: Json | null
+          priority?: string | null
           sla_deadline_hours?: number | null
           started_at?: string | null
           status?: string
           task_template_id?: string | null
+          time_spent_minutes?: number | null
+          timer_started_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1483,10 +1489,13 @@ export type Database = {
           notes?: string | null
           order_index?: number | null
           output_data?: Json | null
+          priority?: string | null
           sla_deadline_hours?: number | null
           started_at?: string | null
           status?: string
           task_template_id?: string | null
+          time_spent_minutes?: number | null
+          timer_started_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3443,6 +3452,47 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      task_notifications: {
+        Row: {
+          client_task_id: string | null
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          message: string | null
+          notification_type: string
+          read_at: string | null
+          title: string
+        }
+        Insert: {
+          client_task_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          notification_type: string
+          read_at?: string | null
+          title: string
+        }
+        Update: {
+          client_task_id?: string | null
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          notification_type?: string
+          read_at?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_notifications_client_task_id_fkey"
+            columns: ["client_task_id"]
+            isOneToOne: false
+            referencedRelation: "client_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_templates: {
         Row: {
