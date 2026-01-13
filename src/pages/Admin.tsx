@@ -82,6 +82,8 @@ import { SOPCommandCenter } from "@/components/admin/SOPCommandCenter";
 import { DailyDigestGenerator } from "@/components/admin/DailyDigestGenerator";
 import { TeamPerformanceMetrics } from "@/components/admin/TeamPerformanceMetrics";
 import { WorkloadBalancer } from "@/components/admin/WorkloadBalancer";
+import { SmartTaskQueue } from "@/components/admin/SmartTaskQueue";
+import { TaskNotificationsPanel } from "@/components/admin/TaskNotificationsPanel";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1054,6 +1056,10 @@ const Admin = () => {
             }
           }}
         />;
+      case "smart-task-queue":
+        return <SmartTaskQueue adminPassword={storedPassword} />;
+      case "task-notifications":
+        return <TaskNotificationsPanel />;
       case "pipeline":
         return <PipelineDashboard adminPassword={storedPassword} />;
       case "alerts":
@@ -1173,6 +1179,8 @@ const Admin = () => {
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
       home: "Dashboard",
+      "smart-task-queue": "Smart Task Queue",
+      "task-notifications": "Task Notifications",
       "daily-digest": "Daily Digest",
       "automation-center": "Automation Control Center",
       "sop-command-center": "SOP Command Center",
@@ -1234,7 +1242,8 @@ const Admin = () => {
 
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
-    "home", "daily-digest", "pipeline", "contacts", "gap-analysis", "pdf-leads", 
+    "home", "daily-digest", "smart-task-queue", "task-notifications",
+    "pipeline", "contacts", "gap-analysis", "pdf-leads", 
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",

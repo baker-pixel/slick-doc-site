@@ -38,6 +38,8 @@ export type AdminSection =
   | "automation-center"
   | "sop-command-center"
   | "daily-digest"
+  | "smart-task-queue"
+  | "task-notifications"
   | "pipeline" 
   | "alerts" 
   | "quick-actions" 
@@ -98,14 +100,14 @@ interface AdminSidebarProps {
 // Daily Work - The essentials
 const dailyWorkItems = [
   { id: "home" as const, label: "Home", icon: Home },
+  { id: "smart-task-queue" as const, label: "Task Queue", icon: Zap },
+  { id: "task-notifications" as const, label: "Notifications", icon: Bell },
   { id: "daily-digest" as const, label: "Daily Digest", icon: FileText },
-  { id: "automation-center" as const, label: "Automation Center", icon: Zap },
+  { id: "automation-center" as const, label: "Automation", icon: PlayCircle },
   { id: "sop-command-center" as const, label: "SOP Command", icon: ClipboardCheck },
-  { id: "client-workflow" as const, label: "Client Workflow", icon: PlayCircle },
-  { id: "clients" as const, label: "Clients", icon: Briefcase },
+  { id: "client-workflow" as const, label: "Client Workflow", icon: Briefcase },
+  { id: "clients" as const, label: "Clients", icon: Users },
   { id: "pipeline" as const, label: "Pipeline", icon: Activity },
-  { id: "contacts" as const, label: "Leads", icon: Users },
-  { id: "alerts" as const, label: "Alerts", icon: Bell },
 ];
 
 // Client Work - Tasks, deliverables, communications
@@ -213,7 +215,7 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
                     <item.icon className="h-4 w-4" />
                     <span>{item.label}</span>
                   </SidebarMenuButton>
-                  {item.id === "alerts" && unacknowledgedCount > 0 && (
+                  {item.id === "task-notifications" && unacknowledgedCount > 0 && (
                     <SidebarMenuBadge className="bg-red-500 text-white">
                       {unacknowledgedCount}
                     </SidebarMenuBadge>
