@@ -118,15 +118,52 @@ function normalizeJobType(raw: unknown): AutomationType {
   // Backward/legacy aliases sent by older UI/task templates
   // NOTE: DB check constraint currently allows `create_analytics_dashboard` (not `create_kpi_dashboard`).
   const aliasMap: Record<string, AutomationType> = {
+    // KPI Dashboard aliases
     build_comprehensive_kpi_dashboards: "create_analytics_dashboard",
     comprehensive_kpi_dashboards: "create_analytics_dashboard",
     kpi_dashboard: "create_analytics_dashboard",
     create_kpi_dashboard: "create_analytics_dashboard",
+    
+    // Intake form aliases
     send_client_intake_form: "send_intake_form",
+    intake_form: "send_intake_form",
+    
+    // Content generation aliases
     write_2_monthly_blog_posts: "content_generation",
     write_monthly_blog_posts: "content_generation",
     generate_blog_post: "content_generation",
     generate_blog_posts: "content_generation",
+    google_post: "content_generation",
+    social_media_post: "content_generation",
+    social_post: "content_generation",
+    blog_post: "content_generation",
+    
+    // Report aliases
+    monthly_report: "generate_monthly_report",
+    performance_report: "generate_monthly_report",
+    client_report: "generate_monthly_report",
+    
+    // SEO aliases
+    seo_audit: "run_seo_audit",
+    keyword_gap: "run_keyword_gap_analysis",
+    keyword_analysis: "run_keyword_gap_analysis",
+    
+    // Review system aliases
+    review_automation: "setup_review_automation",
+    review_link: "create_google_review_link",
+    review_qr: "create_review_qr_code",
+    review_scripts: "send_review_scripts",
+    
+    // Lead automation aliases
+    lead_automation: "setup_lead_automations",
+    retargeting: "setup_retargeting_audiences",
+    retention: "setup_retention_automations",
+    
+    // Other aliases
+    page_speed: "run_page_speed_test",
+    speed_test: "run_page_speed_test",
+    crm: "add_to_crm",
+    kickoff: "schedule_kickoff",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);
