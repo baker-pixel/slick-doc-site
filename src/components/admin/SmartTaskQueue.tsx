@@ -68,6 +68,7 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
   const [completeModal, setCompleteModal] = useState<{ open: boolean; task: TaskItem | null }>({ open: false, task: null });
   const [completionNote, setCompletionNote] = useState("");
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isRunningAuto, setIsRunningAuto] = useState(false);
 
   // Fetch all clients
   const { data: clients = [] } = useQuery({
@@ -229,6 +230,58 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
     }
   };
 
+  // Count pending auto tasks for selected client
+  const pendingAutoTasks = useMemo(() => {
+    return clientTasks.filter((t) => t.status !== "completed" && t.automation_type === "FULL");
+  }, [clientTasks]);
+
+  // Run all automatic tasks
+  const runAllAutoTasks = async () => {
+    if (pendingAutoTasks.length === 0) return;
+    setIsRunningAuto(true);
+    let completed = 0;
+
+    try {
+      for (const task of pendingAutoTasks) {
+        // Try to run the automation
+        try {
+          await supabase.functions.invoke("run-automation", {
+            body: {
+              clientId: selectedClientId,
+              jobType: task.category,
+              taskId: task.id,
+              taskName: task.name,
+            },
+          });
+        } catch (e) {
+          console.warn(`Automation for "${task.name}" skipped:`, e);
+        }
+
+        // Mark task complete regardless (it's a FULL auto task)
+        const { error } = await supabase
+          .from("client_tasks")
+          .update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            notes: "Auto-completed by automation runner",
+          })
+          .eq("id", task.id);
+
+        if (!error) completed++;
+      }
+
+      toast.success(`⚡ Ran ${completed} automated task${completed !== 1 ? "s" : ""}`, {
+        description: `${completed} of ${pendingAutoTasks.length} tasks completed automatically`,
+      });
+      refetch();
+    } catch (error) {
+      console.error("Error running auto tasks:", error);
+      toast.error("Failed to run automated tasks");
+    } finally {
+      setIsRunningAuto(false);
+    }
+  };
+
   const getCategoryColor = (cat: string) => {
     const colors: Record<string, string> = {
       onboarding: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
@@ -339,25 +392,43 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-          <Button
-            variant={focusMode ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFocusMode(true)}
-            className="h-8 gap-1.5 rounded-md"
-          >
-            <Focus className="h-3.5 w-3.5" />
-            Focus
-          </Button>
-          <Button
-            variant={!focusMode ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFocusMode(false)}
-            className="h-8 gap-1.5 rounded-md"
-          >
-            <List className="h-3.5 w-3.5" />
-            Checklist
-          </Button>
+        <div className="flex items-center gap-2">
+          {pendingAutoTasks.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={runAllAutoTasks}
+              disabled={isRunningAuto}
+              className="h-8 gap-1.5 rounded-md border-primary/30 text-primary hover:bg-primary/10"
+            >
+              {isRunningAuto ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {isRunningAuto ? "Running..." : `Run Auto (${pendingAutoTasks.length})`}
+            </Button>
+          )}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+            <Button
+              variant={focusMode ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFocusMode(true)}
+              className="h-8 gap-1.5 rounded-md"
+            >
+              <Focus className="h-3.5 w-3.5" />
+              Focus
+            </Button>
+            <Button
+              variant={!focusMode ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setFocusMode(false)}
+              className="h-8 gap-1.5 rounded-md"
+            >
+              <List className="h-3.5 w-3.5" />
+              Checklist
+            </Button>
+          </div>
         </div>
       </div>
 
