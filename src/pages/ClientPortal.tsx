@@ -48,7 +48,7 @@ interface ClientAccount {
 }
 
 const tabTitles: Record<PortalTab, string> = {
-  activity: "Activity Feed",
+  activity: "Home",
   notifications: "Wins & Updates",
   projects: "Projects",
   messages: "Messages",
