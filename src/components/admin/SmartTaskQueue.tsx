@@ -248,9 +248,8 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
           await supabase.functions.invoke("run-automation", {
             body: {
               clientId: selectedClientId,
-              jobType: task.category,
+              jobType: task.name,
               taskId: task.id,
-              taskName: task.name,
             },
           });
         } catch (e) {
