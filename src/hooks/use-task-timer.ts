@@ -26,7 +26,7 @@ export function useTaskTimer({
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(initialMinutes * 60);
   const [startTime, setStartTime] = useState<Date | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Format time as HH:MM:SS
   const formattedTime = useCallback(() => {
