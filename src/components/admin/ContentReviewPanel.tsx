@@ -237,20 +237,18 @@ export const ContentReviewPanel = () => {
     try {
       const client = clients.find(c => c.id === generateClientId);
       
-      const { data, error } = await supabase.functions.invoke("run-automation", {
-        body: {
-          clientId: generateClientId,
-          jobType: "content_generation",
-          inputData: {
-            contentType: generateContentType,
-            topic: generateTopic,
-            businessName: client?.business_name,
-            industry: client?.industry
-          }
+      const { triggerN8N } = await import("@/lib/n8n");
+      await triggerN8N({
+        clientId: generateClientId,
+        tasks: [{ id: `content-${Date.now()}`, name: "content_generation", category: "content" }],
+        trigger: "content_generation",
+        metadata: {
+          contentType: generateContentType,
+          topic: generateTopic,
+          businessName: client?.business_name,
+          industry: client?.industry
         }
       });
-
-      if (error) throw error;
 
       toast({ title: "Content generated!", description: "New content has been created and is ready for review." });
       setGenerateModalOpen(false);

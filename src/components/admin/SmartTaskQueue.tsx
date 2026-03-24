@@ -235,47 +235,32 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
     return clientTasks.filter((t) => t.status !== "completed" && t.automation_type === "FULL");
   }, [clientTasks]);
 
-  // Run all automatic tasks
+  // Run all automatic tasks via N8N
   const runAllAutoTasks = async () => {
     if (pendingAutoTasks.length === 0) return;
     setIsRunningAuto(true);
-    let completed = 0;
 
     try {
-      for (const task of pendingAutoTasks) {
-        // Try to run the automation
-        try {
-          await supabase.functions.invoke("run-automation", {
-            body: {
-              clientId: selectedClientId,
-              jobType: task.name,
-              taskId: task.id,
-            },
-          });
-        } catch (e) {
-          console.warn(`Automation for "${task.name}" skipped:`, e);
-        }
+      const { triggerN8N } = await import("@/lib/n8n");
+      await triggerN8N({
+        clientId: selectedClientId!,
+        tasks: pendingAutoTasks.map(t => ({
+          id: t.id,
+          name: t.name,
+          category: t.category,
+          automation_type: t.automation_type,
+          client_account_id: t.client_account_id,
+        })),
+        trigger: "run_auto",
+      });
 
-        // Mark task complete regardless (it's a FULL auto task)
-        const { error } = await supabase
-          .from("client_tasks")
-          .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
-            notes: "Auto-completed by automation runner",
-          })
-          .eq("id", task.id);
-
-        if (!error) completed++;
-      }
-
-      toast.success(`⚡ Ran ${completed} automated task${completed !== 1 ? "s" : ""}`, {
-        description: `${completed} of ${pendingAutoTasks.length} tasks completed automatically`,
+      toast.success(`⚡ Triggered ${pendingAutoTasks.length} task${pendingAutoTasks.length !== 1 ? "s" : ""} via N8N`, {
+        description: "Tasks are running. Status will update automatically.",
       });
       refetch();
     } catch (error) {
-      console.error("Error running auto tasks:", error);
-      toast.error("Failed to run automated tasks");
+      console.error("Error triggering N8N:", error);
+      toast.error("Failed to trigger automated tasks");
     } finally {
       setIsRunningAuto(false);
     }
