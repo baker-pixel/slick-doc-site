@@ -357,7 +357,6 @@ export function QuickActionsPanel() {
       });
 
       setGeneratedContent("Content generation triggered via N8N. Check back shortly for results.");
-      setGeneratedContent(content);
       
       toast({ title: "Content generated!" });
       fetchData();
