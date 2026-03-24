@@ -356,7 +356,7 @@ export function QuickActionsPanel() {
         }
       });
 
-      const content = data?.output?.content || data?.output?.generated_content || "Content generated successfully!";
+      setGeneratedContent("Content generation triggered via N8N. Check back shortly for results.");
       setGeneratedContent(content);
       
       toast({ title: "Content generated!" });

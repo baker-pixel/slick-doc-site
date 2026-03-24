@@ -249,7 +249,6 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
           name: t.name,
           category: t.category,
           automation_type: t.automation_type,
-          client_account_id: t.client_account_id,
         })),
         trigger: "run_auto",
       });
