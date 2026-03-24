@@ -421,25 +421,21 @@ export default function TaskExecutionModal({
     setExecutionResult(null);
 
     try {
-      const jobType = mapTaskToJobType(task.name);
-      
-      const { data, error } = await supabase.functions.invoke("run-automation", {
-        body: {
-          clientId: task.client_account_id,
-          taskId: task.id,
-          jobType: jobType,
-        },
+      const { triggerN8NTask } = await import("@/lib/n8n");
+      await triggerN8NTask(task.client_account_id, {
+        id: task.id,
+        name: task.name,
+        category: task.category,
+        automation_type: task.automation_type,
+        client_account_id: task.client_account_id,
       });
-
-      if (error) throw error;
 
       setExecutionResult({
         success: true,
-        message: "Task completed successfully!",
-        output: data?.output,
+        message: "Task triggered via N8N! Status will update automatically.",
       });
 
-      toast.success(`Task "${task.name}" completed successfully!`);
+      toast.success(`Task "${task.name}" triggered successfully!`);
       onTaskCompleted();
     } catch (error) {
       console.error("Task execution error:", error);
@@ -447,7 +443,7 @@ export default function TaskExecutionModal({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error occurred",
       });
-      toast.error("Failed to execute task");
+      toast.error("Failed to trigger task");
     } finally {
       setIsExecuting(false);
     }

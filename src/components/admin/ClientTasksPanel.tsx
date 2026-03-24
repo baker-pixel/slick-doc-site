@@ -141,47 +141,16 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     setRunningTasks(prev => new Set([...prev, task.id]));
 
     try {
-      // Map task category to valid job types (must match DB check constraint)
-      const jobTypeMap: Record<string, string> = {
-        email: "email_sequence",
-        lead_nurturing: "email_sequence",
-        content: "content_generation",
-        analytics: "report",
-        reporting: "generate_report",
-        onboarding: "custom",
-        reviews: "setup_review_system",
-        seo: "run_seo_audit",
-        crm: "add_to_crm",
-        ads: "custom",
-        funnel: "custom",
-        retention: "email_sequence",
-      };
-
-      const jobType = jobTypeMap[task.category] || "custom";
-
-      const { data, error } = await supabase.functions.invoke("run-automation", {
-        body: {
-          clientId: task.client_account_id,
-          jobType,
-          taskId: task.id,
-          inputData: { taskName: task.name },
-        },
+      const { triggerN8NTask } = await import("@/lib/n8n");
+      await triggerN8NTask(task.client_account_id, {
+        id: task.id,
+        name: task.name,
+        category: task.category,
+        automation_type: task.automation_type,
+        client_account_id: task.client_account_id,
       });
 
-      if (error) throw error;
-
-      // Update task with automation job
-      await supabase
-        .from("client_tasks")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          automation_job_id: data?.jobId,
-          output_data: data?.output,
-        })
-        .eq("id", task.id);
-
-      toast.success("Automation completed");
+      toast.success("Task triggered via N8N");
       fetchTasks();
     } catch (err) {
       toast.error(`Automation failed: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -205,21 +174,28 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     }
 
     setRunningAll(true);
-    let completed = 0;
-    let failed = 0;
 
-    for (const task of pendingAutomatable) {
-      try {
-        await runAutomation(task);
-        completed++;
-      } catch {
-        failed++;
-      }
+    try {
+      const { triggerN8N } = await import("@/lib/n8n");
+      await triggerN8N({
+        clientId: pendingAutomatable[0].client_account_id,
+        tasks: pendingAutomatable.map(t => ({
+          id: t.id,
+          name: t.name,
+          category: t.category,
+          automation_type: t.automation_type,
+          client_account_id: t.client_account_id,
+        })),
+        trigger: "run_all_pending",
+      });
+
+      toast.success(`Triggered ${pendingAutomatable.length} tasks via N8N`);
+      fetchTasks();
+    } catch (err) {
+      toast.error(`Batch trigger failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setRunningAll(false);
     }
-
-    setRunningAll(false);
-    toast.success(`Batch complete: ${completed} succeeded, ${failed} failed`);
-    fetchTasks();
   };
 
   const getStatusBadge = (status: string) => {
