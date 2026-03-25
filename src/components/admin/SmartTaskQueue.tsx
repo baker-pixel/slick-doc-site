@@ -528,6 +528,8 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
           <div className="space-y-1">
             {clientTasks.map((task, i) => {
               const isDone = task.status === "completed";
+              const isRunning = task.status === "in_progress";
+              const isFailed = task.status === "failed";
               const isCurrent = i === currentStepIndex;
 
               return (
