@@ -141,16 +141,11 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     setRunningTasks(prev => new Set([...prev, task.id]));
 
     try {
-      const { triggerN8NTask } = await import("@/lib/n8n");
-      await triggerN8NTask(task.client_account_id, {
-        id: task.id,
-        name: task.name,
-        category: task.category,
-        automation_type: task.automation_type,
-        client_account_id: task.client_account_id,
-      });
+      const { runSingleTask } = await import("@/lib/n8n");
+      const jobType = task.name.toLowerCase().replace(/\s+/g, "_");
+      await runSingleTask(task.client_account_id, task.id, jobType);
 
-      toast.success("Task triggered via N8N");
+      toast.success(`Task "${task.name}" completed`);
       fetchTasks();
     } catch (err) {
       toast.error(`Automation failed: ${err instanceof Error ? err.message : "Unknown error"}`);
