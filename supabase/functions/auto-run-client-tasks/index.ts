@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -74,35 +74,28 @@ serve(async (req) => {
           throw new Error(response.error.message);
         }
 
-        // Mark completed
-        await supabase
-          .from("client_tasks")
-          .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
-            output_data: response.data || null,
-          })
-          .eq("id", task.id);
-
+        // run-automation already marks the task completed via taskId,
+        // just read status to confirm
         completed++;
         results.push({ taskId: task.id, name: task.name, status: "completed" });
         console.log(`✓ ${task.name} completed`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-        // Mark failed but continue to next task
+        // run-automation's catch block already marks task as failed via taskId,
+        // but if the invoke itself failed (network etc), ensure we mark it
         await supabase
           .from("client_tasks")
           .update({
             status: "failed",
             notes: `Error: ${errorMessage}`,
           })
-          .eq("id", task.id);
+          .eq("id", task.id)
+          .neq("status", "failed"); // avoid overwriting if already set
 
         failed++;
         results.push({ taskId: task.id, name: task.name, status: "failed", error: errorMessage });
         console.error(`✗ ${task.name} failed:`, errorMessage);
-        // Continue to next task instead of stopping
       }
     }
 
