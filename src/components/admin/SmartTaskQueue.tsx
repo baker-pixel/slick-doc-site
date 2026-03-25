@@ -507,11 +507,15 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
                   clientTasks.length > 20 ? "w-2" : "w-6",
                   t.status === "completed"
                     ? "bg-green-500"
+                    : t.status === "in_progress"
+                    ? "bg-primary animate-pulse"
+                    : t.status === "failed"
+                    ? "bg-destructive"
                     : i === currentStepIndex
                     ? "bg-primary animate-pulse"
                     : "bg-muted-foreground/20"
                 )}
-                title={`${i + 1}. ${t.name}`}
+                title={`${i + 1}. ${t.name} (${t.status})`}
               />
             ))}
           </div>
