@@ -343,20 +343,21 @@ export function QuickActionsPanel() {
     try {
       const client = clients.find(c => c.id === selectedClient);
       
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId: selectedClient,
-        tasks: [{ id: `content-${Date.now()}`, name: "content_generation", category: "content" }],
-        trigger: "content_generation",
-        metadata: {
-          contentType,
-          topic: contentTopic,
-          businessName: client?.business_name,
-          industry: client?.industry
-        }
+      const { data, error } = await supabase.functions.invoke("run-automation", {
+        body: {
+          clientId: selectedClient,
+          jobType: "content_generation",
+          metadata: {
+            contentType,
+            topic: contentTopic,
+            businessName: client?.business_name,
+            industry: client?.industry,
+          },
+        },
       });
+      if (error) throw error;
 
-      setGeneratedContent("Content generation triggered via N8N. Check back shortly for results.");
+      setGeneratedContent("Content generation completed. Refresh to see results.");
       
       toast({ title: "Content generated!" });
       fetchData();

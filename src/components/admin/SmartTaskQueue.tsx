@@ -235,31 +235,26 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
     return clientTasks.filter((t) => t.status !== "completed" && t.automation_type === "FULL");
   }, [clientTasks]);
 
-  // Run all automatic tasks via N8N
+  // Run all automatic tasks via edge function
   const runAllAutoTasks = async () => {
     if (pendingAutoTasks.length === 0) return;
     setIsRunningAuto(true);
 
     try {
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId: selectedClientId!,
-        tasks: pendingAutoTasks.map(t => ({
-          id: t.id,
-          name: t.name,
-          category: t.category,
-          automation_type: t.automation_type,
-        })),
-        trigger: "run_auto",
-      });
+      const { runAutoTasks } = await import("@/lib/n8n");
+      const result = await runAutoTasks(selectedClientId!);
 
-      toast.success(`⚡ Triggered ${pendingAutoTasks.length} task${pendingAutoTasks.length !== 1 ? "s" : ""} via N8N`, {
-        description: "Tasks are running. Status will update automatically.",
-      });
+      if (result.failed > 0) {
+        toast.warning(`Completed ${result.completed}/${result.completed + result.failed} tasks`, {
+          description: `${result.failed} task(s) failed. Check task notes for details.`,
+        });
+      } else {
+        toast.success(`✓ All ${result.completed} tasks completed!`);
+      }
       refetch();
     } catch (error) {
-      console.error("Error triggering N8N:", error);
-      toast.error("Failed to trigger automated tasks");
+      console.error("Error running auto tasks:", error);
+      toast.error("Failed to run automated tasks");
     } finally {
       setIsRunningAuto(false);
     }

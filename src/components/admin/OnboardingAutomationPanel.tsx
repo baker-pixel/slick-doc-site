@@ -89,19 +89,20 @@ export function OnboardingAutomationPanel() {
     setRunningSteps(prev => new Set([...prev, stepId]));
 
     try {
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId: onboarding.client_account_id,
-        tasks: [{ id: `onboarding-${stepKey}`, name: automationType, category: "onboarding" }],
-        trigger: "onboarding_step",
-        metadata: {
-          onboardingId: onboarding.id,
-          stepKey,
-          clientEmail: onboarding.client_accounts?.email,
-          clientName: onboarding.client_accounts?.first_name || onboarding.client_accounts?.business_name,
-          businessName: onboarding.client_accounts?.business_name,
+      const { data, error } = await supabase.functions.invoke("run-automation", {
+        body: {
+          clientId: onboarding.client_account_id,
+          jobType: automationType,
+          metadata: {
+            onboardingId: onboarding.id,
+            stepKey,
+            clientEmail: onboarding.client_accounts?.email,
+            clientName: onboarding.client_accounts?.first_name || onboarding.client_accounts?.business_name,
+            businessName: onboarding.client_accounts?.business_name,
+          },
         },
       });
+      if (error) throw error;
 
       // Update the onboarding step
       await supabase

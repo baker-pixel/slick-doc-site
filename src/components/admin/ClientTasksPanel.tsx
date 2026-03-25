@@ -171,20 +171,10 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     setRunningAll(true);
 
     try {
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId: pendingAutomatable[0].client_account_id,
-        tasks: pendingAutomatable.map(t => ({
-          id: t.id,
-          name: t.name,
-          category: t.category,
-          automation_type: t.automation_type,
-          client_account_id: t.client_account_id,
-        })),
-        trigger: "run_all_pending",
-      });
+      const { runAutoTasks } = await import("@/lib/n8n");
+      const result = await runAutoTasks(pendingAutomatable[0].client_account_id);
 
-      toast.success(`Triggered ${pendingAutomatable.length} tasks via N8N`);
+      toast.success(`Completed ${result.completed}/${result.completed + result.failed} tasks`);
       fetchTasks();
     } catch (err) {
       toast.error(`Batch trigger failed: ${err instanceof Error ? err.message : "Unknown error"}`);

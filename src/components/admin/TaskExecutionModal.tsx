@@ -421,21 +421,16 @@ export default function TaskExecutionModal({
     setExecutionResult(null);
 
     try {
-      const { triggerN8NTask } = await import("@/lib/n8n");
-      await triggerN8NTask(task.client_account_id, {
-        id: task.id,
-        name: task.name,
-        category: task.category,
-        automation_type: task.automation_type,
-        client_account_id: task.client_account_id,
-      });
+      const { runSingleTask } = await import("@/lib/n8n");
+      const jobType = task.name.toLowerCase().replace(/\s+/g, "_");
+      await runSingleTask(task.client_account_id, task.id, jobType);
 
       setExecutionResult({
         success: true,
-        message: "Task triggered via N8N! Status will update automatically.",
+        message: "Task executed and completed successfully!",
       });
 
-      toast.success(`Task "${task.name}" triggered successfully!`);
+      toast.success(`Task "${task.name}" completed!`);
       onTaskCompleted();
     } catch (error) {
       console.error("Task execution error:", error);
