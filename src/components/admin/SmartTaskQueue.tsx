@@ -537,9 +537,11 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
                   key={task.id}
                   className={cn(
                     "flex items-start gap-3 p-3 rounded-xl transition-all border",
-                    isCurrent && !isDone && "border-primary/30 bg-primary/5 shadow-sm",
+                    isCurrent && !isDone && !isRunning && "border-primary/30 bg-primary/5 shadow-sm",
                     isDone && "border-transparent opacity-70",
-                    !isCurrent && !isDone && "border-transparent hover:bg-muted/50"
+                    isFailed && "border-destructive/30 bg-destructive/5",
+                    isRunning && "border-primary/30 bg-primary/5",
+                    !isCurrent && !isDone && !isRunning && !isFailed && "border-transparent hover:bg-muted/50"
                   )}
                 >
                   {/* Step indicator */}
