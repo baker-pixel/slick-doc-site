@@ -326,9 +326,50 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Automation error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Automation error:", errorMessage);
+
+    // Update job status to failed if job was created
+    try {
+      const body: AutomationRequest = await req.clone().json().catch(() => ({})) as any;
+      // Try to find the running job for this client to mark it failed
+      if (body.clientId) {
+        const { data: runningJobs } = await supabase
+          .from("automation_jobs")
+          .select("id")
+          .eq("client_id", body.clientId)
+          .eq("status", "running")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (runningJobs?.[0]) {
+          await supabase
+            .from("automation_jobs")
+            .update({
+              status: "failed",
+              error_message: errorMessage,
+              completed_at: new Date().toISOString(),
+            })
+            .eq("id", runningJobs[0].id);
+        }
+      }
+
+      // Update task status to failed if taskId was provided
+      if (body.taskId) {
+        await supabase
+          .from("client_tasks")
+          .update({
+            status: "failed",
+            notes: `Error: ${errorMessage}`,
+          })
+          .eq("id", body.taskId);
+      }
+    } catch (cleanupErr) {
+      console.error("Failed to update error status:", cleanupErr);
+    }
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

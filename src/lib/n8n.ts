@@ -23,38 +23,20 @@ export async function runAutoTasks(clientId: string): Promise<{
 
 /**
  * Triggers a single task execution via run-automation.
+ * Status updates are handled by run-automation itself — no duplicate writes here.
  */
 export async function runSingleTask(
   clientId: string,
   taskId: string,
   jobType: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Mark task as in_progress
-  await supabase
-    .from("client_tasks")
-    .update({ status: "in_progress", started_at: new Date().toISOString() })
-    .eq("id", taskId);
-
   const { data, error } = await supabase.functions.invoke("run-automation", {
     body: { clientId, taskId, jobType },
   });
 
   if (error) {
-    await supabase
-      .from("client_tasks")
-      .update({ status: "failed", notes: error.message })
-      .eq("id", taskId);
     throw new Error(error.message || "Task execution failed");
   }
-
-  // Mark completed
-  await supabase
-    .from("client_tasks")
-    .update({
-      status: "completed",
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", taskId);
 
   return data;
 }
