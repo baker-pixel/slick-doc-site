@@ -95,6 +95,7 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: isRunningAuto ? 3000 : false, // Poll while running
   });
 
   // Build client progress list
