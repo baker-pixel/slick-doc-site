@@ -9,6 +9,8 @@ import {
   Loader2,
   Sparkles,
   ArrowRight,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,9 +41,12 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
       if (error) throw error;
       return (data || []) as TaskItem[];
     },
+    refetchInterval: 5000, // Poll every 5s to catch status updates
   });
 
   const completedCount = useMemo(() => tasks.filter((t) => t.status === "completed").length, [tasks]);
+  const runningCount = useMemo(() => tasks.filter((t) => t.status === "in_progress").length, [tasks]);
+  const failedCount = useMemo(() => tasks.filter((t) => t.status === "failed").length, [tasks]);
   const totalCount = tasks.length;
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
   const currentStepIndex = tasks.findIndex((t) => t.status !== "completed");
@@ -83,15 +88,29 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
           </span>
         </div>
         <Progress value={progressPct} className="h-2.5" />
-        {allDone ? (
-          <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-            🎉 All steps complete — your marketing system is live!
-          </p>
-        ) : currentTask ? (
-          <p className="text-sm text-muted-foreground">
-            Up next: <span className="font-medium text-foreground">{currentTask.name}</span>
-          </p>
-        ) : null}
+        <div className="flex items-center gap-3 text-sm">
+          {runningCount > 0 && (
+            <span className="flex items-center gap-1 text-primary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {runningCount} running
+            </span>
+          )}
+          {failedCount > 0 && (
+            <span className="flex items-center gap-1 text-destructive">
+              <XCircle className="h-3 w-3" />
+              {failedCount} failed
+            </span>
+          )}
+          {allDone ? (
+            <p className="text-emerald-600 dark:text-emerald-400 font-medium">
+              🎉 All steps complete — your marketing system is live!
+            </p>
+          ) : currentTask ? (
+            <p className="text-muted-foreground">
+              Up next: <span className="font-medium text-foreground">{currentTask.name}</span>
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {/* Current step highlight */}
@@ -104,6 +123,11 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
             <Badge variant="outline" className="capitalize text-xs">
               {getCategoryLabel(currentTask.category)}
             </Badge>
+            {currentTask.status === "in_progress" && (
+              <Badge variant="secondary" className="gap-1 text-xs">
+                <Loader2 className="h-3 w-3 animate-spin" /> Running
+              </Badge>
+            )}
             {currentTask.automation_type === "FULL" && (
               <Badge variant="secondary" className="gap-1 text-xs">
                 <Sparkles className="h-3 w-3" /> Auto
@@ -116,7 +140,9 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
           )}
           <p className="text-xs text-primary font-medium flex items-center gap-1 pt-1">
             <ArrowRight className="h-3 w-3" />
-            {currentTask.automation_type === "FULL"
+            {currentTask.status === "in_progress"
+              ? "This step is currently being executed"
+              : currentTask.automation_type === "FULL"
               ? "This step is handled automatically by your team"
               : "Your team is working on this"}
           </p>
@@ -127,6 +153,8 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
       <div className="space-y-1">
         {tasks.map((task, i) => {
           const isDone = task.status === "completed";
+          const isRunning = task.status === "in_progress";
+          const isFailed = task.status === "failed";
           const isCurrent = i === currentStepIndex;
 
           return (
@@ -135,13 +163,18 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
               className={cn(
                 "flex items-start gap-3 rounded-lg px-4 py-3 transition-colors",
                 isCurrent && "bg-primary/5",
-                isDone && "opacity-60"
+                isDone && "opacity-60",
+                isFailed && "bg-destructive/5"
               )}
             >
               {/* Step indicator */}
               <div className="pt-0.5">
                 {isDone ? (
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                ) : isRunning ? (
+                  <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                ) : isFailed ? (
+                  <XCircle className="h-5 w-5 text-destructive" />
                 ) : isCurrent ? (
                   <div className="h-5 w-5 rounded-full border-2 border-primary bg-primary/20 flex items-center justify-center">
                     <div className="h-2 w-2 rounded-full bg-primary" />
@@ -156,11 +189,18 @@ export function ClientActivityTab({ clientAccountId }: ClientActivityTabProps) {
                 <p className={cn(
                   "text-sm font-medium",
                   isDone && "line-through text-muted-foreground",
-                  isCurrent && "text-foreground"
+                  isCurrent && "text-foreground",
+                  isFailed && "text-destructive"
                 )}>
                   {task.name}
                 </p>
-                {isCurrent && task.description && (
+                {isRunning && (
+                  <p className="text-xs text-primary mt-0.5">Running...</p>
+                )}
+                {isFailed && (
+                  <p className="text-xs text-destructive mt-0.5">Failed — your team has been notified</p>
+                )}
+                {isCurrent && !isRunning && !isFailed && task.description && (
                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{task.description}</p>
                 )}
               </div>

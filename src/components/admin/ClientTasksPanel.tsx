@@ -141,16 +141,11 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     setRunningTasks(prev => new Set([...prev, task.id]));
 
     try {
-      const { triggerN8NTask } = await import("@/lib/n8n");
-      await triggerN8NTask(task.client_account_id, {
-        id: task.id,
-        name: task.name,
-        category: task.category,
-        automation_type: task.automation_type,
-        client_account_id: task.client_account_id,
-      });
+      const { runSingleTask } = await import("@/lib/n8n");
+      const jobType = task.name.toLowerCase().replace(/\s+/g, "_");
+      await runSingleTask(task.client_account_id, task.id, jobType);
 
-      toast.success("Task triggered via N8N");
+      toast.success(`Task "${task.name}" completed`);
       fetchTasks();
     } catch (err) {
       toast.error(`Automation failed: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -176,20 +171,10 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
     setRunningAll(true);
 
     try {
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId: pendingAutomatable[0].client_account_id,
-        tasks: pendingAutomatable.map(t => ({
-          id: t.id,
-          name: t.name,
-          category: t.category,
-          automation_type: t.automation_type,
-          client_account_id: t.client_account_id,
-        })),
-        trigger: "run_all_pending",
-      });
+      const { runAutoTasks } = await import("@/lib/n8n");
+      const result = await runAutoTasks(pendingAutomatable[0].client_account_id);
 
-      toast.success(`Triggered ${pendingAutomatable.length} tasks via N8N`);
+      toast.success(`Completed ${result.completed}/${result.completed + result.failed} tasks`);
       fetchTasks();
     } catch (err) {
       toast.error(`Batch trigger failed: ${err instanceof Error ? err.message : "Unknown error"}`);
