@@ -546,11 +546,16 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
                 >
                   {/* Step indicator */}
                   <button
-                    onClick={() => isDone ? undoComplete(task) : quickComplete(task)}
+                    onClick={() => isDone ? undoComplete(task) : !isRunning && quickComplete(task)}
                     className="mt-0.5 shrink-0"
+                    disabled={isRunning}
                   >
                     {isDone ? (
                       <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : isRunning ? (
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    ) : isFailed ? (
+                      <RotateCcw className="h-5 w-5 text-destructive" />
                     ) : isCurrent ? (
                       <div className="h-5 w-5 rounded-full border-2 border-primary flex items-center justify-center">
                         <div className="h-2 w-2 rounded-full bg-primary" />
