@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -126,6 +126,64 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [revisionNotes, setRevisionNotes] = useState("");
+
+  interface WorkflowTask {
+    id: string;
+    task_type: string;
+    status: string;
+    payload: any;
+    result: any;
+    created_at: string;
+  }
+
+  const [workflowTasks, setWorkflowTasks] = useState<WorkflowTask[]>([]);
+
+  // Fetch workflow_tasks for this client
+  const { data: initialWorkflowTasks } = useQuery({
+    queryKey: ["workflow-tasks", clientAccountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workflow_tasks")
+        .select("*")
+        .eq("client_id", clientAccountId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as WorkflowTask[];
+    },
+  });
+
+  useEffect(() => {
+    if (initialWorkflowTasks) setWorkflowTasks(initialWorkflowTasks);
+  }, [initialWorkflowTasks]);
+
+  // Realtime subscription for workflow_tasks
+  useEffect(() => {
+    const channel = supabase
+      .channel(`workflow-tasks-${clientAccountId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "workflow_tasks",
+          filter: `client_id=eq.${clientAccountId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setWorkflowTasks((prev) => [payload.new as WorkflowTask, ...prev]);
+          } else if (payload.eventType === "UPDATE") {
+            setWorkflowTasks((prev) =>
+              prev.map((t) => (t.id === (payload.new as WorkflowTask).id ? (payload.new as WorkflowTask) : t))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clientAccountId]);
 
   const { data: deliverables, isLoading } = useQuery({
     queryKey: ["client-deliverables", clientAccountId],
@@ -407,6 +465,69 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
                         </div>
                       </div>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* AI-Generated Content from Workflow Tasks */}
+      {workflowTasks.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            AI-Generated Content
+          </h3>
+          {workflowTasks.map((task) => {
+            const isCompleted = task.status === "completed";
+            const isFailed = task.status === "failed";
+            const isRunning = task.status === "running" || task.status === "pending";
+
+            return (
+              <Card key={task.id} className={`transition-all ${isCompleted ? 'ring-2 ring-emerald-500/20' : ''}`}>
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className="text-xs capitalize">{task.task_type}</Badge>
+                        <Badge className={
+                          isCompleted ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" :
+                          isFailed ? "bg-red-500/10 text-red-600 border-red-500/30" :
+                          "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                        }>
+                          {isRunning && <Clock className="h-3 w-3 mr-1 animate-spin" />}
+                          {task.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(task.created_at), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                      {task.payload?.content_type && (
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {task.payload.content_type} — {task.payload.topic}
+                        </p>
+                      )}
+                      {isCompleted && task.result?.content && (
+                        <div className="bg-muted/50 rounded-lg p-4 mt-2">
+                          <p className="text-sm whitespace-pre-wrap">{task.result.content}</p>
+                        </div>
+                      )}
+                      {isFailed && task.result?.error && (
+                        <p className="text-sm text-destructive mt-2">{task.result.error}</p>
+                      )}
+                    </div>
+                    {isCompleted && (
+                      <div className="flex gap-2">
+                        <Button size="sm" className="gap-1">
+                          <CheckCircle2 className="h-4 w-4" /> Approve
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1">
+                          <RotateCcw className="h-4 w-4" /> Request Changes
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
