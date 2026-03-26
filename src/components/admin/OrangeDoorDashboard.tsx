@@ -76,6 +76,11 @@ export function OrangeDoorDashboard({
   const [alerts, setAlerts] = useState<{ type: 'red' | 'yellow' | 'warning'; message: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningBatch, setRunningBatch] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateClientId, setGenerateClientId] = useState("");
+  const [generateContentType, setGenerateContentType] = useState("Instagram post");
+  const [generateTopic, setGenerateTopic] = useState("Why local businesses need a strong online presence");
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
