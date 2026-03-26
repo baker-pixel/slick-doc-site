@@ -544,7 +544,9 @@ export type Database = {
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           tier: string
+          tone: string | null
           updated_at: string
+          website_summary: string | null
         }
         Insert: {
           business_name: string
@@ -565,7 +567,9 @@ export type Database = {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           tier: string
+          tone?: string | null
           updated_at?: string
+          website_summary?: string | null
         }
         Update: {
           business_name?: string
@@ -586,7 +590,9 @@ export type Database = {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           tier?: string
+          tone?: string | null
           updated_at?: string
+          website_summary?: string | null
         }
         Relationships: []
       }
@@ -3700,6 +3706,47 @@ export type Database = {
           {
             foreignKeyName: "voice_memos_client_account_id_fkey"
             columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_tasks: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          payload: Json | null
+          result: Json | null
+          status: string
+          task_type: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: string
+          task_type: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: string
+          task_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_tasks_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
             referencedColumns: ["id"]
