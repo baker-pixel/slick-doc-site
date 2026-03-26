@@ -547,6 +547,7 @@ export type Database = {
           tone: string | null
           updated_at: string
           website_summary: string | null
+          website_url: string | null
         }
         Insert: {
           business_name: string
@@ -570,6 +571,7 @@ export type Database = {
           tone?: string | null
           updated_at?: string
           website_summary?: string | null
+          website_url?: string | null
         }
         Update: {
           business_name?: string
@@ -593,6 +595,7 @@ export type Database = {
           tone?: string | null
           updated_at?: string
           website_summary?: string | null
+          website_url?: string | null
         }
         Relationships: []
       }

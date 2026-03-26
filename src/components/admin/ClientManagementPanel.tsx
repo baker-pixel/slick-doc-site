@@ -69,6 +69,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     first_name: "",
     last_name: "",
     tier: "foundation",
+    website_url: "",
   });
 
   const [newInvite, setNewInvite] = useState({
@@ -140,6 +141,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       first_name: newClient.first_name || null,
       last_name: newClient.last_name || null,
       tier: newClient.tier,
+      website_url: newClient.website_url || null,
       status: "active",
     }).select().single();
 
@@ -148,7 +150,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     } else {
       toast.success("Client added! Running onboarding automations...");
       setAddDialogOpen(false);
-      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation" });
+      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", website_url: "" });
       fetchClients();
       
       // Auto-run all FULL tasks for the new client
@@ -366,6 +368,14 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                     <SelectItem value="dominate">Dominate</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Website URL</Label>
+                <Input
+                  placeholder="https://example.com"
+                  value={newClient.website_url}
+                  onChange={(e) => setNewClient({ ...newClient, website_url: e.target.value })}
+                />
               </div>
               <Button onClick={addClient} className="w-full">Add Client</Button>
             </div>

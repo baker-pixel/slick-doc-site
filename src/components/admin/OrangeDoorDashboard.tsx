@@ -81,6 +81,8 @@ export function OrangeDoorDashboard({
   const [generateContentType, setGenerateContentType] = useState("Instagram post");
   const [generateTopic, setGenerateTopic] = useState("Why local businesses need a strong online presence");
   const [generating, setGenerating] = useState(false);
+  const [seoRunning, setSeoRunning] = useState(false);
+  const [seoClientId, setSeoClientId] = useState("");
 
   useEffect(() => {
     fetchDashboardData();
@@ -323,6 +325,49 @@ export function OrangeDoorDashboard({
     }
   };
 
+  const [seoDialogOpen, setSeoDialogOpen] = useState(false);
+
+  const handleRunSeoAudit = async () => {
+    if (!seoClientId) {
+      toast({ title: "Please select a client", variant: "destructive" });
+      return;
+    }
+    setSeoRunning(true);
+    try {
+      const { data: triggerData, error: triggerError } = await supabase.functions.invoke('trigger-task', {
+        body: {
+          client_id: seoClientId,
+          task_type: 'seo',
+          payload: { analysis_type: 'full_seo_audit' },
+        },
+      });
+      if (triggerError) throw triggerError;
+      const taskId = triggerData?.task_id;
+      if (!taskId) throw new Error("No task_id returned");
+
+      toast({ title: "SEO audit started", description: "Analysing website..." });
+
+      const { error: agentError } = await supabase.functions.invoke('run-seo-agent', {
+        body: { task_id: taskId },
+      });
+      if (agentError) throw agentError;
+
+      toast({ title: "SEO audit complete!", description: "Results are now available in the client portal." });
+      setSeoDialogOpen(false);
+      fetchDashboardData();
+    } catch (error) {
+      console.error('SEO audit error:', error);
+      toast({
+        title: "SEO audit failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSeoRunning(false);
+    }
+  };
+
+
   const getHealthIcon = (health: 'green' | 'yellow' | 'red') => {
     const colors = {
       green: 'text-emerald-500',
@@ -405,6 +450,13 @@ export function OrangeDoorDashboard({
         <Button variant="outline" onClick={() => setGenerateOpen(true)} className="gap-2">
           <Sparkles className="w-4 h-4" /> Generate Content
         </Button>
+
+        <Button variant="outline" onClick={() => {
+          setSeoClientId("");
+          setSeoDialogOpen(true);
+        }} className="gap-2">
+          <Zap className="w-4 h-4" /> Run SEO Audit
+        </Button>
       </motion.div>
 
       {/* Generate Content Dialog */}
@@ -455,7 +507,33 @@ export function OrangeDoorDashboard({
         </DialogContent>
       </Dialog>
 
-      {/* Top Metrics */}
+      {/* SEO Audit Dialog */}
+      <Dialog open={seoDialogOpen} onOpenChange={setSeoDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run SEO Audit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Client</Label>
+              <Select value={seoClientId} onValueChange={setSeoClientId}>
+                <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+                <SelectContent>
+                  {clientHealth.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleRunSeoAudit} disabled={seoRunning} className="w-full gap-2">
+              {seoRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {seoRunning ? "Running audit..." : "Run SEO Audit"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       <motion.div 
         className="grid grid-cols-2 lg:grid-cols-4 gap-4"
         initial="hidden"
