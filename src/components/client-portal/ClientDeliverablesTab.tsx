@@ -127,6 +127,64 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
   const [feedback, setFeedback] = useState("");
   const [revisionNotes, setRevisionNotes] = useState("");
 
+  interface WorkflowTask {
+    id: string;
+    task_type: string;
+    status: string;
+    payload: any;
+    result: any;
+    created_at: string;
+  }
+
+  const [workflowTasks, setWorkflowTasks] = useState<WorkflowTask[]>([]);
+
+  // Fetch workflow_tasks for this client
+  const { data: initialWorkflowTasks } = useQuery({
+    queryKey: ["workflow-tasks", clientAccountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workflow_tasks")
+        .select("*")
+        .eq("client_id", clientAccountId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as WorkflowTask[];
+    },
+  });
+
+  useEffect(() => {
+    if (initialWorkflowTasks) setWorkflowTasks(initialWorkflowTasks);
+  }, [initialWorkflowTasks]);
+
+  // Realtime subscription for workflow_tasks
+  useEffect(() => {
+    const channel = supabase
+      .channel(`workflow-tasks-${clientAccountId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "workflow_tasks",
+          filter: `client_id=eq.${clientAccountId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setWorkflowTasks((prev) => [payload.new as WorkflowTask, ...prev]);
+          } else if (payload.eventType === "UPDATE") {
+            setWorkflowTasks((prev) =>
+              prev.map((t) => (t.id === (payload.new as WorkflowTask).id ? (payload.new as WorkflowTask) : t))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clientAccountId]);
+
   const { data: deliverables, isLoading } = useQuery({
     queryKey: ["client-deliverables", clientAccountId],
     queryFn: async () => {
