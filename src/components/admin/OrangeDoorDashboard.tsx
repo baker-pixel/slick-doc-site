@@ -453,9 +453,7 @@ export function OrangeDoorDashboard({
 
         <Button variant="outline" onClick={() => {
           setSeoClientId("");
-          setSeoRunning(false);
-          setGenerateOpen(false);
-          document.getElementById("seo-dialog-trigger")?.click();
+          setSeoDialogOpen(true);
         }} className="gap-2">
           <Zap className="w-4 h-4" /> Run SEO Audit
         </Button>
