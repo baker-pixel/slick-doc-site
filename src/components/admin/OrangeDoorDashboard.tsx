@@ -368,6 +368,7 @@ export function OrangeDoorDashboard({
   };
 
 
+  const getHealthIcon = (health: 'green' | 'yellow' | 'red') => {
     const colors = {
       green: 'text-emerald-500',
       yellow: 'text-amber-500',
