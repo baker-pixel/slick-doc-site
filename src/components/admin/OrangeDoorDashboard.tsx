@@ -276,6 +276,53 @@ export function OrangeDoorDashboard({
     });
   };
 
+  const handleGenerateContent = async () => {
+    if (!generateClientId) {
+      toast({ title: "Please select a client", variant: "destructive" });
+      return;
+    }
+    setGenerating(true);
+    try {
+      // Step 1: Trigger task
+      const { data: triggerData, error: triggerError } = await supabase.functions.invoke('trigger-task', {
+        body: {
+          client_id: generateClientId,
+          task_type: 'content',
+          payload: {
+            content_type: generateContentType,
+            topic: generateTopic,
+          },
+        },
+      });
+
+      if (triggerError) throw triggerError;
+      const taskId = triggerData?.task_id;
+      if (!taskId) throw new Error("No task_id returned");
+
+      toast({ title: "Task created", description: "AI is generating content..." });
+
+      // Step 2: Run content agent
+      const { data: agentData, error: agentError } = await supabase.functions.invoke('run-content-agent', {
+        body: { task_id: taskId },
+      });
+
+      if (agentError) throw agentError;
+
+      toast({ title: "Content generated!", description: "The deliverable is now available in the client portal." });
+      setGenerateOpen(false);
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Generate content error:', error);
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const getHealthIcon = (health: 'green' | 'yellow' | 'red') => {
     const colors = {
       green: 'text-emerald-500',
