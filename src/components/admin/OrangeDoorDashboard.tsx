@@ -508,10 +508,7 @@ export function OrangeDoorDashboard({
       </Dialog>
 
       {/* SEO Audit Dialog */}
-      <Dialog>
-        <button id="seo-dialog-trigger" className="hidden">
-          <span data-state="closed" />
-        </button>
+      <Dialog open={seoDialogOpen} onOpenChange={setSeoDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Run SEO Audit</DialogTitle>
