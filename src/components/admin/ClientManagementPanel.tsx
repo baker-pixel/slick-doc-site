@@ -150,7 +150,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     } else {
       toast.success("Client added! Running onboarding automations...");
       setAddDialogOpen(false);
-      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation" });
+      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", website_url: "" });
       fetchClients();
       
       // Auto-run all FULL tasks for the new client
