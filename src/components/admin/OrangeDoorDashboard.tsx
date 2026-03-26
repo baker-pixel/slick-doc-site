@@ -466,7 +466,36 @@ export function OrangeDoorDashboard({
         </DialogContent>
       </Dialog>
 
-      {/* Top Metrics */}
+      {/* SEO Audit Dialog */}
+      <Dialog>
+        <button id="seo-dialog-trigger" className="hidden">
+          <span data-state="closed" />
+        </button>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run SEO Audit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Client</Label>
+              <Select value={seoClientId} onValueChange={setSeoClientId}>
+                <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+                <SelectContent>
+                  {clientHealth.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleRunSeoAudit} disabled={seoRunning} className="w-full gap-2">
+              {seoRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {seoRunning ? "Running audit..." : "Run SEO Audit"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       <motion.div 
         className="grid grid-cols-2 lg:grid-cols-4 gap-4"
         initial="hidden"
