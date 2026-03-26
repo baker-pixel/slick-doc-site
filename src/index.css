@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 /* Hide Lovable watermark badge */
-[data-lovable-badge],
-.lovable-badge,
 #lovable-badge,
-a[href*="lovable.dev"][target="_blank"]:not([class]),
-iframe[src*="lovable"] {
+#lovable-badge-cta,
+#lovable-badge-text,
+#lovable-badge-divider,
+#lovable-badge-close {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
