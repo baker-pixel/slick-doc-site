@@ -81,6 +81,8 @@ export function OrangeDoorDashboard({
   const [generateContentType, setGenerateContentType] = useState("Instagram post");
   const [generateTopic, setGenerateTopic] = useState("Why local businesses need a strong online presence");
   const [generating, setGenerating] = useState(false);
+  const [seoRunning, setSeoRunning] = useState(false);
+  const [seoClientId, setSeoClientId] = useState("");
 
   useEffect(() => {
     fetchDashboardData();

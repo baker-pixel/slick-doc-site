@@ -484,6 +484,98 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
             const isCompleted = task.status === "completed";
             const isFailed = task.status === "failed";
             const isRunning = task.status === "running" || task.status === "pending";
+            const isSeo = task.task_type === "seo" && isCompleted && task.result?.seo_score !== undefined;
+
+            if (isSeo) {
+              const r = task.result;
+              const score = r.seo_score ?? 0;
+              const scoreColor = score >= 70 ? "text-emerald-600" : score >= 40 ? "text-amber-600" : "text-red-600";
+              const scoreBg = score >= 70 ? "bg-emerald-500/10" : score >= 40 ? "bg-amber-500/10" : "bg-red-500/10";
+
+              return (
+                <Card key={task.id} className="transition-all ring-2 ring-emerald-500/20">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs capitalize">SEO Audit</Badge>
+                        <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">completed</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(task.created_at), "MMM d, h:mm a")}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" className="gap-1">
+                          <CheckCircle2 className="h-4 w-4" /> Approve
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1">
+                          <RotateCcw className="h-4 w-4" /> Request Changes
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div className={`inline-flex items-center gap-3 px-4 py-3 rounded-lg ${scoreBg}`}>
+                      <span className={`text-4xl font-bold ${scoreColor}`}>{score}</span>
+                      <span className="text-sm text-muted-foreground">/ 100<br />SEO Score</span>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {/* Working well */}
+                      {Array.isArray(r.working_well) && r.working_well.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-emerald-600 mb-2 flex items-center gap-1">
+                            <CheckCircle2 className="h-4 w-4" /> What's Working
+                          </h4>
+                          <ul className="space-y-1">
+                            {r.working_well.map((p: string, i: number) => (
+                              <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                <span className="text-emerald-500 mt-1">•</span>{p}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Needs improvement */}
+                      {Array.isArray(r.needs_improvement) && r.needs_improvement.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-amber-600 mb-2 flex items-center gap-1">
+                            <XCircle className="h-4 w-4" /> Needs Improvement
+                          </h4>
+                          <ul className="space-y-1">
+                            {r.needs_improvement.map((p: string, i: number) => (
+                              <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                <span className="text-amber-500 mt-1">•</span>{p}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Keywords */}
+                    {Array.isArray(r.recommended_keywords) && r.recommended_keywords.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2">Target Keywords</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {r.recommended_keywords.map((kw: string, i: number) => (
+                            <Badge key={i} variant="secondary" className="text-xs">{kw}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action summary */}
+                    {r.action_summary && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-1">Recommended Next Steps</h4>
+                        <p className="text-sm text-muted-foreground">{r.action_summary}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            }
 
             return (
               <Card key={task.id} className={`transition-all ${isCompleted ? 'ring-2 ring-emerald-500/20' : ''}`}>
