@@ -325,7 +325,49 @@ export function OrangeDoorDashboard({
     }
   };
 
-  const getHealthIcon = (health: 'green' | 'yellow' | 'red') => {
+  const [seoDialogOpen, setSeoDialogOpen] = useState(false);
+
+  const handleRunSeoAudit = async () => {
+    if (!seoClientId) {
+      toast({ title: "Please select a client", variant: "destructive" });
+      return;
+    }
+    setSeoRunning(true);
+    try {
+      const { data: triggerData, error: triggerError } = await supabase.functions.invoke('trigger-task', {
+        body: {
+          client_id: seoClientId,
+          task_type: 'seo',
+          payload: { analysis_type: 'full_seo_audit' },
+        },
+      });
+      if (triggerError) throw triggerError;
+      const taskId = triggerData?.task_id;
+      if (!taskId) throw new Error("No task_id returned");
+
+      toast({ title: "SEO audit started", description: "Analysing website..." });
+
+      const { error: agentError } = await supabase.functions.invoke('run-seo-agent', {
+        body: { task_id: taskId },
+      });
+      if (agentError) throw agentError;
+
+      toast({ title: "SEO audit complete!", description: "Results are now available in the client portal." });
+      setSeoDialogOpen(false);
+      fetchDashboardData();
+    } catch (error) {
+      console.error('SEO audit error:', error);
+      toast({
+        title: "SEO audit failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSeoRunning(false);
+    }
+  };
+
+
     const colors = {
       green: 'text-emerald-500',
       yellow: 'text-amber-500',
