@@ -416,6 +416,7 @@ export function OrangeDoorDashboard({
         }} className="gap-2">
           <Zap className="w-4 h-4" /> Run SEO Audit
         </Button>
+      </motion.div>
 
       {/* Generate Content Dialog */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
