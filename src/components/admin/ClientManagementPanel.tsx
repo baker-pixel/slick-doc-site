@@ -369,6 +369,14 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Website URL</Label>
+                <Input
+                  placeholder="https://example.com"
+                  value={newClient.website_url}
+                  onChange={(e) => setNewClient({ ...newClient, website_url: e.target.value })}
+                />
+              </div>
               <Button onClick={addClient} className="w-full">Add Client</Button>
             </div>
           </DialogContent>
