@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Users, DollarSign, Bot, AlertTriangle, 
   Plus, RefreshCw, Flag, ChevronRight,
-  Activity, Zap, Calendar, CalendarDays, CalendarRange
+  Activity, Zap, Calendar, CalendarDays, CalendarRange,
+  Sparkles, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
