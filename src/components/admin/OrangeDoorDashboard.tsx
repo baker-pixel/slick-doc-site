@@ -407,7 +407,15 @@ export function OrangeDoorDashboard({
         <Button variant="outline" onClick={() => setGenerateOpen(true)} className="gap-2">
           <Sparkles className="w-4 h-4" /> Generate Content
         </Button>
-      </motion.div>
+
+        <Button variant="outline" onClick={() => {
+          setSeoClientId("");
+          setSeoRunning(false);
+          setGenerateOpen(false);
+          document.getElementById("seo-dialog-trigger")?.click();
+        }} className="gap-2">
+          <Zap className="w-4 h-4" /> Run SEO Audit
+        </Button>
 
       {/* Generate Content Dialog */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
