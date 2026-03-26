@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide Lovable watermark badge */
+[data-lovable-badge],
+.lovable-badge,
+#lovable-badge,
+a[href*="lovable.dev"][target="_blank"]:not([class]),
+iframe[src*="lovable"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Orange Door Design System */
 
 @layer base {
