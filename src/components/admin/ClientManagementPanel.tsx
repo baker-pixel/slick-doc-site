@@ -69,6 +69,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     first_name: "",
     last_name: "",
     tier: "foundation",
+    website_url: "",
   });
 
   const [newInvite, setNewInvite] = useState({
