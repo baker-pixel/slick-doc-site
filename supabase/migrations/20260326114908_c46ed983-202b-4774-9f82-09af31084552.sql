@@ -1,0 +1,1 @@
+ALTER TABLE public.client_accounts ADD COLUMN IF NOT EXISTS website_url text;
