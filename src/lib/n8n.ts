@@ -1,58 +1,42 @@
 import { supabase } from "@/integrations/supabase/client";
 
-interface N8NTask {
-  id: string;
-  name: string;
-  category?: string;
-  automation_type?: string;
-  client_account_id?: string;
-  [key: string]: unknown;
-}
-
-interface TriggerN8NOptions {
-  clientId: string;
-  tasks: N8NTask[];
-  trigger?: string;
-  metadata?: Record<string, unknown>;
-}
-
-interface TriggerN8NResult {
-  success: boolean;
-  message: string;
-  taskIds: string[];
-  n8nResponse?: unknown;
-}
-
 /**
- * Triggers N8N webhook via the trigger-n8n edge function.
- * All automation execution flows through N8N — no direct run-automation calls.
+ * Triggers the auto-run-client-tasks edge function to execute
+ * all FULL automation tasks sequentially for a given client.
  */
-export async function triggerN8N(options: TriggerN8NOptions): Promise<TriggerN8NResult> {
-  const { clientId, tasks, trigger = "run_auto", metadata = {} } = options;
-
-  const { data, error } = await supabase.functions.invoke("trigger-n8n", {
-    body: { clientId, tasks, trigger, metadata },
+export async function runAutoTasks(clientId: string): Promise<{
+  success: boolean;
+  completed: number;
+  failed: number;
+  results: { taskId: string; name: string; status: string; error?: string }[];
+}> {
+  const { data, error } = await supabase.functions.invoke("auto-run-client-tasks", {
+    body: { clientId },
   });
 
   if (error) {
-    throw new Error(error.message || "Failed to trigger N8N");
+    throw new Error(error.message || "Failed to run automated tasks");
   }
 
-  return data as TriggerN8NResult;
+  return data;
 }
 
 /**
- * Trigger N8N for a single task.
+ * Triggers a single task execution via run-automation.
+ * Status updates are handled by run-automation itself — no duplicate writes here.
  */
-export async function triggerN8NTask(
+export async function runSingleTask(
   clientId: string,
-  task: N8NTask,
-  trigger = "single_task"
-): Promise<TriggerN8NResult> {
-  return triggerN8N({
-    clientId,
-    tasks: [task],
-    trigger,
-    metadata: { taskName: task.name, category: task.category },
+  taskId: string,
+  jobType: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("run-automation", {
+    body: { clientId, taskId, jobType },
   });
+
+  if (error) {
+    throw new Error(error.message || "Task execution failed");
+  }
+
+  return data;
 }

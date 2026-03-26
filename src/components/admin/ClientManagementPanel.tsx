@@ -257,14 +257,12 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     setRunningJobs((prev) => new Set([...prev, jobKey]));
 
     try {
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId,
-        tasks: [{ id: jobKey, name: jobType, category: jobType }],
-        trigger: jobType,
+      const { data, error } = await supabase.functions.invoke("run-automation", {
+        body: { clientId, jobType },
       });
+      if (error) throw error;
 
-      toast.success(`${jobType.replace("_", " ")} triggered via N8N`);
+      toast.success(`${jobType.replace("_", " ")} triggered successfully`);
     } catch (err) {
       toast.error(`Failed to run ${jobType}: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {

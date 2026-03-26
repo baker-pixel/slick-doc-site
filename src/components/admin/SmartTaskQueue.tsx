@@ -95,6 +95,7 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: isRunningAuto ? 3000 : false, // Poll while running
   });
 
   // Build client progress list
@@ -235,31 +236,26 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
     return clientTasks.filter((t) => t.status !== "completed" && t.automation_type === "FULL");
   }, [clientTasks]);
 
-  // Run all automatic tasks via N8N
+  // Run all automatic tasks via edge function
   const runAllAutoTasks = async () => {
     if (pendingAutoTasks.length === 0) return;
     setIsRunningAuto(true);
 
     try {
-      const { triggerN8N } = await import("@/lib/n8n");
-      await triggerN8N({
-        clientId: selectedClientId!,
-        tasks: pendingAutoTasks.map(t => ({
-          id: t.id,
-          name: t.name,
-          category: t.category,
-          automation_type: t.automation_type,
-        })),
-        trigger: "run_auto",
-      });
+      const { runAutoTasks } = await import("@/lib/n8n");
+      const result = await runAutoTasks(selectedClientId!);
 
-      toast.success(`⚡ Triggered ${pendingAutoTasks.length} task${pendingAutoTasks.length !== 1 ? "s" : ""} via N8N`, {
-        description: "Tasks are running. Status will update automatically.",
-      });
+      if (result.failed > 0) {
+        toast.warning(`Completed ${result.completed}/${result.completed + result.failed} tasks`, {
+          description: `${result.failed} task(s) failed. Check task notes for details.`,
+        });
+      } else {
+        toast.success(`✓ All ${result.completed} tasks completed!`);
+      }
       refetch();
     } catch (error) {
-      console.error("Error triggering N8N:", error);
-      toast.error("Failed to trigger automated tasks");
+      console.error("Error running auto tasks:", error);
+      toast.error("Failed to run automated tasks");
     } finally {
       setIsRunningAuto(false);
     }
@@ -511,11 +507,15 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
                   clientTasks.length > 20 ? "w-2" : "w-6",
                   t.status === "completed"
                     ? "bg-green-500"
+                    : t.status === "in_progress"
+                    ? "bg-primary animate-pulse"
+                    : t.status === "failed"
+                    ? "bg-destructive"
                     : i === currentStepIndex
                     ? "bg-primary animate-pulse"
                     : "bg-muted-foreground/20"
                 )}
-                title={`${i + 1}. ${t.name}`}
+                title={`${i + 1}. ${t.name} (${t.status})`}
               />
             ))}
           </div>
@@ -528,6 +528,8 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
           <div className="space-y-1">
             {clientTasks.map((task, i) => {
               const isDone = task.status === "completed";
+              const isRunning = task.status === "in_progress";
+              const isFailed = task.status === "failed";
               const isCurrent = i === currentStepIndex;
 
               return (
@@ -535,18 +537,25 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
                   key={task.id}
                   className={cn(
                     "flex items-start gap-3 p-3 rounded-xl transition-all border",
-                    isCurrent && !isDone && "border-primary/30 bg-primary/5 shadow-sm",
+                    isCurrent && !isDone && !isRunning && "border-primary/30 bg-primary/5 shadow-sm",
                     isDone && "border-transparent opacity-70",
-                    !isCurrent && !isDone && "border-transparent hover:bg-muted/50"
+                    isFailed && "border-destructive/30 bg-destructive/5",
+                    isRunning && "border-primary/30 bg-primary/5",
+                    !isCurrent && !isDone && !isRunning && !isFailed && "border-transparent hover:bg-muted/50"
                   )}
                 >
                   {/* Step indicator */}
                   <button
-                    onClick={() => isDone ? undoComplete(task) : quickComplete(task)}
+                    onClick={() => isDone ? undoComplete(task) : !isRunning && quickComplete(task)}
                     className="mt-0.5 shrink-0"
+                    disabled={isRunning}
                   >
                     {isDone ? (
                       <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : isRunning ? (
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    ) : isFailed ? (
+                      <RotateCcw className="h-5 w-5 text-destructive" />
                     ) : isCurrent ? (
                       <div className="h-5 w-5 rounded-full border-2 border-primary flex items-center justify-center">
                         <div className="h-2 w-2 rounded-full bg-primary" />

@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Users, DollarSign, Bot, AlertTriangle, 
   Plus, RefreshCw, Flag, ChevronRight,
-  Activity, Zap, Calendar, CalendarDays, CalendarRange
+  Activity, Zap, Calendar, CalendarDays, CalendarRange,
+  Sparkles, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,6 +17,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { format, differenceInDays } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
@@ -66,6 +76,11 @@ export function OrangeDoorDashboard({
   const [alerts, setAlerts] = useState<{ type: 'red' | 'yellow' | 'warning'; message: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningBatch, setRunningBatch] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateClientId, setGenerateClientId] = useState("");
+  const [generateContentType, setGenerateContentType] = useState("Instagram post");
+  const [generateTopic, setGenerateTopic] = useState("Why local businesses need a strong online presence");
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -261,6 +276,53 @@ export function OrangeDoorDashboard({
     });
   };
 
+  const handleGenerateContent = async () => {
+    if (!generateClientId) {
+      toast({ title: "Please select a client", variant: "destructive" });
+      return;
+    }
+    setGenerating(true);
+    try {
+      // Step 1: Trigger task
+      const { data: triggerData, error: triggerError } = await supabase.functions.invoke('trigger-task', {
+        body: {
+          client_id: generateClientId,
+          task_type: 'content',
+          payload: {
+            content_type: generateContentType,
+            topic: generateTopic,
+          },
+        },
+      });
+
+      if (triggerError) throw triggerError;
+      const taskId = triggerData?.task_id;
+      if (!taskId) throw new Error("No task_id returned");
+
+      toast({ title: "Task created", description: "AI is generating content..." });
+
+      // Step 2: Run content agent
+      const { data: agentData, error: agentError } = await supabase.functions.invoke('run-content-agent', {
+        body: { task_id: taskId },
+      });
+
+      if (agentError) throw agentError;
+
+      toast({ title: "Content generated!", description: "The deliverable is now available in the client portal." });
+      setGenerateOpen(false);
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Generate content error:', error);
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const getHealthIcon = (health: 'green' | 'yellow' | 'red') => {
     const colors = {
       green: 'text-emerald-500',
@@ -339,7 +401,59 @@ export function OrangeDoorDashboard({
         <Button variant="outline" onClick={() => onNavigate('client-health')} className="gap-2">
           <Flag className="w-4 h-4" /> Flag Client for Review
         </Button>
+
+        <Button variant="outline" onClick={() => setGenerateOpen(true)} className="gap-2">
+          <Sparkles className="w-4 h-4" /> Generate Content
+        </Button>
       </motion.div>
+
+      {/* Generate Content Dialog */}
+      <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate AI Content</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Client</Label>
+              <Select value={generateClientId} onValueChange={setGenerateClientId}>
+                <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+                <SelectContent>
+                  {clientHealth.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Content Type</Label>
+              <Select value={generateContentType} onValueChange={setGenerateContentType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Instagram post">Instagram Post</SelectItem>
+                  <SelectItem value="Facebook post">Facebook Post</SelectItem>
+                  <SelectItem value="LinkedIn post">LinkedIn Post</SelectItem>
+                  <SelectItem value="Blog intro">Blog Intro</SelectItem>
+                  <SelectItem value="Email subject line">Email Subject Line</SelectItem>
+                  <SelectItem value="Google Business post">Google Business Post</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Topic</Label>
+              <Input
+                value={generateTopic}
+                onChange={(e) => setGenerateTopic(e.target.value)}
+                placeholder="What should the content be about?"
+              />
+            </div>
+            <Button onClick={handleGenerateContent} disabled={generating} className="w-full gap-2">
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {generating ? "Generating..." : "Generate Content"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Top Metrics */}
       <motion.div 

@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -18,15 +18,16 @@ serve(async (req) => {
 
   try {
     const { clientId }: { clientId: string } = await req.json();
-    console.log(`Auto-running tasks for new client ${clientId}`);
+    console.log(`Auto-running tasks for client ${clientId}`);
 
-    // Get all pending FULL automation tasks for this client
+    // Get all pending FULL automation tasks for this client, ordered
     const { data: tasks, error: tasksError } = await supabase
       .from("client_tasks")
       .select("*")
       .eq("client_account_id", clientId)
-      .eq("status", "pending")
-      .eq("automation_type", "FULL");
+      .in("status", ["pending", "failed"])
+      .eq("automation_type", "FULL")
+      .order("order_index", { ascending: true });
 
     if (tasksError) {
       throw new Error(`Failed to fetch tasks: ${tasksError.message}`);
@@ -35,27 +36,37 @@ serve(async (req) => {
     if (!tasks || tasks.length === 0) {
       console.log("No pending FULL tasks to run");
       return new Response(
-        JSON.stringify({ success: true, message: "No tasks to run", tasksRun: 0 }),
+        JSON.stringify({ success: true, message: "No tasks to run", completed: 0, failed: 0, results: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Found ${tasks.length} FULL automation tasks to run`);
+    console.log(`Found ${tasks.length} FULL automation tasks to run sequentially`);
 
     let completed = 0;
     let failed = 0;
     const results: { taskId: string; name: string; status: string; error?: string }[] = [];
 
-    // Run each task by calling the run-automation function
+    // Run each task SEQUENTIALLY
     for (const task of tasks) {
+      const jobType = mapTaskToJobType(task.name);
+      console.log(`[${completed + failed + 1}/${tasks.length}] Running: ${task.name} (jobType: ${jobType})`);
+
+      // Mark as in_progress
+      await supabase
+        .from("client_tasks")
+        .update({
+          status: "in_progress",
+          started_at: new Date().toISOString(),
+        })
+        .eq("id", task.id);
+
       try {
-        console.log(`Running task: ${task.name} (${task.id})`);
-        
         const response = await supabase.functions.invoke("run-automation", {
           body: {
             clientId: clientId,
             taskId: task.id,
-            jobType: mapTaskToJobType(task.name),
+            jobType: jobType,
           },
         });
 
@@ -63,14 +74,28 @@ serve(async (req) => {
           throw new Error(response.error.message);
         }
 
+        // run-automation already marks the task completed via taskId,
+        // just read status to confirm
         completed++;
         results.push({ taskId: task.id, name: task.name, status: "completed" });
-        console.log(`Task ${task.name} completed successfully`);
+        console.log(`✓ ${task.name} completed`);
       } catch (error) {
-        failed++;
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+        // run-automation's catch block already marks task as failed via taskId,
+        // but if the invoke itself failed (network etc), ensure we mark it
+        await supabase
+          .from("client_tasks")
+          .update({
+            status: "failed",
+            notes: `Error: ${errorMessage}`,
+          })
+          .eq("id", task.id)
+          .neq("status", "failed"); // avoid overwriting if already set
+
+        failed++;
         results.push({ taskId: task.id, name: task.name, status: "failed", error: errorMessage });
-        console.error(`Task ${task.name} failed:`, errorMessage);
+        console.error(`✗ ${task.name} failed:`, errorMessage);
       }
     }
 
@@ -78,7 +103,7 @@ serve(async (req) => {
     await supabase.from("automation_alerts").insert({
       alert_type: "batch_complete",
       severity: failed > 0 ? "warning" : "info",
-      title: `Auto-onboarding Complete`,
+      title: `Auto-run Complete`,
       message: `Ran ${completed + failed} tasks: ${completed} succeeded, ${failed} failed`,
       source: "auto-run-client-tasks",
       source_id: clientId,
@@ -86,13 +111,7 @@ serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Ran ${completed + failed} tasks`,
-        completed,
-        failed,
-        results 
-      }),
+      JSON.stringify({ success: true, completed, failed, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
@@ -104,7 +123,6 @@ serve(async (req) => {
   }
 });
 
-// Map task names to job types
 function mapTaskToJobType(taskName: string): string {
   const mappings: Record<string, string> = {
     "Send Intake Form": "send_intake_form",
@@ -124,14 +142,12 @@ function mapTaskToJobType(taskName: string): string {
     "Generate Monthly Report": "generate_monthly_report",
   };
 
-  // Find matching job type
   for (const [name, jobType] of Object.entries(mappings)) {
-    if (taskName.toLowerCase().includes(name.toLowerCase()) || 
+    if (taskName.toLowerCase().includes(name.toLowerCase()) ||
         name.toLowerCase().includes(taskName.toLowerCase())) {
       return jobType;
     }
   }
 
-  // Default fallback
   return taskName.toLowerCase().replace(/\s+/g, "_");
 }
