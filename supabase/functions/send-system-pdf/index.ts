@@ -276,7 +276,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email with PDF attachment
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Consultants <onboarding@resend.dev>",
+      from: "Orange Door Consultants <hello@orangedoormarketing.com>",
       to: [email],
       subject: "Your SYSTEM Methodology Brochure is Ready!",
       attachments: [

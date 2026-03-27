@@ -266,7 +266,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Marketing <onboarding@resend.dev>",
+      from: "Orange Door Marketing <hello@orangedoormarketing.com>",
       to: [testEmail],
       subject: `[TEST] ${subject}`,
       html: `
