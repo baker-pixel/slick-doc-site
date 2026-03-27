@@ -50,7 +50,7 @@ serve(async (req) => {
     // Build the callback URL for N8N to call back
     const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/n8n-callback`;
 
-    // Send POST to N8N webhook
+    // Send POST to N8N webhook — include workflow metadata for callback auto-advance
     const n8nPayload = {
       client_id: clientId,
       tasks: tasks || [],

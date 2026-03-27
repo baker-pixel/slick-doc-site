@@ -18,11 +18,11 @@ serve(async (req) => {
     );
 
     const body = await req.json();
-    const { task_id, status, error_message, output_data, client_id } = body;
+    const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number } = body;
 
     // Validate required fields
-    if (!task_id && !client_id) {
-      throw new Error("task_id or client_id is required");
+    if (!task_id && !client_id && !step_id) {
+      throw new Error("task_id, client_id, or step_id is required");
     }
 
     // Validate status
@@ -31,7 +31,7 @@ serve(async (req) => {
       throw new Error(`Invalid status: ${status}. Must be one of: ${validStatuses.join(", ")}`);
     }
 
-    console.log(`N8N callback: task=${task_id}, status=${status}, client=${client_id}`);
+    console.log(`N8N callback: task=${task_id}, step=${step_id}, status=${status}, client=${client_id}`);
 
     // Single task update
     if (task_id) {
@@ -64,8 +64,49 @@ serve(async (req) => {
       }
     }
 
+    // Workflow step update
+    if (step_id) {
+      const stepUpdate: Record<string, unknown> = {
+        status: status || "completed",
+        result: output_data || null,
+      };
+      if (status === "completed" || !status) {
+        stepUpdate.completed_at = new Date().toISOString();
+      }
+      if (status === "failed" && error_message) {
+        stepUpdate.result = { error: error_message };
+      }
+
+      await supabase
+        .from("workflow_steps")
+        .update(stepUpdate)
+        .eq("id", step_id);
+
+      // Auto-advance workflow if step completed
+      if ((status === "completed" || !status) && workflow_id && step_number) {
+        const nextStepNumber = step_number + 1;
+        if (nextStepNumber <= 17) {
+          const baseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+          fetch(`${baseUrl}/functions/v1/run-workflow-step`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify({
+              client_id,
+              workflow_id,
+              step_number: nextStepNumber,
+            }),
+          }).catch((err) => console.error("Auto-advance from n8n-callback error:", err));
+        }
+      }
+    }
+
     // Batch update: mark multiple tasks by client
-    if (!task_id && client_id && status) {
+    if (!task_id && !step_id && client_id && status) {
       const { error } = await supabase
         .from("client_tasks")
         .update({
