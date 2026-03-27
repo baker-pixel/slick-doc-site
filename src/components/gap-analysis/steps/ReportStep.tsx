@@ -167,8 +167,8 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
             .update({ ai_analysis: data.analysis })
             .eq("id", submissionId);
         }
-        // Send email with report after analysis is complete
-        sendReportEmail(data.analysis);
+        // Send email with report — pass scorecard directly, don't rely on state
+        sendReportEmail(data.analysis, calculatedScorecard);
       }
     } catch (err) {
       console.error("Analysis generation failed:", err);
