@@ -1531,6 +1531,47 @@ export type Database = {
           },
         ]
       }
+      client_workflows: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          current_step: number | null
+          id: string
+          status: string | null
+          total_steps: number | null
+          updated_at: string | null
+          workflow_name: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          current_step?: number | null
+          id?: string
+          status?: string | null
+          total_steps?: number | null
+          updated_at?: string | null
+          workflow_name?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          current_step?: number | null
+          id?: string
+          status?: string | null
+          total_steps?: number | null
+          updated_at?: string | null
+          workflow_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_workflows_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_submissions: {
         Row: {
           business_name: string
@@ -3711,6 +3752,76 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_steps: {
+        Row: {
+          client_id: string
+          completed_at: string | null
+          created_at: string | null
+          depends_on: number | null
+          id: string
+          payload: Json | null
+          result: Json | null
+          status: string | null
+          step_name: string
+          step_number: number
+          task_id: string | null
+          task_type: string
+          workflow_id: string
+        }
+        Insert: {
+          client_id: string
+          completed_at?: string | null
+          created_at?: string | null
+          depends_on?: number | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: string | null
+          step_name: string
+          step_number: number
+          task_id?: string | null
+          task_type: string
+          workflow_id: string
+        }
+        Update: {
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string | null
+          depends_on?: number | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          status?: string | null
+          step_name?: string
+          step_number?: number
+          task_id?: string | null
+          task_type?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_steps_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_steps_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_steps_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "client_workflows"
             referencedColumns: ["id"]
           },
         ]
