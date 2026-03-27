@@ -458,6 +458,10 @@ export function OrangeDoorDashboard({
         }} className="gap-2">
           <Zap className="w-4 h-4" /> Run SEO Audit
         </Button>
+
+        <Button variant="outline" onClick={() => setWorkflowDialogOpen(true)} className="gap-2">
+          <Play className="w-4 h-4" /> Start Workflow
+        </Button>
       </motion.div>
 
       {/* Generate Content Dialog */}
