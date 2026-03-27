@@ -539,6 +539,33 @@ export function OrangeDoorDashboard({
         </DialogContent>
       </Dialog>
 
+      {/* Start Workflow Dialog */}
+      <Dialog open={workflowDialogOpen} onOpenChange={setWorkflowDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Start 17-Step Workflow</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Client</Label>
+              <Select value={workflowClientId} onValueChange={setWorkflowClientId}>
+                <SelectTrigger><SelectValue placeholder="Select a client" /></SelectTrigger>
+                <SelectContent>
+                  {clientHealth.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {workflowClientId && (
+              <WorkflowProgressPanel
+                clientId={workflowClientId}
+                clientName={clientHealth.find(c => c.id === workflowClientId)?.business_name || ""}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <motion.div 
         className="grid grid-cols-2 lg:grid-cols-4 gap-4"
