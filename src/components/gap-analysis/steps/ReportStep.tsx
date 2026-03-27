@@ -86,11 +86,11 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     const calculated = calculateSystemScorecard(scorecardData);
     setScorecard(calculated);
 
-    // Generate AI analysis
-    generateAnalysis();
+    // Generate AI analysis — pass scorecard directly since state isn't flushed yet
+    generateAnalysis(calculated);
   }, []);
 
-  const generateAnalysis = async () => {
+  const generateAnalysis = async (calculatedScorecard: SystemScorecard) => {
     try {
       const gapAnalysisPayload = {
         business_name: formData.businessName,
@@ -167,8 +167,8 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
             .update({ ai_analysis: data.analysis })
             .eq("id", submissionId);
         }
-        // Send email with report after analysis is complete
-        sendReportEmail(data.analysis);
+        // Send email with report — pass scorecard directly, don't rely on state
+        sendReportEmail(data.analysis, calculatedScorecard);
       }
     } catch (err) {
       console.error("Analysis generation failed:", err);
@@ -178,7 +178,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     }
   };
 
-  const sendReportEmail = async (analysis: AIAnalysis) => {
+  const sendReportEmail = async (analysis: AIAnalysis, directScorecard: SystemScorecard) => {
     try {
       await supabase.functions.invoke("send-gap-report", {
         body: {
@@ -186,7 +186,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
           firstName: formData.firstName,
           businessName: formData.businessName,
           resumeToken: resumeToken,
-          scorecard: scorecard,
+          scorecard: directScorecard,
           analysis,
         },
       });
