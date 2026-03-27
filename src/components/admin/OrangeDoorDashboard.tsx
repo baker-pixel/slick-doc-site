@@ -84,7 +84,7 @@ export function OrangeDoorDashboard({
   const [generating, setGenerating] = useState(false);
   const [seoRunning, setSeoRunning] = useState(false);
   const [seoClientId, setSeoClientId] = useState("");
-
+  const [workflowClientId, setWorkflowClientId] = useState("");
   useEffect(() => {
     fetchDashboardData();
   }, []);
