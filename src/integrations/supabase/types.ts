@@ -672,6 +672,41 @@ export type Database = {
           },
         ]
       }
+      client_credentials: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          id: string
+          wordpress_app_password: string | null
+          wordpress_url: string | null
+          wordpress_username: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          wordpress_app_password?: string | null
+          wordpress_url?: string | null
+          wordpress_username?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          wordpress_app_password?: string | null
+          wordpress_url?: string | null
+          wordpress_username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_credentials_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_documents: {
         Row: {
           category: string
@@ -1014,6 +1049,44 @@ export type Database = {
           {
             foreignKeyName: "client_notifications_client_account_id_fkey"
             columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_oauth_tokens: {
+        Row: {
+          access_token: string | null
+          client_id: string | null
+          created_at: string | null
+          id: string
+          platform: string
+          token_metadata: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          platform: string
+          token_metadata?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string
+          token_metadata?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_oauth_tokens_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
             referencedColumns: ["id"]
