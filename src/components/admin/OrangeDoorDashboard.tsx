@@ -327,6 +327,7 @@ export function OrangeDoorDashboard({
   };
 
   const [seoDialogOpen, setSeoDialogOpen] = useState(false);
+  const [workflowDialogOpen, setWorkflowDialogOpen] = useState(false);
 
   const handleRunSeoAudit = async () => {
     if (!seoClientId) {
