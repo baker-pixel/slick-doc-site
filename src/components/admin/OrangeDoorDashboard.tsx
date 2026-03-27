@@ -5,8 +5,9 @@ import {
   Users, DollarSign, Bot, AlertTriangle, 
   Plus, RefreshCw, Flag, ChevronRight,
   Activity, Zap, Calendar, CalendarDays, CalendarRange,
-  Sparkles, Loader2
+  Sparkles, Loader2, Play
 } from "lucide-react";
+import { WorkflowProgressPanel } from "./WorkflowProgressPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
