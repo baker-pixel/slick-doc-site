@@ -119,8 +119,8 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Generated ICS file for calendar attachment");
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Consultants <onboarding@resend.dev>",
-      reply_to: "hello@orangedoor.com",
+      from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+      reply_to: "hello@orangedoormarketing.com",
       to: [email],
       subject: "Your Strategy Call is Booked! 🎯",
       attachments: [

@@ -62,7 +62,7 @@ const handler = async (req: Request): Promise<Response> => {
     const formattedPeriod = `${new Date(periodStart).toLocaleDateString("en-US", { month: "long", day: "numeric" })} - ${new Date(periodEnd).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Marketing <onboarding@resend.dev>",
+      from: "Orange Door Marketing <hello@orangedoormarketing.com>",
       to: [clientEmail],
       subject: `Your ${reportType} Report is Ready - ${businessName}`,
       html: `
