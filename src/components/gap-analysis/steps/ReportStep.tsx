@@ -178,7 +178,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     }
   };
 
-  const sendReportEmail = async (analysis: AIAnalysis) => {
+  const sendReportEmail = async (analysis: AIAnalysis, directScorecard: SystemScorecard) => {
     try {
       await supabase.functions.invoke("send-gap-report", {
         body: {
@@ -186,7 +186,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
           firstName: formData.firstName,
           businessName: formData.businessName,
           resumeToken: resumeToken,
-          scorecard: scorecard,
+          scorecard: directScorecard,
           analysis,
         },
       });
