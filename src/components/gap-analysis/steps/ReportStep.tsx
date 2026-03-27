@@ -86,8 +86,8 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     const calculated = calculateSystemScorecard(scorecardData);
     setScorecard(calculated);
 
-    // Generate AI analysis
-    generateAnalysis();
+    // Generate AI analysis — pass scorecard directly since state isn't flushed yet
+    generateAnalysis(calculated);
   }, []);
 
   const generateAnalysis = async () => {
