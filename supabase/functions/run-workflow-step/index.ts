@@ -175,12 +175,33 @@ serve(async (req) => {
 
       // Auto-trigger next step if this one completed (not awaiting n8n)
       if (newStatus === "completed" && step_number < 17) {
-        // Fire and forget — don't await to avoid timeout chains
-        callFn("run-workflow-step", {
-          client_id: effectiveClientId,
-          workflow_id,
-          step_number: step_number + 1,
-        }).catch((err) => console.error("Auto-advance error:", err));
+        try {
+          await callFn("run-workflow-step", {
+            client_id: effectiveClientId,
+            workflow_id,
+            step_number: step_number + 1,
+          });
+        } catch (advanceErr) {
+          const advanceMsg = advanceErr instanceof Error ? advanceErr.message : String(advanceErr);
+          console.error("Auto-advance failed:", advanceMsg);
+
+          // Mark the next step as failed so admin can see it
+          await supabase
+            .from("workflow_steps")
+            .update({ status: "failed", result: { error: `Auto-advance failed: ${advanceMsg}` } })
+            .eq("workflow_id", workflow_id)
+            .eq("step_number", step_number + 1);
+
+          // Insert an automation alert so it shows in the admin panel
+          await supabase.from("automation_alerts").insert({
+            alert_type: "workflow_advance_failed",
+            title: `Workflow stuck at step ${step_number + 1}`,
+            message: `Workflow ${workflow_id} stuck at step ${step_number + 1}: ${advanceMsg}`,
+            severity: "high",
+            source: "run-workflow-step",
+            source_id: workflow_id,
+          });
+        }
       }
 
       return new Response(
