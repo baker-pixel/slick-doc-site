@@ -1,0 +1,1 @@
+ALTER TABLE public.workflow_steps ADD COLUMN IF NOT EXISTS callback_deadline timestamptz;
