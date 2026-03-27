@@ -3831,6 +3831,7 @@ export type Database = {
       }
       workflow_steps: {
         Row: {
+          callback_deadline: string | null
           client_id: string
           completed_at: string | null
           created_at: string | null
@@ -3846,6 +3847,7 @@ export type Database = {
           workflow_id: string
         }
         Insert: {
+          callback_deadline?: string | null
           client_id: string
           completed_at?: string | null
           created_at?: string | null
@@ -3861,6 +3863,7 @@ export type Database = {
           workflow_id: string
         }
         Update: {
+          callback_deadline?: string | null
           client_id?: string
           completed_at?: string | null
           created_at?: string | null

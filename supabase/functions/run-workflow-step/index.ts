@@ -155,13 +155,18 @@ serve(async (req) => {
       const n8nTypes = ["n8n_post_blog", "n8n_post_social", "analytics"];
       const newStatus = n8nTypes.includes(step.task_type) ? "awaiting_callback" : "completed";
 
+      const updatePayload: Record<string, unknown> = {
+        status: newStatus,
+        result,
+        completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+      };
+      if (newStatus === "awaiting_callback") {
+        updatePayload.callback_deadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      }
+
       await supabase
         .from("workflow_steps")
-        .update({
-          status: newStatus,
-          result,
-          completed_at: newStatus === "completed" ? new Date().toISOString() : null,
-        })
+        .update(updatePayload)
         .eq("id", step.id);
 
       // Advance workflow current_step counter
