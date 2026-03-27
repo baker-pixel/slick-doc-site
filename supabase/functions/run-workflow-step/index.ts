@@ -96,9 +96,21 @@ serve(async (req) => {
         case "website_analysis":
           result = await callFn("analyze-website", { client_id: effectiveClientId });
           break;
-        case "seo_audit":
-          result = await callFn("analyze-seo", { client_id: effectiveClientId });
+        case "seo_audit": {
+          // Create a workflow_task so run-seo-agent has a record to write to
+          const { data: seoTask } = await supabase
+            .from("workflow_tasks")
+            .insert({ client_id: effectiveClientId, task_type: "seo", status: "pending", payload: {} })
+            .select()
+            .single();
+          if (seoTask) {
+            await supabase.from("workflow_steps").update({ task_id: seoTask.id }).eq("id", step.id);
+            result = await callFn("run-seo-agent", { task_id: seoTask.id });
+          } else {
+            result = { error: "Failed to create workflow_task for SEO agent" };
+          }
           break;
+        }
         case "gap_report":
           result = await callFn("generate-analysis", { client_id: effectiveClientId });
           break;
