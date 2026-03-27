@@ -1,0 +1,1 @@
+UPDATE public.client_accounts SET website_url = 'https://orangedoormarketing.com.au', industry = 'Digital Marketing', website_summary = 'Orange Door is a full-service digital marketing agency offering SEO, content marketing, social media management, and paid advertising for small businesses.' WHERE id = '8daf0bb4-1388-4ba1-9ae0-857ed7bca1d4';
