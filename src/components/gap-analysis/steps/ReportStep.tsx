@@ -90,7 +90,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     generateAnalysis(calculated);
   }, []);
 
-  const generateAnalysis = async () => {
+  const generateAnalysis = async (calculatedScorecard: SystemScorecard) => {
     try {
       const gapAnalysisPayload = {
         business_name: formData.businessName,
