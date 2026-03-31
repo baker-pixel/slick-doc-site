@@ -276,15 +276,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     }
   };
 
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "foundation": return "bg-slate-500";
-      case "growth": return "bg-blue-500";
-      case "scale": return "bg-purple-500";
-      case "dominate": return "bg-amber-500";
-      default: return "bg-gray-500";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
     switch (status) {
