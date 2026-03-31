@@ -124,7 +124,7 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
     try {
       // Seed the workflow
       const { data: seedData, error: seedError } = await supabase.functions.invoke(
-        "seed-workflow-steps",
+        "seed-tier-workflow",
         { body: { client_id: clientId } }
       );
 
@@ -135,7 +135,7 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
 
       toast({
         title: "Workflow started",
-        description: `17-step workflow initiated for ${clientName}`,
+        description: `${seedData.total_steps}-step ${seedData.tier} workflow initiated for ${clientName}`,
       });
 
       // Refresh to get the new workflow
