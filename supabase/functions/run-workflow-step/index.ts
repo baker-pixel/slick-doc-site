@@ -6,6 +6,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const FOUNDATION_TASKS = ['website_analysis', 'seo_audit', 'gap_report', 'content', 'n8n_post_blog', 'n8n_post_social', 'report'];
+const GROWTH_TASKS = [...FOUNDATION_TASKS, 'email_template', 'ad_copy', 'send_campaign'];
+const TRANSFORMATION_TASKS = [...GROWTH_TASKS, 'analytics', 'social_content', 'email_campaign', 'notify_client'];
+
+const TIER_ALLOWED_TASKS: Record<string, string[]> = {
+  foundation: FOUNDATION_TASKS,
+  growth: GROWTH_TASKS,
+  transformation: TRANSFORMATION_TASKS,
+  scale: TRANSFORMATION_TASKS,
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
