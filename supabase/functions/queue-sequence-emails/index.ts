@@ -319,6 +319,7 @@ interface QueueRequest {
   recipientEmail: string;
   recipientName: string;
   recipientTimezone?: string;
+  tier?: string;
   data: Record<string, any>;
 }
 
