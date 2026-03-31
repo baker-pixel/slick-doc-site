@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Play, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, ExternalLink, Trash2, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { TierBadge } from "./TierBadge";
 
 interface ClientAccount {
   id: string;
