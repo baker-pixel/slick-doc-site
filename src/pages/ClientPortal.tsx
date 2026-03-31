@@ -340,6 +340,7 @@ export default function ClientPortal() {
           onSignOut={handleSignOut}
           badgeCounts={badgeCounts}
           hiddenTabs={preferences.hidden_tabs}
+          clientTier={(clientAccount?.tier?.toLowerCase() as ClientTier) || "foundation"}
         />
         
         <SidebarInset className="flex-1">
