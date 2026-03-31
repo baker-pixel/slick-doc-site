@@ -244,9 +244,7 @@ export function AdminClientSelector({ adminPassword, onSelectClient, onAddClient
                       <h3 className="font-semibold truncate">{client.business_name}</h3>
                       <p className="text-sm text-muted-foreground truncate">{client.email}</p>
                       <div className="flex gap-2 mt-2">
-                        <Badge variant="secondary" className={cn("text-xs", getTierColor(client.tier))}>
-                          {client.tier}
-                        </Badge>
+                        <TierBadge tier={client.tier} />
                         <Badge variant="secondary" className={cn("text-xs", getStatusColor(client.status))}>
                           {client.status}
                         </Badge>
