@@ -127,6 +127,7 @@ function mapTaskToJobType(taskName: string): string {
   const mappings: Record<string, string> = {
     "Send Intake Form": "send_intake_form",
     "Add to CRM": "add_to_crm",
+    "Add client to CRM": "add_to_crm",
     "Schedule Kickoff Call": "schedule_kickoff",
     "Run PageSpeed Test": "run_page_speed_test",
     "Create Google Review Link": "create_google_review_link",
@@ -140,14 +141,34 @@ function mapTaskToJobType(taskName: string): string {
     "Setup Retargeting Audiences": "setup_retargeting_audiences",
     "Setup Retention Automations": "setup_retention_automations",
     "Generate Monthly Report": "generate_monthly_report",
+    // New mappings for task names from task templates
+    "Build immediate response email": "email_sequence",
+    "Build confirmation SMS": "setup_lead_automations",
+    "Build 3-5 follow-up emails": "email_sequence",
+    "Build no response SMS": "setup_lead_automations",
+    "Build nurture email sequence": "email_sequence",
+    "Connect automations to CRM": "add_to_crm",
+    "Build retargeting audiences": "setup_retargeting_audiences",
+    "Add automated CRM reminders": "setup_lead_automations",
+    "Add lead tagging and segmentation": "setup_lead_automations",
+    "Add team notifications": "setup_lead_automations",
+    "Build renewal reminder": "build_renewal_reminder_sequence",
+    "Build review to case study": "build_review_to_case_study_workflow",
+    "Add segmentation logic": "add_segmentation_logic_to_funnel_steps",
+    "Build comprehensive KPI": "create_kpi_dashboard",
+    "Write 2 monthly blog": "content_generation",
+    "Write monthly blog": "content_generation",
   };
 
+  // First try exact/partial match against known mappings
+  const taskLower = taskName.toLowerCase();
   for (const [name, jobType] of Object.entries(mappings)) {
-    if (taskName.toLowerCase().includes(name.toLowerCase()) ||
-        name.toLowerCase().includes(taskName.toLowerCase())) {
+    if (taskLower.includes(name.toLowerCase()) ||
+        name.toLowerCase().includes(taskLower)) {
       return jobType;
     }
   }
 
-  return taskName.toLowerCase().replace(/\s+/g, "_");
+  // Fallback: snake_case the task name and let run-automation's aliasMap handle it
+  return taskName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
