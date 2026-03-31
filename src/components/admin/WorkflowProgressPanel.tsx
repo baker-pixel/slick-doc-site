@@ -190,7 +190,7 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
     );
   }
 
-  const completedCount = steps.filter((s) => s.status === "completed").length;
+  const completedCount = steps.filter((s) => s.status === "completed" || s.status === "skipped").length;
   const progressPct = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
 
   return (
