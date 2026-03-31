@@ -261,9 +261,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className={`text-xs ${getTierColor(client.tier)}`}>
-                          {client.tier}
-                        </Badge>
+                        <TierBadge tier={client.tier} />
                         <span className="text-xs text-muted-foreground">
                           {client.status}
                         </span>
