@@ -13,6 +13,7 @@ import {
   Clock,
   AlertTriangle,
   Wifi,
+  SkipForward,
 } from "lucide-react";
 
 interface WorkflowStep {
@@ -42,6 +43,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.C
   running: { label: "Running", color: "bg-amber-500/10 text-amber-600 border-amber-500/30", icon: Loader2 },
   awaiting_callback: { label: "Awaiting", color: "bg-blue-500/10 text-blue-600 border-blue-500/30", icon: Wifi },
   completed: { label: "Done", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30", icon: CheckCircle2 },
+  skipped: { label: "Skipped", color: "bg-muted text-muted-foreground border-border", icon: SkipForward },
   failed: { label: "Failed", color: "bg-destructive/10 text-destructive border-destructive/30", icon: AlertTriangle },
 };
 
@@ -188,7 +190,7 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
     );
   }
 
-  const completedCount = steps.filter((s) => s.status === "completed").length;
+  const completedCount = steps.filter((s) => s.status === "completed" || s.status === "skipped").length;
   const progressPct = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
 
   return (
@@ -220,6 +222,8 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
                   <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
                 ) : step.status === "awaiting_callback" ? (
                   <Wifi className="h-4 w-4 text-blue-500" />
+                ) : step.status === "skipped" ? (
+                  <SkipForward className="h-4 w-4 text-muted-foreground" />
                 ) : step.status === "failed" ? (
                   <AlertTriangle className="h-4 w-4 text-destructive" />
                 ) : (
