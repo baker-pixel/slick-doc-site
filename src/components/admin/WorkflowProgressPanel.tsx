@@ -222,6 +222,8 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
                   <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
                 ) : step.status === "awaiting_callback" ? (
                   <Wifi className="h-4 w-4 text-blue-500" />
+                ) : step.status === "skipped" ? (
+                  <SkipForward className="h-4 w-4 text-muted-foreground" />
                 ) : step.status === "failed" ? (
                   <AlertTriangle className="h-4 w-4 text-destructive" />
                 ) : (
