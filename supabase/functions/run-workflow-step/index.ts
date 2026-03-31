@@ -191,7 +191,15 @@ serve(async (req) => {
         .eq("id", workflow_id);
 
       // Auto-trigger next step if this one completed (not awaiting n8n)
-      if (newStatus === "completed" && step_number < 17) {
+      // Get total steps from the workflow record
+      const { data: wfData } = await supabase
+        .from("client_workflows")
+        .select("total_steps")
+        .eq("id", workflow_id)
+        .single();
+      const totalSteps = wfData?.total_steps || 17;
+
+      if (newStatus === "completed" && step_number < totalSteps) {
         try {
           await callFn("run-workflow-step", {
             client_id: effectiveClientId,
