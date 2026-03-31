@@ -333,19 +333,55 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { triggerType, recipientEmail, recipientName, recipientTimezone, data }: QueueRequest = await req.json();
+    const { triggerType, recipientEmail, recipientName, recipientTimezone, tier, data }: QueueRequest = await req.json();
 
-    console.log(`Queueing sequence for trigger: ${triggerType}, recipient: ${recipientEmail}`);
+    console.log(`Queueing sequence for trigger: ${triggerType}, recipient: ${recipientEmail}, tier: ${tier || 'any'}`);
 
-    // Get the active sequence for this trigger
-    const { data: sequence, error: seqError } = await supabase
-      .from("email_sequences")
-      .select("*")
-      .eq("trigger_type", triggerType)
-      .eq("is_active", true)
-      .single();
+    // Try tier-specific sequence first, then fall back to generic (tier IS NULL)
+    let sequence: any = null;
 
-    if (seqError || !sequence) {
+    if (tier) {
+      const { data: tierSeq } = await supabase
+        .from("email_sequences")
+        .select("*")
+        .eq("trigger_type", triggerType)
+        .eq("tier", tier.toLowerCase())
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (tierSeq) {
+        sequence = tierSeq;
+        console.log(`Found tier-specific sequence for ${tier}`);
+      }
+    }
+
+    if (!sequence) {
+      const { data: genericSeq } = await supabase
+        .from("email_sequences")
+        .select("*")
+        .eq("trigger_type", triggerType)
+        .is("tier", null)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      sequence = genericSeq;
+      if (sequence) console.log("Using generic (tierless) sequence");
+    }
+
+    if (!sequence) {
+      // Final fallback: any active sequence for this trigger
+      const { data: anySeq } = await supabase
+        .from("email_sequences")
+        .select("*")
+        .eq("trigger_type", triggerType)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+
+      sequence = anySeq;
+    }
+
+    if (!sequence) {
       console.log("No active sequence found for trigger:", triggerType);
       return new Response(JSON.stringify({ message: "No active sequence found" }), {
         status: 200,
