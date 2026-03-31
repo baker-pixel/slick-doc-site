@@ -2064,6 +2064,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          tier: string | null
           trigger_type: string
           updated_at: string
         }
@@ -2073,6 +2074,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          tier?: string | null
           trigger_type: string
           updated_at?: string
         }
@@ -2082,6 +2084,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          tier?: string | null
           trigger_type?: string
           updated_at?: string
         }

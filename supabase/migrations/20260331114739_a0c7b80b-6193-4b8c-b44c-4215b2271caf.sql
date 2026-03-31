@@ -1,0 +1,1 @@
+ALTER TABLE public.email_sequences ADD COLUMN IF NOT EXISTS tier text DEFAULT NULL;
