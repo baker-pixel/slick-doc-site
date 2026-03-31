@@ -202,14 +202,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
     return "text-red-500";
   };
 
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "scale": return "bg-purple-100 text-purple-800";
-      case "growth": return "bg-blue-100 text-blue-800";
-      case "foundation": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   return (
     <div className="space-y-6">
