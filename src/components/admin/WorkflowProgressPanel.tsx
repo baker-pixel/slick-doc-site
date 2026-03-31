@@ -43,6 +43,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.C
   running: { label: "Running", color: "bg-amber-500/10 text-amber-600 border-amber-500/30", icon: Loader2 },
   awaiting_callback: { label: "Awaiting", color: "bg-blue-500/10 text-blue-600 border-blue-500/30", icon: Wifi },
   completed: { label: "Done", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30", icon: CheckCircle2 },
+  skipped: { label: "Skipped", color: "bg-muted text-muted-foreground border-border", icon: SkipForward },
   failed: { label: "Failed", color: "bg-destructive/10 text-destructive border-destructive/30", icon: AlertTriangle },
 };
 
