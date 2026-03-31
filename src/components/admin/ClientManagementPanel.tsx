@@ -419,9 +419,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                           <div className="text-xs text-muted-foreground">{client.email}</div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={getTierColor(client.tier)}>
-                            {client.tier}
-                          </Badge>
+                          <TierBadge tier={client.tier} />
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusColor(client.status)}>
