@@ -164,6 +164,29 @@ function normalizeJobType(raw: unknown): AutomationType {
     speed_test: "run_page_speed_test",
     crm: "add_to_crm",
     kickoff: "schedule_kickoff",
+
+    // CRM/project tracker aliases
+    add_client_to_crm_project_tracker: "add_to_crm",
+    add_client_to_crm: "add_to_crm",
+    connect_automations_to_crm: "add_to_crm",
+
+    // Email/SMS sequence aliases
+    build_immediate_response_email_for_new_leads: "email_sequence",
+    build_immediate_response_email: "email_sequence",
+    build_3_5_follow_up_emails_for_leads: "email_sequence",
+    build_3_5_follow_up_emails: "email_sequence",
+    build_nurture_email_sequence: "email_sequence",
+    build_confirmation_sms_for_new_leads: "setup_lead_automations",
+    build_confirmation_sms: "setup_lead_automations",
+    build_no_response_sms_workflow: "setup_lead_automations",
+    build_no_response_sms: "setup_lead_automations",
+
+    // Retargeting/segmentation aliases
+    build_retargeting_audiences: "setup_retargeting_audiences",
+    add_automated_crm_reminders: "setup_lead_automations",
+    add_lead_tagging_and_segmentation: "setup_lead_automations",
+    add_team_notifications_for_pipeline_events: "setup_lead_automations",
+    add_team_notifications: "setup_lead_automations",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);
