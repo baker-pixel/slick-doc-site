@@ -8,6 +8,7 @@ import { Search, Building2, Users, Plus, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { TierBadge } from "./TierBadge";
 
 interface ClientAccount {
   id: string;
@@ -83,18 +84,7 @@ export function AdminClientSelector({ adminPassword, onSelectClient, onAddClient
       (client.first_name && client.first_name.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const getTierColor = (tier: string) => {
-    switch (tier?.toLowerCase()) {
-      case "foundation":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-      case "growth":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-      case "transformation":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
-      default:
-        return "bg-muted text-muted-foreground";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -197,9 +187,7 @@ export function AdminClientSelector({ adminPassword, onSelectClient, onAddClient
                       </div>
                       <p className="text-sm text-muted-foreground truncate">{client.email}</p>
                       <div className="flex gap-2 mt-2">
-                        <Badge variant="secondary" className={cn("text-xs", getTierColor(client.tier))}>
-                          {client.tier}
-                        </Badge>
+                        <TierBadge tier={client.tier} />
                         <Badge variant="secondary" className={cn("text-xs", getStatusColor(client.status))}>
                           {client.status}
                         </Badge>
@@ -256,9 +244,7 @@ export function AdminClientSelector({ adminPassword, onSelectClient, onAddClient
                       <h3 className="font-semibold truncate">{client.business_name}</h3>
                       <p className="text-sm text-muted-foreground truncate">{client.email}</p>
                       <div className="flex gap-2 mt-2">
-                        <Badge variant="secondary" className={cn("text-xs", getTierColor(client.tier))}>
-                          {client.tier}
-                        </Badge>
+                        <TierBadge tier={client.tier} />
                         <Badge variant="secondary" className={cn("text-xs", getStatusColor(client.status))}>
                           {client.status}
                         </Badge>

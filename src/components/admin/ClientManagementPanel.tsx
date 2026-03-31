@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Play, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, ExternalLink, Trash2, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { TierBadge } from "./TierBadge";
 
 interface ClientAccount {
   id: string;
@@ -276,15 +277,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     }
   };
 
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "foundation": return "bg-slate-500";
-      case "growth": return "bg-blue-500";
-      case "scale": return "bg-purple-500";
-      case "dominate": return "bg-amber-500";
-      default: return "bg-gray-500";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -426,9 +419,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                           <div className="text-xs text-muted-foreground">{client.email}</div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={getTierColor(client.tier)}>
-                            {client.tier}
-                          </Badge>
+                          <TierBadge tier={client.tier} />
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusColor(client.status)}>

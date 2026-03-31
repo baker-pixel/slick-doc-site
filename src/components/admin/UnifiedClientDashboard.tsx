@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TierBadge } from "./TierBadge";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isAfter, isBefore, addDays } from "date-fns";
 import {
@@ -201,14 +202,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
     return "text-red-500";
   };
 
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "scale": return "bg-purple-100 text-purple-800";
-      case "growth": return "bg-blue-100 text-blue-800";
-      case "foundation": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   return (
     <div className="space-y-6">
@@ -267,9 +261,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className={`text-xs ${getTierColor(client.tier)}`}>
-                          {client.tier}
-                        </Badge>
+                        <TierBadge tier={client.tier} />
                         <span className="text-xs text-muted-foreground">
                           {client.status}
                         </span>
@@ -294,9 +286,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
                       <h3 className="text-2xl font-bold">{selectedClient.business_name}</h3>
                       <p className="text-muted-foreground">{selectedClient.email}</p>
                       <div className="flex items-center gap-2 mt-2">
-                        <Badge className={getTierColor(selectedClient.tier)}>
-                          {selectedClient.tier} tier
-                        </Badge>
+                        <TierBadge tier={selectedClient.tier} />
                         {selectedClient.industry && (
                           <Badge variant="outline">{selectedClient.industry}</Badge>
                         )}

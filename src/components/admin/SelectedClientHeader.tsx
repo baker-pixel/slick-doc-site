@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Building2, Mail, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TierBadge } from "./TierBadge";
 
 interface ClientAccount {
   id: string;
@@ -21,18 +22,7 @@ interface SelectedClientHeaderProps {
 }
 
 export function SelectedClientHeader({ client, onChangeClient }: SelectedClientHeaderProps) {
-  const getTierColor = (tier: string) => {
-    switch (tier?.toLowerCase()) {
-      case "foundation":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-      case "growth":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-      case "transformation":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
-      default:
-        return "bg-muted text-muted-foreground";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -79,9 +69,7 @@ export function SelectedClientHeader({ client, onChangeClient }: SelectedClientH
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold truncate">{client.business_name}</h2>
-              <Badge variant="secondary" className={cn("text-xs", getTierColor(client.tier))}>
-                {client.tier}
-              </Badge>
+              <TierBadge tier={client.tier} />
               <Badge variant="secondary" className={cn("text-xs", getStatusColor(client.status))}>
                 {client.status}
               </Badge>
