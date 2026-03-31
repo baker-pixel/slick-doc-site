@@ -58,6 +58,8 @@ export type PortalTab =
   | "settings"
   | "learning";
 
+export type ClientTier = "foundation" | "growth" | "transformation";
+
 export interface BadgeCounts {
   notifications: number;
   messages: number;
@@ -72,59 +74,118 @@ interface ClientPortalSidebarProps {
   onSignOut: () => void;
   badgeCounts?: BadgeCounts;
   hiddenTabs?: string[];
+  clientTier?: ClientTier;
 }
 
-// Simplified: only the tabs clients actually use day-to-day
-const primaryItems = [
-  { id: "activity" as const, label: "Home", icon: Activity },
-  { id: "projects" as const, label: "Projects", icon: LayoutDashboard },
-  { id: "approvals" as const, label: "Approvals", icon: FileCheck, badgeKey: "approvals" as const },
-  { id: "messages" as const, label: "Messages", icon: MessageCircle, badgeKey: "messages" as const },
-  { id: "deliverables" as const, label: "Deliverables", icon: Package },
-  { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
+interface NavItemDef {
+  id: PortalTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badgeKey?: keyof BadgeCounts;
+  minTier: ClientTier;
+}
+
+const TIER_RANK: Record<ClientTier, number> = {
+  foundation: 0,
+  growth: 1,
+  transformation: 2,
+};
+
+const TIER_DISPLAY: Record<ClientTier, string> = {
+  foundation: "Foundation",
+  growth: "Growth",
+  transformation: "Transformation",
+};
+
+// All navigable items with their minimum required tier
+const allNavItems: NavItemDef[] = [
+  { id: "activity", label: "Home", icon: Activity, minTier: "foundation" },
+  { id: "projects", label: "Projects", icon: LayoutDashboard, minTier: "foundation" },
+  { id: "approvals", label: "Approvals", icon: FileCheck, badgeKey: "approvals", minTier: "growth" },
+  { id: "messages", label: "Messages", icon: MessageCircle, badgeKey: "messages", minTier: "foundation" },
+  { id: "deliverables", label: "Deliverables", icon: Package, minTier: "foundation" },
+  { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
+  { id: "brand", label: "Brand Assets", icon: Palette, minTier: "growth" },
+  { id: "access", label: "Platform Access", icon: KeyRound, minTier: "growth" },
+  { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "growth" },
+  { id: "agreements", label: "Agreements", icon: FileSignature, minTier: "transformation" },
+  { id: "team", label: "Your Team", icon: Users, minTier: "transformation" },
 ];
 
-const secondaryItems = [
-  { id: "notifications" as const, label: "Updates", icon: Bell, badgeKey: "notifications" as const },
-  { id: "settings" as const, label: "Settings", icon: Settings },
+const secondaryItems: NavItemDef[] = [
+  { id: "notifications", label: "Updates", icon: Bell, badgeKey: "notifications", minTier: "foundation" },
+  { id: "meetings", label: "Meetings", icon: Calendar, minTier: "foundation" },
+  { id: "requests", label: "Requests", icon: Send, minTier: "foundation" },
+  { id: "documents", label: "Documents", icon: FileText, minTier: "foundation" },
+  { id: "invoices", label: "Invoices", icon: CreditCard, minTier: "foundation" },
+  { id: "help", label: "Help", icon: HelpCircle, minTier: "foundation" },
+  { id: "settings", label: "Settings", icon: Settings, minTier: "foundation" },
 ];
+
+function hasAccess(tier: ClientTier, minTier: ClientTier): boolean {
+  return TIER_RANK[tier] >= TIER_RANK[minTier];
+}
+
+function getUpgradeTierName(minTier: ClientTier): string {
+  return TIER_DISPLAY[minTier];
+}
 
 interface NavItemProps {
-  item: { id: PortalTab; label: string; icon: React.ComponentType<{ className?: string }>; badgeKey?: keyof BadgeCounts };
+  item: NavItemDef;
   activeTab: PortalTab;
   onTabChange: (tab: PortalTab) => void;
   badgeCounts?: BadgeCounts;
+  locked: boolean;
+  lockTierName?: string;
 }
 
-function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
+function NavItem({ item, activeTab, onTabChange, badgeCounts, locked, lockTierName }: NavItemProps) {
   const isActive = activeTab === item.id;
   const badgeCount = item.badgeKey && badgeCounts ? badgeCounts[item.badgeKey] : 0;
-  const showBadge = badgeCount > 0 && !isActive;
-  
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        isActive={isActive}
-        onClick={() => onTabChange(item.id)}
-        tooltip={item.label}
-        className={cn(
-          "relative transition-all duration-200 rounded-xl h-10",
-          isActive 
-            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
+  const showBadge = badgeCount > 0 && !isActive && !locked;
+
+  const button = (
+    <SidebarMenuButton
+      isActive={!locked && isActive}
+      onClick={locked ? undefined : () => onTabChange(item.id)}
+      tooltip={locked ? `Available in ${lockTierName} plan` : item.label}
+      className={cn(
+        "relative transition-all duration-200 rounded-xl h-10",
+        locked
+          ? "opacity-50 cursor-not-allowed"
+          : isActive
+            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
             : "hover:bg-muted/80"
-        )}
-      >
-        <item.icon className={cn("h-4 w-4", isActive && "scale-110")} />
-        <span className="flex-1 font-medium">{item.label}</span>
-        {showBadge && (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground">
-            {badgeCount > 9 ? "9+" : badgeCount}
-          </span>
-        )}
-        {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60" />}
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+      )}
+    >
+      <item.icon className={cn("h-4 w-4", !locked && isActive && "scale-110")} />
+      <span className="flex-1 font-medium">{item.label}</span>
+      {locked && <Lock className="h-3 w-3 opacity-60" />}
+      {showBadge && (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground">
+          {badgeCount > 9 ? "9+" : badgeCount}
+        </span>
+      )}
+      {!locked && isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60" />}
+    </SidebarMenuButton>
   );
+
+  if (locked) {
+    return (
+      <SidebarMenuItem>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent side="right" className="max-w-[200px]">
+              <p className="text-xs">Available in <strong>{lockTierName}</strong> plan — ask your account manager to upgrade.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </SidebarMenuItem>
+    );
+  }
+
+  return <SidebarMenuItem>{button}</SidebarMenuItem>;
 }
 
 export function ClientPortalSidebar({ 
@@ -134,9 +195,10 @@ export function ClientPortalSidebar({
   businessName,
   onSignOut,
   badgeCounts,
-  hiddenTabs = []
+  hiddenTabs = [],
+  clientTier = "foundation",
 }: ClientPortalSidebarProps) {
-  const filterItems = <T extends { id: string }>(items: T[]) => 
+  const filterItems = (items: NavItemDef[]) =>
     items.filter(item => !hiddenTabs.includes(item.id));
 
   const initials = clientName
@@ -145,6 +207,22 @@ export function ClientPortalSidebar({
     .join("")
     .toUpperCase()
     .slice(0, 2) || "CL";
+
+  const renderItems = (items: NavItemDef[]) =>
+    filterItems(items).map((item) => {
+      const locked = !hasAccess(clientTier, item.minTier);
+      return (
+        <NavItem
+          key={item.id}
+          item={item}
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          badgeCounts={badgeCounts}
+          locked={locked}
+          lockTierName={locked ? getUpgradeTierName(item.minTier) : undefined}
+        />
+      );
+    });
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -162,27 +240,20 @@ export function ClientPortalSidebar({
       </SidebarHeader>
       
       <SidebarContent className="px-3">
-        {/* Primary navigation — the stuff clients use daily */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">
-              {filterItems(primaryItems).map((item) => (
-                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
-              ))}
+              {renderItems(allNavItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Divider */}
         <div className="mx-3 my-4 border-t border-border/40" />
 
-        {/* Secondary */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">
-              {filterItems(secondaryItems).map((item) => (
-                <NavItem key={item.id} item={item} activeTab={activeTab} onTabChange={onTabChange} badgeCounts={badgeCounts} />
-              ))}
+              {renderItems(secondaryItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
