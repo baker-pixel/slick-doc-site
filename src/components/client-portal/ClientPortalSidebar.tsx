@@ -10,7 +10,17 @@ import {
   Sparkles,
   ChevronRight,
   Settings,
-  MoreHorizontal,
+  Lock,
+  Calendar,
+  FileText,
+  CreditCard,
+  HelpCircle,
+  Palette,
+  KeyRound,
+  Users,
+  FileSignature,
+  GraduationCap,
+  Send,
 } from "lucide-react";
 import {
   Sidebar,
