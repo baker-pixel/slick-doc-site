@@ -76,6 +76,53 @@ serve(async (req) => {
       }
     }
 
+    // Tier validation
+    const effectiveClientId = client_id || step.client_id;
+    const { data: clientData } = await supabase
+      .from("client_accounts")
+      .select("tier")
+      .eq("id", effectiveClientId)
+      .single();
+
+    const clientTier = (clientData?.tier || "foundation").toLowerCase();
+    const allowedTasks = TIER_ALLOWED_TASKS[clientTier] || TIER_ALLOWED_TASKS.foundation;
+
+    if (!allowedTasks.includes(step.task_type)) {
+      // Skip this step — not included in the client's tier
+      await supabase
+        .from("workflow_steps")
+        .update({ status: "skipped", result: { reason: `Not included in ${clientTier} plan` } })
+        .eq("id", step.id);
+
+      // Auto-advance to next step
+      const { data: wfData } = await supabase
+        .from("client_workflows")
+        .select("total_steps")
+        .eq("id", workflow_id)
+        .single();
+      const totalSteps = wfData?.total_steps || 17;
+
+      await supabase
+        .from("client_workflows")
+        .update({ current_step: step_number + 1, updated_at: new Date().toISOString() })
+        .eq("id", workflow_id);
+
+      if (step_number < totalSteps) {
+        const baseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        await fetch(`${baseUrl}/functions/v1/run-workflow-step`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({ client_id: effectiveClientId, workflow_id, step_number: step_number + 1 }),
+        }).catch((e) => console.error("Auto-advance after skip failed:", e));
+      }
+
+      return new Response(
+        JSON.stringify({ skipped: true, reason: `Not included in ${clientTier} plan`, step: step_number }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Mark step running
     await supabase
       .from("workflow_steps")
