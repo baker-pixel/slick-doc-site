@@ -145,7 +145,6 @@ serve(async (req) => {
     };
 
     let result: unknown = null;
-    const effectiveClientId = client_id || step.client_id;
 
     try {
       const p = step.payload ?? {};
