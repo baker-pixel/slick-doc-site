@@ -13,6 +13,7 @@ import {
   Clock,
   AlertTriangle,
   Wifi,
+  SkipForward,
 } from "lucide-react";
 
 interface WorkflowStep {
