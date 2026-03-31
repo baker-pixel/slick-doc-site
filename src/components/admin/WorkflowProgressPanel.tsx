@@ -181,7 +181,7 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
             ) : (
               <Play className="h-4 w-4" />
             )}
-            {starting ? "Starting..." : "Start 17-Step Workflow"}
+            {starting ? "Starting..." : "Start Tier Workflow"}
           </Button>
         </CardContent>
       </Card>
