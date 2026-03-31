@@ -84,18 +84,7 @@ export function AdminClientSelector({ adminPassword, onSelectClient, onAddClient
       (client.first_name && client.first_name.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const getTierColor = (tier: string) => {
-    switch (tier?.toLowerCase()) {
-      case "foundation":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-      case "growth":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
-      case "transformation":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
-      default:
-        return "bg-muted text-muted-foreground";
-    }
-  };
+  // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
