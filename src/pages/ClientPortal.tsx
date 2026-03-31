@@ -6,7 +6,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
-import { ClientPortalSidebar, type PortalTab, type BadgeCounts } from "@/components/client-portal/ClientPortalSidebar";
+import { ClientPortalSidebar, type PortalTab, type BadgeCounts, type ClientTier } from "@/components/client-portal/ClientPortalSidebar";
 
 import { usePortalPreferences } from "@/hooks/use-portal-preferences";
 
