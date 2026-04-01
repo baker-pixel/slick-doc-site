@@ -286,7 +286,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
                       <h3 className="text-2xl font-bold">{selectedClient.business_name}</h3>
                       <p className="text-muted-foreground">{selectedClient.email}</p>
                       <div className="flex items-center gap-2 mt-2">
-                        <TierBadge tier={selectedClient.tier} />
+                        <TierBadge tier={(selectedClient as any).plan_tier || selectedClient.tier} />
                         {selectedClient.industry && (
                           <Badge variant="outline">{selectedClient.industry}</Badge>
                         )}
