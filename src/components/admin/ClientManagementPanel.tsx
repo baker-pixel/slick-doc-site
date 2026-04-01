@@ -21,6 +21,7 @@ interface ClientAccount {
   first_name: string | null;
   last_name: string | null;
   tier: string;
+  plan_tier: string | null;
   status: string;
   onboarded_at: string | null;
   created_at: string;
@@ -70,6 +71,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     first_name: "",
     last_name: "",
     tier: "foundation",
+    plan_tier: "foundation",
     website_url: "",
   });
 
@@ -142,6 +144,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       first_name: newClient.first_name || null,
       last_name: newClient.last_name || null,
       tier: newClient.tier,
+      plan_tier: newClient.plan_tier,
       website_url: newClient.website_url || null,
       status: "active",
     }).select().single();
@@ -151,7 +154,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     } else {
       toast.success("Client added! Running onboarding automations...");
       setAddDialogOpen(false);
-      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", website_url: "" });
+      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", plan_tier: "foundation", website_url: "" });
       fetchClients();
       
       // Auto-run all FULL tasks for the new client
@@ -357,8 +360,20 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                   <SelectContent>
                     <SelectItem value="foundation">Foundation</SelectItem>
                     <SelectItem value="growth">Growth</SelectItem>
-                    <SelectItem value="scale">Scale</SelectItem>
-                    <SelectItem value="dominate">Dominate</SelectItem>
+                    <SelectItem value="transformation">Transformation</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Plan Tier</Label>
+                <Select value={newClient.plan_tier} onValueChange={(v) => setNewClient({ ...newClient, plan_tier: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="foundation">Foundation</SelectItem>
+                    <SelectItem value="growth">Growth</SelectItem>
+                    <SelectItem value="transformation">Transformation</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -419,7 +434,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                           <div className="text-xs text-muted-foreground">{client.email}</div>
                         </TableCell>
                         <TableCell>
-                          <TierBadge tier={client.tier} />
+                          <TierBadge tier={client.plan_tier || client.tier} />
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusColor(client.status)}>

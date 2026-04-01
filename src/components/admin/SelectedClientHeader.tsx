@@ -69,7 +69,7 @@ export function SelectedClientHeader({ client, onChangeClient }: SelectedClientH
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold truncate">{client.business_name}</h2>
-              <TierBadge tier={client.tier} />
+              <TierBadge tier={(client as any).plan_tier || client.tier} />
               <Badge variant="secondary" className={cn("text-xs", getStatusColor(client.status))}>
                 {client.status}
               </Badge>
