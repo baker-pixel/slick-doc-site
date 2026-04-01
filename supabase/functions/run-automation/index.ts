@@ -187,6 +187,15 @@ function normalizeJobType(raw: unknown): AutomationType {
     add_lead_tagging_and_segmentation: "setup_lead_automations",
     add_team_notifications_for_pipeline_events: "setup_lead_automations",
     add_team_notifications: "setup_lead_automations",
+
+    // Review request system aliases
+    build_automated_review_request_system: "setup_review_automation",
+    provide_review_request_scripts_templates: "send_review_scripts",
+
+    // KPI/analytics/reporting aliases
+    build_kpi_dashboard_outline: "create_analytics_dashboard",
+    review_monthly_analytics_and_kpis: "generate_monthly_report",
+    prepare_and_send_monthly_performance_summary: "generate_monthly_report",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);

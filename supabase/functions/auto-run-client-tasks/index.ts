@@ -158,6 +158,11 @@ function mapTaskToJobType(taskName: string): string {
     "Build comprehensive KPI": "create_kpi_dashboard",
     "Write 2 monthly blog": "content_generation",
     "Write monthly blog": "content_generation",
+    "Build automated review request": "setup_review_automation",
+    "Provide review request scripts": "send_review_scripts",
+    "Build KPI dashboard": "create_kpi_dashboard",
+    "Review monthly analytics": "generate_monthly_report",
+    "Prepare and send monthly": "generate_monthly_report",
   };
 
   // First try exact/partial match against known mappings
