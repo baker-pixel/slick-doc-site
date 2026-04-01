@@ -1781,6 +1781,7 @@ export type Database = {
       }
       content_calendar: {
         Row: {
+          client_account_id: string | null
           content: string
           content_id: string | null
           content_type: string
@@ -1795,6 +1796,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_account_id?: string | null
           content: string
           content_id?: string | null
           content_type: string
@@ -1809,6 +1811,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_account_id?: string | null
           content?: string
           content_id?: string | null
           content_type?: string
@@ -1823,6 +1826,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "content_calendar_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "content_calendar_content_id_fkey"
             columns: ["content_id"]
