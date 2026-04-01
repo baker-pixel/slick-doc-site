@@ -153,18 +153,22 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase
-        .from('client_projects')
-        .insert([{
-          client_account_id: data.client_account_id,
-          name: data.name,
-          description: data.description || null,
-          status: data.status,
-          start_date: data.start_date || null,
-          target_end_date: data.target_end_date || null,
-          progress_percentage: parseInt(data.progress_percentage) || 0,
-        }]);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'create',
+          table: 'client_projects',
+          password: adminPassword,
+          data: {
+            client_account_id: data.client_account_id,
+            name: data.name,
+            description: data.description || null,
+            status: data.status,
+            start_date: data.start_date || null,
+            target_end_date: data.target_end_date || null,
+            progress_percentage: parseInt(data.progress_percentage) || 0,
+          },
+        },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -180,19 +184,23 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: string } & typeof formData) => {
-      const { error } = await supabase
-        .from('client_projects')
-        .update({
-          client_account_id: data.client_account_id,
-          name: data.name,
-          description: data.description || null,
-          status: data.status,
-          start_date: data.start_date || null,
-          target_end_date: data.target_end_date || null,
-          progress_percentage: parseInt(data.progress_percentage) || 0,
-        })
-        .eq('id', id);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'update',
+          table: 'client_projects',
+          id,
+          password: adminPassword,
+          data: {
+            client_account_id: data.client_account_id,
+            name: data.name,
+            description: data.description || null,
+            status: data.status,
+            start_date: data.start_date || null,
+            target_end_date: data.target_end_date || null,
+            progress_percentage: parseInt(data.progress_percentage) || 0,
+          },
+        },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
