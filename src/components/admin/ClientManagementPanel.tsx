@@ -71,6 +71,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     first_name: "",
     last_name: "",
     tier: "foundation",
+    plan_tier: "foundation",
     website_url: "",
   });
 
