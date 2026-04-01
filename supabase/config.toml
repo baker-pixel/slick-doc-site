@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.generate-client-projects]
 verify_jwt = false
+
+[functions.check-stalled-workflows]
+verify_jwt = false
