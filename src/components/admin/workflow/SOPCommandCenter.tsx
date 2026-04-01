@@ -247,11 +247,11 @@ export function SOPCommandCenter({ adminPassword }: SOPCommandCenterProps) {
             Growth
           </Button>
           <Button
-            variant={selectedTier === "scale" ? "default" : "outline"}
+            variant={selectedTier === "transformation" ? "default" : "outline"}
             size="sm"
-            onClick={() => setSelectedTier("scale")}
+            onClick={() => setSelectedTier("transformation")}
           >
-            Scale
+            Transformation
           </Button>
         </div>
       </div>
