@@ -42,14 +42,14 @@ const ASSET_TYPES = [
   { value: "other", label: "Other", icon: FileText },
 ];
 
-export default function BrandAssetsAdminPanel() {
+export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string } = {}) {
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [filterClient, setFilterClient] = useState<string>("all");
+  const [filterClient, setFilterClient] = useState<string>(clientId || "all");
   const [formData, setFormData] = useState({
     client_account_id: "",
     name: "",

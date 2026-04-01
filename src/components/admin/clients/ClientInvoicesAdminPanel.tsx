@@ -33,7 +33,7 @@ interface ClientInvoice {
   client_accounts?: { business_name: string };
 }
 
-export function ClientInvoicesAdminPanel() {
+export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<ClientInvoice | null>(null);
   const [formData, setFormData] = useState({
@@ -250,6 +250,10 @@ export function ClientInvoicesAdminPanel() {
     }
   };
 
+  const displayedInvoices = clientId
+    ? invoices?.filter((inv) => inv.client_account_id === clientId)
+    : invoices;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -364,14 +368,14 @@ export function ClientInvoicesAdminPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {invoices?.length === 0 ? (
+              {displayedInvoices?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No invoices yet. Create your first invoice to get started.
                   </TableCell>
                 </TableRow>
               ) : (
-                invoices?.map((invoice) => (
+                displayedInvoices?.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.client_accounts?.business_name}</TableCell>
                     <TableCell>

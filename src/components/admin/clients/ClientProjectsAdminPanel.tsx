@@ -51,7 +51,7 @@ interface ClientProject {
   project_milestones?: ProjectMilestone[];
 }
 
-export function ClientProjectsAdminPanel() {
+export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
@@ -344,6 +344,10 @@ export function ClientProjectsAdminPanel() {
     }
   };
 
+  const displayedProjects = clientId
+    ? projects?.filter((p) => p.client_account_id === clientId)
+    : projects;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -553,12 +557,12 @@ export function ClientProjectsAdminPanel() {
       <Card>
         <CardContent className="p-0">
           <Accordion type="single" collapsible className="w-full">
-            {projects?.length === 0 ? (
+            {displayedProjects?.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No projects yet. Create your first project to get started.
               </div>
             ) : (
-              projects?.map((project) => (
+              displayedProjects?.map((project) => (
                 <AccordionItem key={project.id} value={project.id}>
                   <AccordionTrigger className="px-4 hover:no-underline">
                     <div className="flex items-center justify-between w-full pr-4">

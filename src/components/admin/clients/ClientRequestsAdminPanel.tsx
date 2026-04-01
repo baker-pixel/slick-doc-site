@@ -49,7 +49,7 @@ const REQUEST_TYPES: Record<string, string> = {
   urgent: "Urgent Issue",
 };
 
-export default function ClientRequestsAdminPanel() {
+export default function ClientRequestsAdminPanel({ clientId }: { clientId?: string } = {}) {
   const [requests, setRequests] = useState<ClientRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<ClientRequest | null>(null);
@@ -159,9 +159,11 @@ export default function ClientRequestsAdminPanel() {
     }
   };
 
-  const filteredRequests = filterStatus === "all" 
-    ? requests 
-    : requests.filter((r) => r.status === filterStatus);
+  const filteredRequests = requests.filter((r) => {
+    const matchesStatus = filterStatus === "all" || r.status === filterStatus;
+    const matchesClient = !clientId || r.client_account_id === clientId;
+    return matchesStatus && matchesClient;
+  });
 
   const pendingCount = requests.filter((r) => r.status === "pending").length;
   const inProgressCount = requests.filter((r) => r.status === "in_progress").length;

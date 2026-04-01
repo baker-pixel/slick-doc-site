@@ -51,6 +51,7 @@ interface ClientAccount {
 
 interface DeliverablesAdminPanelProps {
   adminPassword: string;
+  clientId?: string;
 }
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -62,7 +63,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 
 const categories = ["general", "design", "content", "development", "marketing", "report", "video", "other"];
 
-export default function DeliverablesAdminPanel({ adminPassword }: DeliverablesAdminPanelProps) {
+export default function DeliverablesAdminPanel({ adminPassword, clientId }: DeliverablesAdminPanelProps) {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDeliverable, setEditingDeliverable] = useState<Deliverable | null>(null);
@@ -208,7 +209,9 @@ export default function DeliverablesAdminPanel({ adminPassword }: DeliverablesAd
   };
 
   const filteredDeliverables = deliverables?.filter(
-    (d) => statusFilter === "all" || d.status === statusFilter
+    (d) =>
+      (statusFilter === "all" || d.status === statusFilter) &&
+      (!clientId || d.client_account_id === clientId)
   );
 
   const getClientName = (clientId: string) => {

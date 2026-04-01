@@ -29,7 +29,7 @@ interface ClientAnalytics {
   client_accounts?: { business_name: string };
 }
 
-export function ClientAnalyticsAdminPanel() {
+export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [editingAnalytics, setEditingAnalytics] = useState<ClientAnalytics | null>(null);
   const [formData, setFormData] = useState({
@@ -233,6 +233,10 @@ export function ClientAnalyticsAdminPanel() {
     }
   };
 
+  const displayedAnalytics = clientId
+    ? analytics?.filter((a) => a.client_account_id === clientId)
+    : analytics;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -342,14 +346,14 @@ export function ClientAnalyticsAdminPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {analytics?.length === 0 ? (
+              {displayedAnalytics?.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No analytics data yet. Add your first snapshot to get started.
                   </TableCell>
                 </TableRow>
               ) : (
-                analytics?.map((item) => (
+                displayedAnalytics?.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.client_accounts?.business_name}</TableCell>
                     <TableCell>

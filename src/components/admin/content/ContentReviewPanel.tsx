@@ -34,11 +34,11 @@ interface ClientAccount {
   tier: string;
 }
 
-export const ContentReviewPanel = () => {
+export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => {
   const [contents, setContents] = useState<GeneratedContent[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedClient, setSelectedClient] = useState<string>("all");
+  const [selectedClient, setSelectedClient] = useState<string>(clientId || "all");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [editingContent, setEditingContent] = useState<GeneratedContent | null>(null);

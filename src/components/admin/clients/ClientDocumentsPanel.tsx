@@ -44,18 +44,18 @@ const categories = [
   { value: "report", label: "Reports" },
 ];
 
-export default function ClientDocumentsPanel() {
+export default function ClientDocumentsPanel({ clientId }: { clientId?: string } = {}) {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterClient, setFilterClient] = useState<string>("all");
+  const [filterClient, setFilterClient] = useState<string>(clientId || "all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
 
   // Upload form state
-  const [selectedClient, setSelectedClient] = useState<string>("");
+  const [selectedClient, setSelectedClient] = useState<string>(clientId || "");
   const [selectedCategory, setSelectedCategory] = useState<string>("general");
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

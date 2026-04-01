@@ -44,9 +44,10 @@ interface ClientAccount {
 
 interface ClientMeetingsAdminPanelProps {
   onNavigate?: (section: "client-workflow") => void;
+  clientId?: string;
 }
 
-const ClientMeetingsAdminPanel = ({ onNavigate }: ClientMeetingsAdminPanelProps) => {
+const ClientMeetingsAdminPanel = ({ onNavigate, clientId }: ClientMeetingsAdminPanelProps) => {
   const [meetings, setMeetings] = useState<ClientMeeting[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +63,7 @@ const ClientMeetingsAdminPanel = ({ onNavigate }: ClientMeetingsAdminPanelProps)
     notes: ""
   });
   const [createForm, setCreateForm] = useState({
-    client_account_id: "",
+    client_account_id: clientId || "",
     title: "",
     description: "",
     meeting_type: "video",
@@ -246,7 +247,8 @@ const ClientMeetingsAdminPanel = ({ onNavigate }: ClientMeetingsAdminPanelProps)
       meeting.client_accounts?.business_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       meeting.client_accounts?.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || meeting.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesClient = !clientId || meeting.client_account_id === clientId;
+    return matchesSearch && matchesStatus && matchesClient;
   });
 
   const upcomingCount = meetings.filter(m => m.status === 'scheduled' && new Date(m.scheduled_at) >= new Date()).length;

@@ -1106,25 +1106,25 @@ const Admin = () => {
           </div>
         );
       case "client-projects":
-        return <ClientProjectsAdminPanel />;
+        return <ClientProjectsAdminPanel clientId={selectedClient?.id} />;
       case "client-analytics":
-        return <ClientAnalyticsAdminPanel />;
+        return <ClientAnalyticsAdminPanel clientId={selectedClient?.id} />;
       case "client-invoices":
-        return <ClientInvoicesAdminPanel />;
+        return <ClientInvoicesAdminPanel clientId={selectedClient?.id} />;
       case "client-documents":
-        return <ClientDocumentsPanel />;
+        return <ClientDocumentsPanel clientId={selectedClient?.id} />;
       case "client-messages":
-        return <ClientMessagesAdminPanel />;
+        return <ClientMessagesAdminPanel clientId={selectedClient?.id} />;
       case "client-meetings":
-        return <ClientMeetingsAdminPanel onNavigate={setActiveSection} />;
+        return <ClientMeetingsAdminPanel onNavigate={setActiveSection} clientId={selectedClient?.id} />;
       case "client-requests":
-        return <ClientRequestsAdminPanel />;
+        return <ClientRequestsAdminPanel clientId={selectedClient?.id} />;
       case "brand-assets":
-        return <BrandAssetsAdminPanel />;
+        return <BrandAssetsAdminPanel clientId={selectedClient?.id} />;
       case "team-directory":
         return <TeamDirectoryPanel adminPassword={storedPassword} />;
       case "deliverables":
-        return <DeliverablesAdminPanel adminPassword={storedPassword} />;
+        return <DeliverablesAdminPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
       case "service-agreements":
         return <ServiceAgreementsPanel />;
       case "sops":
@@ -1134,7 +1134,7 @@ const Admin = () => {
       case "task-templates":
         return <TaskTemplatesPanel />;
       case "client-tasks":
-        return <ClientTasksPanel adminPassword={storedPassword} />;
+        return <ClientTasksPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
       case "seo-dashboard":
         return <SeoAnalysisDashboard />;
       case "onboarding":
@@ -1143,7 +1143,7 @@ const Admin = () => {
         return <IntegrationConfigPanel />;
       case "approvals":
       case "content-review":
-        return <ContentReviewPanel />;
+        return <ContentReviewPanel clientId={selectedClient?.id} />;
       case "reports-review":
         return <ReportsReviewPanel />;
       case "marketing-os":
@@ -1246,14 +1246,17 @@ const Admin = () => {
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
     "home", "daily-digest", "smart-task-queue", "task-notifications",
-    "pipeline", "contacts", "gap-analysis", "pdf-leads", 
+    "pipeline", "contacts", "gap-analysis", "pdf-leads",
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",
-    "onboarding", "integrations", "calendar",
+    "integrations", "calendar",
     "quick-actions", "activity-feed", "review-workflow", "client-workflow",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
-    "automation-center", "sop-command-center", "client-health"
+    "automation-center", "sop-command-center", "client-health",
+    "onboarding", "social-posts", "seo-dashboard", "marketing-os",
+    "review-engine", "win-notifications", "case-studies", "before-after",
+    "quality-assurance", "website-personalization",
   ];
 
   const isGlobalSection = globalSections.includes(activeSection);
@@ -1346,7 +1349,7 @@ const Admin = () => {
                   />
                 )}
 
-                {isGlobalSection && (
+                {(["contacts", "gap-analysis", "pdf-leads", "analytics"] as AdminSection[]).includes(activeSection) && (
                   <AdminStatsCards
                     contactsCount={contacts.length}
                     gapAnalysesCount={gapAnalyses.length}

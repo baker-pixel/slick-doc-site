@@ -37,10 +37,10 @@ interface ClientTask {
   };
 }
 
-export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
+export function ClientTasksPanel({ adminPassword, clientId }: { adminPassword: string; clientId?: string }) {
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [clientFilter, setClientFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState(clientId || "all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [automationFilter, setAutomationFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");

@@ -33,10 +33,10 @@ interface ConversationSummary {
   unreadCount: number;
 }
 
-export default function ClientMessagesAdminPanel() {
+export default function ClientMessagesAdminPanel({ clientId }: { clientId?: string } = {}) {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [selectedClient, setSelectedClient] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<string | null>(clientId || null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState("");
