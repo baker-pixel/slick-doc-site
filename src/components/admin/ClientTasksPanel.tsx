@@ -491,46 +491,46 @@ export function ClientTasksPanel({ adminPassword }: { adminPassword: string }) {
         )}
 
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{selectedTask?.name}</DialogTitle>
+              <DialogTitle className="text-lg">{selectedTask?.name}</DialogTitle>
             </DialogHeader>
             {selectedTask && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-muted-foreground">Client</Label>
-                    <p>{selectedTask.client_accounts?.business_name}</p>
+                    <Label className="text-xs text-muted-foreground">Client</Label>
+                    <p className="font-medium">{selectedTask.client_accounts?.business_name}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Status</Label>
-                    <p>{getStatusBadge(selectedTask.status)}</p>
+                    <Label className="text-xs text-muted-foreground">Status</Label>
+                    <div>{getStatusBadge(selectedTask.status)}</div>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Category</Label>
-                    <p className="capitalize">{selectedTask.category}</p>
+                    <Label className="text-xs text-muted-foreground">Category</Label>
+                    <p className="capitalize">{selectedTask.category?.replace(/_/g, ' ')}</p>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Automation Type</Label>
+                    <Label className="text-xs text-muted-foreground">Automation Type</Label>
                     <p>{selectedTask.automation_type}</p>
                   </div>
                 </div>
                 {selectedTask.description && (
                   <div>
-                    <Label className="text-muted-foreground">Description</Label>
+                    <Label className="text-xs text-muted-foreground">Description</Label>
                     <p className="text-sm">{selectedTask.description}</p>
                   </div>
                 )}
                 {selectedTask.instructions && (
                   <div>
-                    <Label className="text-muted-foreground">Instructions</Label>
+                    <Label className="text-xs text-muted-foreground">Instructions</Label>
                     <p className="text-sm whitespace-pre-wrap">{selectedTask.instructions}</p>
                   </div>
                 )}
                 {selectedTask.output_data && (
                   <div>
-                    <Label className="text-muted-foreground">Automation Output</Label>
-                    <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-48">
+                    <Label className="text-xs text-muted-foreground">Automation Output</Label>
+                    <pre className="text-xs bg-muted p-3 rounded overflow-x-auto overflow-y-auto max-h-60 whitespace-pre-wrap break-words">
                       {JSON.stringify(selectedTask.output_data, null, 2)}
                     </pre>
                   </div>
