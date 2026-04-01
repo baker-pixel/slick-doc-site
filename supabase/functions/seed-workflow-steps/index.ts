@@ -6,25 +6,66 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const STEPS = [
-  { step_number: 1,  step_name: "Website analysis",       task_type: "website_analysis", depends_on: null },
-  { step_number: 2,  step_name: "SEO audit",              task_type: "seo_audit",        depends_on: 1 },
-  { step_number: 3,  step_name: "Gap report",             task_type: "gap_report",       depends_on: 2 },
-  { step_number: 4,  step_name: "Keyword strategy",       task_type: "seo_audit",        depends_on: 3 },
-  { step_number: 5,  step_name: "Homepage content",       task_type: "content",          depends_on: 3 },
-  { step_number: 6,  step_name: "Blog post 1",            task_type: "content",          depends_on: 5 },
-  { step_number: 7,  step_name: "Blog post 2",            task_type: "content",          depends_on: 6 },
-  { step_number: 8,  step_name: "Social post batch",      task_type: "social_content",   depends_on: 5 },
-  { step_number: 9,  step_name: "Email welcome sequence",task_type: "email_template",   depends_on: 5 },
-  { step_number: 10, step_name: "Ad copy draft",          task_type: "ad_copy",          depends_on: 5 },
-  { step_number: 11, step_name: "Publish blog 1",         task_type: "n8n_post_blog",    depends_on: 6 },
-  { step_number: 12, step_name: "Publish blog 2",         task_type: "n8n_post_blog",    depends_on: 7 },
-  { step_number: 13, step_name: "Post social batch",      task_type: "n8n_post_social",  depends_on: 8 },
-  { step_number: 14, step_name: "Send welcome email",     task_type: "email_campaign",   depends_on: 9 },
-  { step_number: 15, step_name: "Analytics snapshot",     task_type: "analytics",        depends_on: 14 },
-  { step_number: 16, step_name: "Monthly report",         task_type: "report",           depends_on: 15 },
-  { step_number: 17, step_name: "Client review ready",    task_type: "notify_client",    depends_on: 16 },
+const FOUNDATION_STEPS = [
+  { step_number: 1,  step_name: "Website analysis",          task_type: "website_analysis", depends_on: null },
+  { step_number: 2,  step_name: "SEO audit",                 task_type: "seo_audit",        depends_on: 1 },
+  { step_number: 3,  step_name: "Gap report",                task_type: "gap_report",       depends_on: 2 },
+  { step_number: 4,  step_name: "Keyword strategy",          task_type: "seo_audit",        depends_on: 3 },
+  { step_number: 5,  step_name: "Homepage content",          task_type: "content",          depends_on: 3 },
+  { step_number: 6,  step_name: "Google post batch",         task_type: "social_content",   depends_on: 5 },
+  { step_number: 7,  step_name: "Email welcome sequence",    task_type: "email_template",   depends_on: 5 },
+  { step_number: 8,  step_name: "Publish Google posts",      task_type: "n8n_post_social",  depends_on: 6 },
+  { step_number: 9,  step_name: "Send welcome email",        task_type: "email_campaign",   depends_on: 7 },
+  { step_number: 10, step_name: "Analytics + report",        task_type: "analytics",        depends_on: 9 },
 ];
+
+const GROWTH_STEPS = [
+  { step_number: 1,  step_name: "Website analysis",              task_type: "website_analysis", depends_on: null },
+  { step_number: 2,  step_name: "SEO audit",                     task_type: "seo_audit",        depends_on: 1 },
+  { step_number: 3,  step_name: "Gap report",                    task_type: "gap_report",       depends_on: 2 },
+  { step_number: 4,  step_name: "Keyword strategy",              task_type: "seo_audit",        depends_on: 3 },
+  { step_number: 5,  step_name: "Homepage content",              task_type: "content",          depends_on: 3 },
+  { step_number: 6,  step_name: "Google post batch",             task_type: "social_content",   depends_on: 5 },
+  { step_number: 7,  step_name: "Social post batch",             task_type: "social_content",   depends_on: 5 },
+  { step_number: 8,  step_name: "Email welcome sequence",        task_type: "email_template",   depends_on: 5 },
+  { step_number: 9,  step_name: "Email newsletter 1",            task_type: "email_template",   depends_on: 8 },
+  { step_number: 10, step_name: "Ad copy draft",                 task_type: "ad_copy",          depends_on: 5 },
+  { step_number: 11, step_name: "Publish Google + social posts",  task_type: "n8n_post_social",  depends_on: 7 },
+  { step_number: 12, step_name: "Send welcome + newsletter",     task_type: "email_campaign",   depends_on: 9 },
+  { step_number: 13, step_name: "Analytics snapshot",            task_type: "analytics",        depends_on: 12 },
+  { step_number: 14, step_name: "Monthly report",               task_type: "report",           depends_on: 13 },
+];
+
+const TRANSFORMATION_STEPS = [
+  { step_number: 1,  step_name: "Website analysis",              task_type: "website_analysis", depends_on: null },
+  { step_number: 2,  step_name: "SEO audit",                     task_type: "seo_audit",        depends_on: 1 },
+  { step_number: 3,  step_name: "Gap report",                    task_type: "gap_report",       depends_on: 2 },
+  { step_number: 4,  step_name: "Keyword strategy",              task_type: "seo_audit",        depends_on: 3 },
+  { step_number: 5,  step_name: "Homepage content",              task_type: "content",          depends_on: 3 },
+  { step_number: 6,  step_name: "Blog post 1",                   task_type: "content",          depends_on: 5 },
+  { step_number: 7,  step_name: "Blog post 2",                   task_type: "content",          depends_on: 6 },
+  { step_number: 8,  step_name: "Google post batch",             task_type: "social_content",   depends_on: 5 },
+  { step_number: 9,  step_name: "Social post batch",             task_type: "social_content",   depends_on: 5 },
+  { step_number: 10, step_name: "Email welcome sequence",        task_type: "email_template",   depends_on: 5 },
+  { step_number: 11, step_name: "Email newsletter 1",            task_type: "email_template",   depends_on: 10 },
+  { step_number: 12, step_name: "Ad copy draft",                 task_type: "ad_copy",          depends_on: 5 },
+  { step_number: 13, step_name: "Publish blog 1",                task_type: "n8n_post_blog",    depends_on: 6 },
+  { step_number: 14, step_name: "Publish blog 2",                task_type: "n8n_post_blog",    depends_on: 7 },
+  { step_number: 15, step_name: "Publish Google + social",       task_type: "n8n_post_social",  depends_on: 9 },
+  { step_number: 16, step_name: "Send welcome + newsletter",     task_type: "email_campaign",   depends_on: 11 },
+  { step_number: 17, step_name: "Analytics + monthly report",    task_type: "analytics",        depends_on: 16 },
+];
+
+function getStepsForTier(tier: string) {
+  switch (tier) {
+    case "growth":
+      return GROWTH_STEPS;
+    case "transformation":
+      return TRANSFORMATION_STEPS;
+    default:
+      return FOUNDATION_STEPS;
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -60,14 +101,31 @@ serve(async (req) => {
       );
     }
 
+    // Fetch plan_tier from client_accounts
+    const { data: client, error: clientErr } = await supabase
+      .from("client_accounts")
+      .select("plan_tier")
+      .eq("id", client_id)
+      .single();
+
+    if (clientErr || !client) {
+      return new Response(JSON.stringify({ error: "Client not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const planTier = client.plan_tier || "foundation";
+    const steps = getStepsForTier(planTier);
+
     // Create workflow record
     const { data: workflow, error: wfError } = await supabase
       .from("client_workflows")
       .insert({
         client_id,
-        workflow_name: "system_17_step",
+        workflow_name: `system_${planTier}`,
         current_step: 1,
-        total_steps: 17,
+        total_steps: steps.length,
         status: "active",
       })
       .select()
@@ -77,21 +135,21 @@ serve(async (req) => {
       throw new Error(`Failed to create workflow: ${wfError.message}`);
     }
 
-    // Seed all 17 steps
-    const steps = STEPS.map((s) => ({
+    // Seed all steps
+    const rows = steps.map((s) => ({
       ...s,
       workflow_id: workflow.id,
       client_id,
     }));
 
-    const { error: stepsError } = await supabase.from("workflow_steps").insert(steps);
+    const { error: stepsError } = await supabase.from("workflow_steps").insert(rows);
 
     if (stepsError) {
       throw new Error(`Failed to seed steps: ${stepsError.message}`);
     }
 
     return new Response(
-      JSON.stringify({ success: true, workflow_id: workflow.id }),
+      JSON.stringify({ success: true, workflow_id: workflow.id, plan_tier: planTier, total_steps: steps.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
