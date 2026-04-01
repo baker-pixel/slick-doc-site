@@ -204,7 +204,7 @@ export function SOPCommandCenter({ adminPassword }: SOPCommandCenterProps) {
     const colors: Record<string, string> = {
       foundation: "bg-blue-500/10 text-blue-500",
       growth: "bg-purple-500/10 text-purple-500",
-      scale: "bg-orange-500/10 text-orange-500"
+      transformation: "bg-orange-500/10 text-orange-500"
     };
     return <Badge className={colors[tier] || "bg-muted"}>{tier}</Badge>;
   };
