@@ -193,8 +193,7 @@ export function TaskTemplatesPanel() {
               <SelectItem value="all">All Tiers</SelectItem>
               <SelectItem value="foundation">Foundation</SelectItem>
               <SelectItem value="growth">Growth</SelectItem>
-              <SelectItem value="scale">Scale</SelectItem>
-              <SelectItem value="dominate">Dominate</SelectItem>
+              <SelectItem value="transformation">Transformation</SelectItem>
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
