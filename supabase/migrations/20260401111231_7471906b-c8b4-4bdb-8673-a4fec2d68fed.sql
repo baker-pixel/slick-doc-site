@@ -1,0 +1,2 @@
+ALTER TABLE client_accounts
+  ADD COLUMN IF NOT EXISTS posting_preferences jsonb DEFAULT '{"instagram": false, "linkedin": false, "facebook": false, "google_business": false, "self_post": false, "posting_days": []}'::jsonb;
