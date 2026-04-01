@@ -4,432 +4,442 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Plus, Eye, EyeOff, Trash2, Edit, Globe, BarChart3, Share2, Mail, MoreHorizontal } from "lucide-react";
+import { Globe, Instagram, Linkedin, Facebook, MapPin, Eye, EyeOff, Save, Loader2 } from "lucide-react";
+import type { Json } from "@/integrations/supabase/types";
 
 interface ClientAccessTabProps {
   clientAccountId: string;
 }
 
-interface PlatformCredential {
-  id: string;
-  platform_type: string;
-  platform_name: string;
-  login_url: string | null;
-  username: string | null;
-  password: string | null;
-  additional_info: Record<string, string> | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
+interface PostingPreferences {
+  instagram: boolean;
+  linkedin: boolean;
+  facebook: boolean;
+  google_business: boolean;
+  self_post: boolean;
+  posting_days: string[];
 }
 
-const PLATFORM_TYPES = [
-  { value: "social_media", label: "Social Media", icon: Share2 },
-  { value: "analytics", label: "Analytics", icon: BarChart3 },
-  { value: "website", label: "Website / CMS", icon: Globe },
-  { value: "email", label: "Email Marketing", icon: Mail },
-  { value: "other", label: "Other", icon: MoreHorizontal },
+interface OAuthToken {
+  id: string;
+  platform: string;
+  access_token: string | null;
+  token_metadata: Record<string, unknown> | null;
+}
+
+interface WordPressCredentials {
+  id?: string;
+  wordpress_url: string;
+  wordpress_username: string;
+  wordpress_app_password: string;
+}
+
+const PLATFORMS = [
+  { key: "instagram" as const, label: "Instagram", icon: Instagram },
+  { key: "facebook" as const, label: "Facebook", icon: Facebook },
+  { key: "linkedin" as const, label: "LinkedIn", icon: Linkedin },
+  { key: "google_business" as const, label: "Google Business", icon: MapPin },
 ];
 
-const PLATFORM_PRESETS: Record<string, string[]> = {
-  social_media: ["Facebook", "Instagram", "LinkedIn", "X (Twitter)", "TikTok", "YouTube", "Pinterest"],
-  analytics: ["Google Analytics", "Google Search Console", "Google Tag Manager", "Meta Business Suite", "Hotjar"],
-  website: ["WordPress", "Squarespace", "Wix", "Shopify", "Webflow", "GoDaddy", "Hosting Provider"],
-  email: ["Mailchimp", "Constant Contact", "HubSpot", "Klaviyo", "ActiveCampaign"],
-  other: ["Other"],
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const defaultPrefs: PostingPreferences = {
+  instagram: false,
+  linkedin: false,
+  facebook: false,
+  google_business: false,
+  self_post: false,
+  posting_days: [],
 };
 
 export function ClientAccessTab({ clientAccountId }: ClientAccessTabProps) {
-  const [credentials, setCredentials] = useState<PlatformCredential[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
-  
-  const [form, setForm] = useState({
-    platform_type: "",
-    platform_name: "",
-    login_url: "",
-    username: "",
-    password: "",
-    notes: "",
-  });
+  const [savingSocial, setSavingSocial] = useState(false);
+  const [savingWp, setSavingWp] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+
+  const [prefs, setPrefs] = useState<PostingPreferences>(defaultPrefs);
+  const [tokens, setTokens] = useState<Record<string, string>>({});
+  const [wp, setWp] = useState<WordPressCredentials>({ wordpress_url: "", wordpress_username: "", wordpress_app_password: "" });
+  const [wpId, setWpId] = useState<string | null>(null);
+  const [showWpPassword, setShowWpPassword] = useState(false);
 
   useEffect(() => {
-    fetchCredentials();
+    loadAll();
   }, [clientAccountId]);
 
-  const fetchCredentials = async () => {
+  const loadAll = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("client_platform_credentials")
-        .select("*")
-        .eq("client_account_id", clientAccountId)
-        .order("platform_type", { ascending: true });
+      const [accountRes, tokensRes, credRes] = await Promise.all([
+        supabase
+          .from("client_accounts")
+          .select("posting_preferences")
+          .eq("id", clientAccountId)
+          .single(),
+        supabase
+          .from("client_oauth_tokens")
+          .select("*")
+          .eq("client_id", clientAccountId),
+        supabase
+          .from("client_credentials")
+          .select("*")
+          .eq("client_id", clientAccountId)
+          .limit(1),
+      ]);
 
-      if (error) throw error;
-      setCredentials((data || []) as PlatformCredential[]);
-    } catch (error) {
-      console.error("Error fetching credentials:", error);
-      toast.error("Failed to load credentials");
+      if (accountRes.data?.posting_preferences) {
+        const raw = accountRes.data.posting_preferences as unknown as PostingPreferences;
+        setPrefs({ ...defaultPrefs, ...raw });
+      }
+
+      if (tokensRes.data) {
+        const tokenMap: Record<string, string> = {};
+        (tokensRes.data as OAuthToken[]).forEach((t) => {
+          tokenMap[t.platform] = t.access_token || "";
+        });
+        setTokens(tokenMap);
+      }
+
+      if (credRes.data && credRes.data.length > 0) {
+        const c = credRes.data[0];
+        setWp({
+          wordpress_url: c.wordpress_url || "",
+          wordpress_username: c.wordpress_username || "",
+          wordpress_app_password: c.wordpress_app_password || "",
+        });
+        setWpId(c.id);
+      }
+    } catch (err) {
+      console.error("Error loading access data:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const resetForm = () => {
-    setForm({
-      platform_type: "",
-      platform_name: "",
-      login_url: "",
-      username: "",
-      password: "",
-      notes: "",
-    });
-    setEditingId(null);
-  };
-
-  const handleSave = async () => {
-    if (!form.platform_type || !form.platform_name) {
-      toast.error("Please select a platform type and name");
-      return;
-    }
-
-    setSaving(true);
+  // --- Section A: Social preferences & tokens ---
+  const handleSaveSocial = async () => {
+    setSavingSocial(true);
     try {
-      if (editingId) {
-        const { error } = await supabase
-          .from("client_platform_credentials")
-          .update({
-            platform_type: form.platform_type,
-            platform_name: form.platform_name,
-            login_url: form.login_url || null,
-            username: form.username || null,
-            password: form.password || null,
-            notes: form.notes || null,
-          })
-          .eq("id", editingId);
+      // Save posting preferences
+      const { error: prefsError } = await supabase
+        .from("client_accounts")
+        .update({ posting_preferences: prefs as unknown as Json })
+        .eq("id", clientAccountId);
 
-        if (error) throw error;
-        toast.success("Credentials updated");
-      } else {
-        const { error } = await supabase
-          .from("client_platform_credentials")
-          .insert({
-            client_account_id: clientAccountId,
-            platform_type: form.platform_type,
-            platform_name: form.platform_name,
-            login_url: form.login_url || null,
-            username: form.username || null,
-            password: form.password || null,
-            notes: form.notes || null,
-          });
+      if (prefsError) throw prefsError;
 
-        if (error) throw error;
-        toast.success("Credentials added");
+      // Upsert OAuth tokens for enabled platforms
+      for (const platform of PLATFORMS) {
+        const enabled = prefs[platform.key];
+        const tokenValue = tokens[platform.key];
+
+        if (enabled && tokenValue) {
+          // Check if token row exists
+          const { data: existing } = await supabase
+            .from("client_oauth_tokens")
+            .select("id")
+            .eq("client_id", clientAccountId)
+            .eq("platform", platform.key)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            await supabase
+              .from("client_oauth_tokens")
+              .update({ access_token: tokenValue, updated_at: new Date().toISOString() })
+              .eq("id", existing[0].id);
+          } else {
+            await supabase
+              .from("client_oauth_tokens")
+              .insert({ client_id: clientAccountId, platform: platform.key, access_token: tokenValue });
+          }
+        }
       }
 
-      setDialogOpen(false);
-      resetForm();
-      fetchCredentials();
-    } catch (error) {
-      console.error("Error saving credentials:", error);
-      toast.error("Failed to save credentials");
+      toast.success("Social media preferences saved");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save social preferences");
     } finally {
-      setSaving(false);
+      setSavingSocial(false);
     }
   };
 
-  const handleEdit = (credential: PlatformCredential) => {
-    setForm({
-      platform_type: credential.platform_type,
-      platform_name: credential.platform_name,
-      login_url: credential.login_url || "",
-      username: credential.username || "",
-      password: credential.password || "",
-      notes: credential.notes || "",
-    });
-    setEditingId(credential.id);
-    setDialogOpen(true);
+  // --- Section B: WordPress credentials ---
+  const handleSaveWp = async () => {
+    setSavingWp(true);
+    try {
+      if (wpId) {
+        const { error } = await supabase
+          .from("client_credentials")
+          .update({
+            wordpress_url: wp.wordpress_url || null,
+            wordpress_username: wp.wordpress_username || null,
+            wordpress_app_password: wp.wordpress_app_password || null,
+            updated_at: new Date().toISOString(),
+          } as Record<string, unknown>)
+          .eq("id", wpId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("client_credentials")
+          .insert({
+            client_id: clientAccountId,
+            wordpress_url: wp.wordpress_url || null,
+            wordpress_username: wp.wordpress_username || null,
+            wordpress_app_password: wp.wordpress_app_password || null,
+          } as Record<string, unknown>)
+          .select("id")
+          .single();
+        if (error) throw error;
+        if (data) setWpId(data.id);
+      }
+      toast.success("Website credentials saved");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save website credentials");
+    } finally {
+      setSavingWp(false);
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete these credentials?")) return;
+  // --- Section C: Posting schedule ---
+  const toggleDay = (day: string) => {
+    setPrefs((prev) => {
+      const days = prev.posting_days.includes(day)
+        ? prev.posting_days.filter((d) => d !== day)
+        : [...prev.posting_days, day];
+      return { ...prev, posting_days: days };
+    });
+  };
 
+  const handleSaveSchedule = async () => {
+    setSavingSchedule(true);
     try {
       const { error } = await supabase
-        .from("client_platform_credentials")
-        .delete()
-        .eq("id", id);
-
+        .from("client_accounts")
+        .update({ posting_preferences: prefs as unknown as Json })
+        .eq("id", clientAccountId);
       if (error) throw error;
-      toast.success("Credentials deleted");
-      fetchCredentials();
-    } catch (error) {
-      console.error("Error deleting credentials:", error);
-      toast.error("Failed to delete credentials");
+      toast.success("Posting schedule saved");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save posting schedule");
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
-  const togglePasswordVisibility = (id: string) => {
-    setVisiblePasswords(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const getTypeIcon = (type: string) => {
-    const found = PLATFORM_TYPES.find(t => t.value === type);
-    return found ? found.icon : MoreHorizontal;
-  };
-
-  const groupedCredentials = credentials.reduce((acc, cred) => {
-    if (!acc[cred.platform_type]) {
-      acc[cred.platform_type] = [];
-    }
-    acc[cred.platform_type].push(cred);
-    return acc;
-  }, {} as Record<string, PlatformCredential[]>);
+  const enabledPlatforms = PLATFORMS.filter((p) => prefs[p.key]);
 
   if (loading) {
     return (
       <div className="space-y-4">
         <div className="h-8 w-48 bg-muted animate-pulse rounded" />
         <div className="h-32 bg-muted animate-pulse rounded" />
+        <div className="h-32 bg-muted animate-pulse rounded" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Platform Access</h2>
-          <p className="text-muted-foreground">
-            Share your login credentials securely so we can manage your accounts
-          </p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) resetForm();
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Credentials
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>{editingId ? "Edit" : "Add"} Platform Credentials</DialogTitle>
-              <DialogDescription>
-                Enter your login details for the platform you'd like us to manage.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Platform Type *</Label>
-                <Select
-                  value={form.platform_type}
-                  onValueChange={(value) => setForm({ ...form, platform_type: value, platform_name: "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PLATFORM_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {form.platform_type && (
-                <div className="space-y-2">
-                  <Label>Platform *</Label>
-                  <Select
-                    value={form.platform_name}
-                    onValueChange={(value) => setForm({ ...form, platform_name: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select platform..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PLATFORM_PRESETS[form.platform_type]?.map((platform) => (
-                        <SelectItem key={platform} value={platform}>
-                          {platform}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Login URL</Label>
-                <Input
-                  placeholder="https://..."
-                  value={form.login_url}
-                  onChange={(e) => setForm({ ...form, login_url: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Username / Email</Label>
-                <Input
-                  placeholder="Enter username or email"
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Password</Label>
-                <Input
-                  type="password"
-                  placeholder="Enter password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea
-                  placeholder="Any additional info (2FA backup codes, admin URL, etc.)"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  rows={3}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? "Saving..." : editingId ? "Update" : "Add"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-semibold">Platform Access</h2>
+        <p className="text-muted-foreground">
+          Connect your accounts so we can create and publish content on your behalf.
+        </p>
       </div>
 
-      {credentials.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Share2 className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No credentials added yet</h3>
-            <p className="text-muted-foreground mb-4 max-w-sm">
-              Add your social media, analytics, and website login info so our team can manage your accounts.
-            </p>
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Credential
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {PLATFORM_TYPES.map((type) => {
-            const items = groupedCredentials[type.value];
-            if (!items || items.length === 0) return null;
-
-            const Icon = type.icon;
+      {/* Section A — Social Media Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Social Media Preferences</CardTitle>
+          <CardDescription>
+            Choose which platforms you'd like us to post on for you.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {PLATFORMS.map((platform) => {
+            const Icon = platform.icon;
+            const enabled = prefs[platform.key];
 
             return (
-              <Card key={type.value}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Icon className="h-5 w-5" />
-                    {type.label}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {items.map((cred) => (
-                    <div
-                      key={cred.id}
-                      className="flex items-start justify-between p-4 rounded-lg border bg-card"
-                    >
-                      <div className="space-y-1 flex-1">
-                        <h4 className="font-medium">{cred.platform_name}</h4>
-                        {cred.login_url && (
-                          <p className="text-sm text-muted-foreground">
-                            <a href={cred.login_url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                              {cred.login_url}
-                            </a>
-                          </p>
-                        )}
-                        <div className="grid grid-cols-2 gap-4 mt-2">
-                          {cred.username && (
-                            <div>
-                              <span className="text-xs text-muted-foreground">Username</span>
-                              <p className="text-sm font-mono">{cred.username}</p>
-                            </div>
-                          )}
-                          {cred.password && (
-                            <div>
-                              <span className="text-xs text-muted-foreground">Password</span>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-mono">
-                                  {visiblePasswords.has(cred.id) ? cred.password : "••••••••"}
-                                </p>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => togglePasswordVisibility(cred.id)}
-                                >
-                                  {visiblePasswords.has(cred.id) ? (
-                                    <EyeOff className="h-3 w-3" />
-                                  ) : (
-                                    <Eye className="h-3 w-3" />
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {cred.notes && (
-                          <p className="text-sm text-muted-foreground mt-2">{cred.notes}</p>
-                        )}
-                      </div>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(cred)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(cred.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+              <div key={platform.key} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-5 w-5 text-muted-foreground" />
+                    <Label htmlFor={`toggle-${platform.key}`} className="font-medium cursor-pointer">
+                      Would you like us to post on {platform.label} for you?
+                    </Label>
+                  </div>
+                  <Switch
+                    id={`toggle-${platform.key}`}
+                    checked={enabled}
+                    onCheckedChange={(checked) =>
+                      setPrefs((prev) => ({ ...prev, [platform.key]: checked }))
+                    }
+                  />
+                </div>
+
+                {enabled ? (
+                  <div className="ml-8 space-y-2">
+                    <Label className="text-sm text-muted-foreground">
+                      Connect {platform.label} — paste your access token
+                    </Label>
+                    <Input
+                      placeholder={`${platform.label} access token`}
+                      value={tokens[platform.key] || ""}
+                      onChange={(e) =>
+                        setTokens((prev) => ({ ...prev, [platform.key]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ) : (
+                  <p className="ml-8 text-sm text-muted-foreground italic">
+                    We'll generate content for you to post yourself.
+                  </p>
+                )}
+              </div>
             );
           })}
-        </div>
-      )}
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleSaveSocial} disabled={savingSocial}>
+              {savingSocial ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save Social Preferences
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section B — Website Access */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Globe className="h-5 w-5" />
+            Website Access
+          </CardTitle>
+          <CardDescription>
+            Provide your WordPress credentials so we can publish blog posts and page updates.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>WordPress Site URL</Label>
+            <Input
+              placeholder="https://yoursite.com"
+              value={wp.wordpress_url}
+              onChange={(e) => setWp((prev) => ({ ...prev, wordpress_url: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>WordPress Username</Label>
+            <Input
+              placeholder="admin"
+              value={wp.wordpress_username}
+              onChange={(e) => setWp((prev) => ({ ...prev, wordpress_username: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>WordPress Application Password</Label>
+            <div className="relative">
+              <Input
+                type={showWpPassword ? "text" : "password"}
+                placeholder="xxxx xxxx xxxx xxxx"
+                value={wp.wordpress_app_password}
+                onChange={(e) =>
+                  setWp((prev) => ({ ...prev, wordpress_app_password: e.target.value }))
+                }
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setShowWpPassword(!showWpPassword)}
+              >
+                {showWpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Generate an application password in WordPress under Users → Profile → Application Passwords.
+            </p>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleSaveWp} disabled={savingWp}>
+              {savingWp ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save Website Credentials
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section C — Posting Schedule */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Posting Schedule</CardTitle>
+          <CardDescription>
+            Choose which days of the week you'd like us to post on your enabled platforms.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {enabledPlatforms.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">
+              Enable at least one social platform above to set a posting schedule.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Select preferred posting days for:{" "}
+                {enabledPlatforms.map((p) => p.label).join(", ")}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {DAYS.map((day) => (
+                  <label
+                    key={day}
+                    className="flex items-center gap-2 cursor-pointer select-none"
+                  >
+                    <Checkbox
+                      checked={prefs.posting_days.includes(day)}
+                      onCheckedChange={() => toggleDay(day)}
+                    />
+                    <span className="text-sm font-medium">{day}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <Button
+              onClick={handleSaveSchedule}
+              disabled={savingSchedule || enabledPlatforms.length === 0}
+            >
+              {savingSchedule ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save Schedule
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
