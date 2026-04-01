@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { ProjectSetupWizard } from "./ProjectSetupWizard";
+import { ProjectSetupWizard } from "../misc/ProjectSetupWizard";
 
 interface OnboardingStep {
   id: string;

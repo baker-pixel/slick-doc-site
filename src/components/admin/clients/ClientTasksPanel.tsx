@@ -12,7 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Loader2, CheckCircle, Play, Eye, ClipboardList, Zap, User, Clock, RefreshCw, LayoutGrid, List } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { TaskCompletionModal } from "./TaskCompletionModal";
+import { TaskCompletionModal } from "../workflow/TaskCompletionModal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ClientTask {

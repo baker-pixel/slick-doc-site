@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { TierBadge } from "./TierBadge";
+import { TierBadge } from "../core/TierBadge";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isAfter, isBefore, addDays } from "date-fns";
 import {

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Building2, Mail, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { TierBadge } from "./TierBadge";
+import { TierBadge } from "../core/TierBadge";
 
 interface ClientAccount {
   id: string;
