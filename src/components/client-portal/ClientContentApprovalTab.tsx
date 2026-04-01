@@ -785,7 +785,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                     <Badge variant="outline" className={`${typeConfig.bgColor} ${typeConfig.color} border-0`}>
                       {typeConfig.label}
                     </Badge>
-                    {getStatusBadge(selectedApproval.status)}
+                    {getStatusBadge(selectedApproval.status, selectedApproval.publish_status)}
                     <span className="text-xs text-muted-foreground">
                       Submitted: {format(new Date(selectedApproval.submitted_at), "MMMM d, yyyy 'at' h:mm a")}
                     </span>
