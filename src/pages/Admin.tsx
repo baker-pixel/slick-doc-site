@@ -1106,7 +1106,7 @@ const Admin = () => {
           </div>
         );
       case "client-projects":
-        return <ClientProjectsAdminPanel clientId={selectedClient?.id} />;
+        return <ClientProjectsAdminPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
       case "client-analytics":
         return <ClientAnalyticsAdminPanel clientId={selectedClient?.id} />;
       case "client-invoices":

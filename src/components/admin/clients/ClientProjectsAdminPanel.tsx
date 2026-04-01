@@ -51,7 +51,7 @@ interface ClientProject {
   project_milestones?: ProjectMilestone[];
 }
 
-export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {}) {
+export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId?: string; adminPassword?: string } = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
