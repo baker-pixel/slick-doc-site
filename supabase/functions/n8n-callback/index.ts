@@ -82,6 +82,26 @@ serve(async (req) => {
         .update(stepUpdate)
         .eq("id", step_id);
 
+      // Mark any linked content_approvals as published
+      if (status === "completed" || !status) {
+        const { data: approvals } = await supabase
+          .from("content_approvals")
+          .select("id")
+          .eq("client_account_id", client_id)
+          .eq("status", "approved")
+          .in("publish_status", ["queued", "pending"]);
+
+        if (approvals && approvals.length > 0) {
+          await supabase
+            .from("content_approvals")
+            .update({
+              published_at: new Date().toISOString(),
+              publish_status: "published",
+            })
+            .in("id", approvals.map((a: { id: string }) => a.id));
+        }
+      }
+
       // Auto-advance workflow if step completed
       if ((status === "completed" || !status) && workflow_id && step_number) {
         const nextStepNumber = step_number + 1;
