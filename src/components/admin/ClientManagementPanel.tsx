@@ -144,6 +144,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       first_name: newClient.first_name || null,
       last_name: newClient.last_name || null,
       tier: newClient.tier,
+      plan_tier: newClient.plan_tier,
       website_url: newClient.website_url || null,
       status: "active",
     }).select().single();
