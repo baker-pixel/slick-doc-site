@@ -51,7 +51,7 @@ interface ClientProject {
   project_milestones?: ProjectMilestone[];
 }
 
-export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {}) {
+export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId?: string; adminPassword?: string } = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
@@ -78,26 +78,46 @@ export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {
   const { data: projects, isLoading } = useQuery({
     queryKey: ['admin-client-projects'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('client_projects')
-        .select('*, client_accounts(business_name), project_milestones(*)')
-        .order('created_at', { ascending: false });
-
+      const { data: res, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'client_projects', password: adminPassword },
+      });
       if (error) throw error;
-      return data as ClientProject[];
+      // Fetch milestones and client names separately
+      const projectRows = res?.data || [];
+      if (projectRows.length === 0) return [];
+      
+      const projectIds = projectRows.map((p: any) => p.id);
+      const clientIds = [...new Set(projectRows.map((p: any) => p.client_account_id))];
+      
+      const [milestonesRes, clientsRes] = await Promise.all([
+        supabase.functions.invoke('admin', {
+          body: { action: 'list', table: 'project_milestones', password: adminPassword },
+        }),
+        supabase.functions.invoke('admin', {
+          body: { action: 'list', table: 'client_accounts', password: adminPassword },
+        }),
+      ]);
+      
+      const milestones = milestonesRes?.data?.data || [];
+      const clientAccounts = clientsRes?.data?.data || [];
+      const clientMap = Object.fromEntries(clientAccounts.map((c: any) => [c.id, c.business_name]));
+      
+      return projectRows.map((p: any) => ({
+        ...p,
+        client_accounts: { business_name: clientMap[p.client_account_id] || 'Unknown' },
+        project_milestones: milestones.filter((m: any) => m.project_id === p.id),
+      })) as ClientProject[];
     },
   });
 
   const { data: clients } = useQuery({
     queryKey: ['client-accounts-list'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('client_accounts')
-        .select('id, business_name, tier')
-        .order('business_name');
-
+      const { data: res, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'client_accounts', password: adminPassword },
+      });
       if (error) throw error;
-      return data as ClientAccountWithTier[];
+      return (res?.data || []) as ClientAccountWithTier[];
     },
   });
 
@@ -131,18 +151,22 @@ export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase
-        .from('client_projects')
-        .insert([{
-          client_account_id: data.client_account_id,
-          name: data.name,
-          description: data.description || null,
-          status: data.status,
-          start_date: data.start_date || null,
-          target_end_date: data.target_end_date || null,
-          progress_percentage: parseInt(data.progress_percentage) || 0,
-        }]);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'create',
+          table: 'client_projects',
+          password: adminPassword,
+          data: {
+            client_account_id: data.client_account_id,
+            name: data.name,
+            description: data.description || null,
+            status: data.status,
+            start_date: data.start_date || null,
+            target_end_date: data.target_end_date || null,
+            progress_percentage: parseInt(data.progress_percentage) || 0,
+          },
+        },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -158,19 +182,23 @@ export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: string } & typeof formData) => {
-      const { error } = await supabase
-        .from('client_projects')
-        .update({
-          client_account_id: data.client_account_id,
-          name: data.name,
-          description: data.description || null,
-          status: data.status,
-          start_date: data.start_date || null,
-          target_end_date: data.target_end_date || null,
-          progress_percentage: parseInt(data.progress_percentage) || 0,
-        })
-        .eq('id', id);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'update',
+          table: 'client_projects',
+          id,
+          password: adminPassword,
+          data: {
+            client_account_id: data.client_account_id,
+            name: data.name,
+            description: data.description || null,
+            status: data.status,
+            start_date: data.start_date || null,
+            target_end_date: data.target_end_date || null,
+            progress_percentage: parseInt(data.progress_percentage) || 0,
+          },
+        },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -186,11 +214,9 @@ export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('client_projects')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: { action: 'delete', table: 'client_projects', id, password: adminPassword },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -205,26 +231,28 @@ export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {
 
   const createMilestoneMutation = useMutation({
     mutationFn: async ({ projectId, ...data }: { projectId: string } & typeof milestoneData) => {
-      const { data: existingMilestones } = await supabase
-        .from('project_milestones')
-        .select('sort_order')
-        .eq('project_id', projectId)
-        .order('sort_order', { ascending: false })
-        .limit(1);
+      // Get next sort order from existing milestones in the cached data
+      const existingMilestones = (projects || [])
+        .find(p => p.id === projectId)?.project_milestones || [];
+      const nextOrder = existingMilestones.length > 0 
+        ? Math.max(...existingMilestones.map(m => m.sort_order)) + 1 
+        : 1;
 
-      const nextOrder = (existingMilestones?.[0]?.sort_order || 0) + 1;
-
-      const { error } = await supabase
-        .from('project_milestones')
-        .insert([{
-          project_id: projectId,
-          name: data.name,
-          description: data.description || null,
-          due_date: data.due_date || null,
-          status: data.status,
-          sort_order: nextOrder,
-        }]);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'create',
+          table: 'project_milestones',
+          password: adminPassword,
+          data: {
+            project_id: projectId,
+            name: data.name,
+            description: data.description || null,
+            due_date: data.due_date || null,
+            status: data.status,
+            sort_order: nextOrder,
+          },
+        },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -241,11 +269,9 @@ export function ClientProjectsAdminPanel({ clientId }: { clientId?: string } = {
 
   const deleteMilestoneMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('project_milestones')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.functions.invoke('admin', {
+        body: { action: 'delete', table: 'project_milestones', id, password: adminPassword },
+      });
       if (error) throw error;
     },
     onSuccess: () => {

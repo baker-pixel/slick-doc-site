@@ -259,6 +259,27 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create": {
+        if (!table || !data) {
+          return new Response(
+            JSON.stringify({ error: "table and data are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const { data: created, error } = await supabase
+          .from(table)
+          .insert(data)
+          .select()
+          .maybeSingle();
+        
+        if (error) throw error;
+        console.log(`Created record in ${table}`);
+        return new Response(
+          JSON.stringify({ data: created }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "schedule_email": {
         // Schedule a new email
         const { recipient_email, recipient_name, subject, html_content, scheduled_for, recipient_timezone, optimal_send_time } = data;
