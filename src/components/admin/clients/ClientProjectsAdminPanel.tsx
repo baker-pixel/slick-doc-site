@@ -113,13 +113,11 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
   const { data: clients } = useQuery({
     queryKey: ['client-accounts-list'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('client_accounts')
-        .select('id, business_name, tier')
-        .order('business_name');
-
+      const { data: res, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'client_accounts', password: adminPassword },
+      });
       if (error) throw error;
-      return data as ClientAccountWithTier[];
+      return (res?.data || []) as ClientAccountWithTier[];
     },
   });
 
