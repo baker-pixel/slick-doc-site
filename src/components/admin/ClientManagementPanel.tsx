@@ -21,6 +21,7 @@ interface ClientAccount {
   first_name: string | null;
   last_name: string | null;
   tier: string;
+  plan_tier: string | null;
   status: string;
   onboarded_at: string | null;
   created_at: string;
