@@ -25,6 +25,7 @@ interface ContentApproval {
   feedback: string | null;
   submitted_at: string;
   reviewed_at: string | null;
+  publish_status: string | null;
 }
 
 interface ClientContentApprovalTabProps {
@@ -516,25 +517,32 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from("content_approvals")
-        .update({
-          status: "approved",
-          feedback: feedback || null,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", selectedApproval.id);
+      const { data, error } = await supabase.functions.invoke("handle-approval", {
+        body: {
+          approval_id: selectedApproval.id,
+          action: "approved",
+          feedback: feedback || undefined,
+        },
+      });
 
       if (error) throw error;
 
+      // Optimistic update
+      setApprovals((prev) =>
+        prev.map((a) =>
+          a.id === selectedApproval.id
+            ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString(), feedback: feedback || null }
+            : a
+        )
+      );
+
       toast({
         title: "Content Approved",
-        description: "The content has been approved and will proceed to publishing.",
+        description: "The content has been approved and queued for publishing.",
       });
 
       setSelectedApproval(null);
       setFeedback("");
-      fetchApprovals();
     } catch (error) {
       console.error("Error approving content:", error);
       toast({
@@ -559,16 +567,24 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from("content_approvals")
-        .update({
-          status: "changes_requested",
+      const { data, error } = await supabase.functions.invoke("handle-approval", {
+        body: {
+          approval_id: selectedApproval.id,
+          action: "changes_requested",
           feedback,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", selectedApproval.id);
+        },
+      });
 
       if (error) throw error;
+
+      // Optimistic update
+      setApprovals((prev) =>
+        prev.map((a) =>
+          a.id === selectedApproval.id
+            ? { ...a, status: "changes_requested", publish_status: "changes_requested", feedback, reviewed_at: new Date().toISOString() }
+            : a
+        )
+      );
 
       toast({
         title: "Changes Requested",
@@ -577,7 +593,6 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
 
       setSelectedApproval(null);
       setFeedback("");
-      fetchApprovals();
     } catch (error) {
       console.error("Error requesting changes:", error);
       toast({
@@ -590,7 +605,13 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, publishStatus?: string | null) => {
+    if (publishStatus === "published") {
+      return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Published</Badge>;
+    }
+    if (status === "approved" && publishStatus === "queued") {
+      return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Publishing...</Badge>;
+    }
     switch (status) {
       case "approved":
         return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
@@ -665,7 +686,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                               </CardDescription>
                             </div>
                           </div>
-                          {getStatusBadge(approval.status)}
+                         {getStatusBadge(approval.status, approval.publish_status)}
                         </div>
                       </CardHeader>
                       <CardContent className="pt-2">
@@ -725,7 +746,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                               </CardDescription>
                             </div>
                           </div>
-                          {getStatusBadge(approval.status)}
+                          {getStatusBadge(approval.status, approval.publish_status)}
                         </div>
                       </CardHeader>
                     </Card>
@@ -764,7 +785,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                     <Badge variant="outline" className={`${typeConfig.bgColor} ${typeConfig.color} border-0`}>
                       {typeConfig.label}
                     </Badge>
-                    {getStatusBadge(selectedApproval.status)}
+                    {getStatusBadge(selectedApproval.status, selectedApproval.publish_status)}
                     <span className="text-xs text-muted-foreground">
                       Submitted: {format(new Date(selectedApproval.submitted_at), "MMMM d, yyyy 'at' h:mm a")}
                     </span>

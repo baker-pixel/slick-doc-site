@@ -1703,6 +1703,7 @@ export type Database = {
       }
       content_approvals: {
         Row: {
+          approved_at: string | null
           client_account_id: string
           content_id: string | null
           content_preview: string | null
@@ -1711,6 +1712,9 @@ export type Database = {
           feedback: string | null
           full_content: string | null
           id: string
+          publish_status: string | null
+          publish_triggered_at: string | null
+          published_at: string | null
           reviewed_at: string | null
           status: string
           submitted_at: string
@@ -1718,6 +1722,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
           client_account_id: string
           content_id?: string | null
           content_preview?: string | null
@@ -1726,6 +1731,9 @@ export type Database = {
           feedback?: string | null
           full_content?: string | null
           id?: string
+          publish_status?: string | null
+          publish_triggered_at?: string | null
+          published_at?: string | null
           reviewed_at?: string | null
           status?: string
           submitted_at?: string
@@ -1733,6 +1741,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
           client_account_id?: string
           content_id?: string | null
           content_preview?: string | null
@@ -1741,6 +1750,9 @@ export type Database = {
           feedback?: string | null
           full_content?: string | null
           id?: string
+          publish_status?: string | null
+          publish_triggered_at?: string | null
+          published_at?: string | null
           reviewed_at?: string | null
           status?: string
           submitted_at?: string
