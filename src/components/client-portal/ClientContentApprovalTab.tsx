@@ -746,7 +746,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                               </CardDescription>
                             </div>
                           </div>
-                          {getStatusBadge(approval.status)}
+                          {getStatusBadge(approval.status, approval.publish_status)}
                         </div>
                       </CardHeader>
                     </Card>
