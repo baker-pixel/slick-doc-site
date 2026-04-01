@@ -78,13 +78,35 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
   const { data: projects, isLoading } = useQuery({
     queryKey: ['admin-client-projects'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('client_projects')
-        .select('*, client_accounts(business_name), project_milestones(*)')
-        .order('created_at', { ascending: false });
-
+      const { data: res, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'client_projects', password: adminPassword },
+      });
       if (error) throw error;
-      return data as ClientProject[];
+      // Fetch milestones and client names separately
+      const projectRows = res?.data || [];
+      if (projectRows.length === 0) return [];
+      
+      const projectIds = projectRows.map((p: any) => p.id);
+      const clientIds = [...new Set(projectRows.map((p: any) => p.client_account_id))];
+      
+      const [milestonesRes, clientsRes] = await Promise.all([
+        supabase.functions.invoke('admin', {
+          body: { action: 'list', table: 'project_milestones', password: adminPassword },
+        }),
+        supabase.functions.invoke('admin', {
+          body: { action: 'list', table: 'client_accounts', password: adminPassword },
+        }),
+      ]);
+      
+      const milestones = milestonesRes?.data?.data || [];
+      const clientAccounts = clientsRes?.data?.data || [];
+      const clientMap = Object.fromEntries(clientAccounts.map((c: any) => [c.id, c.business_name]));
+      
+      return projectRows.map((p: any) => ({
+        ...p,
+        client_accounts: { business_name: clientMap[p.client_account_id] || 'Unknown' },
+        project_milestones: milestones.filter((m: any) => m.project_id === p.id),
+      })) as ClientProject[];
     },
   });
 
