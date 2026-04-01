@@ -261,7 +261,7 @@ export function UnifiedClientDashboard({ adminPassword, onNavigateToSection }: U
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <TierBadge tier={client.tier} />
+                        <TierBadge tier={(client as any).plan_tier || client.tier} />
                         <span className="text-xs text-muted-foreground">
                           {client.status}
                         </span>
