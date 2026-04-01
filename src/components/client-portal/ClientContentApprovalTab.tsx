@@ -567,16 +567,24 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from("content_approvals")
-        .update({
-          status: "changes_requested",
+      const { data, error } = await supabase.functions.invoke("handle-approval", {
+        body: {
+          approval_id: selectedApproval.id,
+          action: "changes_requested",
           feedback,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", selectedApproval.id);
+        },
+      });
 
       if (error) throw error;
+
+      // Optimistic update
+      setApprovals((prev) =>
+        prev.map((a) =>
+          a.id === selectedApproval.id
+            ? { ...a, status: "changes_requested", publish_status: "changes_requested", feedback, reviewed_at: new Date().toISOString() }
+            : a
+        )
+      );
 
       toast({
         title: "Changes Requested",
@@ -585,7 +593,6 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
 
       setSelectedApproval(null);
       setFeedback("");
-      fetchApprovals();
     } catch (error) {
       console.error("Error requesting changes:", error);
       toast({
