@@ -462,19 +462,14 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           "Email nurture sequence configuration",
           "Social media content planning",
         ];
-      case "scale":
+      case "transformation":
         return [
           "Full marketing funnel audit",
           "Paid ads campaign setup",
           "Advanced analytics and attribution",
           "Conversion rate optimization plan",
-        ];
-      case "dominate":
-        return [
-          "Complete market domination strategy",
           "Multi-channel campaign orchestration",
           "Custom reporting dashboard",
-          "Weekly strategy calls scheduled",
         ];
       default:
         return [];

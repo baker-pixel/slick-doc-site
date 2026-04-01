@@ -179,7 +179,6 @@ export default function ClientProgressTracker({ adminPassword }: ClientProgressT
             <SelectItem value="all">All Tiers</SelectItem>
             <SelectItem value="foundation">Foundation</SelectItem>
             <SelectItem value="growth">Growth</SelectItem>
-            <SelectItem value="scale">Scale</SelectItem>
             <SelectItem value="transformation">Transformation</SelectItem>
           </SelectContent>
         </Select>

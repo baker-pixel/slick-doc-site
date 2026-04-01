@@ -146,8 +146,7 @@ export function OnboardingAutomationPanel() {
     const colors: Record<string, string> = {
       foundation: "bg-slate-500",
       growth: "bg-blue-500",
-      scale: "bg-purple-500",
-      dominate: "bg-amber-500",
+      transformation: "bg-purple-500",
     };
     return <Badge className={colors[tier] || "bg-gray-500"}>{tier}</Badge>;
   };

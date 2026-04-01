@@ -265,8 +265,7 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
     switch (tier) {
       case "foundation": return "bg-blue-500/10 text-blue-500 border-blue-500/30";
       case "growth": return "bg-purple-500/10 text-purple-500 border-purple-500/30";
-      case "scale": return "bg-amber-500/10 text-amber-500 border-amber-500/30";
-      case "transform": return "bg-emerald-500/10 text-emerald-500 border-emerald-500/30";
+      case "transformation": return "bg-purple-500/10 text-purple-500 border-purple-500/30";
       default: return "bg-muted text-muted-foreground";
     }
   };

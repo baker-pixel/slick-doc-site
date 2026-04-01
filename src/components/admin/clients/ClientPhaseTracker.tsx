@@ -232,8 +232,7 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
                 <SelectItem value="all">All Tiers</SelectItem>
                 <SelectItem value="foundation">Foundation</SelectItem>
                 <SelectItem value="growth">Growth</SelectItem>
-                <SelectItem value="scale">Scale</SelectItem>
-                <SelectItem value="dominate">Dominate</SelectItem>
+                <SelectItem value="transformation">Transformation</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={fetchClientsWithPhases}>

@@ -254,8 +254,7 @@ export function TaskTemplatesPanel() {
                       <SelectContent>
                         <SelectItem value="foundation">Foundation (Level 1)</SelectItem>
                         <SelectItem value="growth">Growth (Level 2)</SelectItem>
-                        <SelectItem value="scale">Scale (Level 3)</SelectItem>
-                        <SelectItem value="dominate">Dominate</SelectItem>
+                        <SelectItem value="transformation">Transformation (Level 3)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

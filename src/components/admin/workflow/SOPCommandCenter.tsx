@@ -535,7 +535,7 @@ export function SOPCommandCenter({ adminPassword }: SOPCommandCenterProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 gap-6">
-                {['foundation', 'growth', 'scale'].map(tier => (
+                {['foundation', 'growth', 'transformation'].map(tier => (
                   <div key={tier} className="space-y-3">
                     <h3 className="font-semibold capitalize flex items-center gap-2">
                       {getTierBadge(tier)}

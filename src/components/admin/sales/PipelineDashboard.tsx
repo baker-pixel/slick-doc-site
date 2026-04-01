@@ -570,8 +570,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
                   <SelectContent>
                     <SelectItem value="foundation">Foundation</SelectItem>
                     <SelectItem value="growth">Growth</SelectItem>
-                    <SelectItem value="scale">Scale</SelectItem>
-                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                    <SelectItem value="transformation">Transformation</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
