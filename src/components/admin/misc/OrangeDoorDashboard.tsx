@@ -7,7 +7,7 @@ import {
   Activity, Zap, Calendar, CalendarDays, CalendarRange,
   Sparkles, Loader2, Play
 } from "lucide-react";
-import { WorkflowProgressPanel } from "./WorkflowProgressPanel";
+import { WorkflowProgressPanel } from "../workflow/WorkflowProgressPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

@@ -26,9 +26,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { TaskCompletionModal } from "./TaskCompletionModal";
-import TaskExecutionModal from "./TaskExecutionModal";
-import { AdminSection } from "./AdminSidebar";
+import { TaskCompletionModal } from "../workflow/TaskCompletionModal";
+import TaskExecutionModal from "../workflow/TaskExecutionModal";
+import { AdminSection } from "../core/AdminSidebar";
 
 interface ClientWorkflowPanelProps {
   adminPassword: string;

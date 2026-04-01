@@ -8,7 +8,7 @@ import { Search, Building2, Users, Plus, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { TierBadge } from "./TierBadge";
+import { TierBadge } from "../core/TierBadge";
 
 interface ClientAccount {
   id: string;
