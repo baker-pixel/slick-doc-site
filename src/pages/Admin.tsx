@@ -1141,6 +1141,7 @@ const Admin = () => {
         return <OnboardingAutomationPanel />;
       case "integrations":
         return <IntegrationConfigPanel />;
+      case "approvals":
       case "content-review":
         return <ContentReviewPanel />;
       case "reports-review":
