@@ -539,6 +539,7 @@ export type Database = {
           last_name: string | null
           level: number | null
           onboarded_at: string | null
+          plan_tier: string | null
           review_qr_image_url: string | null
           status: string
           stripe_customer_id: string | null
@@ -563,6 +564,7 @@ export type Database = {
           last_name?: string | null
           level?: number | null
           onboarded_at?: string | null
+          plan_tier?: string | null
           review_qr_image_url?: string | null
           status?: string
           stripe_customer_id?: string | null
@@ -587,6 +589,7 @@ export type Database = {
           last_name?: string | null
           level?: number | null
           onboarded_at?: string | null
+          plan_tier?: string | null
           review_qr_image_url?: string | null
           status?: string
           stripe_customer_id?: string | null
