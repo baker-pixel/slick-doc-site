@@ -517,25 +517,32 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
     setSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from("content_approvals")
-        .update({
-          status: "approved",
-          feedback: feedback || null,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", selectedApproval.id);
+      const { data, error } = await supabase.functions.invoke("handle-approval", {
+        body: {
+          approval_id: selectedApproval.id,
+          action: "approved",
+          feedback: feedback || undefined,
+        },
+      });
 
       if (error) throw error;
 
+      // Optimistic update
+      setApprovals((prev) =>
+        prev.map((a) =>
+          a.id === selectedApproval.id
+            ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString(), feedback: feedback || null }
+            : a
+        )
+      );
+
       toast({
         title: "Content Approved",
-        description: "The content has been approved and will proceed to publishing.",
+        description: "The content has been approved and queued for publishing.",
       });
 
       setSelectedApproval(null);
       setFeedback("");
-      fetchApprovals();
     } catch (error) {
       console.error("Error approving content:", error);
       toast({
