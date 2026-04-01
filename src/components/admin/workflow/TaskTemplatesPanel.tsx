@@ -164,8 +164,7 @@ export function TaskTemplatesPanel() {
     const colors: Record<string, string> = {
       foundation: "bg-slate-500",
       growth: "bg-blue-500",
-      scale: "bg-purple-500",
-      dominate: "bg-amber-500",
+      transformation: "bg-purple-500",
     };
     return <Badge className={colors[tier] || "bg-gray-500"}>{tier}</Badge>;
   };
@@ -194,8 +193,7 @@ export function TaskTemplatesPanel() {
               <SelectItem value="all">All Tiers</SelectItem>
               <SelectItem value="foundation">Foundation</SelectItem>
               <SelectItem value="growth">Growth</SelectItem>
-              <SelectItem value="scale">Scale</SelectItem>
-              <SelectItem value="dominate">Dominate</SelectItem>
+              <SelectItem value="transformation">Transformation</SelectItem>
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -256,8 +254,7 @@ export function TaskTemplatesPanel() {
                       <SelectContent>
                         <SelectItem value="foundation">Foundation (Level 1)</SelectItem>
                         <SelectItem value="growth">Growth (Level 2)</SelectItem>
-                        <SelectItem value="scale">Scale (Level 3)</SelectItem>
-                        <SelectItem value="dominate">Dominate</SelectItem>
+                        <SelectItem value="transformation">Transformation (Level 3)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

@@ -34,7 +34,7 @@ const TRANSFORMATION_EXTRA = [
 
 function getStepsForTier(tier: string) {
   const t = tier.toLowerCase();
-  if (t === "transformation" || t === "scale") {
+  if (t === "transformation") {
     return [...FOUNDATION_STEPS, ...GROWTH_EXTRA, ...TRANSFORMATION_EXTRA];
   }
   if (t === "growth") {

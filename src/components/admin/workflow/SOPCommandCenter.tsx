@@ -204,7 +204,7 @@ export function SOPCommandCenter({ adminPassword }: SOPCommandCenterProps) {
     const colors: Record<string, string> = {
       foundation: "bg-blue-500/10 text-blue-500",
       growth: "bg-purple-500/10 text-purple-500",
-      scale: "bg-orange-500/10 text-orange-500"
+      transformation: "bg-orange-500/10 text-orange-500"
     };
     return <Badge className={colors[tier] || "bg-muted"}>{tier}</Badge>;
   };
@@ -247,11 +247,11 @@ export function SOPCommandCenter({ adminPassword }: SOPCommandCenterProps) {
             Growth
           </Button>
           <Button
-            variant={selectedTier === "scale" ? "default" : "outline"}
+            variant={selectedTier === "transformation" ? "default" : "outline"}
             size="sm"
-            onClick={() => setSelectedTier("scale")}
+            onClick={() => setSelectedTier("transformation")}
           >
-            Scale
+            Transformation
           </Button>
         </div>
       </div>
@@ -535,7 +535,7 @@ export function SOPCommandCenter({ adminPassword }: SOPCommandCenterProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 gap-6">
-                {['foundation', 'growth', 'scale'].map(tier => (
+                {['foundation', 'growth', 'transformation'].map(tier => (
                   <div key={tier} className="space-y-3">
                     <h3 className="font-semibold capitalize flex items-center gap-2">
                       {getTierBadge(tier)}
