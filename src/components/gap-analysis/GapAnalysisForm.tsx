@@ -497,22 +497,10 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
     setIsSaving(true);
     try {
       const { data, error } = await supabase.from("gap_analysis_submissions").insert({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        business_name: formData.businessName,
-        email: formData.email,
-        phone: formData.phone || null,
-        website_url: formData.websiteUrl || null,
+        ...mapFormDataToDb(formData),
         current_step: currentStep,
         is_partial: true,
         status: "in_progress",
-        // Save whatever data we have so far
-        top_business_goals: formData.topBusinessGoals || null,
-        growth_satisfaction: formData.growthSatisfaction || null,
-        investing_in_seo: formData.investingInSeo,
-        uses_email_automation: formData.usesEmailAutomation,
-        asks_for_reviews: formData.asksForReviews,
-        uses_google_analytics: formData.usesGoogleAnalytics,
       }).select('resume_token').single();
 
       if (error) throw error;
