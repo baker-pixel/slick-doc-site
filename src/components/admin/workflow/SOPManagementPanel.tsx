@@ -171,8 +171,7 @@ export function SOPManagementPanel() {
     switch (tier) {
       case "foundation": return "bg-slate-500";
       case "growth": return "bg-blue-500";
-      case "scale": return "bg-purple-500";
-      case "dominate": return "bg-amber-500";
+      case "transformation": return "bg-purple-500";
       default: return "bg-gray-500";
     }
   };
