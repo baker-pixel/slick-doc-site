@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { clientName, industry, platform, topic } = await req.json();
+    const { clientName, industry, platform, topic, tone, websiteSummary } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
@@ -26,22 +26,26 @@ serve(async (req) => {
     };
 
     const style = platformStyles[platform] || platformStyles.facebook;
+    const brandTone = tone || "professional";
 
     const prompt = `Create a compelling social media post for ${clientName} (${industry || "business"} industry) for ${platform}.
 
 Style: ${style}
+Brand tone: ${brandTone}
 
+${websiteSummary ? `Business context: ${websiteSummary}` : ""}
 ${topic ? `Topic/Theme: ${topic}` : ""}
 
 The post should:
 - Be engaging and authentic
+- Match the brand's ${brandTone} tone of voice
 - Include a clear call-to-action
 - Match the platform's best practices
 - Be ready to post as-is
 
 Return ONLY the post content, nothing else. No quotes, no explanations.`;
 
-    console.log("Generating content for:", clientName, platform);
+    console.log("Generating content for:", clientName, platform, "tone:", brandTone);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

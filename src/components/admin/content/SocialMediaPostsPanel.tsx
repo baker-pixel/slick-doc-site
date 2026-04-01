@@ -30,13 +30,19 @@ import {
   Wand2,
   Download,
   Check,
-  Pencil
+  Pencil,
+  ShieldCheck,
+  Building2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 interface Client {
   id: string;
   business_name: string;
   industry: string | null;
+  tone: string | null;
+  website_summary: string | null;
 }
 
 interface SocialPost {
@@ -49,6 +55,7 @@ interface SocialPost {
   created_at: string;
   published_at: string | null;
   metadata: Record<string, unknown> | null;
+  client_account_id: string | null;
 }
 
 const platformIcons: Record<string, React.ReactNode> = {
@@ -83,13 +90,13 @@ export default function SocialMediaPostsPanel() {
     scheduledFor: "",
   });
 
-  // Fetch clients
+  // Fetch clients with full business info
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-for-social"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_accounts")
-        .select("id, business_name, industry")
+        .select("id, business_name, industry, tone, website_summary")
         .eq("status", "active")
         .order("business_name");
       if (error) throw error;
@@ -97,15 +104,21 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Fetch social posts from content_calendar
+  const activeClient = clients.find((c) => c.id === selectedClient) || null;
+
+  // Fetch social posts filtered by selected client
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["social-posts", selectedClient],
     queryFn: async () => {
-      const query = supabase
+      let query = supabase
         .from("content_calendar")
         .select("*")
         .in("platform", ["facebook", "instagram", "linkedin", "twitter"])
         .order("scheduled_for", { ascending: false });
+
+      if (selectedClient) {
+        query = query.eq("client_account_id", selectedClient);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -113,25 +126,34 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Create post mutation
+  // Create post mutation — uses admin edge function to bypass RLS
   const createPost = useMutation({
     mutationFn: async (post: typeof newPost & { imageUrl?: string }) => {
-      const { error } = await supabase.from("content_calendar").insert({
-        title: post.title,
-        content: post.content,
-        platform: post.platform,
-        content_type: "social_post",
-        scheduled_for: post.scheduledFor || new Date().toISOString(),
-        status: post.scheduledFor ? "scheduled" : "draft",
-        metadata: { image_url: post.imageUrl || null, client_id: selectedClient },
+      if (!selectedClient) throw new Error("Please select a client first");
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create",
+          table: "content_calendar",
+          data: {
+            title: post.title,
+            content: post.content,
+            platform: post.platform,
+            content_type: "social_post",
+            scheduled_for: post.scheduledFor || new Date().toISOString(),
+            status: "draft", // Always draft until admin approves
+            client_account_id: selectedClient,
+            metadata: { image_url: post.imageUrl || null },
+          },
+        },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
       setIsCreateOpen(false);
       resetForm();
-      toast({ title: "Post created successfully" });
+      toast({ title: "Post created as draft — approve to make visible to client" });
     },
     onError: (error) => {
       toast({ title: "Error creating post", description: error.message, variant: "destructive" });
@@ -141,8 +163,11 @@ export default function SocialMediaPostsPanel() {
   // Delete post mutation
   const deletePost = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("content_calendar").delete().eq("id", id);
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: { action: "delete", table: "content_calendar", id },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
@@ -153,33 +178,45 @@ export default function SocialMediaPostsPanel() {
   // Update post status mutation
   const updatePostStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase
-        .from("content_calendar")
-        .update({ status, published_at: status === "published" ? new Date().toISOString() : null })
-        .eq("id", id);
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "update",
+          table: "content_calendar",
+          id,
+          data: {
+            status,
+            published_at: status === "published" ? new Date().toISOString() : null,
+          },
+        },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
-      toast({ title: "Post updated" });
+      toast({ title: "Post status updated" });
     },
   });
 
   // Update post mutation
   const updatePost = useMutation({
     mutationFn: async ({ id, post, imageUrl }: { id: string; post: typeof newPost; imageUrl?: string }) => {
-      const { error } = await supabase
-        .from("content_calendar")
-        .update({
-          title: post.title,
-          content: post.content,
-          platform: post.platform,
-          scheduled_for: post.scheduledFor || new Date().toISOString(),
-          status: post.scheduledFor ? "scheduled" : "draft",
-          metadata: { image_url: imageUrl || null, client_id: selectedClient },
-        })
-        .eq("id", id);
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "update",
+          table: "content_calendar",
+          id,
+          data: {
+            title: post.title,
+            content: post.content,
+            platform: post.platform,
+            scheduled_for: post.scheduledFor || new Date().toISOString(),
+            metadata: { image_url: imageUrl || null },
+          },
+        },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
@@ -225,18 +262,22 @@ export default function SocialMediaPostsPanel() {
     }
   };
 
-  // Generate AI content
+  // Generate AI content using client's business info
   const generateAIContent = async () => {
+    if (!activeClient) {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
     setIsGeneratingContent(true);
     try {
-      const client = selectedClient ? clients.find((c) => c.id === selectedClient) : null;
-      
       const { data, error } = await supabase.functions.invoke("generate-social-content", {
         body: {
-          clientName: client?.business_name || contentTopic || "a business",
-          industry: client?.industry || "marketing",
+          clientName: activeClient.business_name,
+          industry: activeClient.industry || "marketing",
           platform: newPost.platform,
           topic: contentTopic,
+          tone: activeClient.tone || "professional",
+          websiteSummary: activeClient.website_summary || "",
         },
       });
 
@@ -253,15 +294,18 @@ export default function SocialMediaPostsPanel() {
     }
   };
 
-  // Generate AI images (multiple options)
+  // Generate AI images
   const generateAIImages = async () => {
+    if (!activeClient) {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
     setIsGeneratingImages(true);
     setGeneratedImages([]);
     setSelectedImage(null);
     
     try {
-      const client = selectedClient ? clients.find((c) => c.id === selectedClient) : null;
-      const prompt = imagePrompt || `Professional marketing image for ${client?.business_name || contentTopic || "a modern business"} in the ${client?.industry || "marketing"} industry`;
+      const prompt = imagePrompt || `Professional marketing image for ${activeClient.business_name} in the ${activeClient.industry || "marketing"} industry`;
 
       const { data, error } = await supabase.functions.invoke("generate-social-image", {
         body: {
@@ -288,7 +332,6 @@ export default function SocialMediaPostsPanel() {
     }
   };
 
-  // Generate both content and images
   const generateBoth = async () => {
     await Promise.all([generateAIContent(), generateAIImages()]);
   };
@@ -305,7 +348,13 @@ export default function SocialMediaPostsPanel() {
     link.click();
   };
 
+  const getClientName = (clientId: string | null) => {
+    if (!clientId) return "Unassigned";
+    return clients.find((c) => c.id === clientId)?.business_name || "Unknown";
+  };
+
   const draftPosts = posts.filter((p) => p.status === "draft");
+  const approvedPosts = posts.filter((p) => p.status === "approved");
   const scheduledPosts = posts.filter((p) => p.status === "scheduled");
   const publishedPosts = posts.filter((p) => p.status === "published");
 
@@ -322,7 +371,7 @@ export default function SocialMediaPostsPanel() {
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className={`p-1.5 rounded ${platformColors[post.platform]} text-white`}>
                   {platformIcons[post.platform]}
                 </div>
@@ -331,14 +380,25 @@ export default function SocialMediaPostsPanel() {
                   variant={
                     post.status === "published"
                       ? "default"
+                      : post.status === "approved"
+                      ? "default"
                       : post.status === "scheduled"
                       ? "secondary"
                       : "outline"
                   }
+                  className={post.status === "approved" ? "bg-green-600" : ""}
                 >
+                  {post.status === "draft" && <EyeOff className="h-3 w-3 mr-1" />}
+                  {post.status === "approved" && <Eye className="h-3 w-3 mr-1" />}
                   {post.status}
                 </Badge>
               </div>
+              {post.client_account_id && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Building2 className="h-3 w-3" />
+                  {getClientName(post.client_account_id)}
+                </div>
+              )}
               {post.title && <h4 className="font-medium">{post.title}</h4>}
               <p className="text-sm text-muted-foreground line-clamp-3">{post.content}</p>
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -353,11 +413,32 @@ export default function SocialMediaPostsPanel() {
                   </span>
                 )}
               </div>
+              {post.status === "draft" && (
+                <p className="text-xs text-amber-600 flex items-center gap-1">
+                  <EyeOff className="h-3 w-3" /> Not visible to client
+                </p>
+              )}
+              {post.status === "approved" && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <Eye className="h-3 w-3" /> Visible to client
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <Button size="icon" variant="ghost" onClick={() => copyToClipboard(post.content)}>
                 <Copy className="h-4 w-4" />
               </Button>
+              {post.status === "draft" && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-green-600 hover:text-green-700"
+                  title="Approve — makes visible to client"
+                  onClick={() => updatePostStatus.mutate({ id: post.id, status: "approved" })}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                </Button>
+              )}
               {post.status !== "published" && (
                 <>
                   <Button
@@ -367,14 +448,17 @@ export default function SocialMediaPostsPanel() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="text-green-500 hover:text-green-600"
-                    onClick={() => updatePostStatus.mutate({ id: post.id, status: "published" })}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
+                  {(post.status === "approved" || post.status === "scheduled") && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-blue-500 hover:text-blue-600"
+                      title="Mark as published"
+                      onClick={() => updatePostStatus.mutate({ id: post.id, status: "published" })}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  )}
                 </>
               )}
               <Button
@@ -397,24 +481,27 @@ export default function SocialMediaPostsPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Social Media Posts</h2>
-          <p className="text-muted-foreground">Create AI-generated content and images</p>
+          <p className="text-muted-foreground">Create AI-generated content mapped to each client</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={selectedClient} onValueChange={setSelectedClient}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Select client" />
             </SelectTrigger>
             <SelectContent>
               {clients.map((client) => (
                 <SelectItem key={client.id} value={client.id}>
-                  {client.business_name}
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-3 w-3" />
+                    {client.business_name}
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!selectedClient}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Post
               </Button>
@@ -422,9 +509,32 @@ export default function SocialMediaPostsPanel() {
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingPost ? "Edit Social Post" : "Create AI-Powered Social Post"}</DialogTitle>
-                <DialogDescription>{editingPost ? "Update your post content and settings" : "Generate engaging content and images with AI"}</DialogDescription>
+                <DialogDescription>
+                  {editingPost
+                    ? "Update your post content and settings"
+                    : activeClient
+                    ? `Generating for ${activeClient.business_name} · ${activeClient.industry || "General"} · Tone: ${activeClient.tone || "Professional"}`
+                    : "Select a client to generate content"}
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 py-4">
+                {/* Client context banner */}
+                {activeClient && (
+                  <div className="rounded-lg border bg-muted/50 p-3 text-sm space-y-1">
+                    <div className="flex items-center gap-2 font-medium">
+                      <Building2 className="h-4 w-4" />
+                      {activeClient.business_name}
+                    </div>
+                    <div className="text-muted-foreground text-xs space-x-3">
+                      {activeClient.industry && <span>Industry: {activeClient.industry}</span>}
+                      {activeClient.tone && <span>Tone: {activeClient.tone}</span>}
+                    </div>
+                    {activeClient.website_summary && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{activeClient.website_summary}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Platform Selection */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -438,24 +548,16 @@ export default function SocialMediaPostsPanel() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="facebook">
-                          <div className="flex items-center gap-2">
-                            <Facebook className="h-4 w-4" /> Facebook
-                          </div>
+                          <div className="flex items-center gap-2"><Facebook className="h-4 w-4" /> Facebook</div>
                         </SelectItem>
                         <SelectItem value="instagram">
-                          <div className="flex items-center gap-2">
-                            <Instagram className="h-4 w-4" /> Instagram
-                          </div>
+                          <div className="flex items-center gap-2"><Instagram className="h-4 w-4" /> Instagram</div>
                         </SelectItem>
                         <SelectItem value="linkedin">
-                          <div className="flex items-center gap-2">
-                            <Linkedin className="h-4 w-4" /> LinkedIn
-                          </div>
+                          <div className="flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn</div>
                         </SelectItem>
                         <SelectItem value="twitter">
-                          <div className="flex items-center gap-2">
-                            <Twitter className="h-4 w-4" /> Twitter/X
-                          </div>
+                          <div className="flex items-center gap-2"><Twitter className="h-4 w-4" /> Twitter/X</div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -477,7 +579,7 @@ export default function SocialMediaPostsPanel() {
                   size="lg"
                   className="w-full"
                   onClick={generateBoth}
-                  disabled={isGeneratingContent || isGeneratingImages}
+                  disabled={isGeneratingContent || isGeneratingImages || !selectedClient}
                 >
                   {(isGeneratingContent || isGeneratingImages) ? (
                     <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
@@ -608,6 +710,12 @@ export default function SocialMediaPostsPanel() {
                   />
                 </div>
 
+                {/* Approval note */}
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                  <EyeOff className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Posts are saved as <strong>drafts</strong> and are <strong>not visible</strong> to clients until you approve them.</span>
+                </div>
+
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" className="flex-1" onClick={() => setIsCreateOpen(false)}>
@@ -616,9 +724,9 @@ export default function SocialMediaPostsPanel() {
                   <Button
                     className="flex-1"
                     onClick={handleSave}
-                    disabled={!newPost.content || createPost.isPending || updatePost.isPending}
+                    disabled={!newPost.content || !selectedClient || createPost.isPending || updatePost.isPending}
                   >
-                    {editingPost ? "Update Post" : newPost.scheduledFor ? "Schedule Post" : "Save as Draft"}
+                    {editingPost ? "Update Post" : "Save as Draft"}
                   </Button>
                 </div>
               </div>
@@ -627,76 +735,65 @@ export default function SocialMediaPostsPanel() {
         </div>
       </div>
 
-      <Tabs defaultValue="all" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="all">All ({posts.length})</TabsTrigger>
-          <TabsTrigger value="draft">Drafts ({draftPosts.length})</TabsTrigger>
-          <TabsTrigger value="scheduled">Scheduled ({scheduledPosts.length})</TabsTrigger>
-          <TabsTrigger value="published">Published ({publishedPosts.length})</TabsTrigger>
-        </TabsList>
+      {!selectedClient && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">Select a client to get started</h3>
+            <p className="text-muted-foreground">
+              Choose a client from the dropdown above to view and create social media posts
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
-        <TabsContent value="all" className="space-y-4">
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading posts...</div>
-          ) : posts.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Send className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">No social posts yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Create your first AI-powered social media post
-                </p>
-                <Button onClick={() => setIsCreateOpen(true)}>
-                  <Wand2 className="h-4 w-4 mr-2" />
-                  Create with AI
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {posts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
+      {selectedClient && (
+        <Tabs defaultValue="all" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="all">All ({posts.length})</TabsTrigger>
+            <TabsTrigger value="draft">Drafts ({draftPosts.length})</TabsTrigger>
+            <TabsTrigger value="approved">Approved ({approvedPosts.length})</TabsTrigger>
+            <TabsTrigger value="scheduled">Scheduled ({scheduledPosts.length})</TabsTrigger>
+            <TabsTrigger value="published">Published ({publishedPosts.length})</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="draft" className="space-y-4">
-          {draftPosts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No draft posts</div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {draftPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="scheduled" className="space-y-4">
-          {scheduledPosts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No scheduled posts</div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {scheduledPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="published" className="space-y-4">
-          {publishedPosts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No published posts</div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {publishedPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+          {[
+            { value: "all", data: posts },
+            { value: "draft", data: draftPosts },
+            { value: "approved", data: approvedPosts },
+            { value: "scheduled", data: scheduledPosts },
+            { value: "published", data: publishedPosts },
+          ].map(({ value, data }) => (
+            <TabsContent key={value} value={value} className="space-y-4">
+              {isLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading posts...</div>
+              ) : data.length === 0 ? (
+                value === "all" ? (
+                  <Card>
+                    <CardContent className="py-12 text-center">
+                      <Send className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No social posts for this client</h3>
+                      <p className="text-muted-foreground mb-4">Create your first AI-powered social media post</p>
+                      <Button onClick={() => setIsCreateOpen(true)}>
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Create with AI
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">No {value} posts</div>
+                )
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {data.map((post) => (
+                    <PostCard key={post.id} post={post} />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </div>
   );
 }
