@@ -62,8 +62,7 @@ const phases = [
 const tierColors: Record<string, string> = {
   foundation: "bg-slate-500/10 text-slate-600 border-slate-500/30",
   growth: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-  scale: "bg-purple-500/10 text-purple-600 border-purple-500/30",
-  dominate: "bg-amber-500/10 text-amber-600 border-amber-500/30",
+  transformation: "bg-purple-500/10 text-purple-600 border-purple-500/30",
 };
 
 export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
