@@ -196,6 +196,22 @@ function normalizeJobType(raw: unknown): AutomationType {
     build_kpi_dashboard_outline: "create_analytics_dashboard",
     review_monthly_analytics_and_kpis: "generate_monthly_report",
     prepare_and_send_monthly_performance_summary: "generate_monthly_report",
+
+    // SEO task aliases
+    optimize_meta_titles_and_descriptions: "run_seo_audit",
+    add_schema_markup: "run_seo_audit",
+    optimize_meta_titles: "run_seo_audit",
+    meta_title_optimization: "run_seo_audit",
+    schema_markup: "run_seo_audit",
+    fix_broken_links: "run_seo_audit",
+    technical_seo: "run_seo_audit",
+    on_page_seo: "run_seo_audit",
+    optimize_page_speed: "run_page_speed_test",
+    page_speed_optimization: "run_page_speed_test",
+    submit_sitemap: "run_seo_audit",
+    internal_linking: "run_seo_audit",
+    local_seo: "run_seo_audit",
+    citation_building: "run_seo_audit",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);
