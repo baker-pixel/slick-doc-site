@@ -1,8 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
@@ -10,10 +12,51 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
   try {
-    const { gapAnalysis } = await req.json();
+    const body = await req.json();
+
+    let gapAnalysis: Record<string, unknown>;
+
+    // Support new server-side path: { submission_id }
+    if (body.submission_id) {
+      const { data: row, error: fetchErr } = await supabase
+        .from("gap_analysis_submissions")
+        .select("*")
+        .eq("id", body.submission_id)
+        .single();
+
+      if (fetchErr || !row) {
+        return new Response(
+          JSON.stringify({ error: "Submission not found", details: fetchErr?.message }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Skip if already generated
+      if (row.ai_analysis) {
+        return new Response(
+          JSON.stringify({ analysis: row.ai_analysis, cached: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      gapAnalysis = row;
+    } else if (body.gapAnalysis) {
+      // Legacy frontend path (kept for backward compat)
+      gapAnalysis = body.gapAnalysis;
+    } else {
+      return new Response(
+        JSON.stringify({ error: "submission_id or gapAnalysis required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
     if (!LOVABLE_API_KEY) {
       console.error("LOVABLE_API_KEY is not configured");
       throw new Error("AI service not configured");
@@ -138,7 +181,7 @@ Generate a comprehensive analysis in JSON format.`;
     if (!response.ok) {
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
-      
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
@@ -151,31 +194,66 @@ Generate a comprehensive analysis in JSON format.`;
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
+
       throw new Error("AI generation failed");
     }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
-    
+
     console.log("AI response received");
 
-    // Try to parse JSON from the response
     let analysis;
     try {
-      // Extract JSON from potential markdown code blocks
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
       const jsonStr = jsonMatch ? jsonMatch[1] : content;
       analysis = JSON.parse(jsonStr.trim());
-    } catch (parseError) {
-      console.error("Failed to parse AI response as JSON:", parseError);
-      // Return raw content if JSON parsing fails
+    } catch (_parseError) {
+      console.error("Failed to parse AI response as JSON:", _parseError);
       analysis = {
         executiveSummary: content,
         strengths: [],
         gaps: [],
         recommendations: [],
       };
+    }
+
+    // If called with submission_id, save the result back to the row
+    if (body.submission_id) {
+      const { error: updateErr } = await supabase
+        .from("gap_analysis_submissions")
+        .update({ ai_analysis: analysis, status: "completed" })
+        .eq("id", body.submission_id);
+
+      if (updateErr) {
+        console.error("Failed to save analysis to submission:", updateErr);
+      }
+
+      // Also trigger the report email server-side
+      const { data: sub } = await supabase
+        .from("gap_analysis_submissions")
+        .select("email, first_name, business_name, resume_token")
+        .eq("id", body.submission_id)
+        .single();
+
+      if (sub?.email) {
+        const baseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        fetch(`${baseUrl}/functions/v1/send-gap-report`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            email: sub.email,
+            firstName: sub.first_name,
+            businessName: sub.business_name,
+            resumeToken: sub.resume_token,
+            analysis,
+          }),
+        }).catch((e) => console.error("Failed to send gap report email:", e));
+      }
     }
 
     return new Response(JSON.stringify({ analysis }), {

@@ -86,115 +86,53 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     const calculated = calculateSystemScorecard(scorecardData);
     setScorecard(calculated);
 
-    // Generate AI analysis — pass scorecard directly since state isn't flushed yet
-    generateAnalysis(calculated);
-  }, []);
-
-  const generateAnalysis = async (calculatedScorecard: SystemScorecard) => {
-    try {
-      const gapAnalysisPayload = {
-        business_name: formData.businessName,
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        website_url: formData.websiteUrl,
-        top_business_goals: formData.topBusinessGoals,
-        growth_satisfaction: formData.growthSatisfaction,
-        primary_customer_sources: formData.primaryCustomerSources,
-        top_competitors: formData.topCompetitors,
-        unique_differentiator: formData.uniqueDifferentiator,
-        has_seasonality: formData.hasSeasonality,
-        seasonality_details: formData.seasonalityDetails,
-        avg_customer_lifetime_value: formData.avgCustomerLifetimeValue,
-        website_last_updated: formData.websiteLastUpdated,
-        tracks_website_conversions: formData.tracksWebsiteConversions,
-        monthly_website_leads: formData.monthlyWebsiteLeads,
-        priority_improvement: formData.priorityImprovement,
-        investing_in_seo: formData.investingInSeo,
-        ranking_for_keywords: formData.rankingForKeywords,
-        monthly_organic_traffic: formData.monthlyOrganicTraffic,
-        tracking_keyword_rankings: formData.trackingKeywordRankings,
-        running_paid_ads: formData.runningPaidAds,
-        ad_platforms: formData.adPlatforms,
-        monthly_ad_spend: formData.monthlyAdSpend,
-        cost_per_lead: formData.costPerLead,
-        satisfied_with_ad_performance: formData.satisfiedWithAdPerformance,
-        runs_retargeting: formData.runsRetargeting,
-        ads_use_landing_pages: formData.adsUseLandingPages,
-        uses_email_automation: formData.usesEmailAutomation,
-        uses_sms_followups: formData.usesSmsFollowups,
-        has_crm: formData.hasCrm,
-        crm_name: formData.crmName,
-        crm_tracks_all_inbound: formData.crmTracksAllInbound,
-        has_segmentation_drip: formData.hasSegmentationDrip,
-        has_abandoned_followups: formData.hasAbandonedFollowups,
-        lead_response_time: formData.leadResponseTime,
-        close_rate: formData.closeRate,
-        uses_online_scheduling: formData.usesOnlineScheduling,
-        common_objections: formData.commonObjections,
-        where_prospects_lost: formData.whereProspectsLost,
-        asks_for_reviews: formData.asksForReviews,
-        monthly_new_reviews: formData.monthlyNewReviews,
-        has_reputation_tool: formData.hasReputationTool,
-        emails_past_customers: formData.emailsPastCustomers,
-        repeat_customer_rate: formData.repeatCustomerRate,
-        has_loyalty_referral_program: formData.hasLoyaltyReferralProgram,
-        uses_google_analytics: formData.usesGoogleAnalytics,
-        knows_best_lead_sources: formData.knowsBestLeadSources,
-        kpis_tracked: formData.kpisTracked,
-        data_accuracy_confidence: formData.dataAccuracyConfidence,
-        does_ab_testing: formData.doesAbTesting,
-        who_handles_marketing: formData.whoHandlesMarketing,
-        monthly_marketing_budget: formData.monthlyMarketingBudget,
-        weekly_team_hours: formData.weeklyTeamHours,
-        past_marketing_failures: formData.pastMarketingFailures,
-        biggest_marketing_frustration: formData.biggestMarketingFrustration,
-        biggest_agency_fear: formData.biggestAgencyFear,
-        fastest_impact: formData.fastestImpact,
-        what_makes_it_worth_it: formData.whatMakesItWorthIt,
-      };
-
-      const { data, error } = await supabase.functions.invoke("generate-analysis", {
-        body: { gapAnalysis: gapAnalysisPayload },
-      });
-
-      if (error) throw error;
-      if (data?.analysis) {
-        setAiAnalysis(data.analysis);
-        // Save AI analysis to database for shareable link
-        if (submissionId) {
-          await supabase
-            .from("gap_analysis_submissions")
-            .update({ ai_analysis: data.analysis })
-            .eq("id", submissionId);
-        }
-        // Send email with report — pass scorecard directly, don't rely on state
-        sendReportEmail(data.analysis, calculatedScorecard);
-      }
-    } catch (err) {
-      console.error("Analysis generation failed:", err);
-      setAnalysisError("Unable to generate detailed analysis. Our team will review your submission manually.");
-    } finally {
+    // Poll the database for server-side AI analysis
+    if (!submissionId) {
       setIsLoadingAnalysis(false);
+      setAnalysisError("No submission ID found. Please try again.");
+      return;
     }
-  };
 
-  const sendReportEmail = async (analysis: AIAnalysis, directScorecard: SystemScorecard) => {
-    try {
-      await supabase.functions.invoke("send-gap-report", {
-        body: {
-          email: formData.email,
-          firstName: formData.firstName,
-          businessName: formData.businessName,
-          resumeToken: resumeToken,
-          scorecard: directScorecard,
-          analysis,
-        },
-      });
-      setEmailSent(true);
-    } catch (err) {
-      console.error("Failed to send report email:", err);
-    }
-  };
+    let cancelled = false;
+    const startTime = Date.now();
+    const TIMEOUT_MS = 60_000;
+    const POLL_INTERVAL_MS = 3_000;
+
+    const poll = async () => {
+      while (!cancelled) {
+        if (Date.now() - startTime > TIMEOUT_MS) {
+          setAnalysisError("Analysis is taking longer than expected. Please refresh the page in a few minutes.");
+          setIsLoadingAnalysis(false);
+          return;
+        }
+
+        try {
+          const { data: row } = await supabase
+            .from("gap_analysis_submissions")
+            .select("ai_analysis")
+            .eq("id", submissionId)
+            .single();
+
+          if (row?.ai_analysis) {
+            setAiAnalysis(row.ai_analysis as unknown as AIAnalysis);
+            setIsLoadingAnalysis(false);
+            setEmailSent(true); // Email is sent server-side now
+            return;
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      }
+    };
+
+    poll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submissionId]);
 
   const copyShareLink = () => {
     if (shareableUrl) {
