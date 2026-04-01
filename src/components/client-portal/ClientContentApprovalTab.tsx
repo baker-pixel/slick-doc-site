@@ -25,6 +25,7 @@ interface ContentApproval {
   feedback: string | null;
   submitted_at: string;
   reviewed_at: string | null;
+  publish_status: string | null;
 }
 
 interface ClientContentApprovalTabProps {
