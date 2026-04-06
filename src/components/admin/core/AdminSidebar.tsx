@@ -14,6 +14,7 @@ import {
   Search,
   Home,
   Contact,
+  Layers,
 } from "lucide-react";
 import {
   Sidebar,
@@ -114,6 +115,7 @@ const agentItems: NavItem[] = [
 // OPERATIONS group
 const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
+  { id: "client-projects", label: "Projects", icon: Layers },
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
   { id: "approvals", label: "Approvals", icon: FileCheck },
   { id: "contacts", label: "Contacts", icon: Contact },

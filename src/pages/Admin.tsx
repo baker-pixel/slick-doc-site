@@ -1258,6 +1258,8 @@ const Admin = () => {
     "onboarding", "social-posts", "seo-dashboard", "marketing-os",
     "review-engine", "win-notifications", "case-studies", "before-after",
     "quality-assurance", "website-personalization",
+    // Agent office sections — show all clients' work, no client selection required
+    "deliverables", "approvals", "content-review", "reports-review",
   ];
 
   const isGlobalSection = globalSections.includes(activeSection);
