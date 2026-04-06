@@ -12,6 +12,8 @@ import {
   Mail,
   Share2,
   Search,
+  Home,
+  Contact,
 } from "lucide-react";
 import {
   Sidebar,
@@ -114,6 +116,7 @@ const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
   { id: "approvals", label: "Approvals", icon: FileCheck },
+  { id: "contacts", label: "Contacts", icon: Contact },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -193,6 +196,22 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
       </SidebarHeader>
       
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={activeSection === "home"}
+                  onClick={() => onSectionChange("home")}
+                  tooltip="Home"
+                >
+                  <Home className="h-4 w-4" />
+                  <span>Home</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
       </SidebarContent>
