@@ -1,31 +1,17 @@
 import { useState, useEffect } from "react";
-import { 
-  Users, 
+import {
+  Users,
   Settings,
   Briefcase,
   ChevronDown,
   ChevronRight,
-  Home,
-  Zap,
-  ClipboardCheck,
   FileText,
   BarChart3,
   FolderOpen,
-  MessageCircle,
-  Calendar,
-  CreditCard,
-  Package,
   FileCheck,
   Mail,
   Share2,
-  FileSignature,
   Search,
-  Bot,
-  BookOpen,
-  Star,
-  Palette,
-  Plug,
-  LayoutDashboard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -114,51 +100,20 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-// Group 1 — Daily work
-const dailyWorkItems: NavItem[] = [
-  { id: "home", label: "Home", icon: Home },
+// AGENTS group
+const agentItems: NavItem[] = [
+  { id: "seo-dashboard", label: "SEO", icon: Search },
+  { id: "deliverables", label: "Content", icon: FileText },
+  { id: "social-posts", label: "Social", icon: Share2 },
+  { id: "emails", label: "Email", icon: Mail },
+  { id: "reports-review", label: "Reports", icon: BarChart3 },
+];
+
+// OPERATIONS group
+const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
-  { id: "smart-task-queue", label: "Task Queue", icon: Zap },
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
-];
-
-// Group 2 — Client work
-const clientWorkItems: NavItem[] = [
-  { id: "client-tasks", label: "Tasks", icon: ClipboardCheck },
-  { id: "client-projects", label: "Projects", icon: LayoutDashboard },
-  { id: "deliverables", label: "Deliverables", icon: Package },
   { id: "approvals", label: "Approvals", icon: FileCheck },
-  { id: "client-messages", label: "Messages", icon: MessageCircle },
-  { id: "client-meetings", label: "Meetings", icon: Calendar },
-  { id: "client-documents", label: "Documents", icon: FileText },
-  { id: "client-invoices", label: "Invoices", icon: CreditCard },
-];
-
-// Group 3 — Leads & marketing
-const leadsItems: NavItem[] = [
-  { id: "contacts", label: "Contacts", icon: Users },
-  { id: "gap-analysis", label: "Gap Analysis", icon: Search },
-  { id: "emails", label: "Email Centre", icon: Mail },
-  { id: "social-posts", label: "Social Posts", icon: Share2 },
-  { id: "sales-proposals", label: "Proposals", icon: FileSignature },
-  { id: "seo-dashboard", label: "SEO", icon: BarChart3 },
-];
-
-// Group 4 — Automation & ops
-const automationItems: NavItem[] = [
-  { id: "automation", label: "Automation", icon: Bot },
-  { id: "sops", label: "SOPs", icon: BookOpen },
-  { id: "onboarding", label: "Onboarding", icon: Star },
-  { id: "review-engine", label: "Review Engine", icon: Star },
-  { id: "integrations", label: "Integrations", icon: Plug },
-];
-
-// Group 5 — Team & config
-const teamItems: NavItem[] = [
-  { id: "team-directory", label: "Team", icon: Users },
-  { id: "task-templates", label: "Task Templates", icon: ClipboardCheck },
-  { id: "brand-assets", label: "Brand Assets", icon: Palette },
-  { id: "service-agreements", label: "Service Agreements", icon: FileSignature },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -238,11 +193,8 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
       </SidebarHeader>
       
       <SidebarContent>
-        <NavGroup label="Daily Work" items={dailyWorkItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
-        <NavGroup label="Client Work" items={clientWorkItems} activeSection={activeSection} onSectionChange={onSectionChange} />
-        <NavGroup label="Leads & Marketing" items={leadsItems} activeSection={activeSection} onSectionChange={onSectionChange} />
-        <NavGroup label="Automation & Ops" items={automationItems} activeSection={activeSection} onSectionChange={onSectionChange} />
-        <NavGroup label="Team & Config" items={teamItems} activeSection={activeSection} onSectionChange={onSectionChange} />
+        <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
+        <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
       </SidebarContent>
     </Sidebar>
   );
