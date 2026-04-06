@@ -62,10 +62,12 @@ const fadeIn = {
 
 export function OrangeDoorDashboard({ 
   onNavigate,
-  onAddClient 
+  onAddClient,
+  adminPassword 
 }: { 
   onNavigate: (section: string) => void;
   onAddClient: () => void;
+  adminPassword?: string;
 }) {
   const [activeClients, setActiveClients] = useState(0);
   const [mrr, setMrr] = useState(0);
@@ -561,6 +563,8 @@ export function OrangeDoorDashboard({
               <WorkflowProgressPanel
                 clientId={workflowClientId}
                 clientName={clientHealth.find(c => c.id === workflowClientId)?.business_name || ""}
+                clientTier={clientHealth.find(c => c.id === workflowClientId)?.tier}
+                adminPassword={adminPassword}
               />
             )}
           </div>

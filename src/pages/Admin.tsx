@@ -1033,6 +1033,7 @@ const Admin = () => {
           <OrangeDoorDashboard 
             onNavigate={(section) => setActiveSection(section as AdminSection)}
             onAddClient={() => setActiveSection("clients")}
+            adminPassword={storedPassword}
           />
         );
       case "automation-center":
