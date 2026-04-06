@@ -3862,11 +3862,13 @@ export type Database = {
       }
       workflow_steps: {
         Row: {
+          actual_completion: string | null
           callback_deadline: string | null
           client_id: string
           completed_at: string | null
           created_at: string | null
           depends_on: number | null
+          estimated_completion: string | null
           id: string
           payload: Json | null
           result: Json | null
@@ -3878,11 +3880,13 @@ export type Database = {
           workflow_id: string
         }
         Insert: {
+          actual_completion?: string | null
           callback_deadline?: string | null
           client_id: string
           completed_at?: string | null
           created_at?: string | null
           depends_on?: number | null
+          estimated_completion?: string | null
           id?: string
           payload?: Json | null
           result?: Json | null
@@ -3894,11 +3898,13 @@ export type Database = {
           workflow_id: string
         }
         Update: {
+          actual_completion?: string | null
           callback_deadline?: string | null
           client_id?: string
           completed_at?: string | null
           created_at?: string | null
           depends_on?: number | null
+          estimated_completion?: string | null
           id?: string
           payload?: Json | null
           result?: Json | null
