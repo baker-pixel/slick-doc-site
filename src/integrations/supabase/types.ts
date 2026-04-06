@@ -1973,6 +1973,7 @@ export type Database = {
       }
       email_logs: {
         Row: {
+          created_at: string | null
           id: string
           metadata: Json | null
           recipient_email: string
@@ -1983,6 +1984,7 @@ export type Database = {
           tracking_id: string | null
         }
         Insert: {
+          created_at?: string | null
           id?: string
           metadata?: Json | null
           recipient_email: string
@@ -1993,6 +1995,7 @@ export type Database = {
           tracking_id?: string | null
         }
         Update: {
+          created_at?: string | null
           id?: string
           metadata?: Json | null
           recipient_email?: string
