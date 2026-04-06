@@ -141,6 +141,10 @@ serve(async (req) => {
         },
         body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`${name} returned ${res.status}: ${text.slice(0, 300)}`);
+      }
       return res.json();
     };
 
@@ -257,33 +261,11 @@ serve(async (req) => {
       const totalSteps = wfData?.total_steps || 17;
 
       if (newStatus === "completed" && step_number < totalSteps) {
-        try {
-          await callFn("run-workflow-step", {
-            client_id: effectiveClientId,
-            workflow_id,
-            step_number: step_number + 1,
-          });
-        } catch (advanceErr) {
-          const advanceMsg = advanceErr instanceof Error ? advanceErr.message : String(advanceErr);
-          console.error("Auto-advance failed:", advanceMsg);
-
-          // Mark the next step as failed so admin can see it
-          await supabase
-            .from("workflow_steps")
-            .update({ status: "failed", result: { error: `Auto-advance failed: ${advanceMsg}` } })
-            .eq("workflow_id", workflow_id)
-            .eq("step_number", step_number + 1);
-
-          // Insert an automation alert so it shows in the admin panel
-          await supabase.from("automation_alerts").insert({
-            alert_type: "workflow_advance_failed",
-            title: `Workflow stuck at step ${step_number + 1}`,
-            message: `Workflow ${workflow_id} stuck at step ${step_number + 1}: ${advanceMsg}`,
-            severity: "high",
-            source: "run-workflow-step",
-            source_id: workflow_id,
-          });
-        }
+        fetch(`${baseUrl}/functions/v1/run-workflow-step`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({ client_id: effectiveClientId, workflow_id, step_number: step_number + 1 }),
+        }).catch((e) => console.error(`Auto-advance to step ${step_number + 1} failed:`, e));
       }
 
       return new Response(

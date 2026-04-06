@@ -382,7 +382,7 @@ const handler = async (req: Request): Promise<Response> => {
         trackedHtml = addUnsubscribeFooter(trackedHtml, email.recipient_email, supabaseUrl);
 
         const emailResponse = await resend.emails.send({
-          from: "Orange Door Marketing <hello@orangedoormarketing.com>",
+          from: Deno.env.get("EMAIL_FROM") || "Orange Door Marketing <hello@orangedoormarketing.com>",
           to: [email.recipient_email],
           subject: email.subject,
           html: trackedHtml,
@@ -410,32 +410,42 @@ const handler = async (req: Request): Promise<Response> => {
       } catch (emailError: any) {
         console.error(`Error sending email ${email.id}:`, emailError);
 
-        // Update queue with error
-        await supabase
-          .from("email_queue")
-          .update({ status: "failed", error_message: emailError.message })
-          .eq("id", email.id);
+        const retryCount = ((email.metadata as any)?.retry_count || 0) + 1;
+        const maxRetries = 3;
 
-        // Log the failure
-        await supabase.from("email_logs").insert({
-          recipient_email: email.recipient_email,
-          subject: email.subject,
-          status: "failed",
-          metadata: { ...email.metadata, error: emailError.message },
-        });
-
-        // Create automation alert for failure
-        await supabase.from("automation_alerts").insert({
-          alert_type: "email_failure",
-          severity: "error",
-          title: "Email Send Failed",
-          message: `Failed to send email to ${email.recipient_email}: ${emailError.message}`,
-          source: "process-email-queue",
-          source_id: email.id,
-          metadata: { subject: email.subject, error: emailError.message },
-        });
-
-        results.push({ id: email.id, status: "failed", error: emailError.message });
+        if (retryCount < maxRetries) {
+          const backoffMinutes = 5 * Math.pow(3, retryCount - 1);
+          const retryAt = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
+          await supabase.from("email_queue").update({
+            status: "pending",
+            scheduled_for: retryAt,
+            error_message: `Attempt ${retryCount} failed: ${emailError.message}. Retrying at ${retryAt}.`,
+            metadata: { ...email.metadata, retry_count: retryCount },
+          }).eq("id", email.id);
+          results.push({ id: email.id, status: "retrying", attempt: retryCount });
+        } else {
+          await supabase.from("email_queue").update({
+            status: "failed",
+            error_message: `All ${maxRetries} attempts failed. Last error: ${emailError.message}`,
+            metadata: { ...email.metadata, retry_count: retryCount },
+          }).eq("id", email.id);
+          await supabase.from("email_logs").insert({
+            recipient_email: email.recipient_email,
+            subject: email.subject,
+            status: "failed",
+            metadata: { ...email.metadata, error: emailError.message, retry_count: retryCount },
+          });
+          await supabase.from("automation_alerts").insert({
+            alert_type: "email_failure",
+            severity: "error",
+            title: "Email Permanently Failed",
+            message: `Failed to send to ${email.recipient_email} after ${maxRetries} attempts: ${emailError.message}`,
+            source: "process-email-queue",
+            source_id: email.id,
+            metadata: { subject: email.subject, error: emailError.message, retry_count: retryCount },
+          });
+          results.push({ id: email.id, status: "failed", error: emailError.message });
+        }
       }
     }
 

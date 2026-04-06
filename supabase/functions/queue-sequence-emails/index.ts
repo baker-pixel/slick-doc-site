@@ -382,9 +382,9 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     if (!sequence) {
-      console.log("No active sequence found for trigger:", triggerType);
-      return new Response(JSON.stringify({ message: "No active sequence found" }), {
-        status: 200,
+      console.warn("No active sequence found for trigger:", triggerType);
+      return new Response(JSON.stringify({ error: "No active sequence found", triggerType }), {
+        status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
