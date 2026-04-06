@@ -1,0 +1,1 @@
+ALTER TABLE public.workflow_steps ADD COLUMN IF NOT EXISTS task_id uuid REFERENCES workflow_tasks(id) ON DELETE SET NULL;
