@@ -239,20 +239,27 @@ Generate a comprehensive analysis in JSON format.`;
       if (sub?.email) {
         const baseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        fetch(`${baseUrl}/functions/v1/send-gap-report`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${serviceKey}`,
-          },
-          body: JSON.stringify({
-            email: sub.email,
-            firstName: sub.first_name,
-            businessName: sub.business_name,
-            resumeToken: sub.resume_token,
-            analysis,
-          }),
-        }).catch((e) => console.error("Failed to send gap report email:", e));
+        try {
+          const reportRes = await fetch(`${baseUrl}/functions/v1/send-gap-report`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify({
+              email: sub.email,
+              firstName: sub.first_name,
+              businessName: sub.business_name,
+              resumeToken: sub.resume_token,
+              analysis,
+            }),
+          });
+          if (!reportRes.ok) {
+            console.error("send-gap-report failed:", reportRes.status, await reportRes.text());
+          }
+        } catch (e) {
+          console.error("Failed to send gap report email:", e);
+        }
       }
     }
 
