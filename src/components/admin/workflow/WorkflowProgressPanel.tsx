@@ -1,10 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
+import { TierBadge } from "../core/TierBadge";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import {
   Play,
   CheckCircle2,
@@ -14,6 +19,9 @@ import {
   AlertTriangle,
   Wifi,
   SkipForward,
+  Sparkles,
+  Wrench,
+  CalendarIcon,
 } from "lucide-react";
 
 interface WorkflowStep {
@@ -23,6 +31,8 @@ interface WorkflowStep {
   task_type: string;
   status: string;
   completed_at: string | null;
+  estimated_completion: string | null;
+  actual_completion: string | null;
 }
 
 interface Workflow {
@@ -31,23 +41,44 @@ interface Workflow {
   current_step: number;
   total_steps: number;
   status: string;
+  created_at: string;
 }
 
 interface WorkflowProgressPanelProps {
   clientId: string;
   clientName: string;
+  clientTier?: string;
+  adminPassword?: string;
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
   pending: { label: "Pending", color: "bg-muted text-muted-foreground", icon: Circle },
-  running: { label: "Running", color: "bg-amber-500/10 text-amber-600 border-amber-500/30", icon: Loader2 },
+  running: { label: "In Progress", color: "bg-amber-500/10 text-amber-600 border-amber-500/30", icon: Loader2 },
   awaiting_callback: { label: "Awaiting", color: "bg-blue-500/10 text-blue-600 border-blue-500/30", icon: Wifi },
   completed: { label: "Done", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30", icon: CheckCircle2 },
   skipped: { label: "Skipped", color: "bg-muted text-muted-foreground border-border", icon: SkipForward },
   failed: { label: "Failed", color: "bg-destructive/10 text-destructive border-destructive/30", icon: AlertTriangle },
 };
 
-export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgressPanelProps) {
+const PHASE_CONFIG: { name: string; taskTypes: string[] }[] = [
+  { name: "Phase 1 — Analysis", taskTypes: ["website_analysis", "seo_audit", "gap_report"] },
+  { name: "Phase 2 — Content Creation", taskTypes: ["content", "social_content", "email_template", "ad_copy"] },
+  { name: "Phase 3 — Publishing", taskTypes: ["n8n_post_blog", "n8n_post_social", "email_campaign"] },
+  { name: "Phase 4 — Reporting", taskTypes: ["analytics", "report", "notify_client"] },
+];
+
+function getPhase(taskType: string): string {
+  for (const phase of PHASE_CONFIG) {
+    if (phase.taskTypes.includes(taskType)) return phase.name;
+  }
+  return "Other";
+}
+
+function isAiPowered(taskType: string | null): boolean {
+  return !!taskType && taskType !== "manual";
+}
+
+export function WorkflowProgressPanel({ clientId, clientName, clientTier, adminPassword }: WorkflowProgressPanelProps) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +136,7 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
 
         const { data: stepsData } = await supabase
           .from("workflow_steps")
-          .select("id, step_number, step_name, task_type, status, completed_at")
+          .select("id, step_number, step_name, task_type, status, completed_at, estimated_completion, actual_completion")
           .eq("workflow_id", wf.id)
           .order("step_number", { ascending: true });
 
@@ -124,7 +155,6 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
   const handleStartWorkflow = async () => {
     setStarting(true);
     try {
-      // Seed the workflow
       const { data: seedData, error: seedError } = await supabase.functions.invoke(
         "seed-tier-workflow",
         { body: { client_id: clientId } }
@@ -140,10 +170,8 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
         description: `${seedData.total_steps}-step ${seedData.tier} workflow initiated for ${clientName}`,
       });
 
-      // Refresh to get the new workflow
       await fetchWorkflow();
 
-      // Start step 1
       supabase.functions
         .invoke("run-workflow-step", {
           body: { client_id: clientId, workflow_id: workflowId, step_number: 1 },
@@ -160,6 +188,57 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
       setStarting(false);
     }
   };
+
+  const handleUpdateDate = async (stepId: string, date: Date | undefined) => {
+    if (!date || !adminPassword) return;
+    const dateStr = format(date, "yyyy-MM-dd");
+    
+    try {
+      const { error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "update",
+          table: "workflow_steps",
+          id: stepId,
+          password: adminPassword,
+          data: { estimated_completion: dateStr },
+        },
+      });
+      if (error) throw error;
+      setSteps((prev) => prev.map((s) => s.id === stepId ? { ...s, estimated_completion: dateStr } : s));
+      toast({ title: "Due date updated" });
+    } catch (err) {
+      toast({ title: "Failed to update date", variant: "destructive" });
+    }
+  };
+
+  // Grouped steps by phase
+  const groupedSteps = useMemo(() => {
+    const groups: { phase: string; steps: WorkflowStep[] }[] = [];
+    const phaseMap = new Map<string, WorkflowStep[]>();
+
+    for (const step of steps) {
+      const phase = getPhase(step.task_type);
+      if (!phaseMap.has(phase)) {
+        phaseMap.set(phase, []);
+      }
+      phaseMap.get(phase)!.push(step);
+    }
+
+    // Maintain phase order
+    for (const pc of PHASE_CONFIG) {
+      const phaseSteps = phaseMap.get(pc.name);
+      if (phaseSteps && phaseSteps.length > 0) {
+        groups.push({ phase: pc.name, steps: phaseSteps });
+      }
+    }
+    // Add "Other" if any
+    const other = phaseMap.get("Other");
+    if (other && other.length > 0) {
+      groups.push({ phase: "Other", steps: other });
+    }
+
+    return groups;
+  }, [steps]);
 
   if (loading) {
     return (
@@ -191,50 +270,124 @@ export function WorkflowProgressPanel({ clientId, clientName }: WorkflowProgress
   }
 
   const completedCount = steps.filter((s) => s.status === "completed" || s.status === "skipped").length;
-  const progressPct = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
+  const progressPct = steps.length > 0 ? Math.round((completedCount / steps.length) * 100) : 0;
+  const finalEstimate = steps.length > 0 ? steps[steps.length - 1]?.estimated_completion : null;
+  const startedDate = workflow.created_at ? format(new Date(workflow.created_at), "MMM d, yyyy") : "—";
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Workflow Progress</CardTitle>
-          <span className="text-sm text-muted-foreground">
-            {completedCount}/{steps.length} steps
+      {/* Project Header */}
+      <CardHeader className="pb-4 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-lg">{clientName}</CardTitle>
+            {clientTier && <TierBadge tier={clientTier} />}
+          </div>
+          <span className="text-sm font-medium text-muted-foreground">
+            {completedCount} of {steps.length} steps complete — {progressPct}% done
           </span>
         </div>
-        <Progress value={progressPct} className="h-2" />
+        <Progress value={progressPct} className="h-2.5" />
+        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+          <span>Project started: {startedDate}</span>
+          {finalEstimate && (
+            <span>Estimated completion: {format(new Date(finalEstimate + "T00:00:00"), "MMM d, yyyy")}</span>
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-1 max-h-[400px] overflow-y-auto">
-        {steps.map((step) => {
-          const config = statusConfig[step.status] || statusConfig.pending;
-          const Icon = config.icon;
-          const isRunning = step.status === "running";
 
+      {/* Phased Steps */}
+      <CardContent className="space-y-4 max-h-[600px] overflow-y-auto">
+        {groupedSteps.map(({ phase, steps: phaseSteps }) => {
+          const phaseCompleted = phaseSteps.filter((s) => s.status === "completed" || s.status === "skipped").length;
           return (
-            <div
-              key={step.id}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/30 transition-colors"
-            >
-              <div className="flex-shrink-0">
-                {step.status === "completed" ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                ) : isRunning ? (
-                  <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
-                ) : step.status === "awaiting_callback" ? (
-                  <Wifi className="h-4 w-4 text-blue-500" />
-                ) : step.status === "skipped" ? (
-                  <SkipForward className="h-4 w-4 text-muted-foreground" />
-                ) : step.status === "failed" ? (
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                ) : (
-                  <Circle className="h-4 w-4 text-border" />
-                )}
+            <div key={phase} className="space-y-1">
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{phase}</h4>
+                <span className="text-xs text-muted-foreground">{phaseCompleted}/{phaseSteps.length}</span>
               </div>
-              <span className="text-xs text-muted-foreground w-5">{step.step_number}</span>
-              <span className="flex-1 text-sm truncate">{step.step_name}</span>
-              <Badge variant="outline" className={`text-xs ${config.color}`}>
-                {config.label}
-              </Badge>
+              {phaseSteps.map((step) => {
+                const config = statusConfig[step.status] || statusConfig.pending;
+                const Icon = config.icon;
+                const isRunning = step.status === "running";
+                const isDone = step.status === "completed";
+                const ai = isAiPowered(step.task_type);
+
+                return (
+                  <div
+                    key={step.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors",
+                      isRunning && "bg-amber-500/5",
+                      isDone && "opacity-70"
+                    )}
+                  >
+                    <div className="flex-shrink-0">
+                      {isDone ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      ) : isRunning ? (
+                        <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                      ) : step.status === "awaiting_callback" ? (
+                        <Wifi className="h-4 w-4 text-blue-500" />
+                      ) : step.status === "skipped" ? (
+                        <SkipForward className="h-4 w-4 text-muted-foreground" />
+                      ) : step.status === "failed" ? (
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-border" />
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground w-5 tabular-nums">{step.step_number}</span>
+                    <span className="flex-1 text-sm truncate">{step.step_name}</span>
+
+                    {/* AI / Manual tag */}
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-1">
+                      {ai ? <><Sparkles className="h-3 w-3" /> AI</> : <><Wrench className="h-3 w-3" /> Manual</>}
+                    </Badge>
+
+                    {/* Status badge */}
+                    <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-5", config.color)}>
+                      {config.label}
+                    </Badge>
+
+                    {/* Date */}
+                    <div className="w-28 text-right flex-shrink-0">
+                      {isDone && step.actual_completion ? (
+                        <span className="text-xs text-emerald-600">
+                          Done {format(new Date(step.actual_completion + "T00:00:00"), "MMM d")}
+                        </span>
+                      ) : isDone && step.completed_at ? (
+                        <span className="text-xs text-emerald-600">
+                          Done {format(new Date(step.completed_at), "MMM d")}
+                        </span>
+                      ) : adminPassword ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground gap-1">
+                              <CalendarIcon className="h-3 w-3" />
+                              {step.estimated_completion
+                                ? `Due ${format(new Date(step.estimated_completion + "T00:00:00"), "MMM d")}`
+                                : "Set date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                              mode="single"
+                              selected={step.estimated_completion ? new Date(step.estimated_completion + "T00:00:00") : undefined}
+                              onSelect={(d) => handleUpdateDate(step.id, d)}
+                              className="p-3 pointer-events-auto"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      ) : step.estimated_completion ? (
+                        <span className="text-xs text-muted-foreground">
+                          Due {format(new Date(step.estimated_completion + "T00:00:00"), "MMM d")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}

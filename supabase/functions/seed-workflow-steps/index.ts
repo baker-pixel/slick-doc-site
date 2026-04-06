@@ -67,6 +67,58 @@ function getStepsForTier(tier: string) {
   }
 }
 
+/** Add N business days to a date (skips weekends) */
+function addBusinessDays(start: Date, days: number): Date {
+  const result = new Date(start);
+  let added = 0;
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const dow = result.getDay();
+    if (dow !== 0 && dow !== 6) {
+      added++;
+    }
+  }
+  return result;
+}
+
+function toDateString(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+/** Calculate estimated_completion for each step based on sequential dependencies */
+function calculateEstimatedDates(
+  steps: Array<{ step_number: number; task_type: string; depends_on: number | null }>,
+  startDate: Date
+): Map<number, string> {
+  const estimates = new Map<number, Date>();
+
+  for (const step of steps) {
+    const isN8n = step.task_type?.includes("n8n");
+    const duration = isN8n ? 3 : 2;
+
+    let stepStart: Date;
+    if (step.depends_on && estimates.has(step.depends_on)) {
+      // Start day after dependency completes
+      stepStart = new Date(estimates.get(step.depends_on)!);
+      stepStart.setDate(stepStart.getDate() + 1);
+      // Skip to next business day if on weekend
+      while (stepStart.getDay() === 0 || stepStart.getDay() === 6) {
+        stepStart.setDate(stepStart.getDate() + 1);
+      }
+    } else {
+      stepStart = new Date(startDate);
+    }
+
+    estimates.set(step.step_number, addBusinessDays(stepStart, duration));
+  }
+
+  const result = new Map<number, string>();
+  for (const [num, date] of estimates) {
+    result.set(num, toDateString(date));
+  }
+  return result;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -135,11 +187,16 @@ serve(async (req) => {
       throw new Error(`Failed to create workflow: ${wfError.message}`);
     }
 
-    // Seed all steps
+    // Calculate estimated completion dates
+    const startDate = new Date();
+    const estimatedDates = calculateEstimatedDates(steps, startDate);
+
+    // Seed all steps with estimated_completion
     const rows = steps.map((s) => ({
       ...s,
       workflow_id: workflow.id,
       client_id,
+      estimated_completion: estimatedDates.get(s.step_number) || null,
     }));
 
     const { error: stepsError } = await supabase.from("workflow_steps").insert(rows);
