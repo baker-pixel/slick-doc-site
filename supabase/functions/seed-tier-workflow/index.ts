@@ -122,8 +122,25 @@ serve(async (req) => {
     const { error: stepsError } = await supabase.from("workflow_steps").insert(rows);
     if (stepsError) throw new Error(`Failed to seed steps: ${stepsError.message}`);
 
+    // Auto-start step 1 by calling run-workflow-step
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/run-workflow-step`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({ workflow_id: workflow.id, step_number: 1 }),
+      });
+      const result = await resp.json();
+      console.log("Auto-started step 1:", result);
+    } catch (autoStartErr) {
+      console.error("Failed to auto-start step 1 (workflow still created):", autoStartErr);
+    }
+
     return new Response(
-      JSON.stringify({ success: true, workflow_id: workflow.id, tier: client.tier, total_steps: steps.length }),
+      JSON.stringify({ success: true, workflow_id: workflow.id, tier: client.tier, total_steps: steps.length, auto_started: true }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
