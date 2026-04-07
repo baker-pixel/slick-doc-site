@@ -15,6 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { callAdminApi } from "@/lib/admin-api";
+import { friendlyEdgeMessage } from "@/lib/edge-error";
 import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle } from "lucide-react";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar, type AdminSection } from "@/components/admin/core/AdminSidebar";
@@ -381,18 +383,15 @@ const AdminInner = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: { action: "authenticate", password },
-      });
-
-      if (error) throw error;
-      if (!data?.authenticated) throw new Error("Invalid password");
+      const { data, error } = await callAdminApi(password, { action: "authenticate" });
+      if (error) throw new Error(error);
+      if (!(data as any)?.authenticated) throw new Error("Invalid password");
 
       authLogin(password);
       toast({ title: "Access granted" });
       fetchData(password);
     } catch (error: any) {
-      toast({ title: "Access denied", description: error.message, variant: "destructive" });
+      toast({ title: "Access denied", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -401,18 +400,15 @@ const AdminInner = () => {
   const fetchData = async (adminPassword: string) => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: { action: "fetch", password: adminPassword },
-      });
+      const { data, error } = await callAdminApi(adminPassword, { action: "fetch" });
+      if (error) throw new Error(error);
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      setContacts(data.contacts || []);
-      setGapAnalyses(data.gapAnalyses || []);
-      setPdfLeads(data.pdfLeads || []);
+      const d = data as any;
+      setContacts(d.contacts || []);
+      setGapAnalyses(d.gapAnalyses || []);
+      setPdfLeads(d.pdfLeads || []);
     } catch (error: any) {
-      toast({ title: "Error fetching data", description: error.message, variant: "destructive" });
+      toast({ title: "Error fetching data", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -420,44 +416,37 @@ const AdminInner = () => {
 
   const updateStatus = async (table: string, id: string, status: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: { action: "update", table, id, data: { status }, password: storedPassword },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const { error } = await callAdminApi(storedPassword, { action: "update", table, id, data: { status } });
+      if (error) throw new Error(error);
 
       toast({ title: "Status updated" });
       fetchData(storedPassword);
     } catch (error: any) {
-      toast({ title: "Error updating status", description: error.message, variant: "destructive" });
+      toast({ title: "Error updating status", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     }
   };
 
   const deleteRecord = async (table: string, id: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: { action: "delete", table, id, password: storedPassword },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const { error } = await callAdminApi(storedPassword, { action: "delete", table, id });
+      if (error) throw new Error(error);
 
       toast({ title: "Record deleted" });
       fetchData(storedPassword);
     } catch (error: any) {
-      toast({ title: "Error deleting record", description: error.message, variant: "destructive" });
+      toast({ title: "Error deleting record", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     }
   };
 
   const bulkDelete = async (table: string, ids: string[]) => {
     setIsBulkDeleting(true);
     try {
-      await Promise.all(ids.map(id => 
-        supabase.functions.invoke("admin", {
-          body: { action: "delete", table, id, password: storedPassword },
-        })
+      const results = await Promise.all(ids.map(id => 
+        callAdminApi(storedPassword, { action: "delete", table, id })
       ));
+      const firstError = results.find(r => r.error);
+      if (firstError?.error) throw new Error(firstError.error);
+      
       toast({ title: `${ids.length} records deleted` });
       if (table === "contact_submissions") {
         setSelectedContacts(new Set());

@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 import { formatDistanceToNow, format } from "date-fns";
 import { 
   Search, 

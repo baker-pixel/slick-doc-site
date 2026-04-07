@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
+import { friendlyEdgeMessage } from "@/lib/edge-error";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
