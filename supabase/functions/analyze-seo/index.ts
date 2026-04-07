@@ -292,25 +292,33 @@ async function getAiSuggestions(
   }
 
   try {
-    const prompt = `Analyze this webpage and provide SEO improvement suggestions.
+    const prompt = `Analyze this webpage SEO data and return a JSON object with exactly this structure:
+{
+  "suggestions": [
+    { "type": "string (title|content|technical|internal_links|meta|images)", "suggestion": "string", "priority": "string (high|medium|low)" }
+  ],
+  "rewrites": {
+    "title": "suggested better title or null if current is fine",
+    "meta_description": "suggested better meta description or null if current is fine",
+    "first_paragraph": "rewritten first paragraph optimized for keywords or null"
+  }
+}
 
-Page Title: ${analysis.title}
-Meta Description: ${analysis.metaDescription}
-H1 Tags: ${analysis.h1Tags.join(", ")}
+Page Title: ${analysis.title || "(missing)"}
+Meta Description: ${analysis.metaDescription || "(missing)"}
+H1 Tags: ${analysis.h1Tags.join(", ") || "(none)"}
 Word Count: ${analysis.wordCount}
-Target Keywords: ${targetKeywords.join(", ")}
+Images: ${analysis.imageCount} total, ${analysis.imagesMissingAlt} missing alt text
+Internal Links: ${analysis.internalLinks}, External Links: ${analysis.externalLinks}
+Target Keywords: ${targetKeywords.join(", ") || "(none specified)"}
 
-Technical Issues Found:
-${analysis.technicalIssues.map(i => `- ${i.issue}`).join("\n")}
+Technical Issues Already Found:
+${analysis.technicalIssues.map(i => `- ${i.issue} (${i.severity})`).join("\n")}
 
-Content Preview:
-${analysis.textContent.slice(0, 1000)}
+Content Preview (first 800 chars):
+${analysis.textContent.slice(0, 800)}
 
-Provide:
-1. Top 3 actionable SEO suggestions
-2. A better title (if current is weak)
-3. A better meta description (if current is weak)
-4. A rewritten first paragraph optimized for the target keywords`;
+Return only valid JSON, no markdown fences.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -321,7 +329,7 @@ Provide:
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You are an SEO expert. Provide specific, actionable suggestions. Keep responses concise." },
+          { role: "system", content: "You are an SEO expert. Return only valid JSON. No extra text." },
           { role: "user", content: prompt },
         ],
       }),
@@ -335,31 +343,50 @@ Provide:
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "";
 
-    // Parse AI response into structured suggestions
-    const suggestions = [
-      { type: "title", suggestion: "Optimize your title tag for better CTR", priority: "high" },
-      { type: "content", suggestion: "Expand thin content sections", priority: "medium" },
-      { type: "internal_links", suggestion: "Add more internal links", priority: "medium" },
-    ];
-
-    const rewrites = [
-      { type: "title", original: analysis.title, rewritten: `Optimized: ${analysis.title}`, aiGenerated: true },
-      { type: "meta_description", original: analysis.metaDescription, rewritten: analysis.metaDescription || "AI-generated meta description", aiGenerated: true },
-    ];
-
-    // Try to extract structured data from AI response
-    if (content.includes("Title:") || content.includes("title:")) {
-      const titleMatch = content.match(/(?:Better |Suggested |New )?[Tt]itle[:\s]+["']?([^"'\n]+)["']?/);
-      if (titleMatch) {
-        rewrites[0].rewritten = titleMatch[1].trim();
-      }
+    // Parse JSON from AI response
+    let parsed: any;
+    try {
+      const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch (_e) {
+      console.error("Failed to parse AI SEO suggestions as JSON");
+      return { suggestions: [], rewrites: [] };
     }
 
-    if (content.includes("Meta") || content.includes("description")) {
-      const metaMatch = content.match(/(?:Better |Suggested |New )?[Mm]eta [Dd]escription[:\s]+["']?([^"'\n]+)["']?/);
-      if (metaMatch) {
-        rewrites[1].rewritten = metaMatch[1].trim();
-      }
+    // Map suggestions to expected shape
+    const suggestions = Array.isArray(parsed.suggestions)
+      ? parsed.suggestions.map((s: any) => ({
+          type: s.type || "content",
+          suggestion: s.suggestion || s.description || "",
+          priority: s.priority || "medium",
+        })).filter((s: any) => s.suggestion)
+      : [];
+
+    // Map rewrites to expected shape
+    const rewrites: { type: string; original: string; rewritten: string; aiGenerated: boolean }[] = [];
+    if (parsed.rewrites?.title && parsed.rewrites.title !== analysis.title) {
+      rewrites.push({
+        type: "title",
+        original: analysis.title,
+        rewritten: parsed.rewrites.title,
+        aiGenerated: true,
+      });
+    }
+    if (parsed.rewrites?.meta_description && parsed.rewrites.meta_description !== analysis.metaDescription) {
+      rewrites.push({
+        type: "meta_description",
+        original: analysis.metaDescription || "",
+        rewritten: parsed.rewrites.meta_description,
+        aiGenerated: true,
+      });
+    }
+    if (parsed.rewrites?.first_paragraph) {
+      rewrites.push({
+        type: "first_paragraph",
+        original: "",
+        rewritten: parsed.rewrites.first_paragraph,
+        aiGenerated: true,
+      });
     }
 
     return { suggestions, rewrites };
