@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, X, Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
 import { calculateSystemScorecard, getStatusBadgeColor, type SystemScorecard } from "@/lib/systemScorecard";
 
 interface GapAnalysisData {
@@ -156,14 +157,15 @@ export function GapAnalysisDetailModal({ data, open, onOpenChange }: Props) {
         body: { gapAnalysis: data },
       });
 
-      if (error) throw error;
-      if (result?.error) throw new Error(result.error);
+      const errMsg = handleEdgeError(error, result);
+      if (errMsg) {
+        console.error("AI generation error:", errMsg);
+        toast({ title: "Failed to generate analysis", description: friendlyEdgeMessage(errMsg), variant: "destructive" });
+        return;
+      }
 
       setAiAnalysis(result.analysis);
       toast({ title: "AI analysis generated successfully" });
-    } catch (error: any) {
-      console.error("AI generation error:", error);
-      toast({ title: "Failed to generate analysis", description: error.message, variant: "destructive" });
     } finally {
       setIsGenerating(false);
     }

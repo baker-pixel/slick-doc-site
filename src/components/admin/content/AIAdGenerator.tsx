@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface GeneratedAd {
   platform: "google" | "meta";
@@ -277,7 +278,12 @@ export default function AIAdGenerator() {
         }
       });
 
-      if (error) throw error;
+      const errMsg = handleEdgeError(error, data);
+      if (errMsg) {
+        console.error("Error generating ads:", errMsg);
+        toast.error(friendlyEdgeMessage(errMsg));
+        return;
+      }
       
       setGeneratedAds(data.ads || []);
       setAbVariants(data.abVariants || []);
@@ -288,7 +294,7 @@ export default function AIAdGenerator() {
       toast.success("Ads generated successfully!");
     } catch (error) {
       console.error("Error generating ads:", error);
-      toast.error("Failed to generate ads");
+      toast.error(error instanceof Error ? friendlyEdgeMessage(error.message) : "Failed to generate ads");
     } finally {
       setLoading(false);
     }
@@ -478,14 +484,19 @@ ${metaAd.imagePrompts.join("\n")}`;
         }
       });
       
-      if (error) throw error;
+      const errMsg = handleEdgeError(error, data);
+      if (errMsg) {
+        console.error("Error generating image:", errMsg);
+        toast.error(friendlyEdgeMessage(errMsg));
+        return;
+      }
       if (data.imageUrl) {
         setGeneratedImages(prev => [...prev, data.imageUrl]);
         toast.success("Image generated!");
       }
     } catch (error) {
       console.error("Error generating image:", error);
-      toast.error("Failed to generate image. Feature coming soon!");
+      toast.error(error instanceof Error ? friendlyEdgeMessage(error.message) : "Failed to generate image");
     } finally {
       setGeneratingImage(null);
     }

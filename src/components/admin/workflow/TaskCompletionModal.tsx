@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Loader2, CheckCircle, Bell, Package } from "lucide-react";
+import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface TaskCompletionModalProps {
   open: boolean;
@@ -114,23 +115,6 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
     }
   }, [task, open]);
 
-  const getErrorMessage = (err: unknown) => {
-    if (!err) return "Unknown error";
-    if (err instanceof Error) return err.message;
-    if (typeof err === "string") return err;
-    if (typeof err === "object") {
-      const anyErr = err as any;
-      return (
-        anyErr.message ||
-        anyErr.error_description ||
-        anyErr.details ||
-        anyErr.hint ||
-        JSON.stringify(anyErr)
-      );
-    }
-    return String(err);
-  };
-
   const handleComplete = async () => {
     if (!task) return;
 
@@ -148,7 +132,7 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
 
       if (taskError) {
         console.error("Task update failed:", taskError);
-        throw new Error(`Task update failed: ${getErrorMessage(taskError)}`);
+        throw new Error(`Task update failed: ${taskError.message || JSON.stringify(taskError)}`);
       }
 
       // 2. Create deliverable if requested (use admin function to bypass RLS)
@@ -166,9 +150,10 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
           },
         });
 
-        if (deliverableFnError) {
-          console.error("Deliverable creation (admin fn) failed:", deliverableFnError);
-          throw new Error(`Deliverable creation failed: ${getErrorMessage(deliverableFnError)}`);
+        const deliverableErrMsg = handleEdgeError(deliverableFnError, null);
+        if (deliverableErrMsg) {
+          console.error("Deliverable creation (admin fn) failed:", deliverableErrMsg);
+          throw new Error(`Deliverable creation failed: ${deliverableErrMsg}`);
         }
       }
 
@@ -198,9 +183,10 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
           },
         });
 
-        if (notificationFnError) {
-          console.error("Client notification (admin fn) failed:", notificationFnError);
-          throw new Error(`Client notification failed: ${getErrorMessage(notificationFnError)}`);
+        const notifErrMsg = handleEdgeError(notificationFnError, null);
+        if (notifErrMsg) {
+          console.error("Client notification (admin fn) failed:", notifErrMsg);
+          throw new Error(`Client notification failed: ${notifErrMsg}`);
         }
       }
 
@@ -220,9 +206,9 @@ export function TaskCompletionModal({ open, onOpenChange, adminPassword, task, o
       onComplete();
       onOpenChange(false);
     } catch (err) {
-      const msg = getErrorMessage(err);
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("Task completion failed:", err);
-      toast.error(`Failed to complete task: ${msg}`);
+      toast.error(`Failed to complete task: ${friendlyEdgeMessage(msg)}`);
     } finally {
       setLoading(false);
     }

@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
 import { 
   Zap, 
   Play, 
@@ -147,7 +148,8 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
       }
     } catch (error) {
       console.error("Error fetching automation data:", error);
-      toast({ title: "Error loading data", variant: "destructive" });
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      toast({ title: "Error loading data", description: friendlyEdgeMessage(msg), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -257,7 +259,8 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
       toast({ title: "Schedule saved!" });
     } catch (error) {
       console.error("Error saving schedule:", error);
-      toast({ title: "Error saving schedule", variant: "destructive" });
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      toast({ title: "Error saving schedule", description: friendlyEdgeMessage(msg), variant: "destructive" });
     }
   };
 
