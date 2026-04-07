@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { handleEdgeError } from "@/lib/edge-error";
 import type { GapAnalysisData } from "@/components/gap-analysis/GapAnalysisForm";
 
 const initialData: GapAnalysisData = {
@@ -380,7 +381,7 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
       });
 
       try {
-        await supabase.functions.invoke("queue-sequence-emails", {
+        const { error: seqError, data: seqData } = await supabase.functions.invoke("queue-sequence-emails", {
           body: {
             triggerType: "partial_gap_analysis",
             recipientEmail: formData.email,
@@ -393,8 +394,22 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
             },
           },
         });
+        const seqMsg = handleEdgeError(seqError, seqData);
+        if (seqMsg) {
+          console.error("Failed to queue reminder sequence:", seqMsg);
+          toast({
+            title: "Progress saved",
+            description: "Your progress was saved but we couldn't schedule your reminder email. Please contact support if you don't receive it.",
+            variant: "destructive",
+          });
+        }
       } catch (emailError) {
         console.error("Failed to queue reminder sequence:", emailError);
+        toast({
+          title: "Progress saved",
+          description: "Your progress was saved but we couldn't schedule your reminder email. Please contact support if you don't receive it.",
+          variant: "destructive",
+        });
       }
 
       toast({
@@ -430,7 +445,7 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
       setIsComplete(true);
 
       try {
-        await supabase.functions.invoke("queue-sequence-emails", {
+        const { error: seqError, data: seqData } = await supabase.functions.invoke("queue-sequence-emails", {
           body: {
             triggerType: "gap_analysis_complete",
             recipientEmail: formData.email,
@@ -442,8 +457,22 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
             },
           },
         });
+        const seqMsg = handleEdgeError(seqError, seqData);
+        if (seqMsg) {
+          console.error("Failed to queue email sequence:", seqMsg);
+          toast({
+            title: "Submission received",
+            description: "Your analysis was submitted but we couldn't schedule your confirmation email. Please contact support if you don't receive it.",
+            variant: "destructive",
+          });
+        }
       } catch (emailError) {
         console.error("Failed to queue email sequence:", emailError);
+        toast({
+          title: "Submission received",
+          description: "Your analysis was submitted but we couldn't schedule your confirmation email. Please contact support if you don't receive it.",
+          variant: "destructive",
+        });
       }
 
       toast({
