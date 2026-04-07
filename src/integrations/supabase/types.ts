@@ -3992,6 +3992,7 @@ export type Database = {
         Args: { p_client_id: string }
         Returns: number
       }
+      get_anon_key: { Args: never; Returns: string }
       get_optimal_send_hour: { Args: { p_timezone?: string }; Returns: number }
       has_role: {
         Args: {
