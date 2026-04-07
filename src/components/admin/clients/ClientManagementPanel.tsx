@@ -152,22 +152,37 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     if (error) {
       toast.error("Failed to add client: " + error.message);
     } else {
-      toast.success("Client added! Running onboarding automations...");
+      toast.success("Client added! Seeding workflow and running onboarding automations...");
       setAddDialogOpen(false);
       setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", plan_tier: "foundation", website_url: "" });
       fetchClients();
-      
+
+      // Seed the tier-based workflow for this client
+      try {
+        const { error: workflowError } = await supabase.functions.invoke("seed-tier-workflow", {
+          body: { client_id: insertedClient.id },
+        });
+        if (workflowError) {
+          console.error("Workflow seed error:", workflowError);
+          toast.warning("Client created but workflow seeding failed. Start it manually from Workflows.");
+        } else {
+          toast.success("Workflow seeded — step 1 will begin shortly.");
+        }
+      } catch (err) {
+        console.error("Workflow seed error:", err);
+      }
+
       // Auto-run all FULL tasks for the new client
       try {
         const { data, error: autoRunError } = await supabase.functions.invoke("auto-run-client-tasks", {
           body: { clientId: insertedClient.id },
         });
-        
+
         if (autoRunError) {
           console.error("Auto-run error:", autoRunError);
           toast.warning("Client created but auto-run failed. Check Automation → Client Tasks.");
         } else if (data?.completed > 0 || data?.failed > 0) {
-          toast.success(`Onboarding complete: ${data.completed} tasks succeeded, ${data.failed} failed`);
+          toast.success(`Onboarding tasks: ${data.completed} succeeded, ${data.failed} failed`);
         }
       } catch (err) {
         console.error("Auto-run error:", err);

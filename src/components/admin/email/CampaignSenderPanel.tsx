@@ -345,7 +345,7 @@ export function CampaignSenderPanel() {
     let result = content;
     result = result.replace(/\{\{firstName\}\}/g, recipient.firstName || "there");
     result = result.replace(/\{\{lastName\}\}/g, recipient.lastName || "");
-    result = result.replace(/\{\{businessName\}\}/g, recipient.businessName || "your business");
+    result = result.replace(/\{\{businessName\}\}/g, recipient.businessName || "{{businessName}}");
     result = result.replace(/\{\{email\}\}/g, recipient.email);
     
     Object.entries(variableValues).forEach(([key, value]) => {
@@ -750,7 +750,7 @@ export function CampaignSenderPanel() {
                 <div className="space-y-3">
                   {manualRecipients.map((recipient, index) => (
                     <div key={index} className="flex gap-2 items-start">
-                      <div className="flex-1 grid gap-2 sm:grid-cols-2">
+                      <div className="flex-1 grid gap-2 sm:grid-cols-3">
                         <Input
                           type="email"
                           placeholder="Email address *"
@@ -761,6 +761,11 @@ export function CampaignSenderPanel() {
                           placeholder="First name (optional)"
                           value={recipient.firstName || ""}
                           onChange={e => updateManualRecipient(index, "firstName", e.target.value)}
+                        />
+                        <Input
+                          placeholder="Business name (optional)"
+                          value={recipient.businessName || ""}
+                          onChange={e => updateManualRecipient(index, "businessName", e.target.value)}
                         />
                       </div>
                       {manualRecipients.length > 1 && (
