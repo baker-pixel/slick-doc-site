@@ -26,7 +26,7 @@ interface ReportEmailRequest {
   firstName: string;
   businessName: string;
   resumeToken?: string;
-  scorecard: {
+  scorecard?: {
     scores: ScoreItem[];
     overallScore: number;
     overallStatus: string;
