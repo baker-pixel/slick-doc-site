@@ -123,6 +123,11 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
         setUploading(false);
       }
 
+      const metadata: Record<string, any> = {};
+      if (formData.asset_type === "color" && formData.color_hex) {
+        metadata.hex = formData.color_hex;
+      }
+
       const { data, error } = await callAdminApi(adminPassword, {
         action: "create_brand_asset",
         data: {
