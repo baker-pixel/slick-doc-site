@@ -1298,11 +1298,115 @@ Keyword gap analysis helps identify:
     return { completed: false, reason: "No competitors configured", deliverableCreated: true };
   }
 
-  const gapResults = {
-    totalOpportunities: 25,
-    topKeywords: ["digital marketing agency", "seo services", "local marketing"],
-    competitorKeywords: competitors.map((c: any) => ({ name: c.name, keywords: 50 })),
+  // Fetch HTML and extract text/keywords from each URL
+  const fetchPageKeywords = async (url: string): Promise<{ url: string; title: string; h1: string[]; metaKeywords: string; textPreview: string; wordCount: number }> => {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "OrangeDoorSEOBot/1.0" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) return { url, title: "", h1: [], metaKeywords: "", textPreview: "", wordCount: 0 };
+      const html = (await res.text()).slice(0, 50000);
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const h1Matches = html.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || [];
+      const metaKwMatch = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i);
+      const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      return {
+        url,
+        title: titleMatch ? titleMatch[1].trim() : "",
+        h1: h1Matches.map(h => h.replace(/<[^>]+>/g, "").trim()),
+        metaKeywords: metaKwMatch ? metaKwMatch[1].trim() : "",
+        textPreview: text.slice(0, 1000),
+        wordCount: text.split(/\s+/).filter(w => w.length > 0).length,
+      };
+    } catch (_e) {
+      return { url, title: "", h1: [], metaKeywords: "", textPreview: "", wordCount: 0 };
+    }
   };
+
+  // Crawl client website
+  const clientData = client.website_url ? await fetchPageKeywords(client.website_url) : null;
+
+  // Crawl competitor websites
+  const competitorData = await Promise.all(
+    competitors.slice(0, 5).map(async (c: any) => {
+      const domain = c.domain.startsWith("http") ? c.domain : `https://${c.domain}`;
+      const pageData = await fetchPageKeywords(domain);
+      return { name: c.name, ...pageData };
+    })
+  );
+
+  // Ask AI to compare and identify gaps
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  let gapResults: any;
+
+  if (LOVABLE_API_KEY && clientData) {
+    try {
+      const prompt = `You are an SEO keyword gap analyst. Compare the client's website with their competitors and identify keyword opportunities.
+
+CLIENT WEBSITE: ${client.website_url || "N/A"}
+Title: ${clientData.title}
+H1 Tags: ${clientData.h1.join(", ")}
+Meta Keywords: ${clientData.metaKeywords}
+Content Preview: ${clientData.textPreview.slice(0, 500)}
+
+COMPETITORS:
+${competitorData.map(c => `
+${c.name} (${c.url}):
+  Title: ${c.title}
+  H1: ${c.h1.join(", ")}
+  Meta Keywords: ${c.metaKeywords}
+  Content Preview: ${c.textPreview.slice(0, 300)}
+`).join("\n")}
+
+INDUSTRY: ${client.industry || "General"}
+
+Return a JSON object with this exact structure:
+{
+  "totalOpportunities": number,
+  "topKeywords": ["keyword1", "keyword2", ...up to 10],
+  "competitorKeywords": [{"name": "competitor name", "uniqueTopics": ["topic1", "topic2"]}],
+  "contentGaps": ["gap description 1", "gap description 2"],
+  "quickWins": ["quick win 1", "quick win 2"]
+}
+
+Return only JSON.`;
+
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (aiRes.ok) {
+        const aiData = await aiRes.json();
+        const content = aiData.choices?.[0]?.message?.content || "";
+        const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+        gapResults = JSON.parse(cleaned);
+      }
+    } catch (e) {
+      console.error("AI keyword gap analysis error:", e);
+    }
+  }
+
+  // Fallback if AI fails
+  if (!gapResults) {
+    gapResults = {
+      totalOpportunities: 0,
+      topKeywords: [],
+      competitorKeywords: competitorData.map(c => ({ name: c.name, uniqueTopics: [] })),
+      contentGaps: ["AI analysis unavailable — manual review recommended"],
+      quickWins: [],
+    };
+  }
 
   await supabase.from("keyword_gap_results").insert({
     client_account_id: client.id,
@@ -1320,21 +1424,27 @@ Keyword gap analysis helps identify:
 
 ## Top Keyword Opportunities
 
-These are keywords your competitors rank for that you should target:
-
-${gapResults.topKeywords.map(kw => `- **${kw}**`).join('\n')}
+${gapResults.topKeywords.length ? gapResults.topKeywords.map((kw: string) => `- **${kw}**`).join('\n') : "- No keyword opportunities identified yet"}
 
 ## Competitor Analysis
 
-${gapResults.competitorKeywords.map((c: { name: string; keywords: number }) => `### ${c.name}
-- Ranking for approximately **${c.keywords} keywords** you're missing`).join('\n\n')}
+${gapResults.competitorKeywords.map((c: any) => `### ${c.name}
+${c.uniqueTopics?.length ? c.uniqueTopics.map((t: string) => `- ${t}`).join('\n') : '- No unique topics identified'}`).join('\n\n')}
+
+## Content Gaps
+
+${gapResults.contentGaps?.length ? gapResults.contentGaps.map((g: string) => `- ${g}`).join('\n') : "- No content gaps identified"}
+
+## Quick Wins
+
+${gapResults.quickWins?.length ? gapResults.quickWins.map((w: string) => `- ${w}`).join('\n') : "- No quick wins identified"}
 
 ## Recommendations
 
 Based on this analysis, we recommend:
 - Creating content targeting the top keyword opportunities
+- Covering topics your competitors address but you don't
 - Optimizing existing pages for related terms
-- Building backlinks to improve domain authority
 
 *Your marketing team will develop a content strategy based on these findings.*`;
 
