@@ -53,6 +53,7 @@ const REQUEST_TYPES: Record<string, string> = {
 };
 
 export default function ClientRequestsAdminPanel({ clientId }: { clientId?: string } = {}) {
+  const { adminPassword } = useAdminAuth();
   const [requests, setRequests] = useState<ClientRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<ClientRequest | null>(null);
