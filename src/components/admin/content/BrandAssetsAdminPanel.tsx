@@ -180,21 +180,18 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
         await supabase.storage.from("brand-assets").remove([filePath]);
       }
 
-      const { error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "delete_brand_asset",
-          password: adminPassword,
-          id: assetId,
-        },
+      const { error } = await callAdminApi(adminPassword, {
+        action: "delete_brand_asset",
+        id: assetId,
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       toast({ title: "Asset deleted" });
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting asset:", error);
-      toast({ title: "Error", description: "Failed to delete asset", variant: "destructive" });
+      toast({ title: "Error", description: friendlyEdgeMessage(error.message || "Failed to delete asset"), variant: "destructive" });
     }
   };
 

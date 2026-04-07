@@ -74,6 +74,7 @@ const activityTypeLabels: Record<string, string> = {
 };
 
 export function ActivityFeedAdminPanel() {
+  const { adminPassword } = useAdminAuth();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [clientAccounts, setClientAccounts] = useState<ClientAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,22 +87,16 @@ export function ActivityFeedAdminPanel() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const password = localStorage.getItem("admin_password");
-      
       const [activitiesRes, clientsRes] = await Promise.all([
-        supabase.functions.invoke("admin", {
-          body: { action: "fetch_activities", password },
-        }),
-        supabase.functions.invoke("admin", {
-          body: { action: "fetch_client_accounts", password },
-        }),
+        callAdminApi(adminPassword, { action: "fetch_activities" }),
+        callAdminApi(adminPassword, { action: "fetch_client_accounts" }),
       ]);
 
-      if (activitiesRes.data?.activities) {
-        setActivities(activitiesRes.data.activities);
+      if ((activitiesRes.data as any)?.activities) {
+        setActivities((activitiesRes.data as any).activities);
       }
-      if (clientsRes.data?.clients) {
-        setClientAccounts(clientsRes.data.clients);
+      if ((clientsRes.data as any)?.clients) {
+        setClientAccounts((clientsRes.data as any).clients);
       }
     } catch (error) {
       console.error("Error fetching activities:", error);
