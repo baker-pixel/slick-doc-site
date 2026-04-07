@@ -12,6 +12,20 @@ serve(async (req) => {
   }
 
   try {
+    // Validate callback authentication
+    const authHeader = req.headers.get("Authorization") || "";
+    const expectedKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const campaignKey = Deno.env.get("CAMPAIGN_API_KEY") || "";
+    const token = authHeader.replace("Bearer ", "");
+
+    if (!token || (token !== expectedKey && token !== campaignKey)) {
+      console.error("n8n-callback: unauthorized request");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!

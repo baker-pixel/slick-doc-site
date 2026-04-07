@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
+import { AdminAuthProvider, useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
@@ -202,10 +203,9 @@ interface PdfLead {
   created_at: string;
 }
 
-const Admin = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+const AdminInner = () => {
+  const { adminPassword: storedPassword, isAuthenticated, login: authLogin, logout: authLogout } = useAdminAuth();
   const [password, setPassword] = useState("");
-  const [storedPassword, setStoredPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [contacts, setContacts] = useState<ContactSubmission[]>([]);
   const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisData[]>([]);
@@ -388,10 +388,7 @@ const Admin = () => {
       if (error) throw error;
       if (!data?.authenticated) throw new Error("Invalid password");
 
-      setIsAuthenticated(true);
-      setStoredPassword(password);
-      // Store password in localStorage for child components to use
-      localStorage.setItem("admin_password", password);
+      authLogin(password);
       toast({ title: "Access granted" });
       fetchData(password);
     } catch (error: any) {
@@ -1387,5 +1384,11 @@ const Admin = () => {
     </SidebarProvider>
   );
 };
+
+const Admin = () => (
+  <AdminAuthProvider>
+    <AdminInner />
+  </AdminAuthProvider>
+);
 
 export default Admin;
