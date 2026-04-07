@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
+import { friendlyEdgeMessage } from "@/lib/edge-error";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,6 +53,7 @@ const REQUEST_TYPES: Record<string, string> = {
 };
 
 export default function ClientRequestsAdminPanel({ clientId }: { clientId?: string } = {}) {
+  const { adminPassword } = useAdminAuth();
   const [requests, setRequests] = useState<ClientRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<ClientRequest | null>(null);
@@ -87,20 +91,16 @@ export default function ClientRequestsAdminPanel({ clientId }: { clientId?: stri
 
   const fetchRequests = async () => {
     try {
-      const adminPassword = localStorage.getItem("admin_password");
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "get_requests",
-          password: adminPassword,
-        },
+      const { data, error } = await callAdminApi(adminPassword, {
+        action: "get_requests",
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(error);
       
-      setRequests(data?.data || []);
-    } catch (error) {
+      setRequests((data as any)?.data || []);
+    } catch (error: any) {
       console.error("Error fetching requests:", error);
+      toast({ title: "Error loading requests", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -121,24 +121,19 @@ export default function ClientRequestsAdminPanel({ clientId }: { clientId?: stri
 
     setUpdating(true);
     try {
-      const adminPassword = localStorage.getItem("admin_password");
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "update_request",
-          password: adminPassword,
-          id: selectedRequest.id,
-          data: {
-            status: editData.status,
-            admin_notes: editData.admin_notes || null,
-            assigned_to: editData.assigned_to || null,
-            due_date: editData.due_date || null,
-            completed_at: editData.status === "completed" ? new Date().toISOString() : null,
-          },
+      const { data, error } = await callAdminApi(adminPassword, {
+        action: "update_request",
+        id: selectedRequest.id,
+        data: {
+          status: editData.status,
+          admin_notes: editData.admin_notes || null,
+          assigned_to: editData.assigned_to || null,
+          due_date: editData.due_date || null,
+          completed_at: editData.status === "completed" ? new Date().toISOString() : null,
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(error);
 
       toast({
         title: "Request Updated",
