@@ -37,6 +37,7 @@ interface ConversationSummary {
 }
 
 export default function ClientMessagesAdminPanel({ clientId }: { clientId?: string } = {}) {
+  const { adminPassword } = useAdminAuth();
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedClient, setSelectedClient] = useState<string | null>(clientId || null);
@@ -105,40 +106,31 @@ export default function ClientMessagesAdminPanel({ clientId }: { clientId?: stri
 
   const fetchMessages = async (clientId: string) => {
     try {
-      const adminPassword = localStorage.getItem("admin_password");
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "get_messages",
-          password: adminPassword,
-          data: { client_account_id: clientId },
-        },
+      const { data, error } = await callAdminApi(adminPassword, {
+        action: "get_messages",
+        data: { client_account_id: clientId },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(error);
       
-      const messagesData = data?.data || [];
+      const messagesData = (data as any)?.data || [];
       setMessages(messagesData as Message[]);
 
-      // Mark unread client messages as read
       const unread = messagesData.filter((m: Message) => m.sender_type === "client" && !m.is_read);
       for (const msg of unread) {
         await markAsRead(msg.id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching messages:", error);
+      toast({ title: "Error loading messages", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     }
   };
 
   const markAsRead = async (messageId: string) => {
     try {
-      const adminPassword = localStorage.getItem("admin_password");
-      await supabase.functions.invoke("admin", {
-        body: {
-          action: "mark_message_read",
-          password: adminPassword,
-          id: messageId,
-        },
+      await callAdminApi(adminPassword, {
+        action: "mark_message_read",
+        id: messageId,
       });
     } catch (error) {
       console.error("Error marking as read:", error);
@@ -150,21 +142,16 @@ export default function ClientMessagesAdminPanel({ clientId }: { clientId?: stri
 
     setSending(true);
     try {
-      const adminPassword = localStorage.getItem("admin_password");
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "send_message",
-          password: adminPassword,
-          data: {
-            client_account_id: selectedClient,
-            message: newMessage.trim(),
-            sender_name: "Agency Team",
-          },
+      const { data, error } = await callAdminApi(adminPassword, {
+        action: "send_message",
+        data: {
+          client_account_id: selectedClient,
+          message: newMessage.trim(),
+          sender_name: "Agency Team",
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(error);
 
       setNewMessage("");
       toast({
@@ -175,7 +162,7 @@ export default function ClientMessagesAdminPanel({ clientId }: { clientId?: stri
       console.error("Error sending message:", error);
       toast({
         title: "Failed to send",
-        description: error.message || "Please try again",
+        description: friendlyEdgeMessage(error.message || "Please try again"),
         variant: "destructive",
       });
     } finally {

@@ -46,6 +46,7 @@ const ASSET_TYPES = [
 ];
 
 export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string } = {}) {
+  const { adminPassword } = useAdminAuth();
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,20 +71,16 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
 
   const fetchData = async () => {
     try {
-      const adminPassword = localStorage.getItem("admin_password");
-      
       const [assetsRes, clientsRes] = await Promise.all([
-        supabase.functions.invoke("admin", {
-          body: { action: "get_brand_assets", password: adminPassword },
-        }),
+        callAdminApi(adminPassword, { action: "get_brand_assets" }),
         supabase
           .from("client_accounts")
           .select("id, business_name")
           .order("business_name"),
       ]);
 
-      if (assetsRes.data?.data) {
-        setAssets(assetsRes.data.data);
+      if (assetsRes.data && (assetsRes.data as any)?.data) {
+        setAssets((assetsRes.data as any).data);
       }
       if (clientsRes.data) {
         setClients(clientsRes.data);
@@ -126,35 +123,24 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
         setUploading(false);
       }
 
-      const adminPassword = localStorage.getItem("admin_password");
-      const metadata: Record<string, any> = {};
-      
-      if (formData.asset_type === "color" && formData.color_hex) {
-        metadata.hex = formData.color_hex;
-      }
-
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "create_brand_asset",
-          password: adminPassword,
-          data: {
-            client_account_id: formData.client_account_id,
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-            asset_type: formData.asset_type,
-            category: formData.asset_type === "logo" ? "logos" : 
-                     formData.asset_type === "color" ? "colors" :
-                     formData.asset_type === "font" ? "fonts" : "guidelines",
-            file_path: filePath,
-            file_url: fileUrl,
-            metadata,
-            is_primary: formData.is_primary,
-          },
+      const { data, error } = await callAdminApi(adminPassword, {
+        action: "create_brand_asset",
+        data: {
+          client_account_id: formData.client_account_id,
+          name: formData.name.trim(),
+          description: formData.description.trim() || null,
+          asset_type: formData.asset_type,
+          category: formData.asset_type === "logo" ? "logos" : 
+                   formData.asset_type === "color" ? "colors" :
+                   formData.asset_type === "font" ? "fonts" : "guidelines",
+          file_path: filePath,
+          file_url: fileUrl,
+          metadata,
+          is_primary: formData.is_primary,
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) throw new Error(error);
 
       toast({ title: "Asset created", description: "Brand asset has been added successfully." });
       setFormData({
