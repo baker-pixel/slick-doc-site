@@ -62,11 +62,49 @@ serve(async (req) => {
       );
     }
 
-    // Update status to running
-    await supabase
-      .from("workflow_tasks")
-      .update({ status: "running" })
-      .eq("id", taskId);
+    // Fetch real HTML from the website for actual SEO signals
+    let htmlSignals = "";
+    let fetchFailed = false;
+    if (client.website_url) {
+      try {
+        const siteRes = await fetch(client.website_url, {
+          headers: { "User-Agent": "OrangeDoorSEOBot/1.0" },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (siteRes.ok) {
+          const html = (await siteRes.text()).slice(0, 50000);
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+          const h1Matches = html.match(/<h1[^>]*>([^<]+)<\/h1>/gi) || [];
+          const h1Tags = h1Matches.map(h => h.replace(/<[^>]+>/g, "").trim());
+          const imgMatches = html.match(/<img[^>]*>/gi) || [];
+          const imgsMissingAlt = imgMatches.filter(img => !img.includes("alt=") || img.includes('alt=""')).length;
+          const hasViewport = html.toLowerCase().includes('name="viewport"');
+          const textContent = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
+
+          htmlSignals = `
+REAL HTML SIGNALS (from crawling ${client.website_url}):
+- Page Title: ${titleMatch ? titleMatch[1].trim() : "MISSING"}
+- Meta Description: ${metaDescMatch ? metaDescMatch[1].trim() : "MISSING"}
+- H1 Tags: ${h1Tags.length > 0 ? h1Tags.join(", ") : "NONE"}
+- Word Count: ${wordCount}
+- Images: ${imgMatches.length} total, ${imgsMissingAlt} missing alt text
+- Viewport Meta: ${hasViewport ? "Present" : "MISSING"}
+- Content Preview (first 500 chars): ${textContent.slice(0, 500)}`;
+        } else {
+          fetchFailed = true;
+          htmlSignals = `\nNote: Website returned HTTP ${siteRes.status} — could not crawl. Using metadata only.`;
+        }
+      } catch (e) {
+        fetchFailed = true;
+        htmlSignals = `\nNote: Website fetch failed (${e instanceof Error ? e.message : "timeout"}) — using metadata only.`;
+      }
+    } else {
+      htmlSignals = "\nNote: No website URL configured for this client.";
+    }
 
     const prompt = `You are an expert SEO analyst. Analyse the following business and return a structured SEO audit.
 
@@ -74,6 +112,7 @@ Business name: ${client.business_name || "Unknown"}
 Industry: ${client.industry || "General"}
 Website URL: ${client.website_url || "Not provided"}
 Website summary: ${client.website_summary || "No summary available"}
+${htmlSignals}
 
 Return your response as a valid JSON object with exactly this structure:
 {
@@ -83,6 +122,8 @@ Return your response as a valid JSON object with exactly this structure:
   "recommended_keywords": ["keyword1", "keyword2", ...],
   "action_summary": "one paragraph summary of what to do next"
 }
+
+${fetchFailed ? "Note: The website could not be fetched. Be transparent about this limitation in action_summary and score conservatively." : "Base your scores on the REAL HTML signals above, not assumptions."}
 
 Return only the JSON. No extra text, no markdown, no code blocks.`;
 
