@@ -180,6 +180,21 @@ const Dashboard = () => {
             </p>
           </motion.div>
 
+          {/* Plain English Summary */}
+          {data.ai_analysis?.plain_english_summary && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="mb-8"
+            >
+              <PlainEnglishSummary
+                summary={data.ai_analysis.plain_english_summary}
+                overallScore={Math.round(overallScore)}
+              />
+            </motion.div>
+          )}
+
           {/* Overall Score Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
