@@ -10,8 +10,10 @@ import {
   ArrowRight,
   Share2,
   Check,
-  Home
+  Home,
+  Download
 } from "lucide-react";
+import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +131,22 @@ export default function Report() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const downloadPDF = () => {
+    if (!report) return;
+    generateGapReportPDF({
+      businessName: report.business_name,
+      firstName: report.first_name,
+      overallScore: scorecard?.overallScore ?? 0,
+      overallStatus: scorecard?.overallStatus,
+      scores: scorecard?.scores,
+      plainEnglishSummary: aiAnalysis?.executiveSummary,
+      executiveSummary: aiAnalysis?.executiveSummary,
+      strengths: aiAnalysis?.strengths,
+      gaps: aiAnalysis?.gaps,
+      recommendations: aiAnalysis?.recommendations,
+    });
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 70) return "bg-emerald-500";
     if (score >= 50) return "bg-yellow-500";
@@ -210,14 +228,24 @@ export default function Report() {
                 </p>
               )}
             </div>
-            <Button
-              variant="outline"
-              onClick={copyShareLink}
-              className="gap-2 shrink-0"
-            >
-              {copied ? <Check size={16} /> : <Share2 size={16} />}
-              {copied ? "Copied!" : "Share Report"}
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                variant="outline"
+                onClick={downloadPDF}
+                className="gap-2"
+              >
+                <Download size={16} />
+                Download PDF
+              </Button>
+              <Button
+                variant="outline"
+                onClick={copyShareLink}
+                className="gap-2"
+              >
+                {copied ? <Check size={16} /> : <Share2 size={16} />}
+                {copied ? "Copied!" : "Share Report"}
+              </Button>
+            </div>
           </div>
 
           {/* SYSTEM Scorecard */}

@@ -4,7 +4,7 @@ import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
 import { motion } from "framer-motion";
 import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, AlertTriangle, XCircle, Download, Sparkles, Calendar, Rocket, Target } from "lucide-react";
-import jsPDF from "jspdf";
+import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -153,249 +153,25 @@ const QuickAnalysis = () => {
   const downloadPDF = () => {
     if (!result) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 20;
-    const contentWidth = pageWidth - margin * 2;
-    const orange = [243, 118, 41];
-    const navy = [26, 32, 44];
-    const green = [34, 197, 94];
-    const yellow = [234, 179, 8];
-    const red = [239, 68, 68];
-    let yPos = 15;
-
-    const getScoreRGB = (score: number): number[] => {
-      if (score >= 80) return green;
-      if (score >= 60) return yellow;
-      return red;
-    };
-
-    // ===== HEADER BANNER =====
-    doc.setFillColor(orange[0], orange[1], orange[2]);
-    doc.rect(0, 0, pageWidth, 45, "F");
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.text("Website Health Report", pageWidth / 2, 20, { align: "center" });
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    const urlDisplay = url.length > 50 ? url.substring(0, 47) + "..." : url;
-    doc.text(urlDisplay, pageWidth / 2, 32, { align: "center" });
-    
-    doc.setFontSize(8);
-    doc.text("Powered by Orange Door", pageWidth / 2, 40, { align: "center" });
-    
-    yPos = 55;
-
-    // ===== OVERALL SCORE =====
-    const scoreColor = getScoreRGB(result.overallScore);
-    doc.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
-    doc.circle(pageWidth / 2, yPos + 18, 20, "F");
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
-    doc.setFont("helvetica", "bold");
-    doc.text(String(result.overallScore), pageWidth / 2, yPos + 22, { align: "center" });
-    
-    doc.setTextColor(navy[0], navy[1], navy[2]);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    doc.text("Overall Score", pageWidth / 2, yPos + 45, { align: "center" });
-    
-    yPos += 55;
-
-    // Summary
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(80, 80, 80);
-    const summaryLines = doc.splitTextToSize(result.summary, contentWidth);
-    doc.text(summaryLines, margin, yPos);
-    yPos += summaryLines.length * 4 + 12;
-
-    // ===== QUICK WINS =====
-    if (result.quickWins && result.quickWins.length > 0) {
-      doc.setFillColor(255, 247, 237);
-      const boxHeight = 15 + result.quickWins.length * 18;
-      doc.roundedRect(margin, yPos - 3, contentWidth, boxHeight, 3, 3, "F");
-      
-      doc.setDrawColor(orange[0], orange[1], orange[2]);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, yPos - 3, contentWidth, boxHeight, 3, 3, "S");
-      
-      doc.setTextColor(orange[0], orange[1], orange[2]);
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text("QUICK WINS - Do This Week", margin + 5, yPos + 6);
-      yPos += 14;
-
-      result.quickWins.forEach((win, i) => {
-        doc.setTextColor(navy[0], navy[1], navy[2]);
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        const titleText = `${i + 1}. ${win.title}`;
-        doc.text(titleText, margin + 5, yPos);
-        
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(100, 100, 100);
-        const descLines = doc.splitTextToSize(win.description, contentWidth - 15);
-        doc.text(descLines[0] || "", margin + 5, yPos + 5);
-        yPos += 16;
-      });
-      yPos += 8;
-    }
-
-    // ===== CATEGORY SECTIONS =====
-    const addSection = (title: string, score: number, findings: string[], recommendations: string[]) => {
-      if (yPos > 220) {
-        doc.addPage();
-        yPos = 20;
-      }
-
-      const sectionColor = getScoreRGB(score);
-      
-      // Section header bar
-      doc.setFillColor(sectionColor[0], sectionColor[1], sectionColor[2]);
-      doc.rect(margin, yPos, 3, 20, "F");
-      
-      doc.setTextColor(navy[0], navy[1], navy[2]);
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text(title, margin + 8, yPos + 5);
-      
-      // Score badge
-      doc.setFillColor(sectionColor[0], sectionColor[1], sectionColor[2]);
-      doc.roundedRect(pageWidth - margin - 28, yPos - 2, 28, 10, 2, 2, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
-      doc.text(`${score}/100`, pageWidth - margin - 14, yPos + 5, { align: "center" });
-      
-      yPos += 12;
-
-      // Findings
-      doc.setTextColor(navy[0], navy[1], navy[2]);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text("Findings:", margin + 8, yPos);
-      yPos += 5;
-
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(80, 80, 80);
-      doc.setFontSize(8);
-      findings.forEach((finding) => {
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
-        }
-        const lines = doc.splitTextToSize(finding, contentWidth - 20);
-        doc.text("-", margin + 10, yPos);
-        doc.text(lines, margin + 15, yPos);
-        yPos += lines.length * 3.5 + 2;
-      });
-
-      yPos += 2;
-      doc.setTextColor(green[0], green[1], green[2]);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text("Recommendations:", margin + 8, yPos);
-      yPos += 5;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      recommendations.forEach((rec) => {
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
-        }
-        const lines = doc.splitTextToSize(rec, contentWidth - 20);
-        doc.text(">", margin + 10, yPos);
-        doc.text(lines, margin + 15, yPos);
-        yPos += lines.length * 3.5 + 2;
-      });
-
-      yPos += 10;
-    };
-
-    addSection("SEO & Visibility", result.seo.score, result.seo.findings, result.seo.recommendations);
-    addSection("Conversion Elements", result.conversion.score, result.conversion.findings, result.conversion.recommendations);
-    addSection("Technical Performance", result.technical.score, result.technical.findings, result.technical.recommendations);
-
-    // ===== 90-DAY ACTION PLAN =====
-    if (result.actionPlan) {
-      doc.addPage();
-      yPos = 15;
-
-      doc.setFillColor(navy[0], navy[1], navy[2]);
-      doc.rect(0, 0, pageWidth, 30, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(18);
-      doc.setFont("helvetica", "bold");
-      doc.text("Your 90-Day Action Plan", pageWidth / 2, 20, { align: "center" });
-      yPos = 45;
-
-      const phases = [
-        { title: "Week 1", subtitle: result.actionPlan.week1.title, tasks: result.actionPlan.week1.tasks, color: green },
-        { title: "Weeks 2-4", subtitle: result.actionPlan.week2to4.title, tasks: result.actionPlan.week2to4.tasks, color: yellow },
-        { title: "Months 2-3", subtitle: result.actionPlan.month2to3.title, tasks: result.actionPlan.month2to3.tasks, color: orange },
-      ];
-
-      phases.forEach((phase, idx) => {
-        if (yPos > 250) {
-          doc.addPage();
-          yPos = 20;
-        }
-        
-        // Phase circle
-        doc.setFillColor(phase.color[0], phase.color[1], phase.color[2]);
-        doc.circle(margin + 8, yPos + 4, 6, "F");
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text(String(idx + 1), margin + 8, yPos + 7, { align: "center" });
-
-        doc.setTextColor(navy[0], navy[1], navy[2]);
-        doc.setFontSize(12);
-        doc.setFont("helvetica", "bold");
-        doc.text(phase.title, margin + 20, yPos + 4);
-        
-        doc.setTextColor(100, 100, 100);
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-        const subtitleLines = doc.splitTextToSize(phase.subtitle, contentWidth - 25);
-        doc.text(subtitleLines[0] || "", margin + 20, yPos + 11);
-        yPos += 18;
-
-        doc.setFontSize(8);
-        phase.tasks.forEach((task) => {
-          if (yPos > 270) {
-            doc.addPage();
-            yPos = 20;
-          }
-          doc.setTextColor(phase.color[0], phase.color[1], phase.color[2]);
-          doc.text(">", margin + 22, yPos);
-          doc.setTextColor(60, 60, 60);
-          const lines = doc.splitTextToSize(task, pageWidth - 60);
-          doc.text(lines, 48, yPos);
-          yPos += lines.length * 5 + 3;
-        });
-        yPos += 10;
-      });
-    }
-
-    // ===== FOOTER ON LAST PAGE =====
-    doc.setFillColor(orange[0], orange[1], orange[2]);
-    doc.rect(0, 277, pageWidth, 20, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text("Orange Door Digital Marketing", pageWidth / 2, 285, { align: "center" });
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.text("Generated " + new Date().toLocaleDateString(), pageWidth / 2, 292, { align: "center" });
-
-    doc.save("website-analysis-" + new Date().toISOString().split("T")[0] + ".pdf");
+    generateGapReportPDF({
+      businessName: url,
+      websiteUrl: url,
+      overallScore: result.overallScore,
+      plainEnglishSummary: result.summary,
+      scores: [
+        { category: "S", label: "SEO & Visibility", score: result.seo.score, status: result.seo.score >= 70 ? "strong" : result.seo.score >= 50 ? "moderate" : result.seo.score >= 30 ? "weak" : "critical" },
+        { category: "Y", label: "Conversion Elements", score: result.conversion.score, status: result.conversion.score >= 70 ? "strong" : result.conversion.score >= 50 ? "moderate" : result.conversion.score >= 30 ? "weak" : "critical" },
+        { category: "T", label: "Technical Performance", score: result.technical.score, status: result.technical.score >= 70 ? "strong" : result.technical.score >= 50 ? "moderate" : result.technical.score >= 30 ? "weak" : "critical" },
+      ],
+      strengths: result.seo.findings.slice(0, 2),
+      gaps: [...result.seo.recommendations.slice(0, 1), ...result.conversion.recommendations.slice(0, 1), ...result.technical.recommendations.slice(0, 1)],
+      recommendations: [
+        ...result.quickWins?.map(w => ({ title: w.title, description: w.description, priority: "Quick Win" })) || [],
+        ...result.seo.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),
+        ...result.conversion.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),
+        ...result.technical.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),
+      ],
+    });
   };
 
   return (
