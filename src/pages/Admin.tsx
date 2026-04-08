@@ -17,7 +17,8 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
 import { friendlyEdgeMessage } from "@/lib/edge-error";
-import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar, type AdminSection } from "@/components/admin/core/AdminSidebar";
 import { AdminStatsCards } from "@/components/admin/core/AdminStatsCards";
@@ -1071,11 +1072,9 @@ const AdminInner = () => {
       case "feature-guide":
         return <FeatureGuidePanel onNavigate={(section) => setActiveSection(section as AdminSection)} />;
       case "contacts":
-        return renderContactsTable();
       case "gap-analysis":
-        return renderGapAnalysisTable();
       case "pdf-leads":
-        return renderPdfLeadsTable();
+        return renderLeadsSection();
       case "emails":
         return <EmailAdminPanel password={storedPassword} />;
       case "templates":
@@ -1178,8 +1177,9 @@ const AdminInner = () => {
       "client-meetings": "Client Meetings",
       "client-documents": "Client Documents",
       "client-invoices": "Client Invoices",
-      contacts: "Contact Submissions",
-      "gap-analysis": "Gap Analysis",
+      contacts: "Leads",
+      "gap-analysis": "Leads",
+      "pdf-leads": "Leads",
       emails: "Email Centre",
       "social-posts": "Social Media Posts",
       "sales-proposals": "AI Sales Proposals",
