@@ -43,6 +43,22 @@ function getStepsForTier(tier: string) {
   return [...FOUNDATION_STEPS];
 }
 
+/** Add `businessDays` working days to `start`, skipping Sat/Sun. */
+function addBusinessDays(start: Date, businessDays: number): Date {
+  const d = new Date(start);
+  let added = 0;
+  while (added < businessDays) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d;
+}
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
