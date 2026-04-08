@@ -392,6 +392,21 @@ Return only valid JSON, no markdown fences.`;
     return { suggestions, rewrites };
   } catch (error) {
     console.error("AI suggestions error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in analyze-seo`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'analyze-seo',
+      source_id: clientId ?? undefined,
+      metadata: {
+        function_name: 'analyze-seo',
+        client_id: clientId ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return { suggestions: [], rewrites: [] };
   }
 }

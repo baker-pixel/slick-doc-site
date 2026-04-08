@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -308,6 +309,23 @@ Return ONLY valid JSON in this exact format:
 
   } catch (error) {
     console.error("Error in generate-ads:", error);
+
+    try {
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await _sb.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in generate-ads`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'generate-ads',
+        metadata: {
+          function_name: 'generate-ads',
+          client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch(console.error);
+    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

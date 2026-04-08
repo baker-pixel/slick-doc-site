@@ -133,6 +133,20 @@ serve(async (req: Request) => {
     );
   } catch (error: any) {
     console.error("Error in detect-inactive-leads:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in detect-inactive-leads`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'detect-inactive-leads',
+      metadata: {
+        function_name: 'detect-inactive-leads',
+        client_id: null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -1608,6 +1608,20 @@ Deno.serve(async (req) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Admin function error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in admin`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'admin',
+      metadata: {
+        function_name: 'admin',
+        client_id: null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

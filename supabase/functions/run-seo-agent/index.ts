@@ -190,6 +190,20 @@ Return only the JSON. No extra text, no markdown, no code blocks.`;
   } catch (e) {
     console.error("run-seo-agent error:", e);
 
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in run-seo-agent`,
+      message: e instanceof Error ? e.message : 'Unknown error',
+      source: 'run-seo-agent',
+      metadata: {
+        function_name: 'run-seo-agent',
+        client_id: null,
+        error_message: e instanceof Error ? e.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
+
     if (taskId) {
       await supabase
         .from("workflow_tasks")

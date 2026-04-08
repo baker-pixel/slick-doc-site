@@ -104,6 +104,21 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("trigger-n8n error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in trigger-n8n`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'trigger-n8n',
+      source_id: clientId ?? undefined,
+      metadata: {
+        function_name: 'trigger-n8n',
+        client_id: clientId ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

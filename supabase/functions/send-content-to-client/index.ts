@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -102,6 +103,23 @@ const handler = async (req: Request): Promise<Response> => {
     });
   } catch (error: any) {
     console.error("Error in send-content-to-client function:", error);
+
+    try {
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await _sb.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in send-content-to-client`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'send-content-to-client',
+        metadata: {
+          function_name: 'send-content-to-client',
+          client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch(console.error);
+    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     return new Response(
       JSON.stringify({ error: error.message }),
       {
