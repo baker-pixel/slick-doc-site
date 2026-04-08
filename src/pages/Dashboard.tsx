@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { PlainEnglishSummary } from "@/components/PlainEnglishSummary";
+import { addJargonExplanations } from "@/lib/jargonHelper";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -371,7 +373,7 @@ const Dashboard = () => {
                           <div>
                             <h4 className="font-semibold text-foreground mb-2">Executive Summary</h4>
                             <p className="text-muted-foreground text-sm leading-relaxed">
-                              {data.ai_analysis.executiveSummary}
+                              {addJargonExplanations(data.ai_analysis.executiveSummary)}
                             </p>
                           </div>
                         )}
@@ -387,7 +389,7 @@ const Dashboard = () => {
                               {data.ai_analysis.strengths.map((strength: string, idx: number) => (
                                 <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                                   <span className="text-emerald-500 mt-1">•</span>
-                                  {strength}
+                                  {addJargonExplanations(strength)}
                                 </li>
                               ))}
                             </ul>
@@ -405,7 +407,7 @@ const Dashboard = () => {
                               {data.ai_analysis.gaps.map((gap: string, idx: number) => (
                                 <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                                   <span className="text-orange-500 mt-1">•</span>
-                                  {gap}
+                                  {addJargonExplanations(gap)}
                                 </li>
                               ))}
                             </ul>
@@ -420,12 +422,12 @@ const Dashboard = () => {
                               {data.ai_analysis.recommendations.map((rec: { title: string; description: string; priority: string }, idx: number) => (
                                 <div key={idx} className="bg-muted/50 rounded-lg p-3">
                                   <div className="flex items-start justify-between gap-2 mb-1">
-                                    <h5 className="font-medium text-foreground text-sm">{rec.title}</h5>
+                                    <h5 className="font-medium text-foreground text-sm">{addJargonExplanations(rec.title)}</h5>
                                     <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
                                       {rec.priority}
                                     </span>
                                   </div>
-                                  <p className="text-xs text-muted-foreground">{rec.description}</p>
+                                  <p className="text-xs text-muted-foreground">{addJargonExplanations(rec.description)}</p>
                                 </div>
                               ))}
                             </div>
