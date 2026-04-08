@@ -23,12 +23,23 @@ import { calculateSystemScorecard, type SystemScorecard } from "@/lib/systemScor
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
+import { PlainEnglishSummary } from "@/components/PlainEnglishSummary";
+import { addJargonExplanations } from "@/lib/jargonHelper";
+
+interface PlainEnglishSummaryData {
+  headline?: string;
+  what_this_means?: string;
+  top_priority?: string;
+  biggest_opportunity?: string;
+  what_is_working?: string;
+}
 
 interface AIAnalysis {
   executiveSummary: string;
   strengths: string[];
   gaps: string[];
   recommendations: { title: string; description: string; priority: string }[];
+  plain_english_summary?: PlainEnglishSummaryData;
 }
 
 interface ReportData {
