@@ -45,7 +45,7 @@ export default function ClientPortalAuth() {
       .from("client_portal_users")
       .select("id")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
     if (data) {
       navigate("/portal");
@@ -137,7 +137,7 @@ export default function ClientPortalAuth() {
         .from("client_portal_users")
         .select("id")
         .eq("user_id", data.user.id)
-        .single();
+        .maybeSingle();
 
       if (!portalUser) {
         toast({
@@ -201,7 +201,7 @@ export default function ClientPortalAuth() {
           .select("id")
           .eq("user_id", userId)
           .eq("client_account_id", invitation.client_account_id)
-          .single();
+          .maybeSingle();
 
         if (!existingPortalUser) {
           const { error: portalError } = await supabase
