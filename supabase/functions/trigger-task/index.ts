@@ -55,6 +55,21 @@ serve(async (req) => {
     );
   } catch (e) {
     console.error("trigger-task error:", e);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in trigger-task`,
+      message: e instanceof Error ? e.message : 'Unknown error',
+      source: 'trigger-task',
+      source_id: client_id ?? undefined,
+      metadata: {
+        function_name: 'trigger-task',
+        client_id: client_id ?? null,
+        error_message: e instanceof Error ? e.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

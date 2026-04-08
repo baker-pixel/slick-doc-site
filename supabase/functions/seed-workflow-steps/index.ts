@@ -211,6 +211,21 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("seed-workflow-steps error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in seed-workflow-steps`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'seed-workflow-steps',
+      source_id: client_id ?? undefined,
+      metadata: {
+        function_name: 'seed-workflow-steps',
+        client_id: client_id ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -176,6 +176,21 @@ const handler = async (req: Request): Promise<Response> => {
     );
   } catch (error: any) {
     console.error("Error sending notification:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in send-client-notification`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'send-client-notification',
+      source_id: client_account_id ?? undefined,
+      metadata: {
+        function_name: 'send-client-notification',
+        client_id: client_account_id ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }

@@ -244,6 +244,21 @@ Return your response as a JSON object with this structure:
 
   } catch (error) {
     console.error("Generate projects error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in generate-client-projects`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'generate-client-projects',
+      source_id: clientAccountId ?? undefined,
+      metadata: {
+        function_name: 'generate-client-projects',
+        client_id: clientAccountId ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

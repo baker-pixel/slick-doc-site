@@ -198,6 +198,23 @@ Provide your analysis as a valid JSON object.`;
 
   } catch (error) {
     console.error("Error in analyze-website function:", error);
+
+    try {
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await _sb.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in analyze-website`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'analyze-website',
+        metadata: {
+          function_name: 'analyze-website',
+        client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch(console.error);
+    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Analysis failed" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

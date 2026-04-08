@@ -145,6 +145,20 @@ Keep it under 150 words. Make it engaging and ready to post.`;
   } catch (e) {
     console.error("run-content-agent error:", e);
 
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in run-content-agent`,
+      message: e instanceof Error ? e.message : 'Unknown error',
+      source: 'run-content-agent',
+      metadata: {
+        function_name: 'run-content-agent',
+        client_id: null,
+        error_message: e instanceof Error ? e.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
+
     // Mark task as failed
     if (taskId) {
       await supabase

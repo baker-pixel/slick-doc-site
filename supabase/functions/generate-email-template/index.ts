@@ -271,6 +271,23 @@ Remember to return valid JSON with name, slug, subject, html_content, descriptio
 
   } catch (error: any) {
     console.error("Error generating template:", error);
+
+    try {
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await _sb.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in generate-email-template`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'generate-email-template',
+        metadata: {
+          function_name: 'generate-email-template',
+        client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch(console.error);
+    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -2134,6 +2134,21 @@ async function buildRenewalReminderSequence(
 
   if (seqError) {
     console.error("Failed to create renewal sequence:", seqError);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in run-automation`,
+      message: e instanceof Error ? e.message : 'Unknown error',
+      source: 'run-automation',
+      source_id: clientId ?? undefined,
+      metadata: {
+        function_name: 'run-automation',
+        client_id: clientId ?? null,
+        error_message: e instanceof Error ? e.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
   }
 
   // Create a deliverable with the sequence details

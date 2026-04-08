@@ -66,6 +66,20 @@ serve(async (req) => {
     );
   } catch (err) {
     console.error("check-stalled-workflows error:", err);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in check-stalled-workflows`,
+      message: err instanceof Error ? err.message : 'Unknown error',
+      source: 'check-stalled-workflows',
+      metadata: {
+        function_name: 'check-stalled-workflows',
+        client_id: null,
+        error_message: err instanceof Error ? err.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

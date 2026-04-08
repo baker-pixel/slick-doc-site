@@ -435,6 +435,20 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Batch processing error:', error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in run-ai-batch`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'run-ai-batch',
+      metadata: {
+        function_name: 'run-ai-batch',
+        client_id: null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

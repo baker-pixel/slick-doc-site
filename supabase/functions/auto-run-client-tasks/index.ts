@@ -116,6 +116,21 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Auto-run error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in auto-run-client-tasks`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'auto-run-client-tasks',
+      source_id: clientId ?? undefined,
+      metadata: {
+        function_name: 'auto-run-client-tasks',
+        client_id: clientId ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

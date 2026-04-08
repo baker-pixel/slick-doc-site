@@ -140,6 +140,20 @@ Output a JSON object with:
     );
   } catch (error) {
     console.error("Parse SOP error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in parse-sop`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'parse-sop',
+      metadata: {
+        function_name: 'parse-sop',
+        client_id: null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

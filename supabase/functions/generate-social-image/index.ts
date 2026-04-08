@@ -80,6 +80,23 @@ The image should be suitable for marketing. No text or words in the image.`;
     );
   } catch (error: unknown) {
     console.error("Error generating images:", error);
+
+    try {
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await _sb.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in generate-social-image`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'generate-social-image',
+        metadata: {
+          function_name: 'generate-social-image',
+        client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch(console.error);
+    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     const errorMessage = error instanceof Error ? error.message : "Failed to generate images";
     return new Response(
       JSON.stringify({ error: errorMessage }),

@@ -162,6 +162,21 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("n8n-callback error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in n8n-callback`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'n8n-callback',
+      source_id: client_id ?? undefined,
+      metadata: {
+        function_name: 'n8n-callback',
+        client_id: client_id ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

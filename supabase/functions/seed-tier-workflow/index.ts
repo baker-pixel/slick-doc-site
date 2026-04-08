@@ -145,6 +145,21 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("seed-tier-workflow error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in seed-tier-workflow`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'seed-tier-workflow',
+      source_id: client_id ?? undefined,
+      metadata: {
+        function_name: 'seed-tier-workflow',
+        client_id: client_id ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

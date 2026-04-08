@@ -268,6 +268,20 @@ Generate a comprehensive analysis in JSON format.`;
     });
   } catch (error) {
     console.error("generate-analysis error:", error);
+
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in generate-analysis`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'generate-analysis',
+      metadata: {
+        function_name: 'generate-analysis',
+        client_id: null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       {
