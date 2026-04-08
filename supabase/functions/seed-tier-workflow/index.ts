@@ -43,6 +43,22 @@ function getStepsForTier(tier: string) {
   return [...FOUNDATION_STEPS];
 }
 
+/** Add `businessDays` working days to `start`, skipping Sat/Sun. */
+function addBusinessDays(start: Date, businessDays: number): Date {
+  const d = new Date(start);
+  let added = 0;
+  while (added < businessDays) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return d;
+}
+
+function toDateStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -108,8 +124,25 @@ serve(async (req) => {
 
     if (wfError) throw new Error(`Failed to create workflow: ${wfError.message}`);
 
+    // Calculate estimated_completion dates
+    const today = new Date();
+    const estimatedDates: string[] = [];
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      const bizDays = s.task_type.includes("n8n") ? 3 : 2;
+      if (i === 0) {
+        estimatedDates.push(toDateStr(addBusinessDays(today, bizDays)));
+      } else {
+        const prevDate = new Date(estimatedDates[i - 1] + "T00:00:00");
+        // Add 1 calendar day gap + business days
+        const startFrom = new Date(prevDate);
+        startFrom.setDate(startFrom.getDate() + 1);
+        estimatedDates.push(toDateStr(addBusinessDays(startFrom, bizDays)));
+      }
+    }
+
     // Seed steps
-    const rows = steps.map((s) => ({
+    const rows = steps.map((s, i) => ({
       step_number: s.step_number,
       step_name: s.step_name,
       task_type: s.task_type,
@@ -117,6 +150,7 @@ serve(async (req) => {
       payload: (s as any).payload || null,
       workflow_id: workflow.id,
       client_id,
+      estimated_completion: estimatedDates[i],
     }));
 
     const { error: stepsError } = await supabase.from("workflow_steps").insert(rows);
