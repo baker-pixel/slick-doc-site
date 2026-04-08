@@ -10,8 +10,10 @@ import {
   ArrowRight,
   Share2,
   Check,
-  Home
+  Home,
+  Download
 } from "lucide-react";
+import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -127,6 +129,22 @@ export default function Report() {
       description: "Share this link with your team.",
     });
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const downloadPDF = () => {
+    if (!report) return;
+    generateGapReportPDF({
+      businessName: report.business_name,
+      firstName: report.first_name,
+      overallScore: scorecard?.overallScore ?? 0,
+      overallStatus: scorecard?.overallStatus,
+      scores: scorecard?.scores,
+      plainEnglishSummary: aiAnalysis?.executiveSummary,
+      executiveSummary: aiAnalysis?.executiveSummary,
+      strengths: aiAnalysis?.strengths,
+      gaps: aiAnalysis?.gaps,
+      recommendations: aiAnalysis?.recommendations,
+    });
   };
 
   const getScoreColor = (score: number) => {
