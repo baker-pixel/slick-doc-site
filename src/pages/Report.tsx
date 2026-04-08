@@ -228,14 +228,24 @@ export default function Report() {
                 </p>
               )}
             </div>
-            <Button
-              variant="outline"
-              onClick={copyShareLink}
-              className="gap-2 shrink-0"
-            >
-              {copied ? <Check size={16} /> : <Share2 size={16} />}
-              {copied ? "Copied!" : "Share Report"}
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                variant="outline"
+                onClick={downloadPDF}
+                className="gap-2"
+              >
+                <Download size={16} />
+                Download PDF
+              </Button>
+              <Button
+                variant="outline"
+                onClick={copyShareLink}
+                className="gap-2"
+              >
+                {copied ? <Check size={16} /> : <Share2 size={16} />}
+                {copied ? "Copied!" : "Share Report"}
+              </Button>
+            </div>
           </div>
 
           {/* SYSTEM Scorecard */}
