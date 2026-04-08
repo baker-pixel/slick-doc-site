@@ -70,6 +70,7 @@ Your task is to analyze a gap analysis submission and provide:
 2. Key strengths identified
 3. Critical gaps that need addressing
 4. Top 3 priority recommendations
+5. A plain English summary written for non-technical small business owners
 
 Use the SYSTEM framework:
 - S: Search & Visibility (SEO, local presence, discoverability)
@@ -80,7 +81,19 @@ Use the SYSTEM framework:
 - M: Metrics & Improvement (analytics, tracking, KPIs, reporting)
 
 Be specific, actionable, and use a professional but friendly tone appropriate for small business owners.
-Format the response as JSON with keys: executiveSummary, strengths (array), gaps (array), recommendations (array of {title, description, priority})`;
+
+Also return a field called plain_english_summary with this exact structure:
+{
+  "plain_english_summary": {
+    "headline": "One sentence — the single most important thing wrong with their marketing. Write it like you are telling a friend, not writing a report. Example: 'Your website is almost invisible on Google and doesn't clearly explain what you do or how to contact you.'",
+    "what_this_means": "2-3 sentences explaining what their score means for their business in plain terms. No jargon. No acronyms. Talk about customers, leads, and revenue — not CTR, bounce rate, or schema markup.",
+    "top_priority": "One sentence — the single most important thing they should fix first and why it will make a difference.",
+    "biggest_opportunity": "One sentence — the one thing that would have the biggest impact if fixed.",
+    "what_is_working": "One sentence — something genuinely positive about their current marketing. Be honest — if nothing is working well, say their brand has potential."
+  }
+}
+
+Format the response as JSON with keys: executiveSummary, strengths (array), gaps (array), recommendations (array of {title, description, priority}), plain_english_summary (object with headline, what_this_means, top_priority, biggest_opportunity, what_is_working)`;
 
     const userPrompt = `Analyze this gap analysis submission:
 
