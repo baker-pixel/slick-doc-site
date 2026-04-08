@@ -341,7 +341,7 @@ export default function Report() {
                   <div>
                     <h4 className="font-semibold text-foreground mb-3">Executive Summary</h4>
                     <p className="text-muted-foreground leading-relaxed">
-                      {aiAnalysis.executiveSummary}
+                      {addJargonExplanations(aiAnalysis.executiveSummary)}
                     </p>
                   </div>
                 )}
@@ -357,7 +357,7 @@ export default function Report() {
                       {aiAnalysis.strengths.map((strength, idx) => (
                         <li key={idx} className="text-muted-foreground flex items-start gap-2">
                           <span className="text-emerald-500 mt-1 shrink-0">✓</span>
-                          {strength}
+                          {addJargonExplanations(strength)}
                         </li>
                       ))}
                     </ul>
@@ -375,7 +375,7 @@ export default function Report() {
                       {aiAnalysis.gaps.map((gap, idx) => (
                         <li key={idx} className="text-muted-foreground flex items-start gap-2">
                           <span className="text-orange-500 mt-1 shrink-0">!</span>
-                          {gap}
+                          {addJargonExplanations(gap)}
                         </li>
                       ))}
                     </ul>
@@ -393,12 +393,12 @@ export default function Report() {
                       {aiAnalysis.recommendations.map((rec, idx) => (
                         <div key={idx} className="bg-secondary/50 rounded-xl p-4">
                           <div className="flex items-start justify-between gap-3 mb-2">
-                            <h5 className="font-medium text-foreground">{rec.title}</h5>
+                            <h5 className="font-medium text-foreground">{addJargonExplanations(rec.title)}</h5>
                             <Badge className="shrink-0 bg-primary/10 text-primary border-0">
                               {rec.priority}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground">{rec.description}</p>
+                          <p className="text-sm text-muted-foreground">{addJargonExplanations(rec.description)}</p>
                         </div>
                       ))}
                     </div>
