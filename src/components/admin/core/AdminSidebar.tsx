@@ -15,6 +15,7 @@ import {
   Home,
   Contact,
   Layers,
+  Download,
 } from "lucide-react";
 import {
   Sidebar,
@@ -119,6 +120,8 @@ const operationsItems: NavItem[] = [
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
   { id: "approvals", label: "Approvals", icon: FileCheck },
   { id: "contacts", label: "Contacts", icon: Contact },
+  { id: "gap-analysis", label: "Gap Analyses", icon: FileText },
+  { id: "pdf-leads", label: "PDF Leads", icon: Download },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
