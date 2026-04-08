@@ -1220,7 +1220,7 @@ const AdminInner = () => {
       "workload-balancer": "Workload Balancer",
       "client-analytics": "Client Analytics",
       "client-requests": "Client Requests",
-      "pdf-leads": "PDF Leads",
+      
       templates: "Email Templates",
       sequences: "Email Sequences",
       campaigns: "Campaigns",
