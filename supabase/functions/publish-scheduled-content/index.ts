@@ -77,14 +77,48 @@ serve(async (req) => {
           case "twitter":
           case "facebook":
           case "linkedin":
-          case "instagram":
-            // Social media posting would require respective API keys
-            // For now, we log and mark as needing manual intervention
-            errorMessage = `${item.platform} API integration not yet configured`;
-            console.log(`Social media post queued for ${item.platform}: ${item.title}`);
-            // Mark as published anyway since content is ready
-            published = true;
+          case "instagram": {
+            // Route social posts through trigger-n8n → n8n → n8n-callback
+            console.log(`Routing ${item.platform} post to n8n: ${item.title}`);
+            const n8nResponse = await supabase.functions.invoke("trigger-n8n", {
+              body: {
+                clientId: item.client_account_id,
+                trigger: "publish_social",
+                tasks: [],
+                metadata: {
+                  content_calendar_id: item.id,
+                  platform: item.platform,
+                  title: item.title,
+                  content: item.content,
+                  scheduled_for: item.scheduled_for,
+                },
+              },
+            });
+
+            if (n8nResponse.error) {
+              errorMessage = `n8n trigger failed: ${n8nResponse.error.message}`;
+              console.error(errorMessage);
+            } else {
+              // Mark as awaiting_callback — n8n-callback will set it to published
+              const { error: awaitError } = await supabase
+                .from("content_calendar")
+                .update({
+                  status: "awaiting_callback",
+                  metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() },
+                })
+                .eq("id", item.id);
+
+              if (awaitError) {
+                console.error(`Failed to set awaiting_callback for ${item.id}:`, awaitError);
+                results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: awaitError.message });
+              } else {
+                console.log(`Social post ${item.id} sent to n8n, awaiting callback`);
+                results.push({ id: item.id, platform: item.platform || "unknown", success: true });
+              }
+              continue; // Skip the published/failed blocks below
+            }
             break;
+          }
 
           case "blog":
             // Blog posts typically just need to be marked as published
