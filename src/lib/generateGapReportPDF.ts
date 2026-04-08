@@ -293,8 +293,11 @@ export function generateGapReportPDF(data: GapReportPDFData): void {
   zones.forEach((zone) => {
     const zx = MARGIN + (CONTENT_W * zone.from) / 100;
     const zw = (CONTENT_W * (zone.to - zone.from)) / 100;
-    doc.setFillColor(zone.color[0], zone.color[1], zone.color[2]);
-    doc.setGlobalAlpha?.(0.2);
+    // Use lighter version of the color for zone background
+    const r = Math.min(255, zone.color[0] + Math.round((255 - zone.color[0]) * 0.7));
+    const g = Math.min(255, zone.color[1] + Math.round((255 - zone.color[1]) * 0.7));
+    const b = Math.min(255, zone.color[2] + Math.round((255 - zone.color[2]) * 0.7));
+    doc.setFillColor(r, g, b);
     doc.rect(zx, barTop, zw, barH, "F");
     // Label
     doc.setFontSize(6);
