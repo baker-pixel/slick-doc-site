@@ -259,6 +259,12 @@ export default function Report() {
             </div>
           </div>
 
+          {/* Plain English Summary — the most important section */}
+          <PlainEnglishSummary
+            summary={aiAnalysis?.plain_english_summary}
+            overallScore={scorecard?.overallScore ?? 0}
+          />
+
           {/* SYSTEM Scorecard */}
           {scorecard && (
             <Card className="border-primary/20">
