@@ -226,7 +226,7 @@ const handler = async (req: Request): Promise<Response> => {
         source: 'send-booking-confirmation',
         metadata: {
           function_name: 'send-booking-confirmation',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

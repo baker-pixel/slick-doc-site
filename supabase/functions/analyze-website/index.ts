@@ -209,7 +209,7 @@ Provide your analysis as a valid JSON object.`;
         source: 'analyze-website',
         metadata: {
           function_name: 'analyze-website',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

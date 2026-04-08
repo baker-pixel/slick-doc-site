@@ -91,7 +91,7 @@ The image should be suitable for marketing. No text or words in the image.`;
         source: 'generate-social-image',
         metadata: {
           function_name: 'generate-social-image',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

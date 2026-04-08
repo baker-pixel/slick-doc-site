@@ -104,7 +104,7 @@ Return ONLY the post content, nothing else. No quotes, no explanations.`;
         source: 'generate-social-content',
         metadata: {
           function_name: 'generate-social-content',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

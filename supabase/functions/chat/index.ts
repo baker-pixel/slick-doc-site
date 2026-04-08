@@ -120,7 +120,7 @@ serve(async (req) => {
         source: 'chat',
         metadata: {
           function_name: 'chat',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

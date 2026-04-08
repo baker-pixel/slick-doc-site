@@ -282,7 +282,7 @@ Remember to return valid JSON with name, slug, subject, html_content, descriptio
         source: 'generate-email-template',
         metadata: {
           function_name: 'generate-email-template',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

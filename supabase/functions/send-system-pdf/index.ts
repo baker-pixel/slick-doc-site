@@ -367,7 +367,7 @@ const handler = async (req: Request): Promise<Response> => {
         source: 'send-system-pdf',
         metadata: {
           function_name: 'send-system-pdf',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

@@ -296,7 +296,7 @@ const handler = async (req: Request): Promise<Response> => {
         source: 'send-test-email',
         metadata: {
           function_name: 'send-test-email',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

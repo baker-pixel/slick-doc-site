@@ -319,7 +319,7 @@ Return ONLY valid JSON in this exact format:
         source: 'generate-ads',
         metadata: {
           function_name: 'generate-ads',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

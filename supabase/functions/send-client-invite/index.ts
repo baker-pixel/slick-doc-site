@@ -147,7 +147,7 @@ serve(async (req) => {
         source: 'send-client-invite',
         metadata: {
           function_name: 'send-client-invite',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },

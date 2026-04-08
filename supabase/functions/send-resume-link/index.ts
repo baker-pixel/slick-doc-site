@@ -106,7 +106,7 @@ const handler = async (req: Request): Promise<Response> => {
         source: 'send-resume-link',
         metadata: {
           function_name: 'send-resume-link',
-        client_id: null,
+          client_id: null,
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },
