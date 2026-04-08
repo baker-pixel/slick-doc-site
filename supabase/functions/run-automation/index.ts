@@ -377,6 +377,21 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("Automation error:", errorMessage);
 
+    await supabase.from('automation_alerts').insert({
+      alert_type: 'function_error',
+      severity: 'error',
+      title: `Error in run-automation`,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      source: 'run-automation',
+      source_id: clientId ?? undefined,
+      metadata: {
+        function_name: 'run-automation',
+        client_id: clientId ?? null,
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+    }).catch(console.error);
+
     // Update job status to failed if job was created
     try {
       const body: AutomationRequest = await req.clone().json().catch(() => ({})) as any;
@@ -2135,20 +2150,6 @@ async function buildRenewalReminderSequence(
   if (seqError) {
     console.error("Failed to create renewal sequence:", seqError);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in run-automation`,
-      message: e instanceof Error ? e.message : 'Unknown error',
-      source: 'run-automation',
-      source_id: clientId ?? undefined,
-      metadata: {
-        function_name: 'run-automation',
-        client_id: clientId ?? null,
-        error_message: e instanceof Error ? e.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-    }).catch(console.error);
   }
 
   // Create a deliverable with the sequence details
