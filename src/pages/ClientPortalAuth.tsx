@@ -248,7 +248,13 @@ export default function ClientPortalAuth() {
         },
       });
 
-      if (authError?.message?.toLowerCase().includes("already registered")) {
+      const isAlreadyRegistered =
+        authError?.message?.toLowerCase().includes("already registered") ||
+        (authError as any)?.code === "user_already_exists" ||
+        // Auto-confirm: signUp returns 200 with an existing user whose identities array is empty
+        (!authError && authData?.user && authData.user.identities?.length === 0);
+
+      if (isAlreadyRegistered) {
         setExistingUserMode(true);
         setPassword("");
         toast({
