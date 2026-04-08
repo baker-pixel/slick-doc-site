@@ -232,6 +232,7 @@ serve(async (req) => {
         status: newStatus,
         result,
         completed_at: newStatus === "completed" ? new Date().toISOString() : null,
+        actual_completion: newStatus === "completed" ? new Date().toISOString().split("T")[0] : null,
       };
       if (newStatus === "awaiting_callback") {
         updatePayload.callback_deadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
