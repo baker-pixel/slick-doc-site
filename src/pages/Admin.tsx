@@ -1013,6 +1013,31 @@ const AdminInner = () => {
     </Card>
   );
 
+  const renderLeadsSection = () => (
+    <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as AdminSection)} className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="contacts" className="flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          Contacts
+          <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>
+        </TabsTrigger>
+        <TabsTrigger value="gap-analysis" className="flex items-center gap-2">
+          <FileText className="h-4 w-4" />
+          Gap Analyses
+          <Badge variant="secondary" className="ml-1 text-xs">{gapAnalyses.length}</Badge>
+        </TabsTrigger>
+        <TabsTrigger value="pdf-leads" className="flex items-center gap-2">
+          <FileDown className="h-4 w-4" />
+          PDF Leads
+          <Badge variant="secondary" className="ml-1 text-xs">{pdfLeads.length}</Badge>
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="contacts">{renderContactsTable()}</TabsContent>
+      <TabsContent value="gap-analysis">{renderGapAnalysisTable()}</TabsContent>
+      <TabsContent value="pdf-leads">{renderPdfLeadsTable()}</TabsContent>
+    </Tabs>
+  );
+
   const renderActiveSection = () => {
     switch (activeSection) {
       case "home":
