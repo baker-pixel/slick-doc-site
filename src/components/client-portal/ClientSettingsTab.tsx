@@ -524,6 +524,9 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
         </CardContent>
       </Card>
 
+      {/* Connected Accounts */}
+      <ConnectedAccountsSection clientAccountId={clientAccountId} />
+
       {/* Save Button - Bottom */}
       {hasChanges && (
         <div className="flex justify-end pt-4 border-t">
