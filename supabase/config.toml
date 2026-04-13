@@ -101,3 +101,9 @@ verify_jwt = false
 
 [functions.check-stalled-workflows]
 verify_jwt = false
+
+[functions.send-prospect-report]
+verify_jwt = false
+
+[functions.run-prospect-drip]
+verify_jwt = false
