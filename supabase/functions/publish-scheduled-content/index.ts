@@ -16,8 +16,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
     // Get all scheduled content that's due
