@@ -32,20 +32,20 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number } = body;
+    const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number, content_id } = body;
 
     // Validate required fields
-    if (!task_id && !client_id && !step_id) {
-      throw new Error("task_id, client_id, or step_id is required");
+    if (!task_id && !client_id && !step_id && !content_id) {
+      throw new Error("task_id, client_id, step_id, or content_id is required");
     }
 
     // Validate status
-    const validStatuses = ["pending", "in_progress", "completed", "failed"];
+    const validStatuses = ["pending", "in_progress", "completed", "failed", "published", "processing"];
     if (status && !validStatuses.includes(status)) {
       throw new Error(`Invalid status: ${status}. Must be one of: ${validStatuses.join(", ")}`);
     }
 
-    console.log(`N8N callback: task=${task_id}, step=${step_id}, status=${status}, client=${client_id}`);
+    console.log(`N8N callback: task=${task_id}, step=${step_id}, content=${content_id}, status=${status}, client=${client_id}`);
 
     // Single task update
     if (task_id) {
@@ -153,6 +153,25 @@ serve(async (req) => {
 
       if (error) {
         throw new Error(`Failed to batch update tasks: ${error.message}`);
+      }
+    }
+
+    // Content calendar update via content_id
+    if (content_id) {
+      const calUpdate: Record<string, unknown> = {};
+      if (status) calUpdate.status = status;
+      if (status === "published") calUpdate.published_at = new Date().toISOString();
+      if (status === "failed" && error_message) {
+        calUpdate.metadata = { error_message };
+      }
+
+      const { error: calError } = await supabase
+        .from("content_calendar")
+        .update(calUpdate)
+        .eq("id", content_id);
+
+      if (calError) {
+        throw new Error(`Failed to update content_calendar ${content_id}: ${calError.message}`);
       }
     }
 

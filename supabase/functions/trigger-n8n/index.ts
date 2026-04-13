@@ -11,35 +11,48 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  let clientId: string | undefined;
+  let contentCalendarId: string | undefined;
+
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL");
-    if (!N8N_WEBHOOK_URL) {
-      throw new Error("N8N_WEBHOOK_URL is not configured");
-    }
-
     const body = await req.json();
-    const { clientId, tasks, trigger, metadata } = body;
+    clientId = body.clientId;
+    const { tasks, trigger, metadata } = body;
+    contentCalendarId = metadata?.content_calendar_id;
 
     if (!clientId) {
       throw new Error("clientId is required");
     }
 
+    const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL");
+    if (!N8N_WEBHOOK_URL) {
+      console.error("N8N_WEBHOOK_URL not configured");
+
+      if (contentCalendarId) {
+        await supabase
+          .from("content_calendar")
+          .update({ status: "failed", metadata: { error_message: "N8N_WEBHOOK_URL not configured" } })
+          .eq("id", contentCalendarId);
+      }
+
+      return new Response(
+        JSON.stringify({ error: "N8N_WEBHOOK_URL not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log(`Triggering N8N for client ${clientId}, trigger: ${trigger}, tasks: ${tasks?.length || 0}`);
 
-    // Mark all tasks as "running" in DB
     const taskIds = (tasks || []).map((t: { id: string }) => t.id).filter(Boolean);
     if (taskIds.length > 0) {
       const { error: updateError } = await supabase
         .from("client_tasks")
-        .update({
-          status: "in_progress",
-          started_at: new Date().toISOString(),
-        })
+        .update({ status: "in_progress", started_at: new Date().toISOString() })
         .in("id", taskIds);
 
       if (updateError) {
@@ -47,10 +60,8 @@ serve(async (req) => {
       }
     }
 
-    // Build the callback URL for N8N to call back
     const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/n8n-callback`;
 
-    // Send POST to N8N webhook — include workflow metadata for callback auto-advance
     const n8nPayload = {
       client_id: clientId,
       tasks: tasks || [],
@@ -60,28 +71,73 @@ serve(async (req) => {
       callback_api_key: Deno.env.get("SUPABASE_ANON_KEY"),
     };
 
-    const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(n8nPayload),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    if (!n8nResponse.ok) {
-      const errorText = await n8nResponse.text();
-      console.error(`N8N webhook failed [${n8nResponse.status}]:`, errorText);
+    let n8nResponse: Response;
+    try {
+      n8nResponse = await fetch(N8N_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(n8nPayload),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      const msg = (fetchErr as Error).name === "AbortError"
+        ? "N8N webhook request timed out (10s)"
+        : `N8N fetch error: ${(fetchErr as Error).message}`;
+      console.error(msg);
 
-      // Mark tasks as failed if N8N webhook itself fails
+      if (contentCalendarId) {
+        await supabase
+          .from("content_calendar")
+          .update({ status: "failed", metadata: { error_message: msg } })
+          .eq("id", contentCalendarId);
+      }
       if (taskIds.length > 0) {
         await supabase
           .from("client_tasks")
-          .update({
-            status: "failed",
-            notes: `N8N webhook error: ${n8nResponse.status}`,
-          })
+          .update({ status: "failed", notes: msg })
           .in("id", taskIds);
       }
 
-      throw new Error(`N8N webhook returned ${n8nResponse.status}: ${errorText}`);
+      return new Response(
+        JSON.stringify({ error: msg }),
+        { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    clearTimeout(timeoutId);
+
+    if (!n8nResponse.ok) {
+      const errorText = await n8nResponse.text();
+      const msg = `N8N webhook returned ${n8nResponse.status}: ${errorText}`;
+      console.error(msg);
+
+      if (contentCalendarId) {
+        await supabase
+          .from("content_calendar")
+          .update({ status: "failed", metadata: { error_message: msg } })
+          .eq("id", contentCalendarId);
+      }
+      if (taskIds.length > 0) {
+        await supabase
+          .from("client_tasks")
+          .update({ status: "failed", notes: msg })
+          .in("id", taskIds);
+      }
+
+      return new Response(
+        JSON.stringify({ error: msg }),
+        { status: n8nResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (contentCalendarId) {
+      await supabase
+        .from("content_calendar")
+        .update({ status: "processing" })
+        .eq("id", contentCalendarId);
     }
 
     let n8nData = null;
@@ -105,17 +161,17 @@ serve(async (req) => {
   } catch (error) {
     console.error("trigger-n8n error:", error);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in trigger-n8n`,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      source: 'trigger-n8n',
+    await supabase.from("automation_alerts").insert({
+      alert_type: "function_error",
+      severity: "error",
+      title: "Error in trigger-n8n",
+      message: error instanceof Error ? error.message : "Unknown error",
+      source: "trigger-n8n",
       source_id: clientId ?? undefined,
       metadata: {
-        function_name: 'trigger-n8n',
+        function_name: "trigger-n8n",
         client_id: clientId ?? null,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
+        error_message: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
       },
     });
