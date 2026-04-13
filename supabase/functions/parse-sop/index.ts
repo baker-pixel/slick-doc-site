@@ -16,8 +16,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
     const supabase = createClient(
+  try {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );

@@ -11,6 +11,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+    const supabase = createClient(
   try {
     // Validate callback authentication
     const authHeader = req.headers.get("Authorization") || "";
@@ -26,7 +27,6 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
