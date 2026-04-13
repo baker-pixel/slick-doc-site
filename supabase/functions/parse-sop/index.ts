@@ -16,11 +16,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-    const supabase = createClient(
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
   try {
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const { sopId, documentText }: ParseSOPRequest = await req.json();
     console.log(`Parsing SOP ${sopId}`);
