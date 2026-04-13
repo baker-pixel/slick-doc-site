@@ -441,14 +441,14 @@ const handler = async (req: Request): Promise<Response> => {
       } else {
 
       // Check if it's a custom template
-      if (emailConfig.template.startsWith("custom:")) {
-        const templateSlug = emailConfig.template.replace("custom:", "");
+      if (templateKey.startsWith("custom:")) {
+        const templateSlug = templateKey.replace("custom:", "");
         const { data: customTemplate, error: templateError } = await supabase
           .from("email_templates")
           .select("subject, html_content")
           .eq("slug", templateSlug)
           .eq("is_active", true)
-          .single();
+          .maybeSingle();
 
         if (templateError || !customTemplate) {
           console.warn(`Custom template not found: ${templateSlug}`);
@@ -456,7 +456,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         // Replace variables in custom template
-        subject = customTemplate.subject;
+        subject = emailConfig.subject || customTemplate.subject;
         html = customTemplate.html_content;
         
         const templateData = { ...data, firstName: recipientName };
@@ -467,18 +467,20 @@ const handler = async (req: Request): Promise<Response> => {
         });
       } else {
         // Use built-in template
-        const template = templates[emailConfig.template];
+        const template = templates[templateKey];
         if (!template) {
-          console.warn(`Template not found: ${emailConfig.template}`);
+          console.warn(`Template not found: ${templateKey}`);
           continue;
         }
         const result = template({ ...data, firstName: recipientName });
         subject = result.subject;
         html = result.html;
       }
+      } // close the else block from templateKey check
       
-      // Calculate scheduled time
-      let scheduledFor = new Date(Date.now() + emailConfig.delay_hours * 60 * 60 * 1000);
+      // Calculate scheduled time - support both delay_hours and delay_days
+      const delayHours = emailConfig.delay_hours ?? (emailConfig.delay_days != null ? emailConfig.delay_days * 24 : 0);
+      let scheduledFor = new Date(Date.now() + delayHours * 60 * 60 * 1000);
       
       // Skip excluded days (weekends/holidays)
       if (excludeWeekends || excludeHolidays) {
