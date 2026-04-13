@@ -98,6 +98,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const { templateType, industry, tone, purpose, clientName, customInstructions }: GenerateRequest = await req.json();
 
@@ -274,7 +275,6 @@ Remember to return valid JSON with name, slug, subject, html_content, descriptio
     console.error("Error generating template:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

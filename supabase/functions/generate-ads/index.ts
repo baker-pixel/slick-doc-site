@@ -11,6 +11,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const {
       // Ad generation
@@ -311,7 +312,6 @@ Return ONLY valid JSON in this exact format:
     console.error("Error in generate-ads:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

@@ -11,6 +11,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const { clientName, industry, platform, topic, tone, websiteSummary } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -96,7 +97,6 @@ Return ONLY the post content, nothing else. No quotes, no explanations.`;
     console.error("Error generating content:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

@@ -30,6 +30,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const rawBody = await req.text();
     console.log("Raw request body:", rawBody);
@@ -112,7 +113,6 @@ serve(async (req) => {
     console.error("Chat error:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

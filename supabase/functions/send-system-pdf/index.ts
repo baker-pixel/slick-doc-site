@@ -243,6 +243,9 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     const { email, firstName }: PdfRequest = await req.json();
     
@@ -256,9 +259,6 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Store the lead in the database
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { error: dbError } = await supabase
       .from("pdf_leads")

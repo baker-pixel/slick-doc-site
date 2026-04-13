@@ -453,7 +453,7 @@ async function sendIntakeForm(supabase: any, client: ClientData) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Orange Door Marketing <noreply@orangedoormarketing.com>",
+        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
         to: client.email,
         subject: "Welcome to Orange Door – Complete Your Intake Form",
         html: `
@@ -563,7 +563,7 @@ async function sendKickoffScheduler(supabase: any, client: ClientData) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Orange Door Marketing <noreply@orangedoormarketing.com>",
+        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
         to: client.email,
         subject: "Schedule Your Kickoff Call – Orange Door Marketing",
         html: `
@@ -936,7 +936,7 @@ async function sendReviewScripts(supabase: any, client: ClientData) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Orange Door Marketing <noreply@orangedoormarketing.com>",
+        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
         to: client.email,
         subject: "Your Google Review Toolkit – Orange Door Marketing",
         html: `

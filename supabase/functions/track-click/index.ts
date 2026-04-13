@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const handler = async (req: Request): Promise<Response> => {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const url = new URL(req.url);
     const trackingId = url.searchParams.get("tid");
@@ -18,10 +21,6 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("No tracking ID, redirecting directly");
       return Response.redirect(decodedUrl, 302);
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Find the email log by tracking_id
     const { data: emailLog, error: findError } = await supabase

@@ -35,13 +35,12 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const payload: ResendWebhookPayload = await req.json();
-    console.log("Received Resend webhook:", JSON.stringify(payload, null, 2));
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  try {
+    const payload: ResendWebhookPayload = await req.json();
+    console.log("Received Resend webhook:", JSON.stringify(payload, null, 2));
 
     // Find the email log by resend_id
     const { data: emailLog, error: findError } = await supabase

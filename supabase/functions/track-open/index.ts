@@ -11,6 +11,9 @@ const TRACKING_PIXEL = new Uint8Array([
 ]);
 
 const handler = async (req: Request): Promise<Response> => {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const url = new URL(req.url);
     const trackingId = url.searchParams.get("tid");
@@ -26,10 +29,6 @@ const handler = async (req: Request): Promise<Response> => {
         },
       });
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Find the email log by tracking_id
     const { data: emailLog, error: findError } = await supabase

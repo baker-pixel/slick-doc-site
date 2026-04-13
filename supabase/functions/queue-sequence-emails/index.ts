@@ -39,6 +39,9 @@ function getNextOptimalSendTime(baseTime: Date, timezone: string): Date {
 
 // Get current hour in a specific timezone
 function getHourInTimezone(date: Date, timezone: string): number {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
       hour: 'numeric',
@@ -327,10 +330,6 @@ const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
     const body = await req.json();

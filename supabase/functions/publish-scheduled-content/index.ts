@@ -57,7 +57,7 @@ serve(async (req) => {
                 console.error(errorMessage);
               } else {
                 const emailResponse = await resend.emails.send({
-                  from: "Orange Door Marketing <hello@orangedoormarketing.com>",
+                  from: "Orange Door Consultants <hello@orangedoormarketing.com>",
                   to: recipients,
                   subject: metadata?.subject || item.title,
                   html: item.content,

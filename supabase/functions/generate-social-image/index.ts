@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 async function generateSingleImage(apiKey: string, prompt: string): Promise<string | null> {
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -83,7 +84,6 @@ The image should be suitable for marketing. No text or words in the image.`;
     console.error("Error generating images:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

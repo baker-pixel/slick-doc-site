@@ -25,6 +25,7 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const { 
       clientEmail, 
@@ -41,7 +42,7 @@ const handler = async (req: Request): Promise<Response> => {
     const formattedContent = content.replace(/\n/g, "<br>");
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Marketing <hello@orangedoormarketing.com>",
+      from: "Orange Door Consultants <hello@orangedoormarketing.com>",
       to: [clientEmail],
       subject: `New ${contentType}: ${contentTitle}`,
       html: `
@@ -105,7 +106,6 @@ const handler = async (req: Request): Promise<Response> => {
     console.error("Error in send-content-to-client function:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

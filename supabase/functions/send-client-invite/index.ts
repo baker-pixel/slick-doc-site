@@ -22,6 +22,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const { invitationId, email, firstName, businessName, token }: InviteRequest = await req.json();
 
@@ -112,7 +113,7 @@ serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Orange Door Marketing <hello@orangedoormarketing.com>",
+        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
         to: [email],
         subject: `You're invited to ${businessName}'s Client Portal`,
         html: htmlContent,
@@ -139,7 +140,6 @@ serve(async (req) => {
     console.error("Error sending client invitation:", error);
 
     try {
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await _sb.from('automation_alerts').insert({
         alert_type: 'function_error',
         severity: 'error',

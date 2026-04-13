@@ -4,6 +4,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
+const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -30,9 +34,6 @@ const OPTIMAL_SEND_WINDOWS = {
 
 // Get timezone offset in minutes
 function getTimezoneOffset(timezone: string): number {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const now = new Date();
     const utcTime = now.getTime();
@@ -382,7 +383,7 @@ const handler = async (req: Request): Promise<Response> => {
         trackedHtml = addUnsubscribeFooter(trackedHtml, email.recipient_email, supabaseUrl);
 
         const emailResponse = await resend.emails.send({
-          from: Deno.env.get("EMAIL_FROM") || "Orange Door Marketing <hello@orangedoormarketing.com>",
+          from: Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>",
           to: [email.recipient_email],
           subject: email.subject,
           html: trackedHtml,
