@@ -195,7 +195,7 @@ export default function Report() {
     <div className="min-h-screen bg-white" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Sticky toolbar */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-[#1A1410]/95 backdrop-blur-sm border-b border-white/5">
-        <div className="container mx-auto px-4 max-w-4xl flex items-center justify-between h-12">
+        <div className="max-w-[820px] mx-auto px-10 flex items-center justify-between h-12">
           <span className="text-white/30 text-xs tracking-wide">
             Orange Door — Confidential Report
           </span>
@@ -218,49 +218,43 @@ export default function Report() {
         </div>
       </div>
 
-      {/* Cover */}
-      <div className="pt-12">
+      {/* Report shell */}
+      <div className="pt-12 max-w-[820px] mx-auto bg-white shadow-[0_4px_40px_rgba(0,0,0,0.07)]">
         <CoverSection
           clientDomain={clientDomain}
           reportDate={reportDate}
           overallScore={scorecard?.overallScore ?? 0}
         />
-      </div>
 
-      {/* Executive Summary */}
-      {aiAnalysis?.executiveSummary && (
-        <ExecutiveSummarySection
-          summary={aiAnalysis.executiveSummary}
-          biggestOpportunity={aiAnalysis.plain_english_summary?.biggest_opportunity}
-        />
-      )}
+        {aiAnalysis?.executiveSummary && (
+          <ExecutiveSummarySection
+            summary={aiAnalysis.executiveSummary}
+            biggestOpportunity={aiAnalysis.plain_english_summary?.biggest_opportunity}
+          />
+        )}
 
-      {/* Category Scores */}
-      {categoryScores.length > 0 && (
-        <CategoryScoresSection scores={categoryScores} />
-      )}
+        {categoryScores.length > 0 && (
+          <CategoryScoresSection scores={categoryScores} />
+        )}
 
-      {/* Strengths & Gaps */}
-      {(aiAnalysis?.strengths?.length || aiAnalysis?.gaps?.length) && (
-        <StrengthsGapsSection
-          strengths={aiAnalysis?.strengths || []}
-          gaps={aiAnalysis?.gaps || []}
-        />
-      )}
+        {(aiAnalysis?.strengths?.length || aiAnalysis?.gaps?.length) && (
+          <StrengthsGapsSection
+            strengths={aiAnalysis?.strengths || []}
+            gaps={aiAnalysis?.gaps || []}
+          />
+        )}
 
-      {/* Action Plan */}
-      {actions.length > 0 && (
-        <ActionPlanSection actions={actions} />
-      )}
+        {actions.length > 0 && (
+          <ActionPlanSection actions={actions} />
+        )}
 
-      {/* Footer CTA */}
-      <FooterCTA />
+        <FooterCTA />
 
-      {/* Bottom link */}
-      <div className="bg-[#1A1410] py-4 text-center border-t border-white/5">
-        <Link to="/" className="text-white/20 hover:text-white/40 text-xs transition-colors">
-          ← Return to orangedoorconsulting.com
-        </Link>
+        <div className="bg-[#1A1410] py-4 text-center border-t border-white/5">
+          <Link to="/" className="text-white/20 hover:text-white/40 text-xs transition-colors">
+            ← Return to orangedoorconsulting.com
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -12,22 +12,27 @@ interface CategoryScoresSectionProps {
 }
 
 export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
-  // Show top 3 or all if fewer
   const displayScores = scores.slice(0, 6);
 
   return (
-    <section className="bg-white py-16 md:py-20">
-      <div className="container mx-auto px-4 max-w-4xl">
+    <section className="bg-[#FAF7F2] px-10 py-12 md:px-14 border-b border-[#F0EBE2]">
+      <div className="max-w-3xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
         >
-          <p className="text-[#E8521A] uppercase tracking-[0.2em] text-xs font-semibold mb-8">
+          <p className="text-[#E8521A] text-[10px] tracking-[0.2em] uppercase font-semibold mb-2">
             Category Scores
           </p>
+          <h2
+            style={{ fontFamily: "'DM Serif Display', serif" }}
+            className="text-[26px] text-[#1A1410] leading-[1.2] mb-8"
+          >
+            Detailed findings
+          </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {displayScores.map((cat, i) => {
               const colors = getStatusColor(cat.status);
               return (
@@ -37,23 +42,18 @@ export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.08 }}
-                  className="bg-[#FAF7F2] border border-[#1A1410]/5 rounded-xl p-5 space-y-3"
+                  className="bg-white border border-[rgba(60,35,15,0.12)] rounded-xl p-5"
                 >
-                  <p className="text-sm font-medium text-[#1A1410]/70">{cat.label}</p>
-                  <div className="flex items-end justify-between">
-                    <span
-                      className={`text-4xl font-light ${colors.text}`}
-                      style={{ fontFamily: "'DM Serif Display', serif" }}
-                    >
-                      {cat.score}
-                    </span>
-                    <span
-                      className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full border ${colors.badge}`}
-                    >
-                      {cat.status}
-                    </span>
+                  <p className="text-[11px] tracking-[0.12em] uppercase text-[#7A6355] font-medium mb-3">
+                    {cat.label}
+                  </p>
+                  <div
+                    className={`text-[40px] leading-none mb-2.5 ${colors.text}`}
+                    style={{ fontFamily: "'DM Serif Display', serif" }}
+                  >
+                    {cat.score}
                   </div>
-                  <div className="h-1.5 bg-[#1A1410]/5 rounded-full overflow-hidden">
+                  <div className="h-[5px] bg-[#F0EBE2] rounded-full overflow-hidden mb-2">
                     <motion.div
                       className={`h-full rounded-full ${colors.bar}`}
                       initial={{ width: 0 }}
@@ -62,6 +62,9 @@ export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
                       transition={{ duration: 0.8, delay: 0.2 + i * 0.08 }}
                     />
                   </div>
+                  <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${colors.badge}`}>
+                    {cat.status}
+                  </span>
                 </motion.div>
               );
             })}
