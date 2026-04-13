@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalTab } from "./ClientPortalSidebar";
+import { ConnectedAccountsSection } from "./ConnectedAccountsSection";
 
 interface ClientSettingsTabProps {
   userId: string;
