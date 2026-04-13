@@ -3069,6 +3069,54 @@ export type Database = {
           },
         ]
       }
+      prospects: {
+        Row: {
+          business_type: string | null
+          converted_at: string | null
+          created_at: string
+          drip_step: number
+          email: string
+          gap_score: number | null
+          id: string
+          name: string
+          pdf_report_url: string | null
+          recommended_tier: string | null
+          status: string
+          top_weaknesses: Json | null
+          website_url: string
+        }
+        Insert: {
+          business_type?: string | null
+          converted_at?: string | null
+          created_at?: string
+          drip_step?: number
+          email: string
+          gap_score?: number | null
+          id?: string
+          name: string
+          pdf_report_url?: string | null
+          recommended_tier?: string | null
+          status?: string
+          top_weaknesses?: Json | null
+          website_url: string
+        }
+        Update: {
+          business_type?: string | null
+          converted_at?: string | null
+          created_at?: string
+          drip_step?: number
+          email?: string
+          gap_score?: number | null
+          id?: string
+          name?: string
+          pdf_report_url?: string | null
+          recommended_tier?: string | null
+          status?: string
+          top_weaknesses?: Json | null
+          website_url?: string
+        }
+        Relationships: []
+      }
       qa_checkpoints: {
         Row: {
           checked_at: string | null
