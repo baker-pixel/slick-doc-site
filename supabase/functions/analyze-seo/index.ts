@@ -406,7 +406,7 @@ Return only valid JSON, no markdown fences.`;
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return { suggestions: [], rewrites: [] };
   }
 }

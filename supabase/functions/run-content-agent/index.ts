@@ -157,7 +157,7 @@ Keep it under 150 words. Make it engaging and ready to post.`;
         error_message: e instanceof Error ? e.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
 
     // Mark task as failed
     if (taskId) {

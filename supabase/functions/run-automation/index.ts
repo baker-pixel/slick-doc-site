@@ -390,7 +390,7 @@ serve(async (req) => {
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
 
     // Update job status to failed if job was created
     try {

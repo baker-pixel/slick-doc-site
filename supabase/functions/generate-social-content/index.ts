@@ -109,7 +109,7 @@ Return ONLY the post content, nothing else. No quotes, no explanations.`;
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },
-      }).catch(console.error);
+      });
     } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     const errorMessage = error instanceof Error ? error.message : "Failed to generate content";
     return new Response(

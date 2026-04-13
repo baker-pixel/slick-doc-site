@@ -244,14 +244,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     const { batchType, clientId } = await req.json() as BatchConfig;
     
     console.log(`Starting ${batchType} AI batch process${clientId ? ` for client ${clientId}` : ' for all clients'}`);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get active clients
     let clientQuery = supabase
@@ -448,7 +448,7 @@ serve(async (req) => {
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
