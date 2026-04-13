@@ -328,12 +328,16 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { triggerType, recipientEmail, recipientName, recipientTimezone, tier, data }: QueueRequest = await req.json();
+  try {
+    const body = await req.json();
+    const { triggerType, recipientEmail, recipientName, recipientTimezone, tier } = body;
+    // Merge any extra top-level fields (like businessName) into data
+    const { triggerType: _t, recipientEmail: _e, recipientName: _n, recipientTimezone: _tz, tier: _tier, data: explicitData, ...extraFields } = body;
+    const data: Record<string, any> = { ...extraFields, ...(explicitData || {}) };
 
     console.log(`Queueing sequence for trigger: ${triggerType}, recipient: ${recipientEmail}, tier: ${tier || 'any'}`);
 
@@ -515,19 +519,23 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error: any) {
     console.error("Error in queue-sequence-emails:", error);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in queue-sequence-emails`,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      source: 'queue-sequence-emails',
-      metadata: {
-        function_name: 'queue-sequence-emails',
-        client_id: null,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-    }).catch(console.error);
+    try {
+      await supabase.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in queue-sequence-emails`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'queue-sequence-emails',
+        metadata: {
+          function_name: 'queue-sequence-emails',
+          client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (alertErr) {
+      console.error("Failed to log alert:", alertErr);
+    }
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
