@@ -1066,8 +1066,11 @@ export type Database = {
           access_token: string | null
           client_id: string | null
           created_at: string | null
+          expires_at: string | null
           id: string
+          page_id: string | null
           platform: string
+          refresh_token: string | null
           token_metadata: Json | null
           updated_at: string | null
         }
@@ -1075,8 +1078,11 @@ export type Database = {
           access_token?: string | null
           client_id?: string | null
           created_at?: string | null
+          expires_at?: string | null
           id?: string
+          page_id?: string | null
           platform: string
+          refresh_token?: string | null
           token_metadata?: Json | null
           updated_at?: string | null
         }
@@ -1084,8 +1090,11 @@ export type Database = {
           access_token?: string | null
           client_id?: string | null
           created_at?: string | null
+          expires_at?: string | null
           id?: string
+          page_id?: string | null
           platform?: string
+          refresh_token?: string | null
           token_metadata?: Json | null
           updated_at?: string | null
         }
