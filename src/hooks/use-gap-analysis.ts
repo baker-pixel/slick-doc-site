@@ -383,7 +383,7 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
       try {
         const { error: seqError, data: seqData } = await supabase.functions.invoke("queue-sequence-emails", {
           body: {
-            triggerType: "partial_gap_analysis",
+            triggerType: "gap_analysis_partial",
             recipientEmail: formData.email,
             recipientName: formData.firstName,
             data: {
