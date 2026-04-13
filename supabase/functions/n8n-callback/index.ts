@@ -32,7 +32,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number } = body;
+    const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number, content_id } = body;
 
     // Validate required fields
     if (!task_id && !client_id && !step_id) {
