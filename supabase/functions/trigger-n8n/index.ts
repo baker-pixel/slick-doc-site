@@ -62,14 +62,62 @@ serve(async (req) => {
 
     const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/n8n-callback`;
 
-    const n8nPayload = {
-      client_id: clientId,
-      tasks: tasks || [],
-      trigger: trigger || "run_auto",
-      metadata: metadata || {},
-      callback_url: callbackUrl,
-      callback_api_key: Deno.env.get("SUPABASE_ANON_KEY"),
-    };
+    // For social publish triggers, fetch the OAuth token and build enriched payload
+    const isSocialPublish = trigger === "publish_social" && metadata?.platform;
+    let n8nPayload: Record<string, unknown>;
+
+    if (isSocialPublish) {
+      const platform = metadata.platform as string;
+
+      const { data: tokenRow, error: tokenErr } = await supabase
+        .from("client_oauth_tokens")
+        .select("access_token, page_id")
+        .eq("client_id", clientId)
+        .eq("platform", platform)
+        .maybeSingle();
+
+      if (tokenErr) {
+        console.error("Error fetching OAuth token:", tokenErr);
+      }
+
+      if (!tokenRow) {
+        const msg = `No OAuth token found for ${platform}`;
+        console.error(msg);
+
+        if (contentCalendarId) {
+          await supabase
+            .from("content_calendar")
+            .update({ status: "failed", metadata: { ...((metadata as object) || {}), error_message: msg } })
+            .eq("id", contentCalendarId);
+        }
+
+        return new Response(
+          JSON.stringify({ error: msg }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      n8nPayload = {
+        content_id: contentCalendarId || null,
+        client_id: clientId,
+        platform,
+        content: metadata.content || "",
+        media_url: metadata.media_url || null,
+        scheduled_at: metadata.scheduled_for || null,
+        access_token: tokenRow.access_token,
+        page_id: tokenRow.page_id || null,
+        callback_url: callbackUrl,
+      };
+    } else {
+      n8nPayload = {
+        client_id: clientId,
+        tasks: tasks || [],
+        trigger: trigger || "run_auto",
+        metadata: metadata || {},
+        callback_url: callbackUrl,
+        callback_api_key: Deno.env.get("SUPABASE_ANON_KEY"),
+      };
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
