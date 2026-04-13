@@ -16,8 +16,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  try {
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
     // Get all scheduled content that's due
@@ -202,7 +202,7 @@ serve(async (req) => {
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error.message }),
       {

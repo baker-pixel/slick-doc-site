@@ -20,6 +20,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const { clientAccountId } = await req.json();
     
@@ -30,11 +33,8 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch client info
     const { data: client, error: clientError } = await supabase
@@ -251,14 +251,14 @@ Return your response as a JSON object with this structure:
       title: `Error in generate-client-projects`,
       message: error instanceof Error ? error.message : 'Unknown error',
       source: 'generate-client-projects',
-      source_id: clientAccountId ?? undefined,
+      source_id: null,
       metadata: {
         function_name: 'generate-client-projects',
-        client_id: clientAccountId ?? null,
+        client_id: null,
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

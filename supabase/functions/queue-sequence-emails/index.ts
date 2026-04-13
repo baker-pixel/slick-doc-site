@@ -328,12 +328,16 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { triggerType, recipientEmail, recipientName, recipientTimezone, tier, data }: QueueRequest = await req.json();
+  try {
+    const body = await req.json();
+    const { triggerType, recipientEmail, recipientName, recipientTimezone, tier } = body;
+    // Merge any extra top-level fields (like businessName) into data
+    const { triggerType: _t, recipientEmail: _e, recipientName: _n, recipientTimezone: _tz, tier: _tier, data: explicitData, ...extraFields } = body;
+    const data: Record<string, any> = { ...extraFields, ...(explicitData || {}) };
 
     console.log(`Queueing sequence for trigger: ${triggerType}, recipient: ${recipientEmail}, tier: ${tier || 'any'}`);
 
@@ -405,9 +409,12 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Using timezone: ${timezone}, optimal send: ${optimalSendEnabled}, exclude weekends: ${excludeWeekends}, exclude holidays: ${excludeHolidays}`);
 
     const emails = sequence.emails as Array<{ 
-      delay_hours: number; 
+      delay_hours?: number;
+      delay_days?: number;
       subject: string; 
-      template: string;
+      template?: string;
+      template_slug?: string;
+      custom_content?: string;
       optimal_send_time?: boolean;
     }>;
     const queuedEmails = [];
@@ -416,21 +423,32 @@ const handler = async (req: Request): Promise<Response> => {
       let subject: string;
       let html: string;
 
-      // Skip if no template defined
-      if (!emailConfig.template) {
+      // Normalize template field: support both template and template_slug
+      const templateKey = emailConfig.template || (emailConfig.template_slug ? `custom:${emailConfig.template_slug}` : null);
+
+      // If no template but has custom_content, build inline
+      if (!templateKey && emailConfig.custom_content) {
+        subject = emailConfig.subject || "Message from Orange Door";
+        const templateData = { ...data, firstName: recipientName };
+        let content = emailConfig.custom_content;
+        Object.entries(templateData).forEach(([key, value]) => {
+          content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), String(value || ""));
+        });
+        html = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">${content}<p>— The Orange Door Team</p></div>`;
+      } else if (!templateKey) {
         console.warn(`No template defined for email config:`, emailConfig);
         continue;
-      }
+      } else {
 
       // Check if it's a custom template
-      if (emailConfig.template.startsWith("custom:")) {
-        const templateSlug = emailConfig.template.replace("custom:", "");
+      if (templateKey.startsWith("custom:")) {
+        const templateSlug = templateKey.replace("custom:", "");
         const { data: customTemplate, error: templateError } = await supabase
           .from("email_templates")
           .select("subject, html_content")
           .eq("slug", templateSlug)
           .eq("is_active", true)
-          .single();
+          .maybeSingle();
 
         if (templateError || !customTemplate) {
           console.warn(`Custom template not found: ${templateSlug}`);
@@ -438,7 +456,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         // Replace variables in custom template
-        subject = customTemplate.subject;
+        subject = emailConfig.subject || customTemplate.subject;
         html = customTemplate.html_content;
         
         const templateData = { ...data, firstName: recipientName };
@@ -449,18 +467,20 @@ const handler = async (req: Request): Promise<Response> => {
         });
       } else {
         // Use built-in template
-        const template = templates[emailConfig.template];
+        const template = templates[templateKey];
         if (!template) {
-          console.warn(`Template not found: ${emailConfig.template}`);
+          console.warn(`Template not found: ${templateKey}`);
           continue;
         }
         const result = template({ ...data, firstName: recipientName });
         subject = result.subject;
         html = result.html;
       }
+      } // close the else block from templateKey check
       
-      // Calculate scheduled time
-      let scheduledFor = new Date(Date.now() + emailConfig.delay_hours * 60 * 60 * 1000);
+      // Calculate scheduled time - support both delay_hours and delay_days
+      const delayHours = emailConfig.delay_hours ?? (emailConfig.delay_days != null ? emailConfig.delay_days * 24 : 0);
+      let scheduledFor = new Date(Date.now() + delayHours * 60 * 60 * 1000);
       
       // Skip excluded days (weekends/holidays)
       if (excludeWeekends || excludeHolidays) {
@@ -515,19 +535,23 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error: any) {
     console.error("Error in queue-sequence-emails:", error);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in queue-sequence-emails`,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      source: 'queue-sequence-emails',
-      metadata: {
-        function_name: 'queue-sequence-emails',
-        client_id: null,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-    }).catch(console.error);
+    try {
+      await supabase.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in queue-sequence-emails`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'queue-sequence-emails',
+        metadata: {
+          function_name: 'queue-sequence-emails',
+          client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (alertErr) {
+      console.error("Failed to log alert:", alertErr);
+    }
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

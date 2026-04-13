@@ -294,7 +294,7 @@ Generate a comprehensive analysis in JSON format.`;
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       {

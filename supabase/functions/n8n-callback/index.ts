@@ -11,6 +11,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+    const supabase = createClient(
   try {
     // Validate callback authentication
     const authHeader = req.headers.get("Authorization") || "";
@@ -26,7 +27,6 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
@@ -169,14 +169,14 @@ serve(async (req) => {
       title: `Error in n8n-callback`,
       message: error instanceof Error ? error.message : 'Unknown error',
       source: 'n8n-callback',
-      source_id: client_id ?? undefined,
+      source_id: null,
       metadata: {
         function_name: 'n8n-callback',
-        client_id: client_id ?? null,
+        client_id: null,
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

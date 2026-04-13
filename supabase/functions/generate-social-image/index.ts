@@ -96,7 +96,7 @@ The image should be suitable for marketing. No text or words in the image.`;
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },
-      }).catch(console.error);
+      });
     } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     const errorMessage = error instanceof Error ? error.message : "Failed to generate images";
     return new Response(

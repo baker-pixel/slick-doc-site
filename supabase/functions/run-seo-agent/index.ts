@@ -202,7 +202,7 @@ Return only the JSON. No extra text, no markdown, no code blocks.`;
         error_message: e instanceof Error ? e.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
 
     if (taskId) {
       await supabase

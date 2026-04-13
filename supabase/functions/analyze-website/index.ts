@@ -214,7 +214,7 @@ Provide your analysis as a valid JSON object.`;
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },
-      }).catch(console.error);
+      });
     } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Analysis failed" }),

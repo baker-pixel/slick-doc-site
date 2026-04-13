@@ -324,7 +324,7 @@ Return ONLY valid JSON in this exact format:
           error_message: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date().toISOString(),
         },
-      }).catch(console.error);
+      });
     } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(JSON.stringify({ error: message }), {

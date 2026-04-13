@@ -11,13 +11,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+    const supabase = createClient(
   try {
     const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL");
     if (!N8N_WEBHOOK_URL) {
       throw new Error("N8N_WEBHOOK_URL is not configured");
     }
 
-    const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
@@ -118,7 +118,7 @@ serve(async (req) => {
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

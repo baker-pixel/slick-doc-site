@@ -16,8 +16,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
     const supabase = createClient(
+  try {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
@@ -153,7 +153,7 @@ Output a JSON object with:
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

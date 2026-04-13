@@ -106,7 +106,7 @@ serve(async (req) => {
       title: `Auto-run Complete`,
       message: `Ran ${completed + failed} tasks: ${completed} succeeded, ${failed} failed`,
       source: "auto-run-client-tasks",
-      source_id: clientId,
+      source_id: null,
       metadata: { clientId, completed, failed, results },
     });
 
@@ -123,14 +123,14 @@ serve(async (req) => {
       title: `Error in auto-run-client-tasks`,
       message: error instanceof Error ? error.message : 'Unknown error',
       source: 'auto-run-client-tasks',
-      source_id: clientId ?? undefined,
+      source_id: null,
       metadata: {
         function_name: 'auto-run-client-tasks',
-        client_id: clientId ?? null,
+        client_id: null,
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
-    }).catch(console.error);
+    });
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
