@@ -251,10 +251,10 @@ Return your response as a JSON object with this structure:
       title: `Error in generate-client-projects`,
       message: error instanceof Error ? error.message : 'Unknown error',
       source: 'generate-client-projects',
-      source_id: clientAccountId ?? undefined,
+      source_id: null,
       metadata: {
         function_name: 'generate-client-projects',
-        client_id: clientAccountId ?? null,
+        client_id: null,
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },

@@ -399,10 +399,10 @@ Return only valid JSON, no markdown fences.`;
       title: `Error in analyze-seo`,
       message: error instanceof Error ? error.message : 'Unknown error',
       source: 'analyze-seo',
-      source_id: clientId ?? undefined,
+      source_id: null,
       metadata: {
         function_name: 'analyze-seo',
-        client_id: clientId ?? null,
+        client_id: null,
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },

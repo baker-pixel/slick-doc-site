@@ -169,10 +169,10 @@ serve(async (req) => {
       title: `Error in n8n-callback`,
       message: error instanceof Error ? error.message : 'Unknown error',
       source: 'n8n-callback',
-      source_id: client_id ?? undefined,
+      source_id: null,
       metadata: {
         function_name: 'n8n-callback',
-        client_id: client_id ?? null,
+        client_id: null,
         error_message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
