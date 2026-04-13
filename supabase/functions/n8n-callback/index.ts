@@ -156,6 +156,25 @@ serve(async (req) => {
       }
     }
 
+    // Content calendar update via content_id
+    if (content_id) {
+      const calUpdate: Record<string, unknown> = {};
+      if (status) calUpdate.status = status;
+      if (status === "published") calUpdate.published_at = new Date().toISOString();
+      if (status === "failed" && error_message) {
+        calUpdate.metadata = { error_message };
+      }
+
+      const { error: calError } = await supabase
+        .from("content_calendar")
+        .update(calUpdate)
+        .eq("id", content_id);
+
+      if (calError) {
+        throw new Error(`Failed to update content_calendar ${content_id}: ${calError.message}`);
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
