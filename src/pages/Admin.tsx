@@ -797,6 +797,28 @@ const AdminInner = () => {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <CalendarIcon className="w-4 h-4" />
+                {gapDateFrom ? format(gapDateFrom, 'MMM d') : 'From'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={gapDateFrom} onSelect={(d) => { setGapDateFrom(d); setGapPage(1); }} />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <CalendarIcon className="w-4 h-4" />
+                {gapDateTo ? format(gapDateTo, 'MMM d') : 'To'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={gapDateTo} onSelect={(d) => { setGapDateTo(d); setGapPage(1); }} />
+            </PopoverContent>
+          </Popover>
           {(gapSearch || gapStatusFilter !== "all" || gapDateFrom || gapDateTo) && (
             <Button variant="ghost" size="sm" onClick={() => { setGapSearch(""); setGapStatusFilter("all"); setGapDateFrom(undefined); setGapDateTo(undefined); setGapPage(1); }}>
               <X className="w-4 h-4" /> Clear
@@ -815,6 +837,9 @@ const AdminInner = () => {
                 <th className="p-2 text-left cursor-pointer select-none" onClick={() => handleGapSort('name')}>
                   <div className="flex items-center">Name<SortIcon column="name" sort={gapSort} /></div>
                 </th>
+                <th className="p-2 text-left cursor-pointer select-none" onClick={() => handleGapSort('email')}>
+                  <div className="flex items-center">Email<SortIcon column="email" sort={gapSort} /></div>
+                </th>
                 <th className="p-2 text-left cursor-pointer select-none" onClick={() => handleGapSort('business_name')}>
                   <div className="flex items-center">Business<SortIcon column="business_name" sort={gapSort} /></div>
                 </th>
@@ -830,6 +855,7 @@ const AdminInner = () => {
                 <tr key={gap.id} className="border-b hover:bg-muted/50">
                   <td className="p-2"><Checkbox checked={selectedGaps.has(gap.id)} onCheckedChange={() => toggleGapSelection(gap.id)} /></td>
                   <td className="p-2 font-medium">{gap.first_name} {gap.last_name}</td>
+                  <td className="p-2 text-muted-foreground">{gap.email}</td>
                   <td className="p-2">{gap.business_name}</td>
                   <td className="p-2">
                     <Select value={gap.status} onValueChange={(v) => updateStatus("gap_analysis_submissions", gap.id, v)}>
@@ -865,7 +891,7 @@ const AdminInner = () => {
                 </tr>
               ))}
               {paginatedGapAnalyses.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No gap analyses found</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No gap analyses found</td></tr>
               )}
             </tbody>
           </table>
@@ -937,8 +963,30 @@ const AdminInner = () => {
               <SelectItem value="gap_report">Gap Report</SelectItem>
             </SelectContent>
           </Select>
-          {(pdfSearch || pdfSourceFilter !== "all") && (
-            <Button variant="ghost" size="sm" onClick={() => { setPdfSearch(""); setPdfSourceFilter("all"); setPdfPage(1); }}>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <CalendarIcon className="w-4 h-4" />
+                {pdfDateFrom ? format(pdfDateFrom, 'MMM d') : 'From'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={pdfDateFrom} onSelect={(d) => { setPdfDateFrom(d); setPdfPage(1); }} />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <CalendarIcon className="w-4 h-4" />
+                {pdfDateTo ? format(pdfDateTo, 'MMM d') : 'To'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={pdfDateTo} onSelect={(d) => { setPdfDateTo(d); setPdfPage(1); }} />
+            </PopoverContent>
+          </Popover>
+          {(pdfSearch || pdfSourceFilter !== "all" || pdfDateFrom || pdfDateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setPdfSearch(""); setPdfSourceFilter("all"); setPdfDateFrom(undefined); setPdfDateTo(undefined); setPdfPage(1); }}>
               <X className="w-4 h-4" /> Clear
             </Button>
           )}
