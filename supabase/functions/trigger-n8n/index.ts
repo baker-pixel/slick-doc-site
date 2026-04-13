@@ -11,16 +11,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-    const supabase = createClient(
   try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
     const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL");
     if (!N8N_WEBHOOK_URL) {
       throw new Error("N8N_WEBHOOK_URL is not configured");
     }
-
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const body = await req.json();
     const { clientId, tasks, trigger, metadata } = body;
