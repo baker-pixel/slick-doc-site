@@ -40,12 +40,12 @@ serve(async (req) => {
     }
 
     // Validate status
-    const validStatuses = ["pending", "in_progress", "completed", "failed"];
+    const validStatuses = ["pending", "in_progress", "completed", "failed", "published", "processing"];
     if (status && !validStatuses.includes(status)) {
       throw new Error(`Invalid status: ${status}. Must be one of: ${validStatuses.join(", ")}`);
     }
 
-    console.log(`N8N callback: task=${task_id}, step=${step_id}, status=${status}, client=${client_id}`);
+    console.log(`N8N callback: task=${task_id}, step=${step_id}, content=${content_id}, status=${status}, client=${client_id}`);
 
     // Single task update
     if (task_id) {
