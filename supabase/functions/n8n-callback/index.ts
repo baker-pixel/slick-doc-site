@@ -11,7 +11,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-    const supabase = createClient(
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
   try {
     // Validate callback authentication
     const authHeader = req.headers.get("Authorization") || "";
@@ -26,10 +30,6 @@ serve(async (req) => {
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const body = await req.json();
     const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number } = body;
