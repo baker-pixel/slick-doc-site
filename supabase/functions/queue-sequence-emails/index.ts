@@ -409,9 +409,12 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Using timezone: ${timezone}, optimal send: ${optimalSendEnabled}, exclude weekends: ${excludeWeekends}, exclude holidays: ${excludeHolidays}`);
 
     const emails = sequence.emails as Array<{ 
-      delay_hours: number; 
+      delay_hours?: number;
+      delay_days?: number;
       subject: string; 
-      template: string;
+      template?: string;
+      template_slug?: string;
+      custom_content?: string;
       optimal_send_time?: boolean;
     }>;
     const queuedEmails = [];
@@ -420,11 +423,22 @@ const handler = async (req: Request): Promise<Response> => {
       let subject: string;
       let html: string;
 
-      // Skip if no template defined
-      if (!emailConfig.template) {
+      // Normalize template field: support both template and template_slug
+      const templateKey = emailConfig.template || (emailConfig.template_slug ? `custom:${emailConfig.template_slug}` : null);
+
+      // If no template but has custom_content, build inline
+      if (!templateKey && emailConfig.custom_content) {
+        subject = emailConfig.subject || "Message from Orange Door";
+        const templateData = { ...data, firstName: recipientName };
+        let content = emailConfig.custom_content;
+        Object.entries(templateData).forEach(([key, value]) => {
+          content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), String(value || ""));
+        });
+        html = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">${content}<p>— The Orange Door Team</p></div>`;
+      } else if (!templateKey) {
         console.warn(`No template defined for email config:`, emailConfig);
         continue;
-      }
+      } else {
 
       // Check if it's a custom template
       if (emailConfig.template.startsWith("custom:")) {
