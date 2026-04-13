@@ -35,8 +35,8 @@ serve(async (req) => {
     const { task_id, status, error_message, output_data, client_id, step_id, workflow_id, step_number, content_id } = body;
 
     // Validate required fields
-    if (!task_id && !client_id && !step_id) {
-      throw new Error("task_id, client_id, or step_id is required");
+    if (!task_id && !client_id && !step_id && !content_id) {
+      throw new Error("task_id, client_id, step_id, or content_id is required");
     }
 
     // Validate status
