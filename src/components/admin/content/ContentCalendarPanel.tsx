@@ -195,8 +195,12 @@ export function ContentCalendarPanel() {
       default: return <FileText className="w-4 h-4" />;
     }
   };
+  const getClientName = (clientId: string | null) => {
+    if (!clientId) return "No client";
+    return clients.find(c => c.id === clientId)?.business_name || "Unknown";
+  };
 
-  const getStatusColor = (status: string) => {
+
     switch (status) {
       case "published": return "bg-green-600";
       case "failed": return "bg-destructive";
