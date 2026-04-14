@@ -265,7 +265,7 @@ export default function ClientPortal() {
 
     switch (activeTab) {
       case "activity":
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
       case "projects":
