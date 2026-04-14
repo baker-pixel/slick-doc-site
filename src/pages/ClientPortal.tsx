@@ -71,6 +71,7 @@ const tabTitles: Record<PortalTab, string> = {
   help: "Help & Guide",
   settings: "Settings",
   learning: "Learning Hub",
+  calendar: "Content Calendar",
 };
 
 const tabDescriptions: Record<PortalTab, string> = {
