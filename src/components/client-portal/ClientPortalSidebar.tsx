@@ -210,7 +210,11 @@ export function ClientPortalSidebar({
   isOnboardingComplete = true,
 }: ClientPortalSidebarProps) {
   const filterItems = (items: NavItemDef[]) =>
-    items.filter(item => !hiddenTabs.includes(item.id));
+    items.filter(item => {
+      if (hiddenTabs.includes(item.id)) return false;
+      if (!isOnboardingComplete && !ONBOARDING_ALLOWED_TABS.includes(item.id)) return false;
+      return true;
+    });
 
   const initials = clientName
     ?.split(" ")
