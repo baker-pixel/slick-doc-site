@@ -101,6 +101,7 @@ export function ContentCalendarPanel() {
     const date = new Date(item.scheduled_for);
     setFormData({
       content_id: item.content_id || "",
+      client_account_id: item.client_account_id || "",
       title: item.title,
       content: item.content,
       content_type: item.content_type,
