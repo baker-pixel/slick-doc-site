@@ -22,6 +22,7 @@ import {
   GraduationCap,
   Send,
   Plug,
+  Share2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,6 +54,7 @@ export type PortalTab =
   | "brand"
   | "access"
   | "integrations"
+  | "social"
   | "team"
   | "analytics"
   | "invoices"
@@ -109,6 +111,7 @@ const allNavItems: NavItemDef[] = [
   { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
   { id: "brand", label: "Brand Assets", icon: Palette, minTier: "growth" },
   { id: "access", label: "Platform Access", icon: KeyRound, minTier: "growth" },
+  { id: "social", label: "Social Media", icon: Share2, minTier: "growth" },
   { id: "integrations", label: "Integrations", icon: Plug, minTier: "growth" },
   { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "growth" },
   { id: "agreements", label: "Agreements", icon: FileSignature, minTier: "transformation" },
