@@ -527,6 +527,7 @@ export type Database = {
       client_accounts: {
         Row: {
           business_name: string
+          context_profile: Json | null
           created_at: string
           email: string
           first_name: string | null
@@ -553,6 +554,7 @@ export type Database = {
         }
         Insert: {
           business_name: string
+          context_profile?: Json | null
           created_at?: string
           email: string
           first_name?: string | null
@@ -579,6 +581,7 @@ export type Database = {
         }
         Update: {
           business_name?: string
+          context_profile?: Json | null
           created_at?: string
           email?: string
           first_name?: string | null
@@ -2246,6 +2249,7 @@ export type Database = {
           common_objections: string | null
           completed_at: string | null
           contact_submission_id: string | null
+          context_profile: Json | null
           conversion_tracking_method: string | null
           cost_per_acquisition: string | null
           cost_per_lead: string | null
@@ -2344,6 +2348,7 @@ export type Database = {
           common_objections?: string | null
           completed_at?: string | null
           contact_submission_id?: string | null
+          context_profile?: Json | null
           conversion_tracking_method?: string | null
           cost_per_acquisition?: string | null
           cost_per_lead?: string | null
@@ -2442,6 +2447,7 @@ export type Database = {
           common_objections?: string | null
           completed_at?: string | null
           contact_submission_id?: string | null
+          context_profile?: Json | null
           conversion_tracking_method?: string | null
           cost_per_acquisition?: string | null
           cost_per_lead?: string | null
@@ -3093,6 +3099,7 @@ export type Database = {
       prospects: {
         Row: {
           business_type: string | null
+          context_profile: Json | null
           converted_at: string | null
           created_at: string
           drip_step: number
@@ -3103,11 +3110,13 @@ export type Database = {
           pdf_report_url: string | null
           recommended_tier: string | null
           status: string
+          submission_id: string | null
           top_weaknesses: Json | null
           website_url: string
         }
         Insert: {
           business_type?: string | null
+          context_profile?: Json | null
           converted_at?: string | null
           created_at?: string
           drip_step?: number
@@ -3118,11 +3127,13 @@ export type Database = {
           pdf_report_url?: string | null
           recommended_tier?: string | null
           status?: string
+          submission_id?: string | null
           top_weaknesses?: Json | null
           website_url: string
         }
         Update: {
           business_type?: string | null
+          context_profile?: Json | null
           converted_at?: string | null
           created_at?: string
           drip_step?: number
@@ -3133,10 +3144,19 @@ export type Database = {
           pdf_report_url?: string | null
           recommended_tier?: string | null
           status?: string
+          submission_id?: string | null
           top_weaknesses?: Json | null
           website_url?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "prospects_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "gap_analysis_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       qa_checkpoints: {
         Row: {

@@ -41,7 +41,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
   const businessType = prospect.business_type || "local business";
   const url = prospect.website_url;
 
-  const wrapHtml = (body: string) => `
+  const wrapHtml = (body: string, email: string = '') => `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
@@ -53,7 +53,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
     ${body}
   </div>
   <div style="background:#f5f5f5;padding:16px 40px;text-align:center;font-size:12px;color:#999;">
-    <a href="https://slick-doc-site.lovable.app/email-preferences?email=${encodeURIComponent(prospect.email)}" style="color:#999;">Unsubscribe</a>
+    <a href="https://slick-doc-site.lovable.app/email-preferences?email=${encodeURIComponent(email)}" style="color:#999;">Unsubscribe</a>
   </div>
 </div>
 </body></html>`;
@@ -73,7 +73,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           <p>The good news? This is one of the easiest things to fix, and we do it for you — no technical knowledge needed on your end.</p>
           ${callCta}
           <p>Talk soon,<br><strong>The Orange Door Team</strong></p>
-        `),
+        `, prospect.email),
       };
 
     case 2:
@@ -95,7 +95,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           <p>You focus on running your business. We handle the rest.</p>
           ${callCta}
           <p>Best,<br><strong>The Orange Door Team</strong></p>
-        `),
+        `, prospect.email),
       };
 
     case 3:
@@ -118,7 +118,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           ${callCta}
           ${signupCta}
           <p>Cheers,<br><strong>The Orange Door Team</strong></p>
-        `),
+        `, prospect.email),
       };
 
     case 4:
@@ -135,11 +135,109 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           </div>
           <p>Either way, I hope the free report was helpful!</p>
           <p>— The Orange Door Team</p>
-        `),
+        `, prospect.email),
       };
 
     default:
       return null;
+  }
+}
+
+async function buildPersonalizedEmail(
+  prospect: Prospect & { context_profile?: Record<string, unknown> },
+  step: number,
+  lovableApiKey: string
+): Promise<{ subject: string; html: string } | null> {
+  const ctx = prospect.context_profile;
+  if (!ctx) return null;
+
+  const services = Array.isArray(ctx.services) && (ctx.services as string[]).length > 0
+    ? (ctx.services as string[]).join(', ')
+    : prospect.business_type || 'your business';
+
+  const differentiators = Array.isArray(ctx.differentiators) && (ctx.differentiators as string[]).length > 0
+    ? (ctx.differentiators as string[]).join('; ')
+    : null;
+
+  const primaryGoal = Array.isArray(ctx.primary_goals) && (ctx.primary_goals as string[]).length > 0
+    ? (ctx.primary_goals as string[])[0]
+    : null;
+
+  const painPoint = Array.isArray(ctx.pain_points) && (ctx.pain_points as string[]).length > 0
+    ? (ctx.pain_points as string[])[0]
+    : (prospect.top_weaknesses?.[0] || 'online visibility');
+
+  const stepThemes: Record<number, string> = {
+    1: "Lead with their single biggest gap/weakness. Make it feel urgent but solvable. One clear CTA to book a call.",
+    2: "Empathize with the time/resource problem. Show how Orange Door becomes their full marketing team. One clear CTA.",
+    3: "Show the full list of what Orange Door does every month. Emphasize done-for-you. CTA to see plans or book call.",
+    4: "Final follow-up. Low-pressure question about whether DIY marketing is working. Two CTAs: schedule call + see pricing.",
+  };
+
+  const theme = stepThemes[step];
+  if (!theme) return null;
+
+  const prompt = `You are writing a nurture email for Orange Door Marketing (East Tennessee SMB consultancy) to send to a prospect.
+
+Prospect context:
+- First name: ${prospect.name?.split(' ')[0] || 'there'}
+- Business type: ${services}
+- Their website: ${prospect.website_url || 'unknown'}
+- Their gap score: ${prospect.gap_score ?? 'unknown'}/100
+- Their biggest gap: ${painPoint}
+${differentiators ? `- Their key differentiator: ${differentiators}` : ''}
+${primaryGoal ? `- Their #1 business goal: ${primaryGoal}` : ''}
+${ctx.success_criteria ? `- What would make marketing worth it for them: ${ctx.success_criteria}` : ''}
+${ctx.fears ? `- Their biggest fear about agencies: ${ctx.fears}` : ''}
+
+Email theme for step ${step}: ${theme}
+
+Orange Door CTAs:
+- Book a call: https://slick-doc-site.lovable.app/schedule
+- See plans: https://slick-doc-site.lovable.app/pricing
+
+Rules:
+- Write ONLY the email body HTML (no <html>, <head>, or <body> tags — just the inner content paragraphs, lists, CTAs)
+- Keep it under 200 words
+- Sound like a helpful human, not a salesperson
+- Reference their specific business type and at least one specific detail from the context above
+- Include exactly one CTA button styled: <a href="URL" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">CTA TEXT</a>
+- End with: <p>— The Orange Door Team</p>
+
+Return JSON: { "subject": "email subject line", "html": "body html" }`;
+
+  try {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        max_tokens: 800,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      console.error(`AI email gen failed: ${aiResponse.status}`);
+      return null;
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices?.[0]?.message?.content || '';
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed.subject || !parsed.html) return null;
+
+    return { subject: parsed.subject, html: parsed.html };
+  } catch (err) {
+    console.error("buildPersonalizedEmail error:", err);
+    return null;
   }
 }
 
@@ -206,9 +304,21 @@ serve(async (req) => {
         // Only send if enough days have passed
         if (daysSinceCreated < daysRequired) continue;
 
-        const emailContent = buildEmail(prospect, nextStep);
+        // Try personalized first, fall back to static template
+        let emailContent = await buildPersonalizedEmail(prospect as any, nextStep, LOVABLE_API_KEY);
+        if (!emailContent) {
+          emailContent = buildEmail(prospect as Prospect, nextStep);
+        }
         if (!emailContent) continue;
 
+        // For personalized emails, wrap in the standard template shell
+        const isPersonalized = !!(prospect as any).context_profile;
+        if (isPersonalized && emailContent.html && !emailContent.html.includes('<!DOCTYPE')) {
+          emailContent = {
+            subject: emailContent.subject,
+            html: wrapHtml(emailContent.html, prospect.email),
+          };
+        }
         try {
           const emailRes = await fetch(`${GATEWAY_URL}/emails`, {
             method: "POST",
