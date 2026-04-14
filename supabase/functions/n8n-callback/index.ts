@@ -118,24 +118,49 @@ serve(async (req) => {
 
       // Auto-advance workflow if step completed
       if ((status === "completed" || !status) && workflow_id && step_number) {
-        const nextStepNumber = step_number + 1;
-        if (nextStepNumber <= 17) {
-          const baseUrl = Deno.env.get("SUPABASE_URL")!;
-          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        // If step 5 (Approve First Content Draft) just completed, trigger auto-schedule
+        if (step_number === 5 && client_id) {
+          try {
+            // Get client tier
+            const { data: clientData } = await supabase
+              .from("client_accounts")
+              .select("tier")
+              .eq("id", client_id)
+              .single();
 
-          fetch(`${baseUrl}/functions/v1/run-workflow-step`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${serviceKey}`,
-            },
-            body: JSON.stringify({
-              client_id,
-              workflow_id,
-              step_number: nextStepNumber,
-            }),
-          }).catch((err) => console.error("Auto-advance from n8n-callback error:", err));
+            if (clientData?.tier) {
+              const baseUrl = Deno.env.get("SUPABASE_URL")!;
+              const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+              fetch(`${baseUrl}/functions/v1/auto-schedule-content`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${serviceKey}`,
+                },
+                body: JSON.stringify({ client_id, tier: clientData.tier }),
+              }).catch((err) => console.error("Auto-schedule trigger error:", err));
+            }
+          } catch (schedErr) {
+            console.error("Failed to trigger auto-schedule:", schedErr);
+          }
         }
+
+        const nextStepNumber = step_number + 1;
+        const baseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+        fetch(`${baseUrl}/functions/v1/run-workflow-step`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            client_id,
+            workflow_id,
+            step_number: nextStepNumber,
+          }),
+        }).catch((err) => console.error("Auto-advance from n8n-callback error:", err));
       }
     }
 
