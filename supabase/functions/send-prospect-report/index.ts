@@ -273,65 +273,110 @@ function buildEmailHtml(prospect: ProspectData): string {
   const weaknesses = prospect.top_weaknesses || [];
   const tierLabel = score != null ? getTierLabel(score) : "Growth";
   const firstName = prospect.name?.split(" ")[0] || "there";
+  const domain = prospect.website_url?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "";
+
+  const getScoreHex = (s: number) => s >= 70 ? "#2D6A4F" : s >= 50 ? "#B45309" : s >= 30 ? "#E8521A" : "#dc2626";
+  const getScoreGradient = (s: number) => s >= 70 ? "#2D6A4F, #3A8A65" : s >= 50 ? "#B45309, #D97706" : s >= 30 ? "#E8521A, #F97316" : "#dc2626, #ef4444";
 
   const weaknessHtml = weaknesses.length > 0
     ? weaknesses.map((w: string, i: number) =>
-        `<tr><td style="padding:10px 14px;font-weight:bold;color:#E8521A;vertical-align:top;width:30px;font-size:16px;">${i + 1}.</td><td style="padding:10px 14px;color:#3C230F;font-size:14px;line-height:1.5;">${w}</td></tr>`
+        `<tr>
+          <td style="padding:14px 16px;font-weight:bold;color:#E8521A;vertical-align:top;width:36px;font-size:18px;font-family:Georgia,'Times New Roman',serif;">${i + 1}.</td>
+          <td style="padding:14px 16px 14px 0;color:#FAF7F2;font-size:14px;line-height:1.6;">${w}</td>
+        </tr>`
       ).join("")
-    : `<tr><td style="padding:10px 14px;color:#7A6355;">We're putting the finishing touches on your full analysis.</td></tr>`;
+    : `<tr><td style="padding:14px 16px;color:#999;">Your detailed analysis is being finalized.</td></tr>`;
+
+  const categoryHtml = [
+    { label: "SEO & Visibility", score: prospect.seo_score ?? 0 },
+    { label: "Conversion Elements", score: prospect.conversion_score ?? 0 },
+    { label: "Technical Performance", score: prospect.technical_score ?? 0 },
+  ].map(cat => {
+    const hex = getScoreHex(cat.score);
+    const pct = Math.max(5, cat.score);
+    return `<tr>
+      <td style="padding:10px 0;color:#1A1410;font-size:13px;font-weight:600;width:160px;">${cat.label}</td>
+      <td style="padding:10px 0;">
+        <div style="background:#F0EBE2;border-radius:4px;height:8px;width:100%;">
+          <div style="background:${hex};border-radius:4px;height:8px;width:${pct}%;"></div>
+        </div>
+      </td>
+      <td style="padding:10px 0 10px 12px;color:${hex};font-weight:bold;font-size:14px;text-align:right;width:40px;">${cat.score}</td>
+    </tr>`;
+  }).join("");
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#FAF7F2;font-family:'Helvetica Neue',Arial,sans-serif;">
-<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:24px;margin-bottom:24px;box-shadow:0 4px 24px rgba(26,20,16,0.08);">
+<body style="margin:0;padding:0;background:#F0EBE2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:620px;margin:0 auto;background:#ffffff;overflow:hidden;margin-top:24px;margin-bottom:24px;">
+
+  <!-- Top accent bar -->
+  <div style="height:4px;background:linear-gradient(90deg,#E8521A,#F97316);"></div>
+
   <!-- Header -->
-  <div style="background:#1A1410;padding:36px 40px;">
-    <table width="100%"><tr>
-      <td><span style="color:#E8521A;font-weight:bold;font-size:12px;letter-spacing:2px;">ORANGE DOOR</span><br>
-        <span style="color:#666;font-size:10px;letter-spacing:1px;">DIGITAL MARKETING</span></td>
-      <td align="right"><span style="color:#666;font-size:11px;">Website Report</span></td>
+  <div style="background:#1A1410;padding:36px 40px 32px;">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td>
+        <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2.5px;margin-bottom:2px;">ORANGE DOOR</div>
+        <div style="color:#666;font-size:10px;letter-spacing:1.5px;">DIGITAL MARKETING</div>
+      </td>
+      <td align="right" valign="top"><span style="color:#666;font-size:11px;letter-spacing:0.5px;">Website Report</span></td>
     </tr></table>
-    <h1 style="color:#ffffff;margin:20px 0 0;font-size:26px;line-height:1.2;">Your Free Marketing Report</h1>
-    <p style="color:#999;margin:8px 0 0;font-size:13px;">${prospect.website_url || ''}</p>
+    <h1 style="color:#ffffff;margin:24px 0 0;font-size:28px;font-weight:700;line-height:1.2;font-family:Georgia,'Times New Roman',serif;">Your Free Marketing Report</h1>
+    <p style="margin:8px 0 0;font-size:13px;"><a href="${prospect.website_url || '#'}" style="color:#E8521A;text-decoration:none;">${domain}</a></p>
   </div>
 
   <!-- Body -->
-  <div style="padding:32px 40px;">
-    <p style="font-size:16px;color:#1A1410;margin:0 0 6px;">Hi ${firstName},</p>
-    <p style="font-size:14px;color:#7A6355;line-height:1.7;margin:0 0 24px;">
-      Thanks for checking your website with us! Here's what our AI found when it analyzed <strong style="color:#1A1410;">${prospect.website_url}</strong>.
+  <div style="padding:36px 40px 16px;">
+    <p style="font-size:17px;color:#1A1410;margin:0 0 6px;font-weight:600;">Hi ${firstName},</p>
+    <p style="font-size:14px;color:#7A6355;line-height:1.7;margin:0 0 28px;">
+      Thanks for checking your website with us! Here's what our AI found when it analyzed
+      <a href="${prospect.website_url || '#'}" style="color:#E8521A;text-decoration:underline;">${domain}</a>.
     </p>
 
     ${score != null ? `
     <!-- Score Card -->
-    <div style="background:#FAF7F2;border-radius:12px;padding:28px;text-align:center;margin-bottom:28px;border:1px solid #F0EBE2;">
-      <div style="display:inline-block;width:88px;height:88px;border-radius:50%;background:${score >= 65 ? '#2D6A4F' : score >= 40 ? '#B45309' : '#dc2626'};line-height:88px;font-size:32px;font-weight:bold;color:#ffffff;">
-        ${score}
+    <div style="background:#1A1410;border-radius:12px;padding:32px 24px;text-align:center;margin-bottom:28px;">
+      <div style="display:inline-block;width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${getScoreGradient(score)});text-align:center;line-height:96px;">
+        <span style="font-size:36px;font-weight:bold;color:#ffffff;font-family:Georgia,'Times New Roman',serif;">${score}</span>
       </div>
-      <p style="margin:12px 0 4px;font-size:12px;color:#7A6355;letter-spacing:1px;">OUT OF 100</p>
-      <p style="margin:0;font-size:18px;font-weight:bold;color:#1A1410;">Recommended: ${tierLabel} Tier</p>
+      <p style="margin:14px 0 4px;font-size:11px;color:#7A6355;letter-spacing:2px;text-transform:uppercase;">OUT OF 100</p>
+      <p style="margin:0;font-size:18px;font-weight:bold;color:#FAF7F2;font-family:Georgia,'Times New Roman',serif;">Recommended: ${tierLabel} Tier</p>
     </div>
     ` : ""}
 
-    <!-- Weaknesses -->
-    <h2 style="font-size:18px;color:#1A1410;margin:28px 0 8px;border-bottom:2px solid #E8521A;padding-bottom:8px;display:inline-block;">Your Top Areas to Improve</h2>
-    <p style="font-size:13px;color:#7A6355;margin:0 0 16px;">Here's where you're leaving the most customers on the table:</p>
-    <table style="width:100%;border-collapse:collapse;background:#FAF7F2;border-radius:8px;overflow:hidden;">
-      ${weaknessHtml}
-    </table>
+    ${score != null ? `
+    <!-- Category Breakdown -->
+    <div style="background:#FAF7F2;border-radius:10px;padding:20px 24px;margin-bottom:28px;border:1px solid #F0EBE2;">
+      <p style="margin:0 0 12px;font-size:13px;color:#7A6355;letter-spacing:1px;text-transform:uppercase;font-weight:600;">Category Breakdown</p>
+      <table width="100%" cellpadding="0" cellspacing="0">${categoryHtml}</table>
+    </div>
+    ` : ""}
 
-    <!-- CTA -->
-    <div style="text-align:center;margin:32px 0;">
-      <a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:16px 36px;background:#E8521A;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;">Book a Free Strategy Call</a>
+    <!-- Top Areas to Improve -->
+    <div style="background:#1A1410;border-radius:12px;padding:28px;margin-bottom:28px;">
+      <h2 style="font-size:18px;color:#FAF7F2;margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;">Your Top Areas to Improve</h2>
+      <div style="width:60px;height:2px;background:#E8521A;margin:0 0 8px;"></div>
+      <p style="font-size:13px;color:#7A6355;margin:0 0 16px;line-height:1.5;">Here's where you're leaving the most customers on the table:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        ${weaknessHtml}
+      </table>
     </div>
 
-    <p style="font-size:13px;color:#7A6355;line-height:1.7;">
+    <!-- CTA -->
+    <div style="text-align:center;margin:32px 0 28px;">
+      <a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">Book a Free Strategy Call</a>
+    </div>
+
+    <p style="font-size:13px;color:#7A6355;line-height:1.7;text-align:center;margin:0 0 8px;">
       We'll walk you through your report, answer any questions, and show you exactly how we'd fix these issues — no obligation, no sales pressure.
     </p>
 
-    <p style="font-size:13px;color:#7A6355;margin-top:24px;">
-      Talk soon,<br><strong style="color:#1A1410;">The Orange Door Team</strong>
-    </p>
+    <div style="border-top:1px solid #F0EBE2;margin:28px 0 0;padding:24px 0 0;">
+      <p style="font-size:13px;color:#7A6355;margin:0;">
+        Talk soon,<br><strong style="color:#1A1410;">The Orange Door Team</strong>
+      </p>
+    </div>
   </div>
 
   <!-- Footer -->

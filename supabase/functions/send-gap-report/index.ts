@@ -306,81 +306,153 @@ function buildEmailHtml(params: ReportEmailRequest): string {
     ? `https://orangedoormarketing.com/dashboard/${resumeToken}`
     : null;
 
-  const scoreRows = scorecard?.scores?.map((s) => `
-    <tr>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">
-        <strong style="color: #f97316;">${s.category.replace("S2", "S")}</strong> ${s.label}
-      </td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
-        <span style="color: ${getScoreColor(s.score)}; font-weight: bold;">${s.score}</span>
-      </td>
-      <td style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
-        <span style="text-transform: capitalize; color: ${getScoreColor(s.score)};">${s.status}</span>
-      </td>
-    </tr>
-  `).join("") || "";
+  const getScoreHex = (s: number) => s >= 70 ? "#2D6A4F" : s >= 50 ? "#B45309" : s >= 30 ? "#E8521A" : "#dc2626";
+  const getScoreGradient = (s: number) => s >= 70 ? "#2D6A4F, #3A8A65" : s >= 50 ? "#B45309, #D97706" : s >= 30 ? "#E8521A, #F97316" : "#dc2626, #ef4444";
 
-  const strengthsList = analysis?.strengths?.map((s) => `<li style="margin-bottom: 6px; color: #374151;">${s}</li>`).join("") || "";
-  const gapsList = analysis?.gaps?.map((g) => `<li style="margin-bottom: 6px; color: #374151;">${g}</li>`).join("") || "";
+  const scoreRows = scorecard?.scores?.map((s) => {
+    const hex = getScoreHex(s.score);
+    const pct = Math.max(5, s.score);
+    return `<tr>
+      <td style="padding:12px 0;width:28px;vertical-align:middle;">
+        <div style="width:28px;height:28px;border-radius:50%;background:#E8521A;text-align:center;line-height:28px;color:#fff;font-weight:bold;font-size:12px;">${s.category.replace("S2", "S")}</div>
+      </td>
+      <td style="padding:12px 12px;vertical-align:middle;">
+        <div style="font-weight:600;color:#1A1410;font-size:13px;">${s.label}</div>
+        <div style="font-size:11px;color:${hex};text-transform:capitalize;margin-top:2px;">${s.status}</div>
+      </td>
+      <td style="padding:12px 0;vertical-align:middle;width:180px;">
+        <div style="background:#F0EBE2;border-radius:4px;height:8px;width:100%;">
+          <div style="background:${hex};border-radius:4px;height:8px;width:${pct}%;"></div>
+        </div>
+      </td>
+      <td style="padding:12px 0 12px 12px;color:${hex};font-weight:bold;font-size:15px;text-align:right;width:36px;">${s.score}</td>
+    </tr>`;
+  }).join("") || "";
+
+  const strengthsList = analysis?.strengths?.map((s) =>
+    `<tr><td style="padding:6px 0;vertical-align:top;width:20px;color:#2D6A4F;font-size:14px;">✓</td><td style="padding:6px 0;color:#1A1410;font-size:14px;line-height:1.5;">${s}</td></tr>`
+  ).join("") || "";
+
+  const gapsList = analysis?.gaps?.map((g) =>
+    `<tr><td style="padding:6px 0;vertical-align:top;width:20px;color:#E8521A;font-size:14px;">▸</td><td style="padding:6px 0;color:#1A1410;font-size:14px;line-height:1.5;">${g}</td></tr>`
+  ).join("") || "";
+
   const recommendationsList = analysis?.recommendations?.map((r) => `
-    <div style="background: #f9fafb; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-      <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-        <strong style="color: #111827;">${r.title}</strong>
-        <span style="background: #f97316; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">${r.priority}</span>
-      </div>
-      <p style="margin: 0; color: #6b7280; font-size: 14px;">${r.description}</p>
+    <div style="background:#1A1410;border-radius:8px;padding:16px;margin-bottom:10px;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td><strong style="color:#FAF7F2;font-size:14px;">${r.title}</strong></td>
+        <td align="right"><span style="background:#E8521A;color:#fff;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;">${r.priority}</span></td>
+      </tr></table>
+      <p style="margin:8px 0 0;color:#7A6355;font-size:13px;line-height:1.5;">${r.description}</p>
     </div>
   `).join("") || "";
 
   return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Your SYSTEM Gap Report</title></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f3f4f6; margin: 0; padding: 20px;">
-  <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 32px; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 24px;">Your SYSTEM Gap Report</h1>
-      <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0;">Prepared for ${businessName}</p>
-    </div>
-    <div style="padding: 32px;">
-      <p style="color: #374151; font-size: 16px; line-height: 1.6;">Hi ${firstName},</p>
-      <p style="color: #374151; font-size: 16px; line-height: 1.6;">Thank you for completing the Orange Door Gap Analysis. Here's your comprehensive SYSTEM health assessment for ${businessName}.</p>
-      ${scorecard ? `
-      <div style="text-align: center; padding: 24px; background: #fef7ed; border-radius: 12px; margin: 24px 0;">
-        <div style="font-size: 48px; font-weight: bold; color: #f97316; margin-bottom: 8px;">${scorecard.overallScore}</div>
-        <div style="color: #9a3412; font-size: 14px;">${scorecard.overallStatus}</div>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your SYSTEM Gap Report</title></head>
+<body style="margin:0;padding:0;background:#F0EBE2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:620px;margin:0 auto;background:#ffffff;overflow:hidden;margin-top:24px;margin-bottom:24px;">
+
+  <!-- Top accent bar -->
+  <div style="height:4px;background:linear-gradient(90deg,#E8521A,#F97316);"></div>
+
+  <!-- Header -->
+  <div style="background:#1A1410;padding:36px 40px 32px;">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td>
+        <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2.5px;margin-bottom:2px;">ORANGE DOOR</div>
+        <div style="color:#666;font-size:10px;letter-spacing:1.5px;">DIGITAL MARKETING</div>
+      </td>
+      <td align="right" valign="top"><span style="color:#666;font-size:11px;letter-spacing:0.5px;">SYSTEM Gap Report</span></td>
+    </tr></table>
+    <h1 style="color:#ffffff;margin:24px 0 0;font-size:28px;font-weight:700;line-height:1.2;font-family:Georgia,'Times New Roman',serif;">Your SYSTEM Gap Report</h1>
+    <p style="color:#999;margin:8px 0 0;font-size:13px;">Prepared for ${businessName}</p>
+  </div>
+
+  <!-- Body -->
+  <div style="padding:36px 40px 16px;">
+    <p style="font-size:17px;color:#1A1410;margin:0 0 6px;font-weight:600;">Hi ${firstName},</p>
+    <p style="font-size:14px;color:#7A6355;line-height:1.7;margin:0 0 28px;">
+      Thank you for completing the Orange Door Gap Analysis. Here's your comprehensive SYSTEM health assessment for <strong style="color:#1A1410;">${businessName}</strong>.
+    </p>
+
+    ${scorecard ? `
+    <!-- Score Card -->
+    <div style="background:#1A1410;border-radius:12px;padding:32px 24px;text-align:center;margin-bottom:28px;">
+      <div style="display:inline-block;width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${getScoreGradient(scorecard.overallScore)});text-align:center;line-height:96px;">
+        <span style="font-size:36px;font-weight:bold;color:#ffffff;font-family:Georgia,'Times New Roman',serif;">${scorecard.overallScore}</span>
       </div>
-      <h2 style="color: #111827; font-size: 18px; margin: 24px 0 16px;">SYSTEM Breakdown</h2>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-        <thead><tr style="background: #f9fafb;">
-          <th style="padding: 10px 12px; text-align: left; color: #6b7280; font-size: 12px; text-transform: uppercase;">Category</th>
-          <th style="padding: 10px 12px; text-align: center; color: #6b7280; font-size: 12px; text-transform: uppercase;">Score</th>
-          <th style="padding: 10px 12px; text-align: center; color: #6b7280; font-size: 12px; text-transform: uppercase;">Status</th>
-        </tr></thead>
-        <tbody>${scoreRows}</tbody>
-      </table>` : ""}
-      ${analysis?.executiveSummary ? `
-      <h2 style="color: #111827; font-size: 18px; margin: 24px 0 12px;">Executive Summary</h2>
-      <p style="color: #374151; font-size: 14px; line-height: 1.7; background: #f9fafb; padding: 16px; border-radius: 8px;">${analysis.executiveSummary}</p>` : ""}
-      ${strengthsList ? `<h2 style="color: #111827; font-size: 18px; margin: 24px 0 12px;">✓ Key Strengths</h2><ul style="padding-left: 20px; margin: 0;">${strengthsList}</ul>` : ""}
-      ${gapsList ? `<h2 style="color: #111827; font-size: 18px; margin: 24px 0 12px;">⚠ Critical Gaps</h2><ul style="padding-left: 20px; margin: 0;">${gapsList}</ul>` : ""}
-      ${recommendationsList ? `<h2 style="color: #111827; font-size: 18px; margin: 24px 0 12px;">💡 Top Recommendations</h2>${recommendationsList}` : ""}
-      ${dashboardUrl ? `
-      <div style="background: linear-gradient(135deg, #fef7ed 0%, #ffedd5 100%); border: 2px solid #f97316; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-        <h3 style="color: #9a3412; margin: 0 0 8px; font-size: 18px;">📊 Your Personal Dashboard</h3>
-        <p style="color: #c2410c; font-size: 14px; margin: 0 0 16px;">Access your SYSTEM scores, recommendations, and track your progress anytime.</p>
-        <a href="${dashboardUrl}" style="display: inline-block; background: #f97316; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600;">View Your Dashboard →</a>
-      </div>` : ""}
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="https://orangedoormarketing.com/contact" style="display: inline-block; background: #111827; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600;">Schedule Your Strategy Call</a>
-      </div>
-      <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">Our team will reach out within 24-48 hours to schedule a complimentary strategy call where we'll dive deeper into your results and discuss how we can help grow your business.</p>
+      <p style="margin:14px 0 4px;font-size:11px;color:#7A6355;letter-spacing:2px;text-transform:uppercase;">OVERALL SCORE</p>
+      <p style="margin:0;font-size:14px;color:#FAF7F2;">${scorecard.overallStatus}</p>
     </div>
-    <div style="background: #f9fafb; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
-      <p style="color: #6b7280; font-size: 14px; margin: 0;">Orange Door Consultants<br>East Tennessee's Growth Partner for SMBs</p>
+
+    <!-- SYSTEM Breakdown -->
+    <div style="background:#FAF7F2;border-radius:10px;padding:20px 24px;margin-bottom:28px;border:1px solid #F0EBE2;">
+      <p style="margin:0 0 14px;font-size:13px;color:#7A6355;letter-spacing:1px;text-transform:uppercase;font-weight:600;">SYSTEM Breakdown</p>
+      <table width="100%" cellpadding="0" cellspacing="0">${scoreRows}</table>
+    </div>
+    ` : ""}
+
+    ${analysis?.executiveSummary ? `
+    <div style="background:#FAF7F2;border-radius:10px;padding:20px 24px;margin-bottom:28px;border-left:3px solid #E8521A;">
+      <p style="margin:0 0 8px;font-size:13px;color:#7A6355;letter-spacing:1px;text-transform:uppercase;font-weight:600;">Executive Summary</p>
+      <p style="margin:0;color:#1A1410;font-size:14px;line-height:1.7;">${analysis.executiveSummary}</p>
+    </div>
+    ` : ""}
+
+    ${strengthsList ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:16px;color:#1A1410;margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;">Key Strengths</h2>
+      <div style="width:50px;height:2px;background:#2D6A4F;margin:0 0 14px;"></div>
+      <table width="100%" cellpadding="0" cellspacing="0">${strengthsList}</table>
+    </div>
+    ` : ""}
+
+    ${gapsList ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:16px;color:#1A1410;margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;">Critical Gaps</h2>
+      <div style="width:50px;height:2px;background:#E8521A;margin:0 0 14px;"></div>
+      <table width="100%" cellpadding="0" cellspacing="0">${gapsList}</table>
+    </div>
+    ` : ""}
+
+    ${recommendationsList ? `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-size:16px;color:#1A1410;margin:0 0 4px;font-family:Georgia,'Times New Roman',serif;">Top Recommendations</h2>
+      <div style="width:50px;height:2px;background:#E8521A;margin:0 0 14px;"></div>
+      ${recommendationsList}
+    </div>
+    ` : ""}
+
+    ${dashboardUrl ? `
+    <div style="background:#1A1410;border-radius:10px;padding:24px;margin-bottom:24px;text-align:center;">
+      <p style="color:#FAF7F2;font-size:16px;font-weight:600;margin:0 0 6px;font-family:Georgia,'Times New Roman',serif;">Your Personal Dashboard</p>
+      <p style="color:#7A6355;font-size:13px;margin:0 0 16px;">Access your SYSTEM scores and track your progress anytime.</p>
+      <a href="${dashboardUrl}" style="display:inline-block;background:linear-gradient(135deg,#E8521A,#F97316);color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;">View Your Dashboard →</a>
+    </div>
+    ` : ""}
+
+    <!-- CTA -->
+    <div style="text-align:center;margin:32px 0 28px;">
+      <a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">Book a Free Strategy Call</a>
+    </div>
+
+    <p style="font-size:13px;color:#7A6355;line-height:1.7;text-align:center;margin:0 0 8px;">
+      We'll walk you through your report, answer any questions, and show you exactly how we'd fix these issues — no obligation, no sales pressure.
+    </p>
+
+    <div style="border-top:1px solid #F0EBE2;margin:28px 0 0;padding:24px 0 0;">
+      <p style="font-size:13px;color:#7A6355;margin:0;">
+        Talk soon,<br><strong style="color:#1A1410;">The Orange Door Team</strong>
+      </p>
     </div>
   </div>
-</body>
-</html>`;
+
+  <!-- Footer -->
+  <div style="background:#FAF7F2;padding:20px 40px;text-align:center;font-size:11px;color:#999;border-top:1px solid #F0EBE2;">
+    Orange Door Consulting · AI-Powered Marketing for Local Businesses
+  </div>
+</div>
+</body></html>`;
 }
 
 // --- Handler ---
