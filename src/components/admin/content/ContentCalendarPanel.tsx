@@ -303,7 +303,7 @@ export function ContentCalendarPanel() {
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(item.scheduled_for), "h:mm a")}
+                          {format(new Date(item.scheduled_for), "h:mm a")} · {getClientName(item.client_account_id)}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                           {item.content.substring(0, 100)}...
