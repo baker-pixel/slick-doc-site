@@ -54,6 +54,7 @@ export function ContentCalendarPanel() {
   // Form state
   const [formData, setFormData] = useState({
     content_id: "",
+    client_account_id: "",
     title: "",
     content: "",
     content_type: "blog_post",
