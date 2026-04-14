@@ -47,7 +47,7 @@ serve(async (req) => {
     // Fetch the client
     const { data: client, error: clientError } = await supabase
       .from("client_accounts")
-      .select("business_name, industry, website_url, website_summary")
+      .select("business_name, industry, website_url, website_summary, context_profile")
       .eq("id", task.client_id)
       .single();
 
@@ -106,12 +106,19 @@ REAL HTML SIGNALS (from crawling ${client.website_url}):
       htmlSignals = "\nNote: No website URL configured for this client.";
     }
 
+    const seoCtx = client.context_profile as Record<string, unknown> | null;
+    const seoServicesStr = Array.isArray(seoCtx?.services) && (seoCtx!.services as string[]).length > 0 ? (seoCtx!.services as string[]).join(', ') : (client.industry || 'General');
+    const seoDiffsStr = Array.isArray(seoCtx?.differentiators) && (seoCtx!.differentiators as string[]).length > 0 ? `Key differentiators: ${(seoCtx!.differentiators as string[]).join('; ')}.` : '';
+    const seoAudienceStr = seoCtx?.target_audience ? `Target audience: ${seoCtx.target_audience}.` : '';
+
     const prompt = `You are an expert SEO analyst. Analyse the following business and return a structured SEO audit.
 
 Business name: ${client.business_name || "Unknown"}
-Industry: ${client.industry || "General"}
+Industry: ${seoServicesStr}
 Website URL: ${client.website_url || "Not provided"}
 Website summary: ${client.website_summary || "No summary available"}
+${seoDiffsStr}
+${seoAudienceStr}
 ${htmlSignals}
 
 Return your response as a valid JSON object with exactly this structure:

@@ -47,7 +47,7 @@ serve(async (req) => {
     // Fetch the client
     const { data: client, error: clientError } = await supabase
       .from("client_accounts")
-      .select("business_name, industry, tone, website_summary")
+      .select("business_name, industry, tone, website_summary, context_profile")
       .eq("id", task.client_id)
       .single();
 
@@ -74,9 +74,21 @@ serve(async (req) => {
     const topic = payload.topic || "general marketing";
     const tone = client.tone || "professional";
 
-    const prompt = `You are a marketing expert for ${client.business_name || "a business"}, a ${client.industry || "general"} business.
-Write a ${contentType} with a ${tone} tone.
-Business context: ${client.website_summary || "No additional context provided."}
+    const ctx = client.context_profile as Record<string, unknown> | null;
+    const servicesStr = Array.isArray(ctx?.services) && (ctx!.services as string[]).length > 0 ? (ctx!.services as string[]).join(', ') : (client.industry || 'general');
+    const diffsStr = Array.isArray(ctx?.differentiators) && (ctx!.differentiators as string[]).length > 0 ? `Key differentiators: ${(ctx!.differentiators as string[]).join('; ')}.` : '';
+    const goalStr = Array.isArray(ctx?.primary_goals) && (ctx!.primary_goals as string[]).length > 0 ? `Primary goal: ${(ctx!.primary_goals as string[])[0]}.` : '';
+    const audienceStr = ctx?.target_audience ? `Target audience: ${ctx.target_audience}.` : '';
+
+    const prompt = `You are a marketing expert for ${client.business_name || "a business"}.
+Business type: ${servicesStr}
+${client.website_summary ? `Website summary: ${client.website_summary}` : ''}
+${diffsStr}
+${goalStr}
+${audienceStr}
+Tone: ${tone}
+
+Write a ${contentType}.
 Topic: ${topic}
 Keep it under 150 words. Make it engaging and ready to post.`;
 

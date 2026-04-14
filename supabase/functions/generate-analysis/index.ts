@@ -37,8 +37,45 @@ serve(async (req) => {
         );
       }
 
-      // Skip if already generated
+      // Skip if already generated — but check if context_profile needs extraction
       if (row.ai_analysis) {
+        if (!row.context_profile) {
+          try {
+            const cachedGap = row as Record<string, unknown>;
+            const rawGoals = cachedGap.top_business_goals;
+            const primaryGoals: string[] = Array.isArray(rawGoals) ? rawGoals : (typeof rawGoals === 'string' && rawGoals ? [rawGoals] : []);
+            const rawDiff = cachedGap.unique_differentiator;
+            const differentiators: string[] = typeof rawDiff === 'string' && rawDiff.trim() ? [rawDiff.trim()] : [];
+            const rawFrustration = cachedGap.biggest_marketing_frustration;
+            const painPoints: string[] = typeof rawFrustration === 'string' && rawFrustration.trim() ? [rawFrustration.trim()] : [];
+            const cachedCtx = {
+              services: [],
+              primary_goals: primaryGoals,
+              differentiators,
+              pain_points: painPoints,
+              target_audience: typeof cachedGap.primary_customer_sources === 'string' ? cachedGap.primary_customer_sources : '',
+              success_criteria: typeof cachedGap.what_makes_it_worth_it === 'string' ? cachedGap.what_makes_it_worth_it : '',
+              urgency: typeof cachedGap.fastest_impact === 'string' ? cachedGap.fastest_impact : '',
+              fears: typeof cachedGap.biggest_agency_fear === 'string' ? cachedGap.biggest_agency_fear : '',
+              business_summary: `${cachedGap.business_name || 'A local business'} focused on ${primaryGoals.join(', ') || 'growing their customer base'}.`,
+              partial: true,
+              source: 'gap_form',
+            };
+            await supabase.from("gap_analysis_submissions").update({ context_profile: cachedCtx }).eq("id", body.submission_id);
+
+            // Also upsert to prospects
+            const cachedEmail = typeof cachedGap.email === 'string' ? cachedGap.email : '';
+            if (cachedEmail) {
+              const { data: ep } = await supabase.from("prospects").select("id, context_profile").eq("email", cachedEmail).maybeSingle();
+              if (ep) {
+                const merged = { ...(ep.context_profile || {}), ...cachedCtx, services: (ep.context_profile as any)?.services?.length > 0 ? (ep.context_profile as any).services : [] };
+                await supabase.from("prospects").update({ context_profile: merged, submission_id: body.submission_id }).eq("id", ep.id);
+              }
+            }
+          } catch (ctxCacheErr) {
+            console.error("Context extraction on cached path failed:", ctxCacheErr);
+          }
+        }
         return new Response(
           JSON.stringify({ analysis: row.ai_analysis, cached: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -242,13 +279,83 @@ Generate a comprehensive analysis in JSON format.`;
         console.error("Failed to save analysis to submission:", updateErr);
       }
 
-      // Also trigger the report email server-side
+      // --- Context profile extraction (non-blocking) ---
+      let contextProfile: Record<string, unknown> | null = null;
+      try {
+        const rawGoals = gapAnalysis.top_business_goals;
+        const primaryGoals: string[] = Array.isArray(rawGoals) ? rawGoals : (typeof rawGoals === 'string' && rawGoals ? [rawGoals] : []);
+        const rawDiff = gapAnalysis.unique_differentiator;
+        const differentiators: string[] = typeof rawDiff === 'string' && (rawDiff as string).trim() ? [(rawDiff as string).trim()] : [];
+        const rawFrustration = gapAnalysis.biggest_marketing_frustration;
+        const painPoints: string[] = typeof rawFrustration === 'string' && (rawFrustration as string).trim() ? [(rawFrustration as string).trim()] : [];
+
+        contextProfile = {
+          services: [],
+          primary_goals: primaryGoals,
+          differentiators,
+          pain_points: painPoints,
+          target_audience: typeof gapAnalysis.primary_customer_sources === 'string' ? gapAnalysis.primary_customer_sources : '',
+          success_criteria: typeof gapAnalysis.what_makes_it_worth_it === 'string' ? gapAnalysis.what_makes_it_worth_it : '',
+          urgency: typeof gapAnalysis.fastest_impact === 'string' ? gapAnalysis.fastest_impact : '',
+          fears: typeof gapAnalysis.biggest_agency_fear === 'string' ? gapAnalysis.biggest_agency_fear : '',
+          business_summary: `${gapAnalysis.business_name || 'A local business'} focused on ${primaryGoals.join(', ') || 'growing their customer base'}.`,
+          partial: !body.submission_id,
+          source: 'gap_form',
+        };
+
+        await supabase
+          .from("gap_analysis_submissions")
+          .update({ context_profile: contextProfile })
+          .eq("id", body.submission_id);
+      } catch (ctxErr) {
+        console.error("Failed to save context_profile to submission:", ctxErr);
+      }
+
+      // --- Upsert prospects row with context_profile (non-blocking) ---
       const { data: sub } = await supabase
         .from("gap_analysis_submissions")
-        .select("email, first_name, business_name, resume_token")
+        .select("email, first_name, last_name, business_name, resume_token")
         .eq("id", body.submission_id)
         .single();
 
+      if (sub?.email && contextProfile) {
+        try {
+          const { data: existingProspect } = await supabase
+            .from("prospects")
+            .select("id, context_profile")
+            .eq("email", sub.email)
+            .maybeSingle();
+
+          if (existingProspect) {
+            const existingCtx = (existingProspect.context_profile || {}) as Record<string, unknown>;
+            const mergedCtx = {
+              ...existingCtx,
+              ...contextProfile,
+              services: Array.isArray(existingCtx.services) && (existingCtx.services as string[]).length > 0 ? existingCtx.services : [],
+              source: 'gap_form',
+            };
+            await supabase
+              .from("prospects")
+              .update({ context_profile: mergedCtx, submission_id: body.submission_id })
+              .eq("id", existingProspect.id);
+          } else {
+            await supabase
+              .from("prospects")
+              .insert({
+                name: `${gapAnalysis.first_name || ''} ${gapAnalysis.last_name || ''}`.trim() || sub.email,
+                email: sub.email,
+                business_type: typeof gapAnalysis.industry === 'string' ? gapAnalysis.industry : null,
+                website_url: typeof gapAnalysis.website_url === 'string' ? gapAnalysis.website_url as string : '',
+                context_profile: contextProfile,
+                submission_id: body.submission_id,
+              });
+          }
+        } catch (prospectErr) {
+          console.error("Failed to upsert prospects context:", prospectErr);
+        }
+      }
+
+      // Trigger report email
       if (sub?.email) {
         const baseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
