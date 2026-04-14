@@ -19,6 +19,7 @@ import { format, isSameDay, startOfDay } from "date-fns";
 interface CalendarItem {
   id: string;
   content_id: string | null;
+  client_account_id: string | null;
   title: string;
   content: string;
   content_type: string;
@@ -33,6 +34,11 @@ interface GeneratedContent {
   title: string | null;
   content: string;
   content_type: string;
+}
+
+interface ClientAccount {
+  id: string;
+  business_name: string;
 }
 
 export function ContentCalendarPanel() {
