@@ -141,6 +141,7 @@ export function ContentCalendarPanel() {
       
       const itemData = {
         content_id: formData.content_id || null,
+        client_account_id: formData.client_account_id,
         title: formData.title,
         content: formData.content,
         content_type: formData.content_type,
