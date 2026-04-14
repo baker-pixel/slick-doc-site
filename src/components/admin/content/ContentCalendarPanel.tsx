@@ -130,6 +130,10 @@ export function ContentCalendarPanel() {
       toast({ title: "Please fill in title and content", variant: "destructive" });
       return;
     }
+    if (!formData.client_account_id) {
+      toast({ title: "Please select a client", variant: "destructive" });
+      return;
+    }
 
     setIsSaving(true);
     try {
