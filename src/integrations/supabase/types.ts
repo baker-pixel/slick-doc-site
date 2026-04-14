@@ -3657,6 +3657,65 @@ export type Database = {
         }
         Relationships: []
       }
+      social_media_posts: {
+        Row: {
+          ai_generated: boolean | null
+          client_account_id: string
+          content: string
+          created_at: string
+          hashtags: string[] | null
+          id: string
+          media_urls: string[] | null
+          platform: string
+          published_at: string | null
+          scheduled_at: string | null
+          status: string
+          tone: string | null
+          topic: string | null
+          updated_at: string
+        }
+        Insert: {
+          ai_generated?: boolean | null
+          client_account_id: string
+          content: string
+          created_at?: string
+          hashtags?: string[] | null
+          id?: string
+          media_urls?: string[] | null
+          platform?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          status?: string
+          tone?: string | null
+          topic?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ai_generated?: boolean | null
+          client_account_id?: string
+          content?: string
+          created_at?: string
+          hashtags?: string[] | null
+          id?: string
+          media_urls?: string[] | null
+          platform?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          status?: string
+          tone?: string | null
+          topic?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_media_posts_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sop_documents: {
         Row: {
           action_items: Json | null
