@@ -209,13 +209,17 @@ export function ContentCalendarPanel() {
     }
   };
 
+  const filteredItems = filterClientId === "all"
+    ? calendarItems
+    : calendarItems.filter(item => item.client_account_id === filterClientId);
+
   const getItemsForDate = (date: Date) => {
-    return calendarItems.filter(item => 
+    return filteredItems.filter(item => 
       isSameDay(new Date(item.scheduled_for), date)
     );
   };
 
-  const datesWithContent = calendarItems.map(item => 
+  const datesWithContent = filteredItems.map(item => 
     startOfDay(new Date(item.scheduled_for)).getTime()
   );
 
