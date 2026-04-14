@@ -454,6 +454,14 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
               businessName: formData.businessName,
               resumeToken: insertedData?.resume_token,
               submissionId: insertedData?.id,
+              differentiator: formData.uniqueDifferentiator || '',
+              primaryGoal: typeof formData.topBusinessGoals === 'string'
+                ? formData.topBusinessGoals
+                : (Array.isArray(formData.topBusinessGoals) ? (formData.topBusinessGoals as string[])[0] : '') || '',
+              painPoint: formData.biggestMarketingFrustration || '',
+              successCriteria: formData.whatMakesItWorthIt || '',
+              urgency: formData.fastestImpact || '',
+              websiteUrl: formData.websiteUrl || '',
             },
           },
         });
