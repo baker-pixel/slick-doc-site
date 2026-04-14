@@ -409,7 +409,25 @@ export function ContentCalendarPanel() {
             )}
 
             <div className="space-y-2">
-              <Label>Title</Label>
+              <Label>Client *</Label>
+              <Select 
+                value={formData.client_account_id} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, client_account_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a client..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.business_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
