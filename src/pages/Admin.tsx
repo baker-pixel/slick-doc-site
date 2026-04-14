@@ -1004,6 +1004,26 @@ const AdminInner = () => {
                   </td>
                   <td className="p-2 text-muted-foreground">{format(new Date(gap.created_at), 'MMM d, yyyy')}</td>
                   <td className="p-2 text-right space-x-1">
+                    {invitedEmails.has(gap.email) ? (
+                      <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={invitingEmail === gap.email}
+                        onClick={() => handleInviteToPortal({
+                          email: gap.email,
+                          first_name: gap.first_name,
+                          last_name: gap.last_name,
+                          business_name: gap.business_name,
+                          industry: gap.industry,
+                          overall_score: gap.overall_score,
+                        })}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        {invitingEmail === gap.email ? "..." : "Invite"}
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => { setSelectedGapAnalysis(gap); setIsDetailModalOpen(true); }}>
                       <Eye className="w-4 h-4" />
                     </Button>
@@ -1158,7 +1178,25 @@ const AdminInner = () => {
                   <td className="p-2">{lead.email}</td>
                   <td className="p-2"><Badge variant="outline">{lead.source || 'Unknown'}</Badge></td>
                   <td className="p-2 text-muted-foreground">{format(new Date(lead.created_at), 'MMM d, yyyy')}</td>
-                  <td className="p-2 text-right">
+                  <td className="p-2 text-right space-x-1">
+                    {invitedEmails.has(lead.email) ? (
+                      <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={invitingEmail === lead.email}
+                        onClick={() => handleInviteToPortal({
+                          email: lead.email,
+                          first_name: lead.first_name,
+                          last_name: null,
+                          business_name: lead.email.split('@')[1] || 'Unknown',
+                        })}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        {invitingEmail === lead.email ? "..." : "Invite"}
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-destructive" /></Button>
