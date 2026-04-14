@@ -201,6 +201,17 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     }
   };
 
+  const fetchOauthConfig = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("oauth-config");
+      if (!error && data) {
+        setOauthConfig(data as Record<string, { clientId: string; configured: boolean }>);
+      }
+    } catch (err) {
+      console.error("Error fetching oauth config:", err);
+    }
+  };
+
   const handleConnect = (platform: (typeof PLATFORMS)[number]) => {
     setConnecting(platform.id);
     const redirectUri = `${SUPABASE_URL}/functions/v1/${platform.callbackFn}`;
