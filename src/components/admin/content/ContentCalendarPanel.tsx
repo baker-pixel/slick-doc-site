@@ -73,7 +73,7 @@ export function ContentCalendarPanel() {
     const [calendarRes, contentRes, clientsRes] = await Promise.all([
       supabase.from("content_calendar").select("*").order("scheduled_for", { ascending: true }),
       supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50),
-      supabase.from("client_accounts").select("id, business_name").order("business_name", { ascending: true })
+      supabase.from("client_accounts").select("id, business_name").eq("status", "active").order("business_name", { ascending: true })
     ]);
 
     if (calendarRes.data) setCalendarItems(calendarRes.data);
