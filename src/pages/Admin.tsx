@@ -466,7 +466,122 @@ const AdminInner = () => {
     }
   };
 
-  const toggleContactSelection = (id: string) => {
+  const [invitingEmail, setInvitingEmail] = useState<string | null>(null);
+  const [invitedEmails, setInvitedEmails] = useState<Set<string>>(new Set());
+
+  // Load existing invitations on mount
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const loadInvitations = async () => {
+      const { data } = await supabase
+        .from("client_invitations")
+        .select("email")
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString());
+      if (data) {
+        setInvitedEmails(new Set(data.map((d: any) => d.email)));
+      }
+    };
+    loadInvitations();
+  }, [isAuthenticated]);
+
+  const tierFromScore = (score: number | null | undefined): string => {
+    if (!score) return 'foundation';
+    if (score >= 70) return 'transformation';
+    if (score >= 45) return 'growth';
+    return 'foundation';
+  };
+
+  const handleInviteToPortal = async (lead: {
+    email: string;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string;
+    industry?: string | null;
+    overall_score?: number | null;
+  }) => {
+    setInvitingEmail(lead.email);
+    try {
+      // 1. Check if client account exists
+      const { data: existing } = await supabase
+        .from("client_accounts")
+        .select("id")
+        .eq("email", lead.email)
+        .maybeSingle();
+
+      let clientId: string;
+      const tier = tierFromScore(lead.overall_score);
+
+      if (existing) {
+        clientId = existing.id;
+      } else {
+        // 2a. Create client account
+        const { data: newClient, error: createErr } = await supabase
+          .from("client_accounts")
+          .insert({
+            business_name: lead.business_name,
+            email: lead.email,
+            first_name: lead.first_name || null,
+            last_name: lead.last_name || null,
+            industry: lead.industry || 'General',
+            status: 'active',
+            tier,
+            plan_tier: tier,
+          })
+          .select("id")
+          .single();
+        if (createErr) throw createErr;
+        clientId = newClient.id;
+
+        // Seed workflow
+        try {
+          await supabase.functions.invoke("seed-tier-workflow", {
+            body: { client_id: clientId, tier },
+          });
+        } catch (wfErr) {
+          console.error("Failed to seed workflow:", wfErr);
+        }
+      }
+
+      // 3. Create invitation via admin API
+      const { error: invErr } = await callAdminApi(storedPassword, {
+        action: "insert",
+        table: "client_invitations",
+        data: {
+          client_account_id: clientId,
+          email: lead.email,
+          first_name: lead.first_name || null,
+          last_name: lead.last_name || null,
+          invited_by: 'admin',
+        },
+      });
+      if (invErr) throw new Error(invErr);
+
+      // 4. Send invitation email
+      try {
+        await supabase.functions.invoke("send-client-invite", {
+          body: {
+            email: lead.email,
+            firstName: lead.first_name || 'there',
+            clientAccountId: clientId,
+          },
+        });
+      } catch (emailErr) {
+        console.error("Failed to send invite email:", emailErr);
+      }
+
+      // 5. Update lead status to 'invited'
+      setInvitedEmails(prev => new Set(prev).add(lead.email));
+      toast({ title: "Invitation sent!", description: `${lead.email} has been invited to the portal.` });
+      fetchData(storedPassword);
+    } catch (err: any) {
+      toast({ title: "Invite failed", description: err.message, variant: "destructive" });
+    } finally {
+      setInvitingEmail(null);
+    }
+  };
+
+
     setSelectedContacts(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
