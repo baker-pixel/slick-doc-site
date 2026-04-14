@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { handleEdgeError } from "@/lib/edge-error";
+import { calculateSystemScorecard } from "@/lib/systemScorecard";
 import type { GapAnalysisData } from "@/components/gap-analysis/GapAnalysisForm";
 
 const initialData: GapAnalysisData = {
@@ -432,13 +433,28 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
     setIsSubmitting(true);
 
     try {
+      const dbData = mapFormDataToDb(formData);
       const { data: insertedData, error } = await supabase.from("gap_analysis_submissions").insert({
-        ...mapFormDataToDb(formData),
+        ...dbData,
         status: "submitted",
         completed_at: new Date().toISOString(),
       }).select('id, resume_token').single();
 
       if (error) throw error;
+
+      // Compute and persist SYSTEM scorecard
+      try {
+        const scorecard = calculateSystemScorecard(dbData);
+        await supabase
+          .from("gap_analysis_submissions")
+          .update({
+            overall_score: scorecard.overallScore,
+            score_breakdown: scorecard.scores as any,
+          })
+          .eq("id", insertedData.id);
+      } catch (scoreErr) {
+        console.error("Failed to save scorecard:", scoreErr);
+      }
 
       setSubmissionId(insertedData?.id || null);
       setSubmissionResumeToken(insertedData?.resume_token || null);

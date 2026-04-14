@@ -21,10 +21,13 @@ import {
   Link2,
   CalendarPlus,
   Eye,
+  ExternalLink,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
 
 interface ClientActivityTabProps {
   clientAccountId: string;
@@ -203,6 +206,29 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
     },
   });
 
+  // Fetch SYSTEM score from gap analysis
+  const { data: gapScore } = useQuery({
+    queryKey: ["client-gap-score", clientAccountId],
+    queryFn: async () => {
+      // Get client email first
+      const { data: client } = await supabase
+        .from("client_accounts")
+        .select("email")
+        .eq("id", clientAccountId)
+        .single();
+      if (!client) return null;
+
+      const { data } = await supabase
+        .from("gap_analysis_submissions")
+        .select("id, overall_score, score_breakdown, business_name, created_at")
+        .eq("email", client.email)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   const isLoading = wfLoading || tasksLoading;
   const hasWorkflow = workflowSteps.length > 0;
 
@@ -314,10 +340,117 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
     );
   }
 
+  const tierFromScore = (score: number): string => {
+    if (score >= 70) return 'Transformation';
+    if (score >= 45) return 'Growth';
+    return 'Foundation';
+  };
+
+  const scoreColor = (score: number): string => {
+    if (score >= 70) return 'text-emerald-500';
+    if (score >= 45) return 'text-amber-500';
+    return 'text-red-500';
+  };
+
+  const scoreRingColor = (score: number): string => {
+    if (score >= 70) return 'stroke-emerald-500';
+    if (score >= 45) return 'stroke-amber-500';
+    return 'stroke-red-500';
+  };
+
+  const renderScoreCard = () => {
+    if (gapScore?.overall_score != null) {
+      const score = gapScore.overall_score;
+      const breakdown = (gapScore.score_breakdown || []) as Array<{ category: string; label: string; score: number }>;
+      const circumference = 2 * Math.PI * 45;
+      const progress = (score / 100) * circumference;
+
+      return (
+        <Card className="border-primary/20 overflow-hidden">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-6 flex-col sm:flex-row">
+              {/* Score gauge */}
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your SYSTEM Score</p>
+                <div className="relative w-28 h-28">
+                  <svg width={112} height={112} className="-rotate-90">
+                    <circle cx={56} cy={56} r={45} fill="none" stroke="hsl(var(--muted))" strokeWidth={8} />
+                    <circle
+                      cx={56} cy={56} r={45} fill="none"
+                      className={scoreRingColor(score)}
+                      strokeWidth={8} strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={circumference - progress}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={cn("text-3xl font-bold", scoreColor(score))}>{score}</span>
+                    <span className="text-[10px] text-muted-foreground">/ 100</span>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  Recommended: {tierFromScore(score)} Plan
+                </Badge>
+              </div>
+
+              {/* Category bars */}
+              <div className="flex-1 space-y-2 w-full">
+                {breakdown.map((cat) => {
+                  const status = scoreToStatus(cat.score);
+                  const colors = getStatusColor(status);
+                  return (
+                    <div key={cat.category} className="flex items-center gap-2">
+                      <span className="w-6 text-xs font-bold text-muted-foreground text-center">{cat.category.replace('S2','S')}</span>
+                      <span className="w-32 text-xs truncate">{cat.label}</span>
+                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                        <div className={cn("h-full rounded-full", colors.bar)} style={{ width: `${cat.score}%` }} />
+                      </div>
+                      <span className="w-8 text-xs text-right font-medium">{cat.score}</span>
+                    </div>
+                  );
+                })}
+                <a
+                  href={`/report/${gapScore.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
+                >
+                  View Full Report <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // No gap analysis found — prompt
+    return (
+      <Card className="border-dashed border-2">
+        <CardContent className="p-6 flex items-center gap-4">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <BarChart3 className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-sm">Complete your free SYSTEM Gap Analysis</p>
+            <p className="text-xs text-muted-foreground">Get a personalized score and action plan for your marketing.</p>
+          </div>
+          <a href="/gap-analysis" target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline">
+              Start Analysis <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
+          </a>
+        </CardContent>
+      </Card>
+    );
+  };
+
   // Render workflow-based progress
   if (hasWorkflow) {
     return (
       <div className="max-w-2xl mx-auto space-y-8">
+        {/* SYSTEM Score Card */}
+        {renderScoreCard()}
         {/* Progress header */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">

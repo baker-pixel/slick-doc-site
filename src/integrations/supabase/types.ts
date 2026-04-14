@@ -2289,6 +2289,7 @@ export type Database = {
           monthly_new_reviews: number | null
           monthly_organic_traffic: number | null
           monthly_website_leads: number | null
+          overall_score: number | null
           past_marketing_failures: string | null
           phone: string | null
           primary_customer_sources: string | null
@@ -2304,6 +2305,7 @@ export type Database = {
           running_paid_ads: boolean | null
           runs_retargeting: boolean | null
           satisfied_with_ad_performance: boolean | null
+          score_breakdown: Json | null
           seasonality_details: string | null
           social_media_handles: string | null
           status: string
@@ -2388,6 +2390,7 @@ export type Database = {
           monthly_new_reviews?: number | null
           monthly_organic_traffic?: number | null
           monthly_website_leads?: number | null
+          overall_score?: number | null
           past_marketing_failures?: string | null
           phone?: string | null
           primary_customer_sources?: string | null
@@ -2403,6 +2406,7 @@ export type Database = {
           running_paid_ads?: boolean | null
           runs_retargeting?: boolean | null
           satisfied_with_ad_performance?: boolean | null
+          score_breakdown?: Json | null
           seasonality_details?: string | null
           social_media_handles?: string | null
           status?: string
@@ -2487,6 +2491,7 @@ export type Database = {
           monthly_new_reviews?: number | null
           monthly_organic_traffic?: number | null
           monthly_website_leads?: number | null
+          overall_score?: number | null
           past_marketing_failures?: string | null
           phone?: string | null
           primary_customer_sources?: string | null
@@ -2502,6 +2507,7 @@ export type Database = {
           running_paid_ads?: boolean | null
           runs_retargeting?: boolean | null
           satisfied_with_ad_performance?: boolean | null
+          score_breakdown?: Json | null
           seasonality_details?: string | null
           social_media_handles?: string | null
           status?: string

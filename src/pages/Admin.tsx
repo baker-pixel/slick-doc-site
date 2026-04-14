@@ -17,7 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
 import { friendlyEdgeMessage } from "@/lib/edge-error";
-import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Eye, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar, type AdminSection } from "@/components/admin/core/AdminSidebar";
@@ -124,6 +124,8 @@ interface GapAnalysisData {
   status: string;
   created_at: string;
   completed_at: string | null;
+  overall_score?: number | null;
+  industry?: string | null;
   top_business_goals?: string | null;
   primary_customer_sources?: string | null;
   top_competitors?: string | null;
@@ -464,6 +466,121 @@ const AdminInner = () => {
     }
   };
 
+  const [invitingEmail, setInvitingEmail] = useState<string | null>(null);
+  const [invitedEmails, setInvitedEmails] = useState<Set<string>>(new Set());
+
+  // Load existing invitations on mount
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const loadInvitations = async () => {
+      const { data } = await supabase
+        .from("client_invitations")
+        .select("email")
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString());
+      if (data) {
+        setInvitedEmails(new Set(data.map((d: any) => d.email)));
+      }
+    };
+    loadInvitations();
+  }, [isAuthenticated]);
+
+  const tierFromScore = (score: number | null | undefined): string => {
+    if (!score) return 'foundation';
+    if (score >= 70) return 'transformation';
+    if (score >= 45) return 'growth';
+    return 'foundation';
+  };
+
+  const handleInviteToPortal = async (lead: {
+    email: string;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string;
+    industry?: string | null;
+    overall_score?: number | null;
+  }) => {
+    setInvitingEmail(lead.email);
+    try {
+      // 1. Check if client account exists
+      const { data: existing } = await supabase
+        .from("client_accounts")
+        .select("id")
+        .eq("email", lead.email)
+        .maybeSingle();
+
+      let clientId: string;
+      const tier = tierFromScore(lead.overall_score);
+
+      if (existing) {
+        clientId = existing.id;
+      } else {
+        // 2a. Create client account
+        const { data: newClient, error: createErr } = await supabase
+          .from("client_accounts")
+          .insert({
+            business_name: lead.business_name,
+            email: lead.email,
+            first_name: lead.first_name || null,
+            last_name: lead.last_name || null,
+            industry: lead.industry || 'General',
+            status: 'active',
+            tier,
+            plan_tier: tier,
+          })
+          .select("id")
+          .single();
+        if (createErr) throw createErr;
+        clientId = newClient.id;
+
+        // Seed workflow
+        try {
+          await supabase.functions.invoke("seed-tier-workflow", {
+            body: { client_id: clientId, tier },
+          });
+        } catch (wfErr) {
+          console.error("Failed to seed workflow:", wfErr);
+        }
+      }
+
+      // 3. Create invitation via admin API
+      const { error: invErr } = await callAdminApi(storedPassword, {
+        action: "insert",
+        table: "client_invitations",
+        data: {
+          client_account_id: clientId,
+          email: lead.email,
+          first_name: lead.first_name || null,
+          last_name: lead.last_name || null,
+          invited_by: 'admin',
+        },
+      });
+      if (invErr) throw new Error(invErr);
+
+      // 4. Send invitation email
+      try {
+        await supabase.functions.invoke("send-client-invite", {
+          body: {
+            email: lead.email,
+            firstName: lead.first_name || 'there',
+            clientAccountId: clientId,
+          },
+        });
+      } catch (emailErr) {
+        console.error("Failed to send invite email:", emailErr);
+      }
+
+      // 5. Update lead status to 'invited'
+      setInvitedEmails(prev => new Set(prev).add(lead.email));
+      toast({ title: "Invitation sent!", description: `${lead.email} has been invited to the portal.` });
+      fetchData(storedPassword);
+    } catch (err: any) {
+      toast({ title: "Invite failed", description: err.message, variant: "destructive" });
+    } finally {
+      setInvitingEmail(null);
+    }
+  };
+
   const toggleContactSelection = (id: string) => {
     setSelectedContacts(prev => {
       const next = new Set(prev);
@@ -704,7 +821,25 @@ const AdminInner = () => {
                     </Select>
                   </td>
                   <td className="p-2 text-muted-foreground">{format(new Date(contact.created_at), 'MMM d, yyyy')}</td>
-                  <td className="p-2 text-right">
+                  <td className="p-2 text-right space-x-1">
+                    {invitedEmails.has(contact.email) ? (
+                      <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={invitingEmail === contact.email}
+                        onClick={() => handleInviteToPortal({
+                          email: contact.email,
+                          first_name: contact.first_name,
+                          last_name: contact.last_name,
+                          business_name: contact.business_name,
+                        })}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        {invitingEmail === contact.email ? "Inviting..." : "Invite"}
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-destructive" /></Button>
@@ -869,6 +1004,26 @@ const AdminInner = () => {
                   </td>
                   <td className="p-2 text-muted-foreground">{format(new Date(gap.created_at), 'MMM d, yyyy')}</td>
                   <td className="p-2 text-right space-x-1">
+                    {invitedEmails.has(gap.email) ? (
+                      <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={invitingEmail === gap.email}
+                        onClick={() => handleInviteToPortal({
+                          email: gap.email,
+                          first_name: gap.first_name,
+                          last_name: gap.last_name,
+                          business_name: gap.business_name,
+                          industry: gap.industry,
+                          overall_score: gap.overall_score,
+                        })}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        {invitingEmail === gap.email ? "..." : "Invite"}
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => { setSelectedGapAnalysis(gap); setIsDetailModalOpen(true); }}>
                       <Eye className="w-4 h-4" />
                     </Button>
@@ -1023,7 +1178,25 @@ const AdminInner = () => {
                   <td className="p-2">{lead.email}</td>
                   <td className="p-2"><Badge variant="outline">{lead.source || 'Unknown'}</Badge></td>
                   <td className="p-2 text-muted-foreground">{format(new Date(lead.created_at), 'MMM d, yyyy')}</td>
-                  <td className="p-2 text-right">
+                  <td className="p-2 text-right space-x-1">
+                    {invitedEmails.has(lead.email) ? (
+                      <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={invitingEmail === lead.email}
+                        onClick={() => handleInviteToPortal({
+                          email: lead.email,
+                          first_name: lead.first_name,
+                          last_name: null,
+                          business_name: lead.email.split('@')[1] || 'Unknown',
+                        })}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        {invitingEmail === lead.email ? "..." : "Invite"}
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-destructive" /></Button>
