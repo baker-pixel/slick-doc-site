@@ -206,6 +206,29 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
     },
   });
 
+  // Fetch SYSTEM score from gap analysis
+  const { data: gapScore } = useQuery({
+    queryKey: ["client-gap-score", clientAccountId],
+    queryFn: async () => {
+      // Get client email first
+      const { data: client } = await supabase
+        .from("client_accounts")
+        .select("email")
+        .eq("id", clientAccountId)
+        .single();
+      if (!client) return null;
+
+      const { data } = await supabase
+        .from("gap_analysis_submissions")
+        .select("id, overall_score, score_breakdown, business_name, created_at")
+        .eq("email", client.email)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   const isLoading = wfLoading || tasksLoading;
   const hasWorkflow = workflowSteps.length > 0;
 
