@@ -19,6 +19,7 @@ import { format, isSameDay, startOfDay } from "date-fns";
 interface CalendarItem {
   id: string;
   content_id: string | null;
+  client_account_id: string | null;
   title: string;
   content: string;
   content_type: string;
@@ -35,10 +36,16 @@ interface GeneratedContent {
   content_type: string;
 }
 
+interface ClientAccount {
+  id: string;
+  business_name: string;
+}
+
 export function ContentCalendarPanel() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
+  const [clients, setClients] = useState<ClientAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
@@ -47,6 +54,7 @@ export function ContentCalendarPanel() {
   // Form state
   const [formData, setFormData] = useState({
     content_id: "",
+    client_account_id: "",
     title: "",
     content: "",
     content_type: "blog_post",
@@ -61,13 +69,15 @@ export function ContentCalendarPanel() {
 
   const fetchData = async () => {
     setIsLoading(true);
-    const [calendarRes, contentRes] = await Promise.all([
+    const [calendarRes, contentRes, clientsRes] = await Promise.all([
       supabase.from("content_calendar").select("*").order("scheduled_for", { ascending: true }),
-      supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50)
+      supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50),
+      supabase.from("client_accounts").select("id, business_name").order("business_name", { ascending: true })
     ]);
 
     if (calendarRes.data) setCalendarItems(calendarRes.data);
     if (contentRes.data) setGeneratedContent(contentRes.data);
+    if (clientsRes.data) setClients(clientsRes.data);
     setIsLoading(false);
   };
 
@@ -75,6 +85,7 @@ export function ContentCalendarPanel() {
     setEditingItem(null);
     setFormData({
       content_id: "",
+      client_account_id: "",
       title: "",
       content: "",
       content_type: "blog_post",
@@ -90,6 +101,7 @@ export function ContentCalendarPanel() {
     const date = new Date(item.scheduled_for);
     setFormData({
       content_id: item.content_id || "",
+      client_account_id: item.client_account_id || "",
       title: item.title,
       content: item.content,
       content_type: item.content_type,
@@ -118,6 +130,10 @@ export function ContentCalendarPanel() {
       toast({ title: "Please fill in title and content", variant: "destructive" });
       return;
     }
+    if (!formData.client_account_id) {
+      toast({ title: "Please select a client", variant: "destructive" });
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -125,6 +141,7 @@ export function ContentCalendarPanel() {
       
       const itemData = {
         content_id: formData.content_id || null,
+        client_account_id: formData.client_account_id,
         title: formData.title,
         content: formData.content,
         content_type: formData.content_type,
@@ -177,6 +194,10 @@ export function ContentCalendarPanel() {
       case "twitter": return <Twitter className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
+  };
+  const getClientName = (clientId: string | null) => {
+    if (!clientId) return "No client";
+    return clients.find(c => c.id === clientId)?.business_name || "Unknown";
   };
 
   const getStatusColor = (status: string) => {
@@ -282,7 +303,7 @@ export function ContentCalendarPanel() {
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(item.scheduled_for), "h:mm a")}
+                          {format(new Date(item.scheduled_for), "h:mm a")} · {getClientName(item.client_account_id)}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                           {item.content.substring(0, 100)}...
@@ -338,7 +359,7 @@ export function ContentCalendarPanel() {
                       <div>
                         <p className="font-medium">{item.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(item.scheduled_for), "MMM d, yyyy 'at' h:mm a")}
+                          {format(new Date(item.scheduled_for), "MMM d, yyyy 'at' h:mm a")} · {getClientName(item.client_account_id)}
                         </p>
                       </div>
                     </div>
@@ -388,7 +409,25 @@ export function ContentCalendarPanel() {
             )}
 
             <div className="space-y-2">
-              <Label>Title</Label>
+              <Label>Client *</Label>
+              <Select 
+                value={formData.client_account_id} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, client_account_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a client..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.business_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
