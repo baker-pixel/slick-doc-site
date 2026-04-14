@@ -295,6 +295,8 @@ export default function ClientPortal() {
         return <ClientIntegrationsTab clientAccountId={portalUser.client_account_id} />;
       case "social":
         return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
+      case "calendar":
+        return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} />;
       case "team":
         return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":
