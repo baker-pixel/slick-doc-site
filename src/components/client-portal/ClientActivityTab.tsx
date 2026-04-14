@@ -21,10 +21,13 @@ import {
   Link2,
   CalendarPlus,
   Eye,
+  ExternalLink,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
 
 interface ClientActivityTabProps {
   clientAccountId: string;
