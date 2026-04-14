@@ -146,6 +146,7 @@ function TokenStatus({ expiresAt }: { expiresAt: string | null }) {
 
 export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTabProps) {
   const [tokens, setTokens] = useState<OAuthToken[]>([]);
+  const [oauthConfig, setOauthConfig] = useState<Record<string, { clientId: string; configured: boolean }>>({});
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -181,6 +182,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     }
 
     fetchTokens();
+    fetchOauthConfig();
   }, []);
 
   const fetchTokens = async () => {
