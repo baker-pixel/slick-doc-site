@@ -209,33 +209,7 @@ export default function ClientPortal() {
       };
       
       setBadgeCounts(counts);
-
-  // Check if onboarding steps 1-5 are all completed
-  const { data: isOnboardingComplete = true } = useQuery({
-    queryKey: ["onboarding-complete", portalUser?.client_account_id],
-    enabled: !!portalUser?.client_account_id,
-    queryFn: async () => {
-      const { data: wf } = await supabase
-        .from("client_workflows")
-        .select("id")
-        .eq("client_id", portalUser!.client_account_id)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (!wf) return true; // No workflow = no gating
-
-      const { data: steps } = await supabase
-        .from("workflow_steps")
-        .select("step_number, status")
-        .eq("workflow_id", wf.id)
-        .lte("step_number", 5)
-        .order("step_number", { ascending: true });
-
-      if (!steps || steps.length === 0) return true;
-      return steps.every((s) => s.status === "completed");
-    },
-  });
-
+      
       // Check if this is the user's first visit
       const welcomeKey = `portal_welcome_seen_${portalUserData.user_id}`;
       const hasSeenWelcome = localStorage.getItem(welcomeKey);
