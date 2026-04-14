@@ -359,7 +359,7 @@ export function ContentCalendarPanel() {
                       <div>
                         <p className="font-medium">{item.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(item.scheduled_for), "MMM d, yyyy 'at' h:mm a")}
+                          {format(new Date(item.scheduled_for), "MMM d, yyyy 'at' h:mm a")} · {getClientName(item.client_account_id)}
                         </p>
                       </div>
                     </div>
