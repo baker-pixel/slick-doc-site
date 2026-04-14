@@ -41,7 +41,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
   const businessType = prospect.business_type || "local business";
   const url = prospect.website_url;
 
-  const wrapHtml = (body: string) => `
+  const wrapHtml = (body: string, email: string = '') => `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
@@ -53,7 +53,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
     ${body}
   </div>
   <div style="background:#f5f5f5;padding:16px 40px;text-align:center;font-size:12px;color:#999;">
-    <a href="https://slick-doc-site.lovable.app/email-preferences?email=${encodeURIComponent(prospect.email)}" style="color:#999;">Unsubscribe</a>
+    <a href="https://slick-doc-site.lovable.app/email-preferences?email=${encodeURIComponent(email)}" style="color:#999;">Unsubscribe</a>
   </div>
 </div>
 </body></html>`;
@@ -73,7 +73,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           <p>The good news? This is one of the easiest things to fix, and we do it for you — no technical knowledge needed on your end.</p>
           ${callCta}
           <p>Talk soon,<br><strong>The Orange Door Team</strong></p>
-        `),
+        `, prospect.email),
       };
 
     case 2:
@@ -95,7 +95,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           <p>You focus on running your business. We handle the rest.</p>
           ${callCta}
           <p>Best,<br><strong>The Orange Door Team</strong></p>
-        `),
+        `, prospect.email),
       };
 
     case 3:
@@ -118,7 +118,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           ${callCta}
           ${signupCta}
           <p>Cheers,<br><strong>The Orange Door Team</strong></p>
-        `),
+        `, prospect.email),
       };
 
     case 4:
@@ -135,7 +135,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           </div>
           <p>Either way, I hope the free report was helpful!</p>
           <p>— The Orange Door Team</p>
-        `),
+        `, prospect.email),
       };
 
     default:
