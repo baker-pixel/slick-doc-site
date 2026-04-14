@@ -360,11 +360,11 @@ export function ContentCalendarPanel() {
           <CardTitle className="text-base">Upcoming Scheduled Content</CardTitle>
         </CardHeader>
         <CardContent>
-          {calendarItems.filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date()).length === 0 ? (
+          {filteredItems.filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date()).length === 0 ? (
             <p className="text-center py-4 text-muted-foreground">No upcoming content scheduled</p>
           ) : (
             <div className="space-y-2">
-              {calendarItems
+              {filteredItems
                 .filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date())
                 .slice(0, 10)
                 .map(item => (
