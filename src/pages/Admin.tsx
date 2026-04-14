@@ -821,7 +821,25 @@ const AdminInner = () => {
                     </Select>
                   </td>
                   <td className="p-2 text-muted-foreground">{format(new Date(contact.created_at), 'MMM d, yyyy')}</td>
-                  <td className="p-2 text-right">
+                  <td className="p-2 text-right space-x-1">
+                    {invitedEmails.has(contact.email) ? (
+                      <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={invitingEmail === contact.email}
+                        onClick={() => handleInviteToPortal({
+                          email: contact.email,
+                          first_name: contact.first_name,
+                          last_name: contact.last_name,
+                          business_name: contact.business_name,
+                        })}
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        {invitingEmail === contact.email ? "Inviting..." : "Invite"}
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-destructive" /></Button>
