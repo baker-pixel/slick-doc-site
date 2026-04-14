@@ -6,15 +6,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function getTier(score: number): "transformation" | "growth" | "optimization" {
+  if (score <= 39) return "transformation";
+  if (score <= 64) return "growth";
+  return "optimization";
+}
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
   try {
-    const { url, industry } = await req.json();
+    const { url, industry, prospect } = await req.json();
+    let prospectId: string | null = null;
 
     if (!url) {
       return new Response(
@@ -23,9 +33,35 @@ serve(async (req) => {
       );
     }
 
+    const prospectName = typeof prospect?.name === "string" ? prospect.name.trim() : "";
+    const prospectEmail = typeof prospect?.email === "string" ? prospect.email.trim() : "";
+    const prospectBusinessType =
+      typeof prospect?.businessType === "string" && prospect.businessType.trim().length > 0
+        ? prospect.businessType.trim()
+        : null;
+
+    if (prospectName && prospectEmail) {
+      const { data: savedProspect, error: prospectError } = await supabase
+        .from("prospects")
+        .insert({
+          name: prospectName,
+          email: prospectEmail,
+          business_type: prospectBusinessType,
+          website_url: url,
+        })
+        .select("id")
+        .single();
+
+      if (prospectError) {
+        console.error("Prospect insert error:", prospectError);
+        throw new Error("Failed to save prospect");
+      }
+
+      prospectId = savedProspect.id;
+    }
+
     console.log("Analyzing website:", url, "Industry:", industry || "not specified");
 
-    // Fetch the website HTML
     let htmlContent = "";
     try {
       const response = await fetch(url, {
@@ -34,11 +70,11 @@ serve(async (req) => {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch website: ${response.status}`);
       }
-      
+
       htmlContent = await response.text();
       console.log("Fetched HTML length:", htmlContent.length);
     } catch (fetchError) {
@@ -49,16 +85,16 @@ serve(async (req) => {
       );
     }
 
-    // Truncate HTML to avoid token limits
     const truncatedHtml = htmlContent.substring(0, 50000);
 
-    // Use Lovable AI to analyze the website
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const industryContext = industry ? `\nThe business is in the ${industry} industry. Tailor your recommendations to this industry's best practices and customer expectations.` : "";
+    const industryContext = industry
+      ? `\nThe business is in the ${industry} industry. Tailor your recommendations to this industry's best practices and customer expectations.`
+      : "";
 
     const systemPrompt = `You are an expert digital marketing and web development analyst. Analyze the website HTML thoroughly and provide HONEST, VARIED scores based on what you ACTUALLY find.${industryContext}
 
@@ -151,7 +187,7 @@ Provide your analysis as a valid JSON object.`;
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error("AI API error:", aiResponse.status, errorText);
-      
+
       if (aiResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a few moments." }),
@@ -164,7 +200,7 @@ Provide your analysis as a valid JSON object.`;
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
+
       throw new Error("AI analysis failed");
     }
 
@@ -176,10 +212,8 @@ Provide your analysis as a valid JSON object.`;
       throw new Error("No analysis content returned");
     }
 
-    // Parse the JSON from the AI response
     let analysis;
     try {
-      // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysis = JSON.parse(jsonMatch[0]);
@@ -191,31 +225,54 @@ Provide your analysis as a valid JSON object.`;
       throw new Error("Failed to parse analysis results");
     }
 
+    if (prospectId) {
+      const topWeaknesses = [
+        ...analysis.seo.recommendations.slice(0, 1),
+        ...analysis.conversion.recommendations.slice(0, 1),
+        ...analysis.technical.recommendations.slice(0, 1),
+      ].slice(0, 3);
+
+      const { error: updateError } = await supabase
+        .from("prospects")
+        .update({
+          gap_score: analysis.overallScore,
+          top_weaknesses: topWeaknesses,
+          recommended_tier: getTier(analysis.overallScore),
+        })
+        .eq("id", prospectId);
+
+      if (updateError) {
+        console.error("Prospect update error:", updateError);
+      }
+    }
+
     console.log("Analysis complete:", analysis.overallScore);
 
     return new Response(
-      JSON.stringify({ analysis }),
+      JSON.stringify({ analysis, prospectId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
   } catch (error) {
     console.error("Error in analyze-website function:", error);
 
     try {
-      await _sb.from('automation_alerts').insert({
-        alert_type: 'function_error',
-        severity: 'error',
-        title: `Error in analyze-website`,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        source: 'analyze-website',
+      await supabase.from("automation_alerts").insert({
+        alert_type: "function_error",
+        severity: "error",
+        title: "Error in analyze-website",
+        message: error instanceof Error ? error.message : "Unknown error",
+        source: "analyze-website",
         metadata: {
-          function_name: 'analyze-website',
+          function_name: "analyze-website",
           client_id: null,
-          error_message: error instanceof Error ? error.message : 'Unknown error',
+          error_message: error instanceof Error ? error.message : "Unknown error",
           timestamp: new Date().toISOString(),
         },
       });
-    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
+    } catch (_alertErr) {
+      console.error("Failed to log alert:", _alertErr);
+    }
+
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Analysis failed" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
