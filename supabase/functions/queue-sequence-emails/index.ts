@@ -170,67 +170,102 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
     `
   }),
   
-  followup_1: (data) => ({
-    subject: "Did you have a chance to review your report?",
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #F97316;">Hi ${data.firstName},</h1>
-        <p>Just checking in - did you get a chance to review your SYSTEM Gap Report?</p>
-        <p>I know you're busy running ${data.businessName}, so I wanted to highlight the most important finding:</p>
-        <p style="background: #FFF7ED; padding: 20px; border-left: 4px solid #F97316;">
-          <strong>Your biggest opportunity:</strong> Based on your responses, focusing on your lead nurturing system could have the fastest impact on your revenue.
-        </p>
-        <p>If you have 15 minutes this week, I'd love to walk you through the report and answer any questions.</p>
-        <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/schedule" 
-             style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-            Schedule a Quick Call
-          </a>
-        </p>
-        <p>— The Orange Door Team</p>
-      </div>
-    `
-  }),
-  
-  followup_2: (data) => ({
-    subject: "Quick question about your marketing goals",
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #F97316;">${data.firstName}, quick question...</h1>
-        <p>I've been thinking about ${data.businessName}'s marketing situation.</p>
-        <p>When you filled out the gap analysis, you mentioned you're looking to improve your digital presence. I'm curious:</p>
-        <p style="font-style: italic; color: #666;">What's the #1 thing holding you back from getting more customers right now?</p>
-        <p>Hit reply and let me know - I read every email personally and might have some ideas that could help.</p>
-        <p>— Jason @ Orange Door</p>
-      </div>
-    `
-  }),
-  
-  followup_3: (data) => ({
-    subject: "Ready to take the next step?",
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #F97316;">Hi ${data.firstName},</h1>
-        <p>It's been about a week since you completed your SYSTEM Gap Report.</p>
-        <p>I wanted to reach out one more time because I genuinely believe we can help ${data.businessName} grow.</p>
-        <p><strong>Here's what working with Orange Door looks like:</strong></p>
-        <ul>
-          <li>✅ We handle EVERYTHING - you focus on your business</li>
-          <li>✅ No long-term contracts - results speak for themselves</li>
-          <li>✅ Local East Tennessee team who understands your market</li>
-        </ul>
-        <p>If you're ready to stop doing marketing yourself and start seeing real results, let's talk.</p>
-        <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/schedule" 
-             style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-            Let's Talk
-          </a>
-        </p>
-        <p>No pressure - if now isn't the right time, I understand. But when you're ready, we'll be here.</p>
-        <p>— Jason @ Orange Door</p>
-      </div>
-    `
-  }),
+  followup_1: (data: Record<string, any>) => {
+    const opportunityLine = data.primaryGoal
+      ? `Based on your goal of <strong>${data.primaryGoal}</strong>, this is the area where focused effort will move the needle fastest for ${data.businessName}.`
+      : `Based on your responses, there are clear opportunities to bring in more customers for ${data.businessName}.`;
+
+    const differentiatorLine = data.differentiator
+      ? `<p>And here's what's exciting — you already have a real advantage: <strong>${data.differentiator}</strong>. We can build your marketing around that.</p>`
+      : '';
+
+    return {
+      subject: data.differentiator
+        ? `${data.firstName}, your edge is showing — let's make it work harder`
+        : "Did you have a chance to review your report?",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #F97316;">Hi ${data.firstName},</h1>
+          <p>Just checking in — did you get a chance to review your SYSTEM Gap Report?</p>
+          <p>I know you're busy running ${data.businessName}, so here's the most important thing to know:</p>
+          <p style="background: #FFF7ED; padding: 20px; border-left: 4px solid #F97316;">
+            ${opportunityLine}
+          </p>
+          ${differentiatorLine}
+          <p>If you have 15 minutes this week, I'd love to walk you through it and answer any questions.</p>
+          <p style="margin: 30px 0;">
+            <a href="https://orangedoormarketing.com/schedule"
+               style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              Schedule a Quick Call
+            </a>
+          </p>
+          <p>— The Orange Door Team</p>
+        </div>
+      `
+    };
+  },
+
+  followup_2: (data: Record<string, any>) => {
+    const painLine = data.painPoint
+      ? `You mentioned: <em style="color: #555;">"${data.painPoint}"</em>`
+      : `You mentioned wanting to grow ${data.businessName}'s customer base.`;
+
+    const urgencyLine = data.urgency
+      ? `<p>You also told us the fastest win you're looking for is: <strong>${data.urgency}</strong>. That's exactly what we'd focus on first.</p>`
+      : '';
+
+    return {
+      subject: `${data.firstName}, quick question about ${data.businessName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #F97316;">${data.firstName}, quick question...</h1>
+          <p>I've been thinking about ${data.businessName}'s situation.</p>
+          <p>When you filled out the gap analysis, ${painLine}</p>
+          ${urgencyLine}
+          <p style="font-style: italic; color: #666;">What's the single biggest thing standing between you and more customers right now?</p>
+          <p>Hit reply — I read every email personally and might have some ideas that could help right away.</p>
+          <p>— Jason @ Orange Door</p>
+        </div>
+      `
+    };
+  },
+
+  followup_3: (data: Record<string, any>) => {
+    const diffLine = data.differentiator
+      ? `<p>You have something most businesses don't: <strong>${data.differentiator}</strong>. We'd make sure the right people in your area know that.</p>`
+      : '';
+
+    const worthItLine = data.successCriteria
+      ? `<p style="background: #FFF7ED; padding: 16px 20px; border-left: 4px solid #F97316;"><strong>You told us what would make this worth it:</strong> "${data.successCriteria}" — that's exactly what we'd work toward.</p>`
+      : '';
+
+    return {
+      subject: `One last thing, ${data.firstName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #F97316;">Hi ${data.firstName},</h1>
+          <p>It's been about a week since you completed your SYSTEM Gap Report for ${data.businessName}.</p>
+          <p>I wanted to reach out one more time because I genuinely think we can help.</p>
+          ${diffLine}
+          ${worthItLine}
+          <p><strong>What working with Orange Door looks like:</strong></p>
+          <ul>
+            <li>✅ We handle everything — you focus on your business</li>
+            <li>✅ No long-term contracts — results speak for themselves</li>
+            <li>✅ Local East Tennessee team who understands your market</li>
+          </ul>
+          <p style="margin: 30px 0;">
+            <a href="https://orangedoormarketing.com/schedule"
+               style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              Let's Talk
+            </a>
+          </p>
+          <p>No pressure — when you're ready, we'll be here.</p>
+          <p>— Jason @ Orange Door</p>
+        </div>
+      `
+    };
+  },
   
   resume_reminder_1: (data) => ({
     subject: "Your gap analysis is waiting for you",
