@@ -1724,10 +1724,12 @@ export type Database = {
           feedback: string | null
           full_content: string | null
           id: string
+          platform: string | null
           publish_status: string | null
           publish_triggered_at: string | null
           published_at: string | null
           reviewed_at: string | null
+          scheduled_for: string | null
           status: string
           submitted_at: string
           title: string
@@ -1743,10 +1745,12 @@ export type Database = {
           feedback?: string | null
           full_content?: string | null
           id?: string
+          platform?: string | null
           publish_status?: string | null
           publish_triggered_at?: string | null
           published_at?: string | null
           reviewed_at?: string | null
+          scheduled_for?: string | null
           status?: string
           submitted_at?: string
           title: string
@@ -1762,10 +1766,12 @@ export type Database = {
           feedback?: string | null
           full_content?: string | null
           id?: string
+          platform?: string | null
           publish_status?: string | null
           publish_triggered_at?: string | null
           published_at?: string | null
           reviewed_at?: string | null
+          scheduled_for?: string | null
           status?: string
           submitted_at?: string
           title?: string
@@ -1796,6 +1802,7 @@ export type Database = {
           content_id: string | null
           content_type: string
           created_at: string
+          error_message: string | null
           id: string
           metadata: Json | null
           platform: string | null
@@ -1812,6 +1819,7 @@ export type Database = {
           content_id?: string | null
           content_type: string
           created_at?: string
+          error_message?: string | null
           id?: string
           metadata?: Json | null
           platform?: string | null
@@ -1828,6 +1836,7 @@ export type Database = {
           content_id?: string | null
           content_type?: string
           created_at?: string
+          error_message?: string | null
           id?: string
           metadata?: Json | null
           platform?: string | null

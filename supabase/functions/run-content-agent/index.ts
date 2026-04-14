@@ -136,11 +136,17 @@ Keep it under 150 words. Make it engaging and ready to post.`;
     // Bridge: insert into content_approvals for client review
     const platform = payload.platform || null;
     const mediaUrls = payload.media_urls || [];
+    const scheduledFor = payload.scheduled_for
+      ? new Date(payload.scheduled_for).toISOString()
+      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // default 24hrs from now
+
     const { error: approvalInsertError } = await supabase
       .from("content_approvals")
       .insert({
         client_account_id: task.client_id,
         content_type: contentType,
+        platform: platform,
+        scheduled_for: scheduledFor,
         title: `${contentType}: ${topic}`,
         content_preview: generatedContent.substring(0, 300),
         full_content: generatedContent,
