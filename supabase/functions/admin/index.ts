@@ -622,6 +622,24 @@ Deno.serve(async (req) => {
 
         if (insertError) throw insertError;
 
+        // Copy context_profile from prospects if available
+        try {
+          const { data: matchedProspect } = await supabase
+            .from("prospects")
+            .select("context_profile")
+            .eq("email", email)
+            .maybeSingle();
+
+          if (matchedProspect?.context_profile) {
+            await supabase
+              .from("client_accounts")
+              .update({ context_profile: matchedProspect.context_profile })
+              .eq("id", newClient.id);
+          }
+        } catch (ctxErr) {
+          console.error("Failed to copy context_profile from prospect:", ctxErr);
+        }
+
         console.log(`Created client account for ${business_name} (${email})`);
         return new Response(
           JSON.stringify({ data: newClient }),
