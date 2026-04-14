@@ -32,6 +32,7 @@ import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningH
 import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { ClientIntegrationsTab } from "@/components/client-portal/ClientIntegrationsTab";
 import { SocialMediaTab } from "@/components/client-portal/SocialMediaTab";
+import { ClientCalendarTab } from "@/components/client-portal/ClientCalendarTab";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
