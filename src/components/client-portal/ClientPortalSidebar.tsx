@@ -195,6 +195,9 @@ function NavItem({ item, activeTab, onTabChange, badgeCounts, locked, lockTierNa
   return <SidebarMenuItem>{button}</SidebarMenuItem>;
 }
 
+// Tabs allowed during onboarding (before steps 1-5 completed)
+const ONBOARDING_ALLOWED_TABS: PortalTab[] = ["activity", "messages", "help"];
+
 export function ClientPortalSidebar({ 
   activeTab, 
   onTabChange, 
@@ -204,6 +207,7 @@ export function ClientPortalSidebar({
   badgeCounts,
   hiddenTabs = [],
   clientTier = "foundation",
+  isOnboardingComplete = true,
 }: ClientPortalSidebarProps) {
   const filterItems = (items: NavItemDef[]) =>
     items.filter(item => !hiddenTabs.includes(item.id));
