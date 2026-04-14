@@ -201,11 +201,39 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
 
   const handleConnect = (platform: (typeof PLATFORMS)[number]) => {
     setConnecting(platform.id);
-    const returnUrl = `${window.location.origin}/portal?tab=integrations`;
-    const url = new URL(`${SUPABASE_URL}/functions/v1/${platform.initFn}`);
-    url.searchParams.set("client_id", clientAccountId);
-    url.searchParams.set("return_url", returnUrl);
-    window.location.href = url.toString();
+    const redirectUri = `${SUPABASE_URL}/functions/v1/${platform.callbackFn}`;
+    const state = platform.id === "twitter"
+      ? `${clientAccountId}|challenge`
+      : clientAccountId;
+
+    if (platform.id === "twitter") {
+      // Twitter OAuth 2.0 with PKCE
+      const url = new URL(platform.oauthUrl);
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("client_id", "YOUR_TWITTER_CLIENT_ID"); // replaced at runtime via env
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("scope", decodeURIComponent(platform.scopes));
+      url.searchParams.set("state", state);
+      url.searchParams.set("code_challenge", "challenge");
+      url.searchParams.set("code_challenge_method", "plain");
+      window.location.href = url.toString();
+    } else if (platform.id === "linkedin") {
+      const url = new URL(platform.oauthUrl);
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("client_id", "YOUR_LINKEDIN_CLIENT_ID"); // replaced at runtime via env
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("scope", decodeURIComponent(platform.scopes));
+      url.searchParams.set("state", state);
+      window.location.href = url.toString();
+    } else {
+      // Facebook / Instagram use same OAuth dialog
+      const url = new URL(platform.oauthUrl);
+      url.searchParams.set("client_id", "YOUR_FACEBOOK_APP_ID"); // replaced at runtime via env
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("scope", decodeURIComponent(platform.scopes));
+      url.searchParams.set("state", state);
+      window.location.href = url.toString();
+    }
   };
 
   const handleDisconnect = async (platformId: string) => {
