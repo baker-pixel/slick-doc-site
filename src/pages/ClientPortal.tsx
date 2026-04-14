@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import { useQuery } from "@tanstack/react-query";
 
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -111,7 +112,33 @@ export default function ClientPortal() {
   // Portal preferences hook
   const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(user?.id);
   const [activeTab, setActiveTab] = useState<PortalTab>(preferences.default_landing_page || "activity");
-  
+
+  // Check if onboarding steps 1-5 are all completed
+  const { data: isOnboardingComplete = true } = useQuery({
+    queryKey: ["onboarding-complete", portalUser?.client_account_id],
+    enabled: !!portalUser?.client_account_id,
+    queryFn: async () => {
+      const { data: wf } = await supabase
+        .from("client_workflows")
+        .select("id")
+        .eq("client_id", portalUser!.client_account_id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!wf) return true; // No workflow = no gating
+
+      const { data: steps } = await supabase
+        .from("workflow_steps")
+        .select("step_number, status")
+        .eq("workflow_id", wf.id)
+        .lte("step_number", 5)
+        .order("step_number", { ascending: true });
+
+      if (!steps || steps.length === 0) return true;
+      return steps.every((s) => s.status === "completed");
+    },
+  });
+
   // Update active tab when preferences load
   useEffect(() => {
     if (!preferencesLoading && preferences.default_landing_page) {
@@ -209,7 +236,6 @@ export default function ClientPortal() {
       
       setBadgeCounts(counts);
       
-
       // Check if this is the user's first visit
       const welcomeKey = `portal_welcome_seen_${portalUserData.user_id}`;
       const hasSeenWelcome = localStorage.getItem(welcomeKey);
@@ -239,7 +265,7 @@ export default function ClientPortal() {
 
     switch (activeTab) {
       case "activity":
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
       case "projects":
@@ -285,7 +311,7 @@ export default function ClientPortal() {
           />
         );
       default:
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
     }
   };
 
@@ -351,6 +377,7 @@ export default function ClientPortal() {
           badgeCounts={badgeCounts}
           hiddenTabs={preferences.hidden_tabs}
           clientTier={(clientAccount?.tier?.toLowerCase() as ClientTier) || "foundation"}
+          isOnboardingComplete={isOnboardingComplete}
         />
         
         <SidebarInset className="flex-1">

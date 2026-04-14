@@ -6,6 +6,59 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// 5 client-facing onboarding gates — prepended to ALL tiers
+const ONBOARDING_STEPS = [
+  {
+    step_number: 1,
+    step_name: "Confirm Business Information",
+    task_type: "client_form",
+    depends_on: null,
+    payload: {
+      form_type: "business_info",
+      fields: ["business_name", "website_url", "phone", "address", "industry", "target_audience", "main_competitors"],
+    },
+  },
+  {
+    step_number: 2,
+    step_name: "Upload Brand Assets",
+    task_type: "client_upload",
+    depends_on: 1,
+    payload: {
+      required: ["logo_primary"],
+      optional: ["logo_dark", "brand_colors", "font_guidelines"],
+    },
+  },
+  {
+    step_number: 3,
+    step_name: "Connect Social Accounts",
+    task_type: "client_oauth",
+    depends_on: 2,
+    payload: {
+      platforms: ["linkedin", "facebook", "instagram", "twitter"],
+      minimum_required: 1,
+    },
+  },
+  {
+    step_number: 4,
+    step_name: "Schedule Kickoff Call",
+    task_type: "client_calendar",
+    depends_on: 3,
+    payload: {
+      calendar_url: "https://calendly.com/baker-orangedoor",
+    },
+  },
+  {
+    step_number: 5,
+    step_name: "Approve Your First Content Draft",
+    task_type: "client_approval",
+    depends_on: 4,
+    payload: { content_type: "linkedin_post" },
+  },
+];
+
+const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 5
+
+// Automation steps — original step_numbers start at 1 but will be offset by 5
 const FOUNDATION_STEPS = [
   { step_number: 1, step_name: "Analyze current website performance", task_type: "website_analysis", depends_on: null },
   { step_number: 2, step_name: "Run basic SEO audit", task_type: "seo_audit", depends_on: 1 },
@@ -32,15 +85,32 @@ const TRANSFORMATION_EXTRA = [
   { step_number: 17, step_name: "Generate full monthly report", task_type: "report", depends_on: 16 },
 ];
 
+function renumberAutomationSteps(steps: any[]) {
+  return steps.map((s) => ({
+    ...s,
+    step_number: s.step_number + ONBOARDING_OFFSET,
+    depends_on: s.depends_on != null ? s.depends_on + ONBOARDING_OFFSET : ONBOARDING_OFFSET, // first automation step depends on last onboarding step
+  }));
+}
+
 function getStepsForTier(tier: string) {
   const t = tier.toLowerCase();
+  let automationSteps: any[];
   if (t === "transformation") {
-    return [...FOUNDATION_STEPS, ...GROWTH_EXTRA, ...TRANSFORMATION_EXTRA];
+    automationSteps = [...FOUNDATION_STEPS, ...GROWTH_EXTRA, ...TRANSFORMATION_EXTRA];
+  } else if (t === "growth") {
+    automationSteps = [...FOUNDATION_STEPS, ...GROWTH_EXTRA];
+  } else {
+    automationSteps = [...FOUNDATION_STEPS];
   }
-  if (t === "growth") {
-    return [...FOUNDATION_STEPS, ...GROWTH_EXTRA];
-  }
-  return [...FOUNDATION_STEPS];
+
+  // Set initial status for onboarding steps
+  const onboarding = ONBOARDING_STEPS.map((s, i) => ({
+    ...s,
+    status: i === 0 ? "pending" : "locked",
+  }));
+
+  return [...onboarding, ...renumberAutomationSteps(automationSteps)];
 }
 
 /** Add `businessDays` working days to `start`, skipping Sat/Sun. */
@@ -64,13 +134,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let client_id: string | undefined;
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { client_id } = await req.json();
+    const body = await req.json();
+    client_id = body.client_id;
     if (!client_id) {
       return new Response(JSON.stringify({ error: "client_id required" }), {
         status: 400,
@@ -129,12 +202,13 @@ serve(async (req) => {
     const estimatedDates: string[] = [];
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i];
-      const bizDays = s.task_type.includes("n8n") ? 3 : 2;
+      // Onboarding steps (client-driven) get 1 business day each
+      const isOnboarding = s.task_type.startsWith("client_");
+      const bizDays = isOnboarding ? 1 : s.task_type.includes("n8n") ? 3 : 2;
       if (i === 0) {
         estimatedDates.push(toDateStr(addBusinessDays(today, bizDays)));
       } else {
         const prevDate = new Date(estimatedDates[i - 1] + "T00:00:00");
-        // Add 1 calendar day gap + business days
         const startFrom = new Date(prevDate);
         startFrom.setDate(startFrom.getDate() + 1);
         estimatedDates.push(toDateStr(addBusinessDays(startFrom, bizDays)));
@@ -142,12 +216,13 @@ serve(async (req) => {
     }
 
     // Seed steps
-    const rows = steps.map((s, i) => ({
+    const rows = steps.map((s: any, i: number) => ({
       step_number: s.step_number,
       step_name: s.step_name,
       task_type: s.task_type,
       depends_on: s.depends_on,
-      payload: (s as any).payload || null,
+      payload: s.payload || null,
+      status: s.status || "pending",
       workflow_id: workflow.id,
       client_id,
       estimated_completion: estimatedDates[i],
@@ -156,44 +231,39 @@ serve(async (req) => {
     const { error: stepsError } = await supabase.from("workflow_steps").insert(rows);
     if (stepsError) throw new Error(`Failed to seed steps: ${stepsError.message}`);
 
-    // Auto-start step 1 by calling run-workflow-step
-    try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const resp = await fetch(`${supabaseUrl}/functions/v1/run-workflow-step`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-        },
-        body: JSON.stringify({ workflow_id: workflow.id, step_number: 1 }),
-      });
-      const result = await resp.json();
-      console.log("Auto-started step 1:", result);
-    } catch (autoStartErr) {
-      console.error("Failed to auto-start step 1 (workflow still created):", autoStartErr);
-    }
+    // Do NOT auto-start step 1 for onboarding — it's a client_form, not automation
+    // Step 1 is already "pending" and available for the client to fill out
 
     return new Response(
-      JSON.stringify({ success: true, workflow_id: workflow.id, tier: client.tier, total_steps: steps.length, auto_started: true }),
+      JSON.stringify({ success: true, workflow_id: workflow.id, tier: client.tier, total_steps: steps.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("seed-tier-workflow error:", error);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in seed-tier-workflow`,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      source: 'seed-tier-workflow',
-      source_id: client_id ?? undefined,
-      metadata: {
-        function_name: 'seed-tier-workflow',
-        client_id: client_id ?? null,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-    });
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      await supabase.from("automation_alerts").insert({
+        alert_type: "function_error",
+        severity: "error",
+        title: "Error in seed-tier-workflow",
+        message: error instanceof Error ? error.message : "Unknown error",
+        source: "seed-tier-workflow",
+        source_id: client_id ?? undefined,
+        metadata: {
+          function_name: "seed-tier-workflow",
+          client_id: client_id ?? null,
+          error_message: error instanceof Error ? error.message : "Unknown error",
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (_alertErr) {
+      console.error("Failed to log alert:", _alertErr);
+    }
+
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
