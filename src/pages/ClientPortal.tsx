@@ -32,6 +32,7 @@ import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningH
 import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { ClientIntegrationsTab } from "@/components/client-portal/ClientIntegrationsTab";
 import { SocialMediaTab } from "@/components/client-portal/SocialMediaTab";
+import { ClientCalendarTab } from "@/components/client-portal/ClientCalendarTab";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
@@ -71,6 +72,7 @@ const tabTitles: Record<PortalTab, string> = {
   help: "Help & Guide",
   settings: "Settings",
   learning: "Learning Hub",
+  calendar: "Content Calendar",
 };
 
 const tabDescriptions: Record<PortalTab, string> = {
@@ -94,6 +96,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   help: "Learn how to use your portal",
   settings: "Customize your portal experience",
   learning: "Educational resources to grow your marketing knowledge",
+  calendar: "View your upcoming content schedule",
 };
 
 export default function ClientPortal() {
@@ -292,6 +295,8 @@ export default function ClientPortal() {
         return <ClientIntegrationsTab clientAccountId={portalUser.client_account_id} />;
       case "social":
         return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
+      case "calendar":
+        return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} />;
       case "team":
         return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":

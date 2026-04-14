@@ -46,6 +46,7 @@ export function ContentCalendarPanel() {
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
+  const [filterClientId, setFilterClientId] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
@@ -72,7 +73,7 @@ export function ContentCalendarPanel() {
     const [calendarRes, contentRes, clientsRes] = await Promise.all([
       supabase.from("content_calendar").select("*").order("scheduled_for", { ascending: true }),
       supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50),
-      supabase.from("client_accounts").select("id, business_name").order("business_name", { ascending: true })
+      supabase.from("client_accounts").select("id, business_name").eq("status", "active").order("business_name", { ascending: true })
     ]);
 
     if (calendarRes.data) setCalendarItems(calendarRes.data);
@@ -208,13 +209,17 @@ export function ContentCalendarPanel() {
     }
   };
 
+  const filteredItems = filterClientId === "all"
+    ? calendarItems
+    : calendarItems.filter(item => item.client_account_id === filterClientId);
+
   const getItemsForDate = (date: Date) => {
-    return calendarItems.filter(item => 
+    return filteredItems.filter(item => 
       isSameDay(new Date(item.scheduled_for), date)
     );
   };
 
-  const datesWithContent = calendarItems.map(item => 
+  const datesWithContent = filteredItems.map(item => 
     startOfDay(new Date(item.scheduled_for)).getTime()
   );
 
@@ -230,14 +235,27 @@ export function ContentCalendarPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <CalendarIcon className="w-5 h-5 text-primary" />
           Content Calendar
         </h2>
-        <Button onClick={() => openScheduleModal(selectedDate)}>
-          <Plus className="w-4 h-4 mr-2" /> Schedule Content
-        </Button>
+        <div className="flex items-center gap-3">
+          <Select value={filterClientId} onValueChange={setFilterClientId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All Clients" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Clients</SelectItem>
+              {clients.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => openScheduleModal(selectedDate)}>
+            <Plus className="w-4 h-4 mr-2" /> Schedule Content
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -342,11 +360,11 @@ export function ContentCalendarPanel() {
           <CardTitle className="text-base">Upcoming Scheduled Content</CardTitle>
         </CardHeader>
         <CardContent>
-          {calendarItems.filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date()).length === 0 ? (
+          {filteredItems.filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date()).length === 0 ? (
             <p className="text-center py-4 text-muted-foreground">No upcoming content scheduled</p>
           ) : (
             <div className="space-y-2">
-              {calendarItems
+              {filteredItems
                 .filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date())
                 .slice(0, 10)
                 .map(item => (
