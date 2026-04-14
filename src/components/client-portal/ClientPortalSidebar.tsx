@@ -1,11 +1,11 @@
-import { 
-  Activity, 
-  Bell, 
-  LayoutDashboard, 
-  FileCheck, 
-  BarChart3, 
-  MessageCircle, 
-  Package, 
+import {
+  Activity,
+  Bell,
+  LayoutDashboard,
+  FileCheck,
+  BarChart3,
+  MessageCircle,
+  Package,
   LogOut,
   Sparkles,
   ChevronRight,
@@ -21,6 +21,7 @@ import {
   FileSignature,
   GraduationCap,
   Send,
+  Plug,
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,21 +39,22 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export type PortalTab = 
-  | "activity" 
-  | "notifications" 
-  | "projects" 
-  | "messages" 
-  | "meetings" 
-  | "requests" 
-  | "approvals" 
-  | "deliverables" 
-  | "documents" 
-  | "agreements" 
-  | "brand" 
+export type PortalTab =
+  | "activity"
+  | "notifications"
+  | "projects"
+  | "messages"
+  | "meetings"
+  | "requests"
+  | "approvals"
+  | "deliverables"
+  | "documents"
+  | "agreements"
+  | "brand"
   | "access"
-  | "team" 
-  | "analytics" 
+  | "integrations"
+  | "team"
+  | "analytics"
   | "invoices"
   | "help"
   | "settings"
@@ -107,6 +109,7 @@ const allNavItems: NavItemDef[] = [
   { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
   { id: "brand", label: "Brand Assets", icon: Palette, minTier: "growth" },
   { id: "access", label: "Platform Access", icon: KeyRound, minTier: "growth" },
+  { id: "integrations", label: "Integrations", icon: Plug, minTier: "growth" },
   { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "growth" },
   { id: "agreements", label: "Agreements", icon: FileSignature, minTier: "transformation" },
   { id: "team", label: "Your Team", icon: Users, minTier: "transformation" },
