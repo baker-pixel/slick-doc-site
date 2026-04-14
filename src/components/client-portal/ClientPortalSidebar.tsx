@@ -60,7 +60,8 @@ export type PortalTab =
   | "invoices"
   | "help"
   | "settings"
-  | "learning";
+  | "learning"
+  | "calendar";
 
 export type ClientTier = "foundation" | "growth" | "transformation";
 
