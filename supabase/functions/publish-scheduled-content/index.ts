@@ -20,12 +20,13 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-    // Get all scheduled content that's due
+    // Get all scheduled content that's due AND client-approved
     const now = new Date().toISOString();
     const { data: scheduledContent, error: fetchError } = await supabase
       .from("content_calendar")
       .select("*")
       .eq("status", "scheduled")
+      .eq("client_approved", true)
       .lte("scheduled_for", now);
 
     if (fetchError) {

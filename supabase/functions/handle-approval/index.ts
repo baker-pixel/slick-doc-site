@@ -63,87 +63,30 @@ serve(async (req) => {
         })
         .eq("id", approval_id);
 
-      // 2. Find matching workflow step
-      const { data: workflow } = await supabase
-        .from("client_workflows")
-        .select("id")
-        .eq("client_id", clientId)
-        .in("status", ["active", "in_progress", "running"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      // 3. Map content_type to n8n trigger
-      const triggerMap: Record<string, string> = {
-        blog_post: "post_blog",
-        social_media: "post_social",
-        social_post: "post_social",
-        email: "send_drip",
-      };
-
-      const normalizedType = approval.content_type?.toLowerCase().replace(/\s+/g, "_");
-      const trigger = triggerMap[normalizedType] || "post_content";
-
-      // 4. Find workflow step matching this content type
-      let stepMetadata: Record<string, unknown> = {};
-      if (workflow) {
-        const taskTypeMap: Record<string, string[]> = {
-          blog_post: ["content", "n8n_post_blog"],
-          social_media: ["social_content", "n8n_post_social"],
-          social_post: ["social_content", "n8n_post_social"],
-          email: ["email_template", "email_campaign"],
-        };
-        const taskTypes = taskTypeMap[normalizedType] || [];
-
-        if (taskTypes.length > 0) {
-          const { data: step } = await supabase
-            .from("workflow_steps")
-            .select("id, step_number")
-            .eq("workflow_id", workflow.id)
-            .in("task_type", taskTypes)
-            .limit(1)
-            .single();
-
-          if (step) {
-            stepMetadata = {
-              step_id: step.id,
-              workflow_id: workflow.id,
-              step_number: step.step_number,
-            };
-          }
-        }
-      }
-
-      // 5. Trigger n8n
-      const baseUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-      const n8nPayload = {
-        clientId,
-        trigger,
-        metadata: {
-          ...stepMetadata,
-          approval_id,
+      // 2. Bridge: Insert into content_calendar with client_approved = true
+      // The pg_cron job on publish-scheduled-content will pick this up
+      const scheduledFor = new Date().toISOString(); // publish ASAP
+      const { error: calInsertError } = await supabase
+        .from("content_calendar")
+        .insert({
+          client_account_id: clientId,
+          content_id: approval.content_id || null,
           content_type: approval.content_type,
-          title: approval.title,
-        },
-        content: approval.full_content || approval.content_preview,
-      };
+          platform: approval.content_type?.includes("social") ? "linkedin" : null,
+          content: approval.full_content || approval.content_preview || "",
+          title: approval.title || "",
+          status: "scheduled",
+          client_approved: true,
+          scheduled_for: scheduledFor,
+          metadata: {
+            source: "content_approvals",
+            approval_id,
+          },
+        });
 
-      fetch(`${baseUrl}/functions/v1/trigger-n8n`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify(n8nPayload),
-      }).catch((e) => console.error("trigger-n8n call failed:", e));
-
-      // 6. Mark publish triggered
-      await supabase
-        .from("content_approvals")
-        .update({ publish_triggered_at: new Date().toISOString() })
-        .eq("id", approval_id);
+      if (calInsertError) {
+        console.error("Failed to insert content_calendar row:", calInsertError);
+      }
 
       // Log activity
       await supabase.from("activity_feed").insert({

@@ -1791,6 +1791,7 @@ export type Database = {
       content_calendar: {
         Row: {
           client_account_id: string | null
+          client_approved: boolean
           content: string
           content_id: string | null
           content_type: string
@@ -1806,6 +1807,7 @@ export type Database = {
         }
         Insert: {
           client_account_id?: string | null
+          client_approved?: boolean
           content: string
           content_id?: string | null
           content_type: string
@@ -1821,6 +1823,7 @@ export type Database = {
         }
         Update: {
           client_account_id?: string | null
+          client_approved?: boolean
           content?: string
           content_id?: string | null
           content_type?: string
