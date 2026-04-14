@@ -581,7 +581,7 @@ const AdminInner = () => {
     }
   };
 
-
+  const toggleContactSelection = (id: string) => {
     setSelectedContacts(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
