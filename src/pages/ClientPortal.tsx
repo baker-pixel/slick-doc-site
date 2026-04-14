@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import { useQuery } from "@tanstack/react-query";
 
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
