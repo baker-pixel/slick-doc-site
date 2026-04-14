@@ -133,6 +133,26 @@ Keep it under 150 words. Make it engaging and ready to post.`;
       })
       .eq("id", taskId);
 
+    // Bridge: insert into content_approvals for client review
+    const platform = payload.platform || null;
+    const mediaUrls = payload.media_urls || [];
+    const { error: approvalInsertError } = await supabase
+      .from("content_approvals")
+      .insert({
+        client_account_id: task.client_id,
+        content_type: contentType,
+        title: `${contentType}: ${topic}`,
+        content_preview: generatedContent.substring(0, 300),
+        full_content: generatedContent,
+        status: "pending",
+        publish_status: "pending",
+        submitted_at: new Date().toISOString(),
+      });
+
+    if (approvalInsertError) {
+      console.error("Failed to insert content_approvals row:", approvalInsertError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
