@@ -79,6 +79,7 @@ interface ClientPortalSidebarProps {
   badgeCounts?: BadgeCounts;
   hiddenTabs?: string[];
   clientTier?: ClientTier;
+  isOnboardingComplete?: boolean;
 }
 
 interface NavItemDef {
