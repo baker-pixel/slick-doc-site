@@ -262,6 +262,10 @@ export default function ClientPortal() {
         return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
       case "access":
         return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
+      case "integrations":
+        return <ClientIntegrationsTab clientAccountId={portalUser.client_account_id} />;
+      case "social":
+        return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
       case "team":
         return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":
