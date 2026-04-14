@@ -311,7 +311,7 @@ export default function ClientPortal() {
           />
         );
       default:
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
     }
   };
 
