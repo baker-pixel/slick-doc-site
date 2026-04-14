@@ -111,6 +111,7 @@ const allNavItems: NavItemDef[] = [
   { id: "messages", label: "Messages", icon: MessageCircle, badgeKey: "messages", minTier: "foundation" },
   { id: "deliverables", label: "Deliverables", icon: Package, minTier: "foundation" },
   { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
+  { id: "calendar", label: "Content Calendar", icon: Calendar, minTier: "foundation" },
   { id: "brand", label: "Brand Assets", icon: Palette, minTier: "growth" },
   { id: "access", label: "Platform Access", icon: KeyRound, minTier: "growth" },
   { id: "social", label: "Social Media", icon: Share2, minTier: "growth" },
