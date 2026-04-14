@@ -30,6 +30,7 @@ import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab"
 import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningHubTab";
 import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { ClientIntegrationsTab } from "@/components/client-portal/ClientIntegrationsTab";
+import { SocialMediaTab } from "@/components/client-portal/SocialMediaTab";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
@@ -62,6 +63,7 @@ const tabTitles: Record<PortalTab, string> = {
   brand: "Brand Assets",
   access: "Platform Access",
   integrations: "Integrations",
+  social: "Social Media",
   team: "Your Team",
   analytics: "Analytics",
   invoices: "Invoices",
@@ -84,6 +86,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   brand: "Access your brand assets and guidelines",
   access: "Share your platform login credentials securely",
   integrations: "Connect your social media accounts for automated posting",
+  social: "Create, schedule, and manage social media posts with AI",
   team: "Meet your dedicated team",
   analytics: "View your performance metrics",
   invoices: "Manage billing and payments",
