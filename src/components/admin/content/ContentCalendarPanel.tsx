@@ -85,6 +85,7 @@ export function ContentCalendarPanel() {
     setEditingItem(null);
     setFormData({
       content_id: "",
+      client_account_id: "",
       title: "",
       content: "",
       content_type: "blog_post",
