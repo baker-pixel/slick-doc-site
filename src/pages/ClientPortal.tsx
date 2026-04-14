@@ -195,6 +195,14 @@ export default function ClientPortal() {
         .single();
 
       if (portalError || !portalUserData) {
+        console.error("Portal user lookup failed:", portalError?.message || "No portal user found");
+        toast({
+          title: "Portal Access Not Found",
+          description: portalError?.code === "PGRST116"
+            ? "Your account isn't linked to any client portal. If you were recently invited, try using the invite link from your email."
+            : "We couldn't find your portal access. Please sign in using the invitation link from your email, or contact your account manager.",
+          variant: "destructive",
+        });
         setShouldRedirect(true);
         setLoading(false);
         return;
@@ -248,6 +256,11 @@ export default function ClientPortal() {
       }
     } catch (error) {
       console.error("Error fetching portal user:", error);
+      toast({
+        title: "Connection Error",
+        description: "We couldn't load your portal data. Please check your internet connection and try refreshing the page.",
+        variant: "destructive",
+      });
       setShouldRedirect(true);
     } finally {
       setLoading(false);
