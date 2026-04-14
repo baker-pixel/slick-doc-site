@@ -95,6 +95,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   help: "Learn how to use your portal",
   settings: "Customize your portal experience",
   learning: "Educational resources to grow your marketing knowledge",
+  calendar: "View your upcoming content schedule",
 };
 
 export default function ClientPortal() {
