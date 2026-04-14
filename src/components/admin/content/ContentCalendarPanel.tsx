@@ -235,14 +235,27 @@ export function ContentCalendarPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <CalendarIcon className="w-5 h-5 text-primary" />
           Content Calendar
         </h2>
-        <Button onClick={() => openScheduleModal(selectedDate)}>
-          <Plus className="w-4 h-4 mr-2" /> Schedule Content
-        </Button>
+        <div className="flex items-center gap-3">
+          <Select value={filterClientId} onValueChange={setFilterClientId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All Clients" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Clients</SelectItem>
+              {clients.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={() => openScheduleModal(selectedDate)}>
+            <Plus className="w-4 h-4 mr-2" /> Schedule Content
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
