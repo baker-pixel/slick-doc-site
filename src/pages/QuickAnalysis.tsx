@@ -109,53 +109,33 @@ const QuickAnalysis = () => {
     setIsAnalyzing(true);
 
     try {
-      // Save prospect to DB
-      const { data: prospect, error: insertError } = await supabase
-        .from("prospects" as any)
-        .insert({ name, email, business_type: businessType || null, website_url: validatedUrl } as any)
-        .select("id")
-        .single();
-
-      if (insertError) throw insertError;
-      const pId = (prospect as any)?.id;
-      setProspectId(pId);
-
-      // Run analysis
       const { data, error } = await supabase.functions.invoke("analyze-website", {
-        body: { url: validatedUrl, industry: businessType || undefined },
+        body: {
+          url: validatedUrl,
+          industry: businessType || undefined,
+          prospect: {
+            name,
+            email,
+            businessType: businessType || null,
+          },
+        },
       });
 
       if (error) throw error;
       if (!data?.analysis) throw new Error("No analysis data returned");
 
       const analysis: AnalysisResult = data.analysis;
+      const pId = data?.prospectId ?? null;
+      setProspectId(pId);
       setResult(analysis);
       setStep(3);
 
-      // Calculate tier and top weaknesses
-      const tier = getTier(analysis.overallScore);
-      const topWeaknesses = [
-        ...analysis.seo.recommendations.slice(0, 1),
-        ...analysis.conversion.recommendations.slice(0, 1),
-        ...analysis.technical.recommendations.slice(0, 1),
-      ].slice(0, 3);
-
-      // Update prospect record + trigger email (fire-and-forget)
       if (pId) {
-        supabase
-          .from("prospects" as any)
-          .update({
-            gap_score: analysis.overallScore,
-            top_weaknesses: topWeaknesses,
-            recommended_tier: tier,
-          } as any)
-          .eq("id", pId)
-          .then(() => {});
-
-        // Send report email
-        supabase.functions.invoke("send-prospect-report", {
-          body: { prospectId: pId },
-        }).catch(err => console.error("Failed to send prospect report email:", err));
+        supabase.functions
+          .invoke("send-prospect-report", {
+            body: { prospectId: pId },
+          })
+          .catch((err) => console.error("Failed to send prospect report email:", err));
       }
 
       toast({ title: "Analysis Complete", description: "Your website analysis is ready!" });
