@@ -145,8 +145,18 @@ Return your analysis as a JSON object with this exact structure:
       "tasks": ["<task 1>", "<task 2>"]
     }
   },
-  "summary": "<2-3 sentence summary>"
+  "summary": "<2-3 sentence summary>",
+  "context_profile": {
+    "services": ["list of specific services or products offered — be specific, e.g. 'HVAC repair' not 'services'"],
+    "differentiators": ["key differentiators or USPs visible on the site — e.g. '20+ years experience', 'family-owned', '24/7 emergency service'"],
+    "target_audience": "who they primarily serve based on site content",
+    "location": "geographic area or city if detectable from the site",
+    "tone": "one of: professional, friendly, casual, expert — based on site copy style",
+    "business_summary": "one sentence plain-English description of what this business does and who it serves"
+  }
 }
+
+Additionally, extract a context_profile object from the website with the fields shown above. Be specific about services — list actual offerings, not generic terms.
 
 SCORING RUBRIC (be strict):
 - 85-100: ONLY if you find: proper meta tags, schema markup, multiple CTAs, testimonials, proper heading hierarchy
@@ -232,12 +242,17 @@ Provide your analysis as a valid JSON object.`;
         ...analysis.technical.recommendations.slice(0, 1),
       ].slice(0, 3);
 
+      const contextProfile = analysis.context_profile
+        ? { ...analysis.context_profile, source: "website_scan", partial: false }
+        : null;
+
       const { error: updateError } = await supabase
         .from("prospects")
         .update({
           gap_score: analysis.overallScore,
           top_weaknesses: topWeaknesses,
           recommended_tier: getTier(analysis.overallScore),
+          ...(contextProfile ? { context_profile: contextProfile } : {}),
         })
         .eq("id", prospectId);
 
