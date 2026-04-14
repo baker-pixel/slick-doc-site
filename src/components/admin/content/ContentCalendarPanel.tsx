@@ -69,13 +69,15 @@ export function ContentCalendarPanel() {
 
   const fetchData = async () => {
     setIsLoading(true);
-    const [calendarRes, contentRes] = await Promise.all([
+    const [calendarRes, contentRes, clientsRes] = await Promise.all([
       supabase.from("content_calendar").select("*").order("scheduled_for", { ascending: true }),
-      supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50)
+      supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50),
+      supabase.from("client_accounts").select("id, business_name").order("business_name", { ascending: true })
     ]);
 
     if (calendarRes.data) setCalendarItems(calendarRes.data);
     if (contentRes.data) setGeneratedContent(contentRes.data);
+    if (clientsRes.data) setClients(clientsRes.data);
     setIsLoading(false);
   };
 
