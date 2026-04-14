@@ -130,7 +130,8 @@ export function ContentCalendarPanel() {
         content_type: formData.content_type,
         scheduled_for: scheduledDateTime.toISOString(),
         platform: formData.platform,
-        status: "scheduled"
+        status: "scheduled",
+        client_approved: true
       };
 
       if (editingItem) {

@@ -65,14 +65,14 @@ serve(async (req) => {
 
       // 2. Bridge: Insert into content_calendar with client_approved = true
       // The pg_cron job on publish-scheduled-content will pick this up
-      const scheduledFor = new Date().toISOString(); // publish ASAP
+      const scheduledFor = approval.scheduled_for || new Date().toISOString();
       const { error: calInsertError } = await supabase
         .from("content_calendar")
         .insert({
           client_account_id: clientId,
-          content_id: approval.content_id || null,
+          content_id: approval.id,
           content_type: approval.content_type,
-          platform: approval.content_type?.includes("social") ? "linkedin" : null,
+          platform: approval.platform || null,
           content: approval.full_content || approval.content_preview || "",
           title: approval.title || "",
           status: "scheduled",
@@ -80,7 +80,7 @@ serve(async (req) => {
           scheduled_for: scheduledFor,
           metadata: {
             source: "content_approvals",
-            approval_id,
+            content_approval_id: approval_id,
           },
         });
 
