@@ -64,9 +64,12 @@ export default function ClientPortalAuth() {
       .single();
 
     if (error || !data) {
+      const reason = error?.code === "PGRST116"
+        ? "This invitation has already been used or has expired. Please ask your admin to send a new one."
+        : "This invitation link is invalid, already accepted, or has expired. Please contact your account manager for a new invite.";
       toast({
-        title: "Invalid Invitation",
-        description: "This invitation link is invalid or has expired.",
+        title: "Invitation Not Found",
+        description: reason,
         variant: "destructive",
       });
       setIsAcceptingInvite(false);
@@ -124,9 +127,14 @@ export default function ClientPortalAuth() {
       });
 
       if (error) {
+        const desc = error.message?.includes("Invalid login")
+          ? "The email or password you entered is incorrect. Please try again."
+          : error.message?.includes("Email not confirmed")
+          ? "Your email address hasn't been verified yet. Please check your inbox for a verification link."
+          : error.message || "Unable to sign in. Please check your credentials and try again.";
         toast({
           title: "Sign In Failed",
-          description: error.message,
+          description: desc,
           variant: "destructive",
         });
         setLoading(false);
@@ -141,8 +149,8 @@ export default function ClientPortalAuth() {
 
       if (!portalUser) {
         toast({
-          title: "Access Denied",
-          description: "You don't have access to the client portal.",
+          title: "No Portal Access",
+          description: "Your account isn't linked to a client portal yet. If you were invited, please use the invitation link from your email. Otherwise, contact your account manager.",
           variant: "destructive",
         });
         await supabase.auth.signOut();
@@ -176,9 +184,12 @@ export default function ClientPortalAuth() {
         });
 
         if (signInError) {
+          const desc = signInError.message?.includes("Invalid login")
+            ? "The password you entered is incorrect. Please try again, or use 'Forgot password' to reset it."
+            : signInError.message || "Unable to sign in. Please try again.";
           toast({
             title: "Sign In Failed",
-            description: "Incorrect password. Please try again.",
+            description: desc,
             variant: "destructive",
           });
           setLoading(false);
@@ -189,7 +200,7 @@ export default function ClientPortalAuth() {
         if (!userId) {
           toast({
             title: "Sign In Failed",
-            description: "Could not access your account",
+            description: "Your account was found but the session could not be established. Please try again or clear your browser cache.",
             variant: "destructive",
           });
           setLoading(false);
@@ -216,9 +227,14 @@ export default function ClientPortalAuth() {
 
           if (portalError) {
             console.error("Portal user creation error:", portalError);
+            const desc = portalError.code === "42501" || portalError.message?.includes("row-level security")
+              ? "A permissions issue prevented your portal setup. This has been logged — please try again in a moment."
+              : portalError.code === "23505"
+              ? "Your portal access already exists. Try signing in instead."
+              : `Portal setup failed: ${portalError.message || "Unknown error"}. Please try again or contact your account manager.`;
             toast({
-              title: "Setup Failed",
-              description: "Could not complete portal setup. Please contact support.",
+              title: "Portal Setup Failed",
+              description: desc,
               variant: "destructive",
             });
             setLoading(false);
@@ -266,9 +282,12 @@ export default function ClientPortalAuth() {
       }
 
       if (authError) {
+        const desc = authError.message?.includes("password")
+          ? "Password must be at least 8 characters long."
+          : authError.message || "Could not create your account. Please try again.";
         toast({
           title: "Registration Failed",
-          description: authError.message,
+          description: desc,
           variant: "destructive",
         });
         setLoading(false);
@@ -279,7 +298,7 @@ export default function ClientPortalAuth() {
       if (!userId) {
         toast({
           title: "Registration Failed",
-          description: "Could not create user account",
+          description: "Your account was created but the session could not be established. Please try signing in with your new password.",
           variant: "destructive",
         });
         setLoading(false);
@@ -298,9 +317,14 @@ export default function ClientPortalAuth() {
 
       if (portalError) {
         console.error("Portal user creation error:", portalError);
+        const desc = portalError.code === "42501" || portalError.message?.includes("row-level security")
+          ? "A permissions issue prevented your portal setup. This has been logged — please try again in a moment."
+          : portalError.code === "23505"
+          ? "Your portal access already exists. Try signing in instead."
+          : `Portal setup failed: ${portalError.message || "Unknown error"}. Please try again or contact your account manager.`;
         toast({
-          title: "Setup Failed",
-          description: "Could not complete portal setup. Please contact support.",
+          title: "Portal Setup Failed",
+          description: desc,
           variant: "destructive",
         });
         setLoading(false);
@@ -330,9 +354,13 @@ export default function ClientPortalAuth() {
 
       navigate("/portal");
     } catch (error: any) {
+      const msg = error.message || "Something went wrong";
+      const desc = msg.includes("Failed to fetch")
+        ? "Network error — please check your internet connection and try again."
+        : `An unexpected error occurred: ${msg}. Please try again.`;
       toast({
-        title: "Error",
-        description: error.message || "An error occurred",
+        title: "Something Went Wrong",
+        description: desc,
         variant: "destructive",
       });
     } finally {
