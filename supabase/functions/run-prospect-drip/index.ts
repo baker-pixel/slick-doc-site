@@ -304,9 +304,21 @@ serve(async (req) => {
         // Only send if enough days have passed
         if (daysSinceCreated < daysRequired) continue;
 
-        const emailContent = buildEmail(prospect, nextStep);
+        // Try personalized first, fall back to static template
+        let emailContent = await buildPersonalizedEmail(prospect as any, nextStep, LOVABLE_API_KEY);
+        if (!emailContent) {
+          emailContent = buildEmail(prospect as Prospect, nextStep);
+        }
         if (!emailContent) continue;
 
+        // For personalized emails, wrap in the standard template shell
+        const isPersonalized = !!(prospect as any).context_profile;
+        if (isPersonalized && emailContent.html && !emailContent.html.includes('<!DOCTYPE')) {
+          emailContent = {
+            subject: emailContent.subject,
+            html: wrapHtml(emailContent.html, prospect.email),
+          };
+        }
         try {
           const emailRes = await fetch(`${GATEWAY_URL}/emails`, {
             method: "POST",
