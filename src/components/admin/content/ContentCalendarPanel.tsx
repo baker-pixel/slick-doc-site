@@ -46,6 +46,7 @@ export function ContentCalendarPanel() {
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
+  const [filterClientId, setFilterClientId] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
