@@ -242,6 +242,15 @@ export default function ClientPortalAuth() {
           }
         }
 
+        // Ensure client role exists
+        try {
+          await supabase
+            .from("user_roles")
+            .upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
+        } catch (roleErr) {
+          console.error("Role upsert error (existing user):", roleErr);
+        }
+
         await supabase
           .from("client_invitations")
           .update({ accepted_at: new Date().toISOString() })
