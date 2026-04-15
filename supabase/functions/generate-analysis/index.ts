@@ -268,11 +268,100 @@ Generate a comprehensive analysis in JSON format.`;
       };
     }
 
+    // --- Compute SYSTEM scores from raw form fields ---
+    const computeSystemScores = (g: Record<string, unknown>) => {
+      const bool = (v: unknown) => v === true || v === "true" || v === "yes";
+      const num = (v: unknown, fallback = 0) => { const n = Number(v); return isNaN(n) ? fallback : n; };
+      const filled = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+
+      // S — Search & Visibility (SEO, local presence)
+      const sScore = [
+        bool(g.investing_in_seo) ? 20 : 0,
+        bool(g.ranking_for_keywords) ? 20 : 0,
+        bool(g.tracking_keyword_rankings) ? 15 : 0,
+        filled(g.monthly_organic_traffic) ? 15 : 0,
+        filled(g.top_competitors) ? 10 : 0,
+        bool(g.has_reputation_tool) ? 10 : 0,
+        bool(g.asks_for_reviews) ? 10 : 0,
+      ].reduce((a, b) => a + b, 0);
+
+      // Y — Yield Optimization (website conversion)
+      const yScore = [
+        filled(g.website_url) ? 15 : 0,
+        bool(g.tracks_website_conversions) ? 25 : 0,
+        filled(g.monthly_website_leads) ? 15 : 0,
+        filled(g.priority_improvement) ? 10 : 0,
+        filled(g.website_last_updated) && g.website_last_updated !== "more_than_2_years" ? 15 : 0,
+        bool(g.ads_use_landing_pages) ? 20 : 0,
+      ].reduce((a, b) => a + b, 0);
+
+      // S — Sequence & Nurture (email, CRM, follow-ups)
+      const seqScore = [
+        bool(g.uses_email_automation) ? 20 : 0,
+        bool(g.uses_sms_followups) ? 15 : 0,
+        bool(g.has_crm) ? 20 : 0,
+        bool(g.crm_tracks_all_inbound) ? 15 : 0,
+        bool(g.has_segmentation_drip) ? 15 : 0,
+        bool(g.has_abandoned_followups) ? 15 : 0,
+      ].reduce((a, b) => a + b, 0);
+
+      // T — Transaction Activation (sales process)
+      const tScore = [
+        filled(g.lead_response_time) && g.lead_response_time !== "more_than_24_hours" ? 25 : 0,
+        filled(g.close_rate) ? 15 : 0,
+        bool(g.uses_online_scheduling) ? 20 : 0,
+        filled(g.common_objections) ? 10 : 0,
+        filled(g.where_prospects_lost) ? 10 : 0,
+        num(g.growth_satisfaction) >= 7 ? 20 : num(g.growth_satisfaction) >= 4 ? 10 : 0,
+      ].reduce((a, b) => a + b, 0);
+
+      // E — Engagement & Retention
+      const eScore = [
+        bool(g.asks_for_reviews) ? 20 : 0,
+        filled(g.monthly_new_reviews) ? 15 : 0,
+        bool(g.emails_past_customers) ? 20 : 0,
+        filled(g.repeat_customer_rate) ? 15 : 0,
+        bool(g.has_loyalty_referral_program) ? 15 : 0,
+        bool(g.has_reputation_tool) ? 15 : 0,
+      ].reduce((a, b) => a + b, 0);
+
+      // M — Metrics & Improvement
+      const mScore = [
+        bool(g.uses_google_analytics) ? 25 : 0,
+        bool(g.knows_best_lead_sources) ? 20 : 0,
+        filled(g.kpis_tracked) ? 15 : 0,
+        filled(g.data_accuracy_confidence) ? 15 : 0,
+        bool(g.does_ab_testing) ? 25 : 0,
+      ].reduce((a, b) => a + b, 0);
+
+      const breakdown = {
+        search: Math.min(sScore, 100),
+        yield: Math.min(yScore, 100),
+        sequence: Math.min(seqScore, 100),
+        transaction: Math.min(tScore, 100),
+        engagement: Math.min(eScore, 100),
+        metrics: Math.min(mScore, 100),
+      };
+
+      const overall = Math.round(
+        Object.values(breakdown).reduce((a, b) => a + b, 0) / 6
+      );
+
+      return { overall, breakdown };
+    };
+
+    const systemScores = computeSystemScores(gapAnalysis);
+
     // If called with submission_id, save the result back to the row
     if (body.submission_id) {
       const { error: updateErr } = await supabase
         .from("gap_analysis_submissions")
-        .update({ ai_analysis: analysis, status: "completed" })
+        .update({
+          ai_analysis: analysis,
+          status: "completed",
+          overall_score: systemScores.overall,
+          score_breakdown: systemScores.breakdown,
+        })
         .eq("id", body.submission_id);
 
       if (updateErr) {

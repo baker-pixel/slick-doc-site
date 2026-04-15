@@ -154,9 +154,23 @@ serve(async (req) => {
       const p = step.payload ?? {};
 
       switch (step.task_type) {
-        case "website_analysis":
-          result = await callFn("analyze-website", { client_id: effectiveClientId });
+        case "website_analysis": {
+          // Fetch website_url and industry from client_accounts for context
+          const { data: waClient } = await supabase
+            .from("client_accounts")
+            .select("website_url, industry")
+            .eq("id", effectiveClientId)
+            .single();
+          if (!waClient?.website_url) {
+            throw new Error("Client has no website_url set — cannot run website analysis");
+          }
+          result = await callFn("analyze-website", {
+            client_id: effectiveClientId,
+            url: waClient.website_url,
+            industry: waClient.industry || undefined,
+          });
           break;
+        }
         case "seo_audit": {
           // Create a workflow_task so run-seo-agent has a record to write to
           const { data: seoTask } = await supabase
@@ -172,9 +186,34 @@ serve(async (req) => {
           }
           break;
         }
-        case "gap_report":
-          result = await callFn("generate-analysis", { client_id: effectiveClientId });
+        case "gap_report": {
+          // Look up most recent gap_analysis_submissions by client email
+          const { data: grClient } = await supabase
+            .from("client_accounts")
+            .select("email")
+            .eq("id", effectiveClientId)
+            .single();
+
+          let submissionId: string | null = null;
+          if (grClient?.email) {
+            const { data: sub } = await supabase
+              .from("gap_analysis_submissions")
+              .select("id")
+              .ilike("email", grClient.email)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            submissionId = sub?.id || null;
+          }
+
+          if (!submissionId) {
+            // Skip gracefully — no submission to analyze
+            result = { skipped: true, reason: "No gap_analysis_submission found for this client" };
+          } else {
+            result = await callFn("generate-analysis", { submission_id: submissionId });
+          }
           break;
+        }
         case "content":
           result = await callFn("run-content-agent", { client_id: effectiveClientId, ...p });
           break;
