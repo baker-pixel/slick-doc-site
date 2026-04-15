@@ -48,7 +48,7 @@ interface ClientBrandAssetsTabProps {
 }
 
 export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAssetsTabProps) {
-  const [assets, setAssets] = useState<BrandAsset[]>([]);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -169,6 +169,9 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
             .eq("workflow_id", wf.id)
             .eq("task_type", "client_upload")
             .neq("status", "completed");
+          // Invalidate workflow queries so Activity tab refreshes
+          queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+          queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
         }
       } catch (e) {
         // Non-fatal — step completion is best-effort
