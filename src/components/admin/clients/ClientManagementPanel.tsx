@@ -472,11 +472,20 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
               </div>
               <div className="space-y-2">
                 <Label>Website URL</Label>
-                <Input
-                  placeholder="https://example.com"
-                  value={newClient.website_url}
-                  onChange={(e) => setNewClient({ ...newClient, website_url: e.target.value })}
-                />
+                <div className="relative">
+                  <Input
+                    placeholder="https://example.com"
+                    value={newClient.website_url}
+                    onChange={(e) => setNewClient({ ...newClient, website_url: e.target.value })}
+                    className={newClient.website_url ? (isValidUrl(newClient.website_url) ? "pr-10 border-green-400" : "pr-10 border-destructive") : ""}
+                  />
+                  {newClient.website_url && isValidUrl(newClient.website_url) && (
+                    <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-green-500" />
+                  )}
+                </div>
+                {newClient.website_url && !isValidUrl(newClient.website_url) && (
+                  <p className="text-xs text-destructive">Must start with http:// or https://</p>
+                )}
               </div>
               <Button onClick={addClient} className="w-full">Add Client</Button>
             </div>
@@ -658,6 +667,21 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                               title="Copy Invite Link"
                             >
                               <Copy className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {!invite.accepted_at && isInviteExpired(invite.expires_at) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resendInvitation(invite)}
+                              disabled={sendingInvite}
+                              title="Resend Invitation"
+                            >
+                              {sendingInvite ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4" />
+                              )}
                             </Button>
                           )}
                           <Button
