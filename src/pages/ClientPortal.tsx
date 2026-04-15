@@ -277,6 +277,31 @@ export default function ClientPortal() {
     ? `${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined
     : undefined;
 
+  const tier = (clientAccount?.tier?.toLowerCase() as ClientTier) || "foundation";
+
+  /**
+   * Tier-to-feature mapping for soft gating:
+   * Foundation: activity, projects, messages, deliverables, analytics, calendar,
+   *             notifications, meetings, requests, documents, invoices, help, settings
+   * Growth:     + approvals, brand, access, social, integrations, learning
+   * Transformation: + agreements, team
+   */
+  const gate = (
+    requiredTier: ClientTier,
+    featureName: string,
+    featureDescription: string,
+    content: React.ReactNode
+  ) => (
+    <TierGate
+      clientTier={tier}
+      requiredTier={requiredTier}
+      featureName={featureName}
+      featureDescription={featureDescription}
+    >
+      {content}
+    </TierGate>
+  );
+
   const renderContent = () => {
     if (!portalUser) return null;
 
@@ -293,34 +318,18 @@ export default function ClientPortal() {
         return <ClientMeetingsTab clientAccountId={portalUser.client_account_id} clientName={clientName} />;
       case "requests":
         return <ClientRequestsTab clientAccountId={portalUser.client_account_id} />;
-      case "approvals":
-        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />;
       case "deliverables":
         return <ClientDeliverablesTab clientAccountId={portalUser.client_account_id} />;
       case "documents":
         return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />;
-      case "agreements":
-        return <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />;
-      case "brand":
-        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
-      case "access":
-        return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
-      case "integrations":
-        return <ClientIntegrationsTab clientAccountId={portalUser.client_account_id} />;
-      case "social":
-        return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
-      case "calendar":
-        return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} />;
-      case "team":
-        return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":
         return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
+      case "calendar":
+        return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} />;
       case "invoices":
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
       case "help":
         return <ClientHelpTab onStartTour={handleStartTour} />;
-      case "learning":
-        return <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />;
       case "settings":
         return (
           <ClientSettingsTab 
@@ -329,6 +338,27 @@ export default function ClientPortal() {
             onPreferencesChange={updatePreferences}
           />
         );
+
+      // ── Growth-tier features ────────────────────────────────────────
+      case "approvals":
+        return gate("growth", "Content Approvals", "Review and approve marketing content before it goes live. Upgrade to Growth to unlock this workflow.", <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />);
+      case "brand":
+        return gate("growth", "Brand Assets", "Store and manage your logos, colors, fonts, and brand guidelines in one place.", <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />);
+      case "access":
+        return gate("growth", "Platform Access", "Securely share your platform login credentials with your marketing team.", <ClientAccessTab clientAccountId={portalUser.client_account_id} />);
+      case "social":
+        return gate("growth", "Social Media", "Create, schedule, and manage social media posts with AI-powered content generation.", <SocialMediaTab clientAccountId={portalUser.client_account_id} />);
+      case "integrations":
+        return gate("growth", "Integrations", "Connect your social media accounts and third-party tools for automated publishing.", <ClientIntegrationsTab clientAccountId={portalUser.client_account_id} />);
+      case "learning":
+        return gate("growth", "Learning Hub", "Access educational resources, guides, and tutorials to grow your marketing knowledge.", <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />);
+
+      // ── Transformation-tier features ────────────────────────────────
+      case "agreements":
+        return gate("transformation", "Agreements", "Manage your service agreements and contracts digitally with e-signatures.", <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />);
+      case "team":
+        return gate("transformation", "Your Team", "Meet your dedicated marketing team and see who's working on your account.", <ClientTeamTab clientAccountId={portalUser.client_account_id} />);
+
       default:
         return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
     }
