@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.run-prospect-drip]
 verify_jwt = false
+
+[functions.fill-scheduled-content]
+verify_jwt = false
