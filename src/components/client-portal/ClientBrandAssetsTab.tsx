@@ -49,6 +49,7 @@ interface ClientBrandAssetsTabProps {
 
 export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAssetsTabProps) {
   const queryClient = useQueryClient();
+  const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
