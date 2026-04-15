@@ -393,20 +393,25 @@ Return only valid JSON, no markdown fences.`;
   } catch (error) {
     console.error("AI suggestions error:", error);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in analyze-seo`,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      source: 'analyze-seo',
-      source_id: null,
-      metadata: {
-        function_name: 'analyze-seo',
-        client_id: null,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-    });
+    try {
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await sb.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in analyze-seo`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'analyze-seo',
+        source_id: null,
+        metadata: {
+          function_name: 'analyze-seo',
+          client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (_alertErr) {
+      console.error("Failed to log alert:", _alertErr);
+    }
     return { suggestions: [], rewrites: [] };
   }
 }

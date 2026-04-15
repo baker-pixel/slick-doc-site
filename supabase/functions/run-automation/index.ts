@@ -52,6 +52,10 @@ interface ClientData {
   industry?: string;
   first_name?: string;
   last_name?: string;
+  website_url?: string;
+  website_summary?: string;
+  context_profile?: Record<string, unknown>;
+  tone?: string;
 }
 
 // Helper to create a deliverable
@@ -233,9 +237,10 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  let clientId: string | undefined;
   try {
     const body: AutomationRequest = await req.json();
-    const clientId = body.clientId;
+    clientId = body.clientId;
     const taskId = body.taskId;
     const inputData = body.inputData;
 

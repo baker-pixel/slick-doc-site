@@ -26,9 +26,11 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+  let client_account_id: string | undefined;
   try {
-
-    const { type, client_account_id, title, description, details, admin_email }: NotificationRequest = await req.json();
+    const body: NotificationRequest = await req.json();
+    client_account_id = body.client_account_id;
+    const { type, title, description, details, admin_email } = body;
 
     console.log(`Sending ${type} notification for client: ${client_account_id}`);
 

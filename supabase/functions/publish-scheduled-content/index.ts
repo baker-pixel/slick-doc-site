@@ -191,19 +191,24 @@ serve(async (req) => {
   } catch (error: any) {
     console.error("Error in publish-scheduled-content:", error);
 
-    await supabase.from('automation_alerts').insert({
-      alert_type: 'function_error',
-      severity: 'error',
-      title: `Error in publish-scheduled-content`,
-      message: error instanceof Error ? error.message : 'Unknown error',
-      source: 'publish-scheduled-content',
-      metadata: {
-        function_name: 'publish-scheduled-content',
-        client_id: null,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-      },
-    });
+    try {
+      const sbErr = createClient(supabaseUrl, supabaseServiceKey);
+      await sbErr.from('automation_alerts').insert({
+        alert_type: 'function_error',
+        severity: 'error',
+        title: `Error in publish-scheduled-content`,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        source: 'publish-scheduled-content',
+        metadata: {
+          function_name: 'publish-scheduled-content',
+          client_id: null,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (_alertErr) {
+      console.error("Failed to log alert:", _alertErr);
+    }
     return new Response(
       JSON.stringify({ error: error.message }),
       {

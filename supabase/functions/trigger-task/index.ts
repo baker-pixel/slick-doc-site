@@ -12,13 +12,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-    const { client_id, task_type, payload } = await req.json();
+  let client_id: string | undefined;
+  try {
+    const body = await req.json();
+    client_id = body.client_id;
+    const { task_type, payload } = body;
 
     if (!client_id || !task_type) {
       return new Response(

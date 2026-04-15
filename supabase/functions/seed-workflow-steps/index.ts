@@ -124,13 +124,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-    const { client_id } = await req.json();
+  let client_id: string | undefined;
+  try {
+    const body = await req.json();
+    client_id = body.client_id;
     if (!client_id) {
       return new Response(JSON.stringify({ error: "client_id required" }), {
         status: 400,
