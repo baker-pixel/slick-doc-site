@@ -15,12 +15,12 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { 
   Send, 
-  CheckCircle, 
-  Trash2, 
-  Plus, 
-  Facebook, 
-  Instagram, 
-  Linkedin, 
+  CheckCircle,
+  Trash2,
+  Plus,
+  Facebook,
+  Instagram,
+  Linkedin,
   Twitter,
   RefreshCw,
   Sparkles,
@@ -34,7 +34,8 @@ import {
   ShieldCheck,
   Building2,
   Eye,
-  EyeOff
+  EyeOff,
+  Zap,
 } from "lucide-react";
 
 interface Client {
@@ -178,23 +179,55 @@ export default function SocialMediaPostsPanel() {
   // Update post status mutation
   const updatePostStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      // When admin approves, set client_approved=true and status=scheduled
+      // so publish-scheduled-content cron picks it up automatically.
+      const extraFields: Record<string, unknown> = {};
+      if (status === "approved") {
+        extraFields.client_approved = true;
+        extraFields.status = "scheduled";
+      } else {
+        extraFields.status = status;
+        if (status === "published") extraFields.published_at = new Date().toISOString();
+      }
+
       const { data, error } = await supabase.functions.invoke("admin", {
         body: {
           action: "update",
           table: "content_calendar",
           id,
-          data: {
-            status,
-            published_at: status === "published" ? new Date().toISOString() : null,
-          },
+          data: extraFields,
         },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
     },
-    onSuccess: () => {
+    onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
-      toast({ title: "Post status updated" });
+      if (status === "approved") {
+        toast({ title: "Post approved and queued", description: "Will publish at scheduled time (cron runs every 15 min)" });
+      } else {
+        toast({ title: "Post status updated" });
+      }
+    },
+  });
+
+  const triggerPublishNow = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
+        body: {},
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["social-posts"] });
+      toast({
+        title: "Publish triggered",
+        description: `Processed: ${data?.processed ?? 0} · Published: ${data?.successful ?? 0} · Failed: ${data?.failed ?? 0}`,
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Publish failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -423,6 +456,11 @@ export default function SocialMediaPostsPanel() {
                   <Eye className="h-3 w-3" /> Visible to client
                 </p>
               )}
+              {post.status === "scheduled" && (
+                <p className="text-xs text-blue-600 flex items-center gap-1">
+                  <Zap className="h-3 w-3" /> Queued — publishes at scheduled time
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <Button size="icon" variant="ghost" onClick={() => copyToClipboard(post.content)}>
@@ -433,7 +471,7 @@ export default function SocialMediaPostsPanel() {
                   size="icon"
                   variant="ghost"
                   className="text-green-600 hover:text-green-700"
-                  title="Approve — makes visible to client"
+                  title="Approve — queues for publishing (cron picks up every 15 min)"
                   onClick={() => updatePostStatus.mutate({ id: post.id, status: "approved" })}
                 >
                   <ShieldCheck className="h-4 w-4" />
@@ -484,6 +522,20 @@ export default function SocialMediaPostsPanel() {
           <p className="text-muted-foreground">Create AI-generated content mapped to each client</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => triggerPublishNow.mutate()}
+            disabled={triggerPublishNow.isPending}
+            title="Run publish-scheduled-content right now for all due posts"
+          >
+            {triggerPublishNow.isPending ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4 mr-2" />
+            )}
+            Publish Now
+          </Button>
           <Select value={selectedClient} onValueChange={setSelectedClient}>
             <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Select client" />
