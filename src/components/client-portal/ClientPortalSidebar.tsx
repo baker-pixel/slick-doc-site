@@ -29,6 +29,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -103,25 +104,39 @@ const TIER_DISPLAY: Record<ClientTier, string> = {
   transformation: "Transformation",
 };
 
-// All navigable items with their minimum required tier
-const allNavItems: NavItemDef[] = [
+function hasAccess(tier: ClientTier, minTier: ClientTier): boolean {
+  return TIER_RANK[tier] >= TIER_RANK[minTier];
+}
+
+function getUpgradeTierName(minTier: ClientTier): string {
+  return TIER_DISPLAY[minTier];
+}
+
+// Grouped nav sections
+const myPortalItems: NavItemDef[] = [
   { id: "activity", label: "Home", icon: Activity, minTier: "foundation" },
   { id: "projects", label: "Projects", icon: LayoutDashboard, minTier: "foundation" },
-  { id: "approvals", label: "Approvals", icon: FileCheck, badgeKey: "approvals", minTier: "growth" },
   { id: "messages", label: "Messages", icon: MessageCircle, badgeKey: "messages", minTier: "foundation" },
+  { id: "approvals", label: "Approvals", icon: FileCheck, badgeKey: "approvals", minTier: "foundation" },
   { id: "deliverables", label: "Deliverables", icon: Package, minTier: "foundation" },
-  { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
   { id: "calendar", label: "Content Calendar", icon: Calendar, minTier: "foundation" },
-  { id: "brand", label: "Brand Assets", icon: Palette, minTier: "growth" },
-  { id: "access", label: "Platform Access", icon: KeyRound, minTier: "growth" },
-  { id: "social", label: "Social Media", icon: Share2, minTier: "growth" },
-  { id: "integrations", label: "Integrations", icon: Plug, minTier: "growth" },
-  { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "growth" },
-  { id: "agreements", label: "Agreements", icon: FileSignature, minTier: "transformation" },
-  { id: "team", label: "Your Team", icon: Users, minTier: "transformation" },
 ];
 
-const secondaryItems: NavItemDef[] = [
+const brandToolsItems: NavItemDef[] = [
+  { id: "brand", label: "Brand Assets", icon: Palette, minTier: "foundation" },
+  { id: "access", label: "Platform Access", icon: KeyRound, minTier: "foundation" },
+  { id: "social", label: "Social Media", icon: Share2, minTier: "foundation" },
+  { id: "integrations", label: "Integrations", icon: Plug, minTier: "foundation" },
+  { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "foundation" },
+  { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
+];
+
+const accountItems: NavItemDef[] = [
+  { id: "agreements", label: "Agreements", icon: FileSignature, minTier: "foundation" },
+  { id: "team", label: "Your Team", icon: Users, minTier: "foundation" },
+];
+
+const supportItems: NavItemDef[] = [
   { id: "notifications", label: "Updates", icon: Bell, badgeKey: "notifications", minTier: "foundation" },
   { id: "meetings", label: "Meetings", icon: Calendar, minTier: "foundation" },
   { id: "requests", label: "Requests", icon: Send, minTier: "foundation" },
@@ -130,14 +145,6 @@ const secondaryItems: NavItemDef[] = [
   { id: "help", label: "Help", icon: HelpCircle, minTier: "foundation" },
   { id: "settings", label: "Settings", icon: Settings, minTier: "foundation" },
 ];
-
-function hasAccess(tier: ClientTier, minTier: ClientTier): boolean {
-  return TIER_RANK[tier] >= TIER_RANK[minTier];
-}
-
-function getUpgradeTierName(minTier: ClientTier): string {
-  return TIER_DISPLAY[minTier];
-}
 
 interface NavItemProps {
   item: NavItemDef;
@@ -197,13 +204,10 @@ function NavItem({ item, activeTab, onTabChange, badgeCounts, locked, lockTierNa
   return <SidebarMenuItem>{button}</SidebarMenuItem>;
 }
 
-// Tabs allowed during onboarding (before steps 1-5 completed)
-const ONBOARDING_ALLOWED_TABS: PortalTab[] = ["activity", "messages", "help"];
-
-export function ClientPortalSidebar({ 
-  activeTab, 
-  onTabChange, 
-  clientName, 
+export function ClientPortalSidebar({
+  activeTab,
+  onTabChange,
+  clientName,
   businessName,
   onSignOut,
   badgeCounts,
@@ -212,11 +216,7 @@ export function ClientPortalSidebar({
   isOnboardingComplete = true,
 }: ClientPortalSidebarProps) {
   const filterItems = (items: NavItemDef[]) =>
-    items.filter(item => {
-      if (hiddenTabs.includes(item.id)) return false;
-      if (!isOnboardingComplete && !ONBOARDING_ALLOWED_TABS.includes(item.id)) return false;
-      return true;
-    });
+    items.filter(item => !hiddenTabs.includes(item.id));
 
   const initials = clientName
     ?.split(" ")
@@ -241,6 +241,8 @@ export function ClientPortalSidebar({
       );
     });
 
+  const labelClass = "text-[10px] uppercase tracking-widest text-muted-foreground/60 px-2 mb-1";
+
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4 pb-6">
@@ -255,12 +257,31 @@ export function ClientPortalSidebar({
           </div>
         </div>
       </SidebarHeader>
-      
+
       <SidebarContent className="px-3">
         <SidebarGroup>
+          <SidebarGroupLabel className={labelClass}>My Portal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">
-              {renderItems(allNavItems)}
+              {renderItems(myPortalItems)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className={labelClass}>Brand & Tools</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-0.5">
+              {renderItems(brandToolsItems)}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className={labelClass}>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-0.5">
+              {renderItems(accountItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -268,9 +289,10 @@ export function ClientPortalSidebar({
         <div className="mx-3 my-4 border-t border-border/40" />
 
         <SidebarGroup>
+          <SidebarGroupLabel className={labelClass}>Support</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">
-              {renderItems(secondaryItems)}
+              {renderItems(supportItems)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -287,9 +309,9 @@ export function ClientPortalSidebar({
             <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
               <p className="text-sm font-semibold truncate">{clientName || "Client"}</p>
             </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onSignOut}
               className="h-7 w-7 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:hidden"
             >
