@@ -34,14 +34,7 @@ function getFirstName(name: string): string {
   return name?.split(" ")[0] || "there";
 }
 
-function buildEmail(prospect: Prospect, step: number): { subject: string; html: string } | null {
-  const firstName = getFirstName(prospect.name);
-  const weaknesses = prospect.top_weaknesses || [];
-  const topWeakness = weaknesses[0] || "your online visibility";
-  const businessType = prospect.business_type || "local business";
-  const url = prospect.website_url;
-
-  const wrapHtml = (body: string, email: string = '') => `
+const wrapHtml = (body: string, email: string = '') => `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
@@ -57,6 +50,13 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
   </div>
 </div>
 </body></html>`;
+
+function buildEmail(prospect: Prospect, step: number): { subject: string; html: string } | null {
+  const firstName = getFirstName(prospect.name);
+  const weaknesses = prospect.top_weaknesses || [];
+  const topWeakness = weaknesses[0] || "your online visibility";
+  const businessType = prospect.business_type || "local business";
+  const url = prospect.website_url;
 
   const callCta = `<div style="text-align:center;margin:25px 0;"><a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Book a Free Call</a></div>`;
   const signupCta = `<div style="text-align:center;margin:10px 0;"><a href="https://slick-doc-site.lovable.app/pricing" style="color:#E8521A;font-weight:bold;text-decoration:underline;">See Our Plans</a></div>`;
