@@ -1,0 +1,1 @@
+UPDATE public.task_templates SET tier = 'transformation' WHERE tier = 'scale';
