@@ -20,6 +20,7 @@ import {
   FileSignature,
   GraduationCap,
   Send,
+  Plug,
   Share2,
 } from "lucide-react";
 import {
@@ -101,11 +102,12 @@ const myPortalItems: NavItemDef[] = [
 ];
 
 const brandToolsItems: NavItemDef[] = [
-  { id: "brand", label: "Brand Assets", icon: Palette, minTier: "foundation" },
-  { id: "access", label: "Platform Access", icon: KeyRound, minTier: "foundation" },
-  { id: "social", label: "Social & Accounts", icon: Share2, minTier: "foundation" },
-  { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "foundation" },
-  { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
+  { id: "brand", label: "Brand Assets", icon: Palette },
+  { id: "access", label: "Platform Access", icon: KeyRound },
+  { id: "social", label: "Social Media", icon: Share2 },
+  { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "learning", label: "Learning Hub", icon: GraduationCap },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 const accountItems: NavItemDef[] = [
