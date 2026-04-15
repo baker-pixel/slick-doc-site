@@ -1099,15 +1099,15 @@ export default function SocialMediaPostsPanel() {
               <>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-lg border p-3 text-center">
-                    <p className="text-2xl font-bold">{(testResult as Record<string, unknown>).processed ?? 0}</p>
+                    <p className="text-2xl font-bold">{String((testResult as Record<string, unknown>).processed ?? 0)}</p>
                     <p className="text-xs text-muted-foreground">Processed</p>
                   </div>
                   <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 p-3 text-center">
-                    <p className="text-2xl font-bold text-green-700">{(testResult as Record<string, unknown>).successful ?? 0}</p>
+                    <p className="text-2xl font-bold text-green-700">{String((testResult as Record<string, unknown>).successful ?? 0)}</p>
                     <p className="text-xs text-green-600">Succeeded</p>
                   </div>
                   <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 p-3 text-center">
-                    <p className="text-2xl font-bold text-red-700">{(testResult as Record<string, unknown>).failed ?? 0}</p>
+                    <p className="text-2xl font-bold text-red-700">{String((testResult as Record<string, unknown>).failed ?? 0)}</p>
                     <p className="text-xs text-red-600">Failed</p>
                   </div>
                 </div>
