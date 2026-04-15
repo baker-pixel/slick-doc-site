@@ -1,0 +1,1 @@
+ALTER TABLE public.sop_documents DROP CONSTRAINT IF EXISTS sop_documents_tier_check;
