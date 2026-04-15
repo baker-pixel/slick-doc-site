@@ -369,24 +369,22 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
         break;
       }
       case "client_upload":
-        // Navigate to brand tab or mark complete
         if (onTabChange) onTabChange("brand");
-        else handleCompleteStep(step.id);
+        handleCompleteStep(step.id);
         break;
       case "client_oauth":
         if (onTabChange) onTabChange("integrations");
-        else handleCompleteStep(step.id);
+        handleCompleteStep(step.id);
         break;
       case "client_calendar": {
         const url = step.payload?.calendar_url || "https://calendly.com/baker-orangedoor";
         window.open(url, "_blank");
-        // Mark complete after opening
         handleCompleteStep(step.id);
         break;
       }
       case "client_approval":
         if (onTabChange) onTabChange("approvals");
-        else handleCompleteStep(step.id);
+        handleCompleteStep(step.id);
         break;
       default:
         break;

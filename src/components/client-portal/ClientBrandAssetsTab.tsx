@@ -152,6 +152,27 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
 
       if (insertError) throw insertError;
 
+      // Auto-complete the client_upload workflow step if it's still pending
+      try {
+        const { data: wf } = await supabase
+          .from("client_workflows")
+          .select("id")
+          .eq("client_id", clientAccountId)
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (wf) {
+          await supabase
+            .from("workflow_steps")
+            .update({ status: "completed", completed_at: new Date().toISOString() })
+            .eq("workflow_id", wf.id)
+            .eq("task_type", "client_upload")
+            .neq("status", "completed");
+        }
+      } catch (e) {
+        // Non-fatal — step completion is best-effort
+      }
+
       toast({ title: "Asset uploaded successfully!" });
       setUploadDialogOpen(false);
       resetUploadForm();
