@@ -274,6 +274,29 @@ Deno.serve(async (req) => {
         
         if (error) throw error;
         console.log(`Created record in ${table}`);
+
+        // Auto-seed workflow when a new client account is created
+        if (table === "client_accounts" && created?.id) {
+          try {
+            const seedRes = await fetch(
+              `${supabaseUrl}/functions/v1/seed-tier-workflow`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({ client_id: created.id }),
+              }
+            );
+            const seedResult = await seedRes.json();
+            console.log(`Seeded workflow for new client ${created.id}:`, seedResult);
+          } catch (seedErr) {
+            console.error("Failed to seed workflow for new client:", seedErr);
+            // Non-fatal — client is still created
+          }
+        }
+
         return new Response(
           JSON.stringify({ data: created }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }

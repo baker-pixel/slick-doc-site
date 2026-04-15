@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ interface ClientBrandAssetsTabProps {
 }
 
 export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAssetsTabProps) {
+  const queryClient = useQueryClient();
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -168,6 +170,9 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
             .eq("workflow_id", wf.id)
             .eq("task_type", "client_upload")
             .neq("status", "completed");
+          // Invalidate workflow queries so Activity tab refreshes
+          queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+          queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
         }
       } catch (e) {
         // Non-fatal — step completion is best-effort
