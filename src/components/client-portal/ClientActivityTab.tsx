@@ -373,7 +373,7 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
         handleCompleteStep(step.id);
         break;
       case "client_oauth":
-        if (onTabChange) onTabChange("integrations");
+        if (onTabChange) onTabChange("social");
         handleCompleteStep(step.id);
         break;
       case "client_calendar": {
