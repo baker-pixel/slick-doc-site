@@ -148,15 +148,26 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       return;
     }
 
-    // Check for duplicate email or business name
-    const { data: existing } = await supabase
-      .from("client_accounts")
-      .select("id, email, business_name")
-      .or(`email.ilike.${newClient.email},business_name.ilike.${newClient.business_name}`)
-      .limit(1);
+    // Check for duplicate email or business name in parallel
+    const [emailCheck, nameCheck] = await Promise.all([
+      supabase
+        .from("client_accounts")
+        .select("id")
+        .ilike("email", newClient.email)
+        .limit(1),
+      supabase
+        .from("client_accounts")
+        .select("id")
+        .ilike("business_name", newClient.business_name)
+        .limit(1),
+    ]);
 
-    if (existing && existing.length > 0) {
-      toast.error("A client with this email or business name already exists.");
+    if (emailCheck.data && emailCheck.data.length > 0) {
+      toast.error("A client with this email already exists.");
+      return;
+    }
+    if (nameCheck.data && nameCheck.data.length > 0) {
+      toast.error("A client with this business name already exists.");
       return;
     }
 
@@ -777,6 +788,9 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                   onChange={(e) => setNewInvite({ ...newInvite, email: e.target.value })}
                   placeholder="john@example.com"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Pre-filled from the client's account email. Change only if inviting a different contact.
+                </p>
               </div>
               <Button onClick={sendInvitation} className="w-full" disabled={sendingInvite}>
                 {sendingInvite ? (
