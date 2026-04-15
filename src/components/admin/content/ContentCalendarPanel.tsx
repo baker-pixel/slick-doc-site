@@ -10,9 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { 
+import {
   Calendar as CalendarIcon, Plus, Clock, Trash2, Edit, Loader2,
-  Mail, Linkedin, Facebook, Twitter, FileText
+  Mail, Linkedin, Facebook, Twitter, FileText, Sparkles, RefreshCw,
+  CheckCircle, AlertCircle
 } from "lucide-react";
 import { format, isSameDay, startOfDay } from "date-fns";
 
@@ -39,6 +40,16 @@ interface GeneratedContent {
 interface ClientAccount {
   id: string;
   business_name: string;
+  tier: string | null;
+}
+
+interface ContentApproval {
+  id: string;
+  title: string;
+  content_type: string;
+  status: string;
+  publish_status: string | null;
+  submitted_at: string;
 }
 
 export function ContentCalendarPanel() {
@@ -51,6 +62,9 @@ export function ContentCalendarPanel() {
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState<ContentApproval[]>([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -68,18 +82,88 @@ export function ContentCalendarPanel() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    fetchApprovalsForClient(filterClientId);
+  }, [filterClientId]);
+
   const fetchData = async () => {
     setIsLoading(true);
     const [calendarRes, contentRes, clientsRes] = await Promise.all([
       supabase.from("content_calendar").select("*").order("scheduled_for", { ascending: true }),
       supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50),
-      supabase.from("client_accounts").select("id, business_name").eq("status", "active").order("business_name", { ascending: true })
+      supabase.from("client_accounts").select("id, business_name, tier").eq("status", "active").order("business_name", { ascending: true })
     ]);
 
     if (calendarRes.data) setCalendarItems(calendarRes.data);
     if (contentRes.data) setGeneratedContent(contentRes.data);
     if (clientsRes.data) setClients(clientsRes.data);
     setIsLoading(false);
+  };
+
+  const fetchApprovalsForClient = async (clientId: string) => {
+    if (clientId === "all") { setPendingApprovals([]); return; }
+    const { data } = await supabase
+      .from("content_approvals")
+      .select("id, title, content_type, status, publish_status, submitted_at")
+      .eq("client_account_id", clientId)
+      .order("submitted_at", { ascending: false })
+      .limit(10);
+    setPendingApprovals(data || []);
+  };
+
+  const generateAIContent = async () => {
+    if (filterClientId === "all") {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
+    const client = clients.find(c => c.id === filterClientId);
+    if (!client) return;
+    const tier = client.tier || "foundation";
+
+    setIsGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("run-ai-batch", {
+        body: { clientId: filterClientId, batchType: "daily" },
+      });
+      if (error) throw error;
+      toast({
+        title: "AI content generated",
+        description: `Content created for ${client.business_name} — check Content Approvals to review.`,
+      });
+      fetchApprovalsForClient(filterClientId);
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const seedCalendarSlots = async () => {
+    if (filterClientId === "all") {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
+    const client = clients.find(c => c.id === filterClientId);
+    if (!client) return;
+    const tier = client.tier || "foundation";
+
+    setIsSeeding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-schedule-content", {
+        body: { client_id: filterClientId, tier },
+      });
+      if (error) throw error;
+      toast({
+        title: "Calendar seeded",
+        description: `${data?.items_created ?? 0} slots added for ${client.business_name} (${tier} tier). Now click "Generate AI Content" to fill them.`,
+      });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Seed failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSeeding(false);
+    }
   };
 
   const openScheduleModal = (date?: Date) => {
@@ -252,6 +336,28 @@ export function ContentCalendarPanel() {
               ))}
             </SelectContent>
           </Select>
+          {filterClientId !== "all" && (
+            <>
+              <Button
+                variant="outline"
+                onClick={seedCalendarSlots}
+                disabled={isSeeding}
+                title="Seed calendar with scheduled slots based on client tier"
+              >
+                {isSeeding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CalendarIcon className="w-4 h-4 mr-2" />}
+                Seed Slots
+              </Button>
+              <Button
+                variant="outline"
+                onClick={generateAIContent}
+                disabled={isGenerating}
+                title="Generate AI content and queue for approval"
+              >
+                {isGenerating ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Generate AI Content
+              </Button>
+            </>
+          )}
           <Button onClick={() => openScheduleModal(selectedDate)}>
             <Plus className="w-4 h-4 mr-2" /> Schedule Content
           </Button>
@@ -353,6 +459,48 @@ export function ContentCalendarPanel() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Approvals for selected client */}
+      {filterClientId !== "all" && pendingApprovals.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500" />
+              Content Awaiting Approval ({pendingApprovals.filter(a => a.status === "pending").length} pending)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {pendingApprovals.map(a => (
+                <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <div>
+                    <p className="font-medium text-sm">{a.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {a.content_type.replace(/_/g, " ")} · {format(new Date(a.submitted_at), "MMM d, h:mm a")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {a.status === "pending" && (
+                      <Badge className="bg-amber-100 text-amber-800 border-amber-200">Needs Admin Review</Badge>
+                    )}
+                    {a.status === "approved" && a.publish_status === "queued" && (
+                      <Badge className="bg-blue-100 text-blue-800 border-blue-200">Publishing...</Badge>
+                    )}
+                    {a.status === "approved" && a.publish_status === "published" && (
+                      <Badge className="bg-green-100 text-green-800 border-green-200">
+                        <CheckCircle className="w-3 h-3 mr-1" /> Published
+                      </Badge>
+                    )}
+                    {a.status === "changes_requested" && (
+                      <Badge className="bg-orange-100 text-orange-800 border-orange-200">Changes Requested</Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upcoming Items */}
       <Card>
