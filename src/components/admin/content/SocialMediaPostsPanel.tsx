@@ -10,11 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { 
-  Send, 
+import {
+  Send,
   CheckCircle,
   Trash2,
   Plus,
@@ -36,6 +37,11 @@ import {
   Eye,
   EyeOff,
   Zap,
+  AlertTriangle,
+  ChevronDown,
+  Link2,
+  CircleDot,
+  FlaskConical,
 } from "lucide-react";
 
 interface Client {
@@ -59,6 +65,23 @@ interface SocialPost {
   client_account_id: string | null;
 }
 
+interface OAuthToken {
+  id: string;
+  platform: string;
+  expires_at: string | null;
+  page_id: string | null;
+  token_metadata: Record<string, unknown> | null;
+}
+
+interface AutomationAlert {
+  id: string;
+  title: string;
+  message: string;
+  severity: string;
+  source: string | null;
+  created_at: string;
+}
+
 const platformIcons: Record<string, React.ReactNode> = {
   facebook: <Facebook className="h-4 w-4" />,
   instagram: <Instagram className="h-4 w-4" />,
@@ -73,6 +96,8 @@ const platformColors: Record<string, string> = {
   twitter: "bg-sky-500",
 };
 
+const SOCIAL_PLATFORMS = ["facebook", "instagram", "linkedin", "twitter"] as const;
+
 export default function SocialMediaPostsPanel() {
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
@@ -84,6 +109,9 @@ export default function SocialMediaPostsPanel() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imagePrompt, setImagePrompt] = useState("");
   const [contentTopic, setContentTopic] = useState("");
+  const [testResultOpen, setTestResultOpen] = useState(false);
+  const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
+  const [errorsOpen, setErrorsOpen] = useState(false);
   const [newPost, setNewPost] = useState({
     title: "",
     content: "",
@@ -127,7 +155,95 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Create post mutation — uses admin edge function to bypass RLS
+  // Fetch OAuth tokens for selected client
+  const { data: oauthTokens = [] } = useQuery({
+    queryKey: ["client-oauth-tokens", selectedClient],
+    enabled: !!selectedClient,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: { action: "list", table: "client_oauth_tokens", filters: { client_id: selectedClient } },
+      });
+      if (error) throw error;
+      return (data?.data || []) as OAuthToken[];
+    },
+  });
+
+  // Fetch OAuth config (which platforms have credentials configured)
+  const { data: oauthConfig } = useQuery({
+    queryKey: ["oauth-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("oauth-config");
+      if (error) throw error;
+      return data as Record<string, { clientId: string; configured: boolean }>;
+    },
+  });
+
+  // Check n8n webhook status — try a dry-run with no clientId to see if webhook URL is configured
+  const { data: n8nStatus } = useQuery({
+    queryKey: ["n8n-webhook-status"],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("trigger-n8n", {
+          body: { clientId: "__health_check__", tasks: [], trigger: "health_check" },
+        });
+        // If we get "N8N_WEBHOOK_URL not configured" that means it's not set up
+        if (error?.message?.includes("N8N_WEBHOOK_URL") || data?.error?.includes("N8N_WEBHOOK_URL")) {
+          return { configured: false };
+        }
+        // Any other response means the URL is configured (even if the request itself fails for other reasons)
+        return { configured: true };
+      } catch {
+        return { configured: false };
+      }
+    },
+    staleTime: 60_000,
+  });
+
+  // Fetch recent automation alerts for pipeline debugging
+  const { data: recentAlerts = [] } = useQuery({
+    queryKey: ["pipeline-alerts"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "list",
+          table: "automation_alerts",
+          filters: {},
+          order: { column: "created_at", ascending: false },
+          limit: 20,
+        },
+      });
+      if (error) throw error;
+      const all = (data?.data || []) as AutomationAlert[];
+      return all
+        .filter((a) =>
+          a.source === "trigger-n8n" ||
+          a.source === "publish-scheduled-content" ||
+          a.title?.includes("trigger-n8n") ||
+          a.title?.includes("publish-scheduled-content") ||
+          a.message?.includes("n8n") ||
+          a.message?.includes("publish")
+        )
+        .slice(0, 5);
+    },
+    staleTime: 30_000,
+  });
+
+  // Compute pipeline status
+  const connectedPlatforms = oauthTokens.map((t) => t.platform);
+  const n8nConfigured = n8nStatus?.configured ?? false;
+  const pipelineStatus: "green" | "yellow" | "red" = !n8nConfigured
+    ? "red"
+    : connectedPlatforms.length > 0
+    ? "green"
+    : "yellow";
+
+  const pipelineStatusConfig = {
+    green: { color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30", label: "Pipeline Ready" },
+    yellow: { color: "text-yellow-600", bg: "bg-yellow-100 dark:bg-yellow-900/30", label: "No OAuth Tokens" },
+    red: { color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30", label: "N8N Not Configured" },
+  };
+
+  // Create post mutation
   const createPost = useMutation({
     mutationFn: async (post: typeof newPost & { imageUrl?: string }) => {
       if (!selectedClient) throw new Error("Please select a client first");
@@ -141,7 +257,7 @@ export default function SocialMediaPostsPanel() {
             platform: post.platform,
             content_type: "social_post",
             scheduled_for: post.scheduledFor || new Date().toISOString(),
-            status: "draft", // Always draft until admin approves
+            status: "draft",
             client_account_id: selectedClient,
             metadata: { image_url: post.imageUrl || null },
           },
@@ -179,8 +295,6 @@ export default function SocialMediaPostsPanel() {
   // Update post status mutation
   const updatePostStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      // When admin approves, set client_approved=true and status=scheduled
-      // so publish-scheduled-content cron picks it up automatically.
       const extraFields: Record<string, unknown> = {};
       if (status === "approved") {
         extraFields.client_approved = true;
@@ -211,6 +325,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
+  // Trigger publish now
   const triggerPublishNow = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
@@ -228,6 +343,27 @@ export default function SocialMediaPostsPanel() {
     },
     onError: (error) => {
       toast({ title: "Publish failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Test n8n pipeline — runs publish-scheduled-content and shows detailed result
+  const testPipeline = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
+        body: {},
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["social-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-alerts"] });
+      setTestResult(data);
+      setTestResultOpen(true);
+    },
+    onError: (error) => {
+      setTestResult({ error: error.message });
+      setTestResultOpen(true);
     },
   });
 
@@ -336,7 +472,7 @@ export default function SocialMediaPostsPanel() {
     setIsGeneratingImages(true);
     setGeneratedImages([]);
     setSelectedImage(null);
-    
+
     try {
       const prompt = imagePrompt || `Professional marketing image for ${activeClient.business_name} in the ${activeClient.industry || "marketing"} industry`;
 
@@ -386,6 +522,49 @@ export default function SocialMediaPostsPanel() {
     return clients.find((c) => c.id === clientId)?.business_name || "Unknown";
   };
 
+  const startOAuthFlow = (platform: string) => {
+    if (!selectedClient) {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const callbackMap: Record<string, string> = {
+      facebook: `${supabaseUrl}/functions/v1/facebook-oauth-callback`,
+      instagram: `${supabaseUrl}/functions/v1/instagram-oauth-callback`,
+      linkedin: `${supabaseUrl}/functions/v1/linkedin-oauth-callback`,
+      twitter: `${supabaseUrl}/functions/v1/twitter-oauth-callback`,
+    };
+
+    const cfg = oauthConfig?.[platform];
+    if (!cfg?.configured) {
+      toast({ title: `${platform} OAuth not configured`, description: "Set up app credentials first.", variant: "destructive" });
+      return;
+    }
+
+    // Build platform-specific auth URLs
+    const redirectUri = callbackMap[platform];
+    let authUrl = "";
+
+    switch (platform) {
+      case "facebook":
+        authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=pages_manage_posts,pages_read_engagement`;
+        break;
+      case "instagram":
+        authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=instagram_basic,instagram_content_publish,pages_show_list`;
+        break;
+      case "linkedin":
+        authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=w_member_social`;
+        break;
+      case "twitter":
+        authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=tweet.read+tweet.write+users.read&code_challenge=challenge&code_challenge_method=plain`;
+        break;
+    }
+
+    if (authUrl) {
+      window.open(authUrl, "_blank", "width=600,height=700");
+    }
+  };
+
   const draftPosts = posts.filter((p) => p.status === "draft");
   const approvedPosts = posts.filter((p) => p.status === "approved");
   const scheduledPosts = posts.filter((p) => p.status === "scheduled");
@@ -393,7 +572,7 @@ export default function SocialMediaPostsPanel() {
 
   const PostCard = ({ post }: { post: SocialPost }) => {
     const imageUrl = (post.metadata as { image_url?: string } | null)?.image_url;
-    
+
     return (
       <Card className="hover:shadow-md transition-shadow overflow-hidden">
         {imageUrl && (
@@ -516,12 +695,36 @@ export default function SocialMediaPostsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Social Media Posts</h2>
-          <p className="text-muted-foreground">Create AI-generated content mapped to each client</p>
-        </div>
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-2xl font-bold">Social Media Posts</h2>
+            <p className="text-muted-foreground">Create AI-generated content mapped to each client</p>
+          </div>
+          {/* Pipeline Status Indicator */}
+          {selectedClient && (
+            <div className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium", pipelineStatusConfig[pipelineStatus].bg, pipelineStatusConfig[pipelineStatus].color)}>
+              <CircleDot className="h-3 w-3" />
+              {pipelineStatusConfig[pipelineStatus].label}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => testPipeline.mutate()}
+            disabled={testPipeline.isPending}
+            title="Test the full n8n publishing pipeline"
+          >
+            {testPipeline.isPending ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FlaskConical className="h-4 w-4 mr-2" />
+            )}
+            Test Pipeline
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -570,7 +773,6 @@ export default function SocialMediaPostsPanel() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 py-4">
-                {/* Client context banner */}
                 {activeClient && (
                   <div className="rounded-lg border bg-muted/50 p-3 text-sm space-y-1">
                     <div className="flex items-center gap-2 font-medium">
@@ -587,7 +789,6 @@ export default function SocialMediaPostsPanel() {
                   </div>
                 )}
 
-                {/* Platform Selection */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Platform</Label>
@@ -624,7 +825,6 @@ export default function SocialMediaPostsPanel() {
                   </div>
                 </div>
 
-                {/* AI Generate Both Button */}
                 <Button
                   type="button"
                   variant="default"
@@ -641,7 +841,6 @@ export default function SocialMediaPostsPanel() {
                   Generate Content & Images with AI
                 </Button>
 
-                {/* Content Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-base font-semibold">Content</Label>
@@ -678,7 +877,6 @@ export default function SocialMediaPostsPanel() {
                   </p>
                 </div>
 
-                {/* Image Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-base font-semibold">Image</Label>
@@ -703,7 +901,7 @@ export default function SocialMediaPostsPanel() {
                     placeholder="Describe the image (optional) - e.g., 'team working together', 'happy customers'"
                     className="text-sm"
                   />
-                  
+
                   {isGeneratingImages && (
                     <div className="grid grid-cols-2 gap-3">
                       {[1, 2, 3, 4].map((i) => (
@@ -713,7 +911,7 @@ export default function SocialMediaPostsPanel() {
                       ))}
                     </div>
                   )}
-                  
+
                   {generatedImages.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">Click to select an image:</p>
@@ -724,8 +922,8 @@ export default function SocialMediaPostsPanel() {
                             onClick={() => setSelectedImage(img)}
                             className={cn(
                               "relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all",
-                              selectedImage === img 
-                                ? "border-primary ring-2 ring-primary ring-offset-2" 
+                              selectedImage === img
+                                ? "border-primary ring-2 ring-primary ring-offset-2"
                                 : "border-transparent hover:border-muted-foreground/50"
                             )}
                           >
@@ -752,7 +950,6 @@ export default function SocialMediaPostsPanel() {
                   )}
                 </div>
 
-                {/* Schedule */}
                 <div className="space-y-2">
                   <Label>Schedule (optional)</Label>
                   <Input
@@ -762,13 +959,11 @@ export default function SocialMediaPostsPanel() {
                   />
                 </div>
 
-                {/* Approval note */}
                 <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
                   <EyeOff className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>Posts are saved as <strong>drafts</strong> and are <strong>not visible</strong> to clients until you approve them.</span>
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-2 pt-2">
                   <Button variant="outline" className="flex-1" onClick={() => setIsCreateOpen(false)}>
                     Cancel
@@ -786,6 +981,169 @@ export default function SocialMediaPostsPanel() {
           </Dialog>
         </div>
       </div>
+
+      {/* Connected Platforms + OAuth Connect section */}
+      {selectedClient && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Connected Platforms
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {SOCIAL_PLATFORMS.map((platform) => {
+                const token = oauthTokens.find((t) => t.platform === platform);
+                const isConnected = !!token;
+                const isExpired = token?.expires_at ? new Date(token.expires_at) < new Date() : false;
+                const oauthAvailable = oauthConfig?.[platform]?.configured;
+                const pageName = (token?.token_metadata as { page_name?: string } | null)?.page_name;
+
+                return (
+                  <div
+                    key={platform}
+                    className={cn(
+                      "rounded-lg border p-3 space-y-2",
+                      isConnected && !isExpired ? "border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800" : "border-border"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded ${platformColors[platform]} text-white`}>
+                        {platformIcons[platform]}
+                      </div>
+                      <span className="font-medium capitalize text-sm">{platform}</span>
+                      {isConnected && !isExpired && <CheckCircle className="h-3.5 w-3.5 text-green-600 ml-auto" />}
+                      {isConnected && isExpired && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 ml-auto" />}
+                    </div>
+                    {isConnected ? (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {pageName && <p>{pageName}</p>}
+                        {token.expires_at && (
+                          <p className={isExpired ? "text-amber-600 font-medium" : ""}>
+                            {isExpired ? "Expired" : `Expires ${format(new Date(token.expires_at), "MMM d, yyyy")}`}
+                          </p>
+                        )}
+                        {isExpired && (
+                          <Button size="sm" variant="outline" className="w-full mt-1 h-7 text-xs" onClick={() => startOAuthFlow(platform)}>
+                            Reconnect
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-xs"
+                        onClick={() => startOAuthFlow(platform)}
+                        disabled={!oauthAvailable}
+                        title={!oauthAvailable ? "OAuth credentials not configured" : undefined}
+                      >
+                        {oauthAvailable ? "Connect" : "Not Configured"}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Errors - collapsible */}
+      {recentAlerts.length > 0 && (
+        <Collapsible open={errorsOpen} onOpenChange={setErrorsOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="w-full justify-between text-sm text-destructive hover:text-destructive">
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Recent Pipeline Errors ({recentAlerts.length})
+              </span>
+              <ChevronDown className={cn("h-4 w-4 transition-transform", errorsOpen && "rotate-180")} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2 pt-2">
+            {recentAlerts.map((alert) => (
+              <div key={alert.id} className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 p-3 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-red-800 dark:text-red-300">{alert.title}</span>
+                  <span className="text-xs text-muted-foreground">{format(new Date(alert.created_at), "MMM d, h:mm a")}</span>
+                </div>
+                <p className="text-xs text-red-700 dark:text-red-400">{alert.message}</p>
+                {alert.source && (
+                  <Badge variant="outline" className="text-xs">{alert.source}</Badge>
+                )}
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Test Pipeline Result Dialog */}
+      <Dialog open={testResultOpen} onOpenChange={setTestResultOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FlaskConical className="h-5 w-5" />
+              Pipeline Test Results
+            </DialogTitle>
+            <DialogDescription>Results from publish-scheduled-content execution</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {testResult?.error ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-4 text-sm text-red-800 dark:text-red-300">
+                <p className="font-medium">Error</p>
+                <p>{String(testResult.error)}</p>
+              </div>
+            ) : testResult ? (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg border p-3 text-center">
+                    <p className="text-2xl font-bold">{String((testResult as Record<string, unknown>).processed ?? 0)}</p>
+                    <p className="text-xs text-muted-foreground">Processed</p>
+                  </div>
+                  <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 p-3 text-center">
+                    <p className="text-2xl font-bold text-green-700">{String((testResult as Record<string, unknown>).successful ?? 0)}</p>
+                    <p className="text-xs text-green-600">Succeeded</p>
+                  </div>
+                  <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 p-3 text-center">
+                    <p className="text-2xl font-bold text-red-700">{String((testResult as Record<string, unknown>).failed ?? 0)}</p>
+                    <p className="text-xs text-red-600">Failed</p>
+                  </div>
+                </div>
+                {Array.isArray((testResult as Record<string, unknown>).results) && (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {((testResult as Record<string, unknown>).results as Array<Record<string, unknown>>).map((r, i) => (
+                      <div key={i} className={cn("rounded border p-2 text-xs", r.success ? "border-green-200 bg-green-50 dark:bg-green-900/10" : "border-red-200 bg-red-50 dark:bg-red-900/10")}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium capitalize">{String(r.platform)}</span>
+                          <Badge variant={r.success ? "default" : "destructive"} className="text-xs">
+                            {r.success ? "Success" : "Failed"}
+                          </Badge>
+                        </div>
+                        <p className="text-muted-foreground mt-0.5">{String(r.id).slice(0, 8)}…</p>
+                        {r.error && <p className="text-red-600 mt-1">{String(r.error)}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(testResult as Record<string, unknown>).processed === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No posts were due for publishing. Make sure posts are <strong>scheduled</strong> with <strong>client_approved = true</strong> and <strong>scheduled_for ≤ now</strong>.
+                  </p>
+                )}
+              </>
+            ) : null}
+            <div className="rounded-lg border p-3 text-sm space-y-1">
+              <p className="font-medium">N8N Webhook Status</p>
+              <div className="flex items-center gap-2">
+                <CircleDot className={cn("h-3.5 w-3.5", n8nConfigured ? "text-green-600" : "text-red-600")} />
+                <span>{n8nConfigured ? "N8N_WEBHOOK_URL is configured" : "N8N_WEBHOOK_URL is NOT configured"}</span>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {!selectedClient && (
         <Card>
