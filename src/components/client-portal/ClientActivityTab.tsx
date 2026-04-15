@@ -369,8 +369,8 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
         break;
       }
       case "client_upload":
+        // Navigate to Brand Assets — completion handled by ClientBrandAssetsTab after actual upload
         if (onTabChange) onTabChange("brand");
-        handleCompleteStep(step.id);
         break;
       case "client_oauth":
         if (onTabChange) onTabChange("social");
