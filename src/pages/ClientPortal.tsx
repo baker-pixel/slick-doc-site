@@ -192,7 +192,7 @@ export default function ClientPortal() {
         .from("client_portal_users")
         .select("*")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
       if (portalError || !portalUserData) {
         console.error("Portal user lookup failed:", portalError?.message || "No portal user found");

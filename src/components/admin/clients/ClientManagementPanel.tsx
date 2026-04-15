@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Play, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, ExternalLink, Trash2, Clock } from "lucide-react";
+import { Plus, Play, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, ExternalLink, Trash2, Clock, CheckCircle2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { TierBadge } from "../core/TierBadge";
 
@@ -132,9 +132,31 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   };
 
 
+  const isValidUrl = (url: string) => {
+    return /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/.test(url);
+  };
+
   const addClient = async () => {
     if (!newClient.email || !newClient.business_name) {
       toast.error("Email and business name are required");
+      return;
+    }
+
+    // Validate website URL if provided
+    if (newClient.website_url && !isValidUrl(newClient.website_url)) {
+      toast.error("Website URL must start with http:// or https:// and have a valid domain (e.g., https://example.com)");
+      return;
+    }
+
+    // Check for duplicate email or business name
+    const { data: existing } = await supabase
+      .from("client_accounts")
+      .select("id, email, business_name")
+      .or(`email.ilike.${newClient.email},business_name.ilike.${newClient.business_name}`)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      toast.error("A client with this email or business name already exists.");
       return;
     }
 
@@ -193,9 +215,9 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const openInviteDialog = (client: ClientAccount) => {
     setSelectedClientForInvite(client);
     setNewInvite({
-      email: "",
-      first_name: "",
-      last_name: "",
+      email: client.email || "",
+      first_name: client.first_name || "",
+      last_name: client.last_name || "",
     });
     setInviteDialogOpen(true);
   };
@@ -208,6 +230,22 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
 
     setSendingInvite(true);
     try {
+      // Check for existing active invitation
+      const { data: existingInvites } = await supabase
+        .from("client_invitations")
+        .select("id")
+        .eq("client_account_id", selectedClientForInvite.id)
+        .eq("email", newInvite.email)
+        .is("accepted_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .limit(1);
+
+      if (existingInvites && existingInvites.length > 0) {
+        toast.error("An active invitation already exists for this email. Copy the existing link or delete it first.");
+        setSendingInvite(false);
+        return;
+      }
+
       // Create the invitation through admin function (bypasses RLS)
       const { data: inviteResult, error: insertError } = await supabase.functions.invoke("admin", {
         body: {
@@ -250,6 +288,59 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       fetchInvitations();
     } catch (err) {
       toast.error(`Failed to send invitation: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setSendingInvite(false);
+    }
+  };
+
+  const resendInvitation = async (oldInvite: ClientInvitation) => {
+    setSendingInvite(true);
+    try {
+      // Delete old invitation
+      await supabase.functions.invoke("admin", {
+        body: { action: "delete_invitation", password: adminPassword, id: oldInvite.id },
+      });
+
+      // Create new invitation
+      const { data: inviteResult, error: insertError } = await supabase.functions.invoke("admin", {
+        body: {
+          action: "create_invitation",
+          password: adminPassword,
+          data: {
+            client_account_id: oldInvite.client_account_id,
+            email: oldInvite.email,
+            first_name: oldInvite.first_name || null,
+            last_name: oldInvite.last_name || null,
+          },
+        },
+      });
+
+      if (insertError) throw insertError;
+      if (inviteResult?.error) throw new Error(inviteResult.error);
+
+      const newInvitation = inviteResult?.data;
+
+      // Send the invitation email
+      const { error: emailError } = await supabase.functions.invoke("send-client-invite", {
+        body: {
+          invitationId: newInvitation.id,
+          email: oldInvite.email,
+          firstName: oldInvite.first_name,
+          businessName: getClientName(oldInvite.client_account_id),
+          token: newInvitation.token,
+        },
+      });
+
+      if (emailError) {
+        console.error("Email send error:", emailError);
+        toast.warning("Invitation recreated but email may not have sent");
+      } else {
+        toast.success("Invitation resent successfully!");
+      }
+
+      fetchInvitations();
+    } catch (err) {
+      toast.error(`Failed to resend invitation: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setSendingInvite(false);
     }
@@ -381,11 +472,20 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
               </div>
               <div className="space-y-2">
                 <Label>Website URL</Label>
-                <Input
-                  placeholder="https://example.com"
-                  value={newClient.website_url}
-                  onChange={(e) => setNewClient({ ...newClient, website_url: e.target.value })}
-                />
+                <div className="relative">
+                  <Input
+                    placeholder="https://example.com"
+                    value={newClient.website_url}
+                    onChange={(e) => setNewClient({ ...newClient, website_url: e.target.value })}
+                    className={newClient.website_url ? (isValidUrl(newClient.website_url) ? "pr-10 border-green-400" : "pr-10 border-destructive") : ""}
+                  />
+                  {newClient.website_url && isValidUrl(newClient.website_url) && (
+                    <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-green-500" />
+                  )}
+                </div>
+                {newClient.website_url && !isValidUrl(newClient.website_url) && (
+                  <p className="text-xs text-destructive">Must start with http:// or https://</p>
+                )}
               </div>
               <Button onClick={addClient} className="w-full">Add Client</Button>
             </div>
@@ -567,6 +667,21 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                               title="Copy Invite Link"
                             >
                               <Copy className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {!invite.accepted_at && isInviteExpired(invite.expires_at) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resendInvitation(invite)}
+                              disabled={sendingInvite}
+                              title="Resend Invitation"
+                            >
+                              {sendingInvite ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4" />
+                              )}
                             </Button>
                           )}
                           <Button
