@@ -343,15 +343,12 @@ export default function ClientPortalAuth() {
         }
       }
 
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({
-          user_id: userId,
-          role: "client",
-        });
-
-      if (roleError) {
-        console.error("Role creation error:", roleError);
+      try {
+        await supabase
+          .from("user_roles")
+          .upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
+      } catch (roleErr) {
+        console.error("Role upsert error:", roleErr);
       }
 
       await supabase
