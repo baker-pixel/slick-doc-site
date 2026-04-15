@@ -10,7 +10,6 @@ import {
   Sparkles,
   ChevronRight,
   Settings,
-  Lock,
   Calendar,
   FileText,
   CreditCard,
@@ -38,7 +37,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type PortalTab =
@@ -89,120 +87,85 @@ interface NavItemDef {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badgeKey?: keyof BadgeCounts;
-  minTier: ClientTier;
 }
 
-const TIER_RANK: Record<ClientTier, number> = {
-  foundation: 0,
-  growth: 1,
-  transformation: 2,
-};
+// ── Grouped nav sections ──────────────────────────────────────────────
+// All items are always visible & clickable. Tier gating happens inside tab content.
 
-const TIER_DISPLAY: Record<ClientTier, string> = {
-  foundation: "Foundation",
-  growth: "Growth",
-  transformation: "Transformation",
-};
-
-function hasAccess(tier: ClientTier, minTier: ClientTier): boolean {
-  return TIER_RANK[tier] >= TIER_RANK[minTier];
-}
-
-function getUpgradeTierName(minTier: ClientTier): string {
-  return TIER_DISPLAY[minTier];
-}
-
-// Grouped nav sections
 const myPortalItems: NavItemDef[] = [
-  { id: "activity", label: "Home", icon: Activity, minTier: "foundation" },
-  { id: "projects", label: "Projects", icon: LayoutDashboard, minTier: "foundation" },
-  { id: "messages", label: "Messages", icon: MessageCircle, badgeKey: "messages", minTier: "foundation" },
-  { id: "approvals", label: "Approvals", icon: FileCheck, badgeKey: "approvals", minTier: "foundation" },
-  { id: "deliverables", label: "Deliverables", icon: Package, minTier: "foundation" },
-  { id: "calendar", label: "Content Calendar", icon: Calendar, minTier: "foundation" },
+  { id: "activity", label: "Home", icon: Activity },
+  { id: "projects", label: "Projects", icon: LayoutDashboard },
+  { id: "messages", label: "Messages", icon: MessageCircle, badgeKey: "messages" },
+  { id: "approvals", label: "Approvals", icon: FileCheck, badgeKey: "approvals" },
+  { id: "deliverables", label: "Deliverables", icon: Package },
+  { id: "calendar", label: "Content Calendar", icon: Calendar },
 ];
 
 const brandToolsItems: NavItemDef[] = [
-  { id: "brand", label: "Brand Assets", icon: Palette, minTier: "foundation" },
-  { id: "access", label: "Platform Access", icon: KeyRound, minTier: "foundation" },
-  { id: "social", label: "Social Media", icon: Share2, minTier: "foundation" },
-  { id: "integrations", label: "Integrations", icon: Plug, minTier: "foundation" },
-  { id: "learning", label: "Learning Hub", icon: GraduationCap, minTier: "foundation" },
-  { id: "analytics", label: "Analytics", icon: BarChart3, minTier: "foundation" },
+  { id: "brand", label: "Brand Assets", icon: Palette },
+  { id: "access", label: "Platform Access", icon: KeyRound },
+  { id: "social", label: "Social Media", icon: Share2 },
+  { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "learning", label: "Learning Hub", icon: GraduationCap },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 const accountItems: NavItemDef[] = [
-  { id: "agreements", label: "Agreements", icon: FileSignature, minTier: "foundation" },
-  { id: "team", label: "Your Team", icon: Users, minTier: "foundation" },
+  { id: "agreements", label: "Agreements", icon: FileSignature },
+  { id: "team", label: "Your Team", icon: Users },
 ];
 
 const supportItems: NavItemDef[] = [
-  { id: "notifications", label: "Updates", icon: Bell, badgeKey: "notifications", minTier: "foundation" },
-  { id: "meetings", label: "Meetings", icon: Calendar, minTier: "foundation" },
-  { id: "requests", label: "Requests", icon: Send, minTier: "foundation" },
-  { id: "documents", label: "Documents", icon: FileText, minTier: "foundation" },
-  { id: "invoices", label: "Invoices", icon: CreditCard, minTier: "foundation" },
-  { id: "help", label: "Help", icon: HelpCircle, minTier: "foundation" },
-  { id: "settings", label: "Settings", icon: Settings, minTier: "foundation" },
+  { id: "notifications", label: "Updates", icon: Bell, badgeKey: "notifications" },
+  { id: "meetings", label: "Meetings", icon: Calendar },
+  { id: "requests", label: "Requests", icon: Send },
+  { id: "documents", label: "Documents", icon: FileText },
+  { id: "invoices", label: "Invoices", icon: CreditCard },
+  { id: "help", label: "Help", icon: HelpCircle },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
+
+// ── NavItem ───────────────────────────────────────────────────────────
 
 interface NavItemProps {
   item: NavItemDef;
   activeTab: PortalTab;
   onTabChange: (tab: PortalTab) => void;
   badgeCounts?: BadgeCounts;
-  locked: boolean;
-  lockTierName?: string;
 }
 
-function NavItem({ item, activeTab, onTabChange, badgeCounts, locked, lockTierName }: NavItemProps) {
+function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
   const isActive = activeTab === item.id;
   const badgeCount = item.badgeKey && badgeCounts ? badgeCounts[item.badgeKey] : 0;
-  const showBadge = badgeCount > 0 && !isActive && !locked;
+  const showBadge = badgeCount > 0 && !isActive;
 
-  const button = (
-    <SidebarMenuButton
-      isActive={!locked && isActive}
-      onClick={locked ? undefined : () => onTabChange(item.id)}
-      tooltip={locked ? `Available in ${lockTierName} plan` : item.label}
-      className={cn(
-        "relative transition-all duration-200 rounded-xl h-10",
-        locked
-          ? "opacity-50 cursor-not-allowed"
-          : isActive
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive}
+        onClick={() => onTabChange(item.id)}
+        tooltip={item.label}
+        className={cn(
+          "relative transition-all duration-200 rounded-xl h-10",
+          isActive
             ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
             : "hover:bg-muted/80"
-      )}
-    >
-      <item.icon className={cn("h-4 w-4", !locked && isActive && "scale-110")} />
-      <span className="flex-1 font-medium">{item.label}</span>
-      {locked && <Lock className="h-3 w-3 opacity-60" />}
-      {showBadge && (
-        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground">
-          {badgeCount > 9 ? "9+" : badgeCount}
-        </span>
-      )}
-      {!locked && isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60" />}
-    </SidebarMenuButton>
+        )}
+      >
+        <item.icon className={cn("h-4 w-4", isActive && "scale-110")} />
+        <span className="flex-1 font-medium">{item.label}</span>
+        {showBadge && (
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground">
+            {badgeCount > 9 ? "9+" : badgeCount}
+          </span>
+        )}
+        {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60" />}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
-
-  if (locked) {
-    return (
-      <SidebarMenuItem>
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>{button}</TooltipTrigger>
-            <TooltipContent side="right" className="max-w-[200px]">
-              <p className="text-xs">Available in <strong>{lockTierName}</strong> plan — ask your account manager to upgrade.</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </SidebarMenuItem>
-    );
-  }
-
-  return <SidebarMenuItem>{button}</SidebarMenuItem>;
 }
+
+// ── Sidebar ───────────────────────────────────────────────────────────
 
 export function ClientPortalSidebar({
   activeTab,
@@ -212,8 +175,9 @@ export function ClientPortalSidebar({
   onSignOut,
   badgeCounts,
   hiddenTabs = [],
-  clientTier = "foundation",
-  isOnboardingComplete = true,
+  // Keep props for call-site compat — no longer used for sidebar filtering
+  clientTier: _clientTier = "foundation",
+  isOnboardingComplete: _isOnboardingComplete = true,
 }: ClientPortalSidebarProps) {
   const filterItems = (items: NavItemDef[]) =>
     items.filter(item => !hiddenTabs.includes(item.id));
@@ -226,20 +190,15 @@ export function ClientPortalSidebar({
     .slice(0, 2) || "CL";
 
   const renderItems = (items: NavItemDef[]) =>
-    filterItems(items).map((item) => {
-      const locked = !hasAccess(clientTier, item.minTier);
-      return (
-        <NavItem
-          key={item.id}
-          item={item}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          badgeCounts={badgeCounts}
-          locked={locked}
-          lockTierName={locked ? getUpgradeTierName(item.minTier) : undefined}
-        />
-      );
-    });
+    filterItems(items).map((item) => (
+      <NavItem
+        key={item.id}
+        item={item}
+        activeTab={activeTab}
+        onTabChange={onTabChange}
+        badgeCounts={badgeCounts}
+      />
+    ));
 
   const labelClass = "text-[10px] uppercase tracking-widest text-muted-foreground/60 px-2 mb-1";
 
@@ -262,27 +221,21 @@ export function ClientPortalSidebar({
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>My Portal</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {renderItems(myPortalItems)}
-            </SidebarMenu>
+            <SidebarMenu className="space-y-0.5">{renderItems(myPortalItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>Brand & Tools</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {renderItems(brandToolsItems)}
-            </SidebarMenu>
+            <SidebarMenu className="space-y-0.5">{renderItems(brandToolsItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>Account</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {renderItems(accountItems)}
-            </SidebarMenu>
+            <SidebarMenu className="space-y-0.5">{renderItems(accountItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -291,9 +244,7 @@ export function ClientPortalSidebar({
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>Support</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {renderItems(supportItems)}
-            </SidebarMenu>
+            <SidebarMenu className="space-y-0.5">{renderItems(supportItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
