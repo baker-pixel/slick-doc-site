@@ -381,12 +381,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
     );
   }
 
-  const fileAccept =
-    uploadForm.asset_type === "logo" || uploadForm.asset_type === "icon"
-      ? "image/*"
-      : uploadForm.asset_type === "font"
-      ? ".ttf,.otf,.woff,.woff2,.eot"
-      : "*";
 
   // ---- Action buttons shared pattern ----
   const AssetActions = ({ asset }: { asset: BrandAsset }) => (
