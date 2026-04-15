@@ -138,9 +138,14 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
           name: uploadForm.name,
           description: uploadForm.description || null,
           asset_type: uploadForm.asset_type,
-          category: uploadForm.asset_type === "logo" ? "logos" : 
-                   uploadForm.asset_type === "color" ? "colors" :
-                   uploadForm.asset_type === "font" ? "fonts" : "guidelines",
+          category:
+            uploadForm.asset_type === "logo" || uploadForm.asset_type === "icon"
+              ? "logos"
+              : uploadForm.asset_type === "color"
+              ? "colors"
+              : uploadForm.asset_type === "font"
+              ? "fonts"
+              : "guidelines",
           file_path: filePath,
           metadata,
         });
@@ -149,8 +154,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
 
       toast({ title: "Asset uploaded successfully!" });
       setUploadDialogOpen(false);
-      setUploadForm({ name: "", asset_type: "logo", description: "", colorValue: "" });
-      setSelectedFile(null);
+      resetUploadForm();
       fetchAssets();
     } catch (error: any) {
       console.error("Upload error:", error);
@@ -198,7 +202,9 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = asset.name;
+      // Preserve original extension from file_path
+      const ext = asset.file_path ? "." + asset.file_path.split(".").pop() : "";
+      a.download = asset.name + ext;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(downloadUrl);
@@ -209,6 +215,17 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       console.error("Download error:", error);
       toast({ title: "Download failed", variant: "destructive" });
     }
+  };
+
+  const resetUploadForm = () => {
+    setUploadForm({ name: "", asset_type: "logo", description: "", colorValue: "" });
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    if (!open) resetUploadForm();
+    setUploadDialogOpen(open);
   };
 
   const handleCopyColor = (colorValue: string, assetId: string) => {
@@ -230,10 +247,12 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
     );
   }
 
-  const logoAssets = assets.filter((a) => a.asset_type === "logo");
+  const logoAssets = assets.filter((a) => a.asset_type === "logo" || a.asset_type === "icon");
   const colorAssets = assets.filter((a) => a.asset_type === "color");
   const fontAssets = assets.filter((a) => a.asset_type === "font");
-  const guidelineAssets = assets.filter((a) => a.asset_type === "guideline" || a.asset_type === "template");
+  const guidelineAssets = assets.filter(
+    (a) => a.asset_type === "guideline" || a.asset_type === "template" || a.asset_type === "other"
+  );
 
   return (
     <div className="space-y-6">
@@ -249,7 +268,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       </div>
 
       {/* Upload Dialog */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+      <Dialog open={uploadDialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Upload Brand Asset</DialogTitle>
@@ -313,20 +332,38 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                     ref={fileInputRef}
                     type="file"
                     className="hidden"
-                    accept={uploadForm.asset_type === "logo" ? "image/*" : 
-                            uploadForm.asset_type === "font" ? ".ttf,.otf,.woff,.woff2" : 
-                            "*"}
+                    accept={
+                      uploadForm.asset_type === "logo" || uploadForm.asset_type === "icon"
+                        ? "image/*,.svg"
+                        : uploadForm.asset_type === "font"
+                        ? ".ttf,.otf,.woff,.woff2,.eot"
+                        : "*"
+                    }
                     onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   />
                   {selectedFile ? (
                     <div className="flex items-center justify-center gap-2">
                       <FileText className="h-5 w-5 text-primary" />
                       <span className="text-sm font-medium">{selectedFile.name}</span>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground underline ml-1"
+                        onClick={(e) => { e.stopPropagation(); setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      >
+                        Change
+                      </button>
                     </div>
                   ) : (
                     <div>
                       <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground">Click to select a file</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {uploadForm.asset_type === "logo" || uploadForm.asset_type === "icon"
+                          ? "PNG, JPG, SVG, GIF, WebP"
+                          : uploadForm.asset_type === "font"
+                          ? "TTF, OTF, WOFF, WOFF2, EOT"
+                          : "Any file type"}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -344,7 +381,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
+            <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
               Cancel
             </Button>
             <Button onClick={handleUpload} disabled={uploading}>
