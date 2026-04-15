@@ -5,6 +5,10 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   CheckCircle2,
   Circle,
@@ -12,7 +16,6 @@ import {
   Sparkles,
   ArrowRight,
   XCircle,
-  Wifi,
   CalendarDays,
   Info,
   Lock,
@@ -127,6 +130,16 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [workflowCreatedAt, setWorkflowCreatedAt] = useState<string | null>(null);
   const [completingStep, setCompletingStep] = useState<string | null>(null);
+  const [showBusinessForm, setShowBusinessForm] = useState(false);
+  const [pendingFormStepId, setPendingFormStepId] = useState<string | null>(null);
+  const [submittingBizForm, setSubmittingBizForm] = useState(false);
+  const [bizForm, setBizForm] = useState({
+    business_name: "",
+    website_url: "",
+    first_name: "",
+    last_name: "",
+    marketing_goal: "",
+  });
 
   // Fetch workflow steps
   const { data: workflowData, isLoading: wfLoading } = useQuery({
@@ -218,14 +231,41 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
         .single();
       if (!client) return null;
 
-      const { data } = await supabase
+      // Case-insensitive email match to handle any casing differences
+      const { data: byEmail } = await supabase
         .from("gap_analysis_submissions")
         .select("id, overall_score, score_breakdown, business_name, created_at")
-        .eq("email", client.email)
+        .ilike("email", client.email)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      return data;
+
+      // Also try matching by business name as fallback
+      let byBusiness = null;
+      if (!byEmail?.overall_score) {
+        const { data: acct } = await supabase
+          .from("client_accounts")
+          .select("business_name")
+          .eq("id", clientAccountId)
+          .single();
+        if (acct?.business_name) {
+          const { data } = await supabase
+            .from("gap_analysis_submissions")
+            .select("id, overall_score, score_breakdown, business_name, created_at")
+            .ilike("business_name", acct.business_name)
+            .not("overall_score", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          byBusiness = data;
+        }
+      }
+
+      // Prefer whichever has an overall_score; if both do, prefer more recent
+      if (byEmail?.overall_score != null && byBusiness?.overall_score != null) {
+        return new Date(byEmail.created_at) >= new Date(byBusiness.created_at) ? byEmail : byBusiness;
+      }
+      return byEmail?.overall_score != null ? byEmail : byBusiness ?? byEmail;
     },
   });
 
@@ -278,13 +318,56 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
     }
   }, [clientAccountId, queryClient]);
 
+  const handleBizFormSubmit = useCallback(async () => {
+    if (!pendingFormStepId) return;
+    if (!bizForm.business_name.trim()) {
+      toast({ title: "Business name is required", variant: "destructive" });
+      return;
+    }
+    setSubmittingBizForm(true);
+    try {
+      const { error } = await supabase
+        .from("client_accounts")
+        .update({
+          business_name: bizForm.business_name,
+          website_url: bizForm.website_url || null,
+          first_name: bizForm.first_name || null,
+          last_name: bizForm.last_name || null,
+        })
+        .eq("id", clientAccountId);
+
+      if (error) throw error;
+      setShowBusinessForm(false);
+      await handleCompleteStep(pendingFormStepId);
+      setPendingFormStepId(null);
+    } catch (err: any) {
+      toast({ title: "Failed to save details", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmittingBizForm(false);
+    }
+  }, [pendingFormStepId, bizForm, clientAccountId, handleCompleteStep]);
+
   // Handle CTA click
-  const handleStepAction = useCallback((step: WorkflowStep) => {
+  const handleStepAction = useCallback(async (step: WorkflowStep) => {
     switch (step.task_type) {
-      case "client_form":
-        // For now, mark complete directly (could open modal in future)
-        handleCompleteStep(step.id);
+      case "client_form": {
+        // Fetch existing account data to pre-fill the form
+        const { data: acct } = await supabase
+          .from("client_accounts")
+          .select("business_name, website_url, first_name, last_name")
+          .eq("id", clientAccountId)
+          .single();
+        setBizForm({
+          business_name: acct?.business_name || "",
+          website_url: acct?.website_url || "",
+          first_name: acct?.first_name || "",
+          last_name: acct?.last_name || "",
+          marketing_goal: "",
+        });
+        setPendingFormStepId(step.id);
+        setShowBusinessForm(true);
         break;
+      }
       case "client_upload":
         // Navigate to brand tab or mark complete
         if (onTabChange) onTabChange("brand");
@@ -318,6 +401,81 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
   const currentTask = currentTaskIndex >= 0 ? tasks[currentTaskIndex] : null;
   const allDone = totalCount > 0 && completedCount === totalCount;
 
+  // Business confirmation dialog — shared across all render paths
+  const bizFormDialog = (
+    <Dialog open={showBusinessForm} onOpenChange={(open) => { if (!open) setShowBusinessForm(false); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Confirm Your Business Details</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Review and confirm your information so we can tailor your marketing plan.
+          </p>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="biz-name">Business Name *</Label>
+            <Input
+              id="biz-name"
+              value={bizForm.business_name}
+              onChange={(e) => setBizForm((f) => ({ ...f, business_name: e.target.value }))}
+              placeholder="Your Business Name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="biz-website">Website URL</Label>
+            <Input
+              id="biz-website"
+              value={bizForm.website_url}
+              onChange={(e) => setBizForm((f) => ({ ...f, website_url: e.target.value }))}
+              placeholder="https://yourbusiness.com"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="biz-first">First Name</Label>
+              <Input
+                id="biz-first"
+                value={bizForm.first_name}
+                onChange={(e) => setBizForm((f) => ({ ...f, first_name: e.target.value }))}
+                placeholder="John"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="biz-last">Last Name</Label>
+              <Input
+                id="biz-last"
+                value={bizForm.last_name}
+                onChange={(e) => setBizForm((f) => ({ ...f, last_name: e.target.value }))}
+                placeholder="Smith"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="biz-goal">Top Marketing Goal</Label>
+            <Textarea
+              id="biz-goal"
+              value={bizForm.marketing_goal}
+              onChange={(e) => setBizForm((f) => ({ ...f, marketing_goal: e.target.value }))}
+              placeholder="e.g. Get more local leads, grow online reviews, increase website traffic"
+              rows={3}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowBusinessForm(false)} disabled={submittingBizForm}>
+            Cancel
+          </Button>
+          <Button onClick={handleBizFormSubmit} disabled={submittingBizForm}>
+            {submittingBizForm ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : null}
+            Confirm & Continue
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -327,15 +485,67 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
   }
 
   if (!hasWorkflow && totalCount === 0) {
+    const placeholderSteps = [
+      "Confirm Business Information",
+      "Upload Brand Assets",
+      "Connect Social Accounts",
+      "Book Your Kickoff Call",
+      "Review Your First Content",
+    ];
     return (
-      <div className="max-w-xl mx-auto text-center py-20 space-y-4">
-        <div className="h-16 w-16 mx-auto rounded-2xl bg-muted/50 flex items-center justify-center">
-          <Sparkles className="h-8 w-8 text-muted-foreground" />
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Score placeholder */}
+        <Card className="border-dashed border-2">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <BarChart3 className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-sm">Your SYSTEM Gap Analysis is being prepared</p>
+              <p className="text-xs text-muted-foreground">
+                Your marketing team is reviewing your website and building your personalised score.
+              </p>
+            </div>
+            <Badge variant="outline" className="flex-shrink-0 whitespace-nowrap">In Progress</Badge>
+          </CardContent>
+        </Card>
+
+        {/* Progress header */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold tracking-tight">Your Marketing Roadmap</h2>
+            <span className="text-sm text-muted-foreground">Setting up…</span>
+          </div>
+          <Progress value={0} className="h-3" />
+          <p className="text-sm text-muted-foreground">
+            Your step-by-step plan is being configured by your team. Check back shortly.
+          </p>
         </div>
-        <h2 className="text-xl font-bold">Your plan is being prepared</h2>
-        <p className="text-muted-foreground">
-          Your marketing team is setting up your custom roadmap. You'll see your step-by-step progress here soon.
-        </p>
+
+        {/* Placeholder step list — disabled */}
+        <div className="space-y-1 opacity-40 pointer-events-none select-none">
+          {placeholderSteps.map((name, i) => (
+            <div key={i} className="flex items-start gap-3 rounded-lg px-4 py-3 bg-muted/30">
+              <Circle className="h-5 w-5 text-border mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium">{name}</p>
+                <p className="text-xs text-muted-foreground">Awaiting setup</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Info callout */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-foreground">
+              Your team is setting up your custom marketing roadmap. You'll receive an email once everything is ready to go.
+            </p>
+          </CardContent>
+        </Card>
+
+        {bizFormDialog}
       </div>
     );
   }
@@ -424,7 +634,7 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
       );
     }
 
-    // No gap analysis found — prompt
+    // No gap analysis found — show "in progress" state, do NOT link to public page
     return (
       <Card className="border-dashed border-2">
         <CardContent className="p-6 flex items-center gap-4">
@@ -432,14 +642,12 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
             <BarChart3 className="h-5 w-5 text-primary" />
           </div>
           <div className="flex-1">
-            <p className="font-medium text-sm">Complete your free SYSTEM Gap Analysis</p>
-            <p className="text-xs text-muted-foreground">Get a personalized score and action plan for your marketing.</p>
+            <p className="font-medium text-sm">Your SYSTEM Gap Analysis is being prepared</p>
+            <p className="text-xs text-muted-foreground">
+              Your marketing team is reviewing your website and building your personalised score. You'll see your results here as soon as they're ready.
+            </p>
           </div>
-          <a href="/gap-analysis" target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline">
-              Start Analysis <ArrowRight className="h-3 w-3 ml-1" />
-            </Button>
-          </a>
+          <Badge variant="outline" className="flex-shrink-0 whitespace-nowrap">In Progress</Badge>
         </CardContent>
       </Card>
     );
@@ -584,6 +792,9 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
             </div>
           </CardContent>
         </Card>
+
+        {/* Business confirmation Dialog */}
+        {bizFormDialog}
       </div>
     );
   }
@@ -686,6 +897,9 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
           );
         })}
       </div>
+
+      {/* Business confirmation Dialog */}
+      {bizFormDialog}
     </div>
   );
 }
