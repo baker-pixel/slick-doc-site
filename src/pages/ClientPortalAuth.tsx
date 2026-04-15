@@ -325,19 +325,22 @@ export default function ClientPortalAuth() {
         });
 
       if (portalError) {
-        console.error("Portal user creation error:", portalError);
-        const desc = portalError.code === "42501" || portalError.message?.includes("row-level security")
-          ? "A permissions issue prevented your portal setup. This has been logged — please try again in a moment."
-          : portalError.code === "23505"
-          ? "Your portal access already exists. Try signing in instead."
-          : `Portal setup failed: ${portalError.message || "Unknown error"}. Please try again or contact your account manager.`;
-        toast({
-          title: "Portal Setup Failed",
-          description: desc,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+        // If duplicate (23505), user already has access — proceed
+        if (portalError.code === "23505") {
+          console.warn("Portal user already exists, proceeding.");
+        } else {
+          console.error("Portal user creation error:", portalError);
+          const desc = portalError.code === "42501" || portalError.message?.includes("row-level security")
+            ? "A permissions issue prevented your portal setup. This has been logged — please try again in a moment."
+            : `Portal setup failed: ${portalError.message || "Unknown error"}. Your login was created — contact your admin with your email address to restore portal access.`;
+          toast({
+            title: "Portal Setup Failed",
+            description: desc,
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       const { error: roleError } = await supabase
