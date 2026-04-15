@@ -443,165 +443,207 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
           <h2 className="text-2xl font-semibold">Brand Assets</h2>
           <p className="text-muted-foreground">Upload and manage your brand logos, colors, fonts, and guidelines</p>
         </div>
-        <Button onClick={() => setUploadDialogOpen(true)}>
+        <Button onClick={() => { setUploadStep(1); setUploadDialogOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Upload Asset
         </Button>
       </div>
 
-      {/* Upload Dialog */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload Brand Asset</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="asset-name">Asset Name *</Label>
-              <Input
-                id="asset-name"
-                value={uploadForm.name}
-                onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
-                placeholder="e.g., Primary Logo, Brand Blue"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="asset-type">Asset Type *</Label>
-              <Select
-                value={uploadForm.asset_type}
-                onValueChange={(value) => {
-                  setUploadForm({ ...uploadForm, asset_type: value });
-                  setSelectedFile(null);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="logo">Logo</SelectItem>
-                  <SelectItem value="color">Color</SelectItem>
-                  <SelectItem value="font">Font</SelectItem>
-                  <SelectItem value="guideline">Guideline / Document</SelectItem>
-                  <SelectItem value="icon">Icon</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {uploadForm.asset_type === "color" ? (
-              <div className="space-y-2">
-                <Label htmlFor="color-value">Color Value (Hex) *</Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="color"
-                    value={uploadForm.colorValue || "#000000"}
-                    onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
-                    className="w-14 h-10 p-1 cursor-pointer"
-                  />
-                  <Input
-                    id="color-value"
-                    value={uploadForm.colorValue}
-                    onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
-                    placeholder="#FF5500"
-                  />
-                </div>
+      {/* Upload Dialog — 2-step flow */}
+      <Dialog open={uploadDialogOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="sm:max-w-[500px]">
+          {uploadStep === 1 ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>What would you like to add?</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3 py-4">
+                {TYPE_CARDS.map((tc) => {
+                  const TypeIcon = tc.icon;
+                  return (
+                    <button
+                      key={tc.type}
+                      onClick={() => selectTypeAndAdvance(tc.type)}
+                      className="flex flex-col items-center gap-2 rounded-xl border-2 border-muted p-5 text-center transition-all hover:border-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <TypeIcon className="h-8 w-8 text-primary" />
+                      <span className="text-sm font-semibold">{tc.label}</span>
+                      <span className="text-[11px] text-muted-foreground">{tc.description}</span>
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label>File *</Label>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/25 hover:border-primary/50"
-                  }`}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={handleDragOver}
-                  onDragEnter={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    accept={fileAccept}
-                    onChange={handleFileSelect}
-                  />
-                  {selectedFile ? (
-                    <div className="space-y-3">
-                      {/* Image thumbnail preview */}
-                      {filePreview && isImageFile(selectedFile.name) && (
-                        <div className="flex justify-center">
-                          <img
-                            src={filePreview}
-                            alt="Preview"
-                            className="max-h-32 max-w-full object-contain rounded border"
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-2">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={goBackToStep1}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <DialogTitle>{DIALOG_TITLES[uploadForm.asset_type] || "Upload Asset"}</DialogTitle>
+                </div>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {/* Color type */}
+                {uploadForm.asset_type === "color" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Pick a Color</Label>
+                      <div className="flex gap-3 items-center">
+                        <Input
+                          type="color"
+                          value={uploadForm.colorValue || "#000000"}
+                          onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
+                          className="w-16 h-16 p-1 cursor-pointer rounded-lg border-2"
+                        />
+                        <div className="flex-1 space-y-1">
+                          <Label htmlFor="hex-input" className="text-xs text-muted-foreground">Hex Value</Label>
+                          <Input
+                            id="hex-input"
+                            value={uploadForm.colorValue}
+                            onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
+                            placeholder="#FF5500"
+                            className="font-mono"
                           />
                         </div>
+                      </div>
+                      {uploadForm.colorValue && (
+                        <div
+                          className="h-12 w-full rounded-lg border"
+                          style={{ backgroundColor: uploadForm.colorValue }}
+                        />
                       )}
-                      {/* Font file info */}
-                      {isFontFile(selectedFile.name) && (
-                        <div className="flex items-center justify-center gap-2">
-                          <Type className="h-8 w-8 text-primary" />
-                          <div className="text-left">
-                            <p className="text-sm font-medium">{selectedFile.name}</p>
-                            <Badge variant="outline" className="text-xs mt-1">
-                              {getFileExtension(selectedFile.name)}
-                            </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="color-name">Name *</Label>
+                      <Input
+                        id="color-name"
+                        value={uploadForm.name}
+                        onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                        placeholder="e.g., Brand Orange, Primary Blue"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* File drag-and-drop zone */}
+                    <div className="space-y-2">
+                      <div
+                        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+                          isDragging
+                            ? "border-primary bg-primary/5 scale-[1.01]"
+                            : "border-muted-foreground/25 hover:border-primary/50"
+                        }`}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          className="hidden"
+                          accept={FILE_ACCEPT_MAP[uploadForm.asset_type] || "*"}
+                          onChange={handleFileSelect}
+                        />
+                        {selectedFile ? (
+                          <div className="space-y-3">
+                            {/* Image thumbnail */}
+                            {filePreview && isImageFile(selectedFile.name) && (
+                              <div className="flex justify-center">
+                                <img
+                                  src={filePreview}
+                                  alt="Preview"
+                                  className="max-h-36 max-w-full object-contain rounded-lg border"
+                                />
+                              </div>
+                            )}
+                            {/* Non-image file info */}
+                            {!isImageFile(selectedFile.name) && (
+                              <div className="flex items-center justify-center gap-3">
+                                {isFontFile(selectedFile.name) ? (
+                                  <Type className="h-10 w-10 text-primary" />
+                                ) : (
+                                  <FileText className="h-10 w-10 text-primary" />
+                                )}
+                                <div className="text-left">
+                                  <p className="text-sm font-medium">{selectedFile.name}</p>
+                                  <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
+                                  {isFontFile(selectedFile.name) && (
+                                    <Badge variant="outline" className="text-[10px] mt-1">
+                                      {getFileExtension(selectedFile.name)}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {/* Image file size */}
+                            {isImageFile(selectedFile.name) && (
+                              <p className="text-xs text-muted-foreground">
+                                {selectedFile.name} · {formatFileSize(selectedFile.size)}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">Click or drag to replace</p>
                           </div>
+                        ) : (
+                          <div>
+                            <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                            <p className="text-sm font-medium">Drag & drop your file here</p>
+                            <p className="text-xs text-muted-foreground mt-1">or click to browse</p>
+                          </div>
+                        )}
+                      </div>
+                      {/* Accepted format badges for fonts */}
+                      {uploadForm.asset_type === "font" && (
+                        <div className="flex flex-wrap gap-1.5 justify-center">
+                          {["TTF", "OTF", "WOFF", "WOFF2", "EOT"].map((fmt) => (
+                            <Badge key={fmt} variant="outline" className="text-[10px] text-muted-foreground">{fmt}</Badge>
+                          ))}
                         </div>
                       )}
-                      {/* Generic file info */}
-                      {!isImageFile(selectedFile.name) && !isFontFile(selectedFile.name) && (
-                        <div className="flex items-center justify-center gap-2">
-                          <FileText className="h-5 w-5 text-primary" />
-                          <span className="text-sm font-medium">{selectedFile.name}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">Click or drag to replace</p>
                     </div>
-                  ) : (
-                    <div>
-                      <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm font-medium">Drag & drop a file here</p>
-                      <p className="text-xs text-muted-foreground mt-1">or click to browse</p>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="file-name">Name *</Label>
+                      <Input
+                        id="file-name"
+                        value={uploadForm.name}
+                        onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                        placeholder={
+                          uploadForm.asset_type === "logo" ? "e.g., Primary Logo" :
+                          uploadForm.asset_type === "font" ? "e.g., Montserrat Bold" :
+                          uploadForm.asset_type === "guideline" ? "e.g., Brand Guidelines v2" :
+                          "e.g., Asset name"
+                        }
+                      />
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
+                  </>
+                )}
 
-            {/* Upload progress */}
-            {uploading && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Uploading…</span>
-                  <span className="font-medium">{uploadProgress}%</span>
-                </div>
-                <Progress value={uploadProgress} className="h-2" />
+                {/* Upload progress */}
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Uploading…</span>
+                      <span className="font-medium">{uploadProgress}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                )}
               </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Input
-                id="description"
-                value={uploadForm.description}
-                onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                placeholder="Brief description of this asset"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpload} disabled={uploading}>
-              {uploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Upload
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpload} disabled={uploading}>
+                  {uploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {uploadForm.asset_type === "color" ? "Add Color" : "Upload"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
