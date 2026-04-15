@@ -14,7 +14,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Download, Image, Type, Palette, FileText, Copy, Check, Upload, Plus, Trash2 } from "lucide-react";
+import { Loader2, Download, Image, Type, Palette, FileText, Copy, Check, Upload, Plus, Trash2, ArrowLeft, FileUp } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface BrandAsset {
@@ -86,6 +86,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; filePath: string | null; name: string } | null>(null);
+  const [uploadStep, setUploadStep] = useState<1 | 2>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -301,7 +302,60 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
   const openUploadWithType = (type: string) => {
     setUploadForm({ name: "", asset_type: type, description: "", colorValue: "" });
     setSelectedFile(null);
+    setUploadStep(2);
     setUploadDialogOpen(true);
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setUploadDialogOpen(open);
+    if (!open) {
+      setUploadStep(1);
+      setSelectedFile(null);
+      setUploadForm({ name: "", asset_type: "logo", description: "", colorValue: "" });
+    }
+  };
+
+  const selectTypeAndAdvance = (type: string) => {
+    setUploadForm({ name: "", asset_type: type, description: "", colorValue: "" });
+    setSelectedFile(null);
+    setUploadStep(2);
+  };
+
+  const goBackToStep1 = () => {
+    setUploadStep(1);
+    setSelectedFile(null);
+    setUploadForm({ name: "", asset_type: "logo", description: "", colorValue: "" });
+  };
+
+  const TYPE_CARDS: { type: string; label: string; icon: typeof Image; description: string }[] = [
+    { type: "logo", label: "Logo", icon: Image, description: "PNG, JPG, SVG, WebP" },
+    { type: "color", label: "Color", icon: Palette, description: "Hex color values" },
+    { type: "font", label: "Font", icon: Type, description: "TTF, OTF, WOFF, WOFF2" },
+    { type: "guideline", label: "Guideline", icon: FileText, description: "PDF, DOC, DOCX" },
+    { type: "other", label: "Other", icon: FileUp, description: "Any file type" },
+  ];
+
+  const DIALOG_TITLES: Record<string, string> = {
+    logo: "Upload Logo",
+    color: "Add Brand Color",
+    font: "Upload Font",
+    guideline: "Upload Guideline",
+    icon: "Upload Icon",
+    other: "Upload Asset",
+  };
+
+  const FILE_ACCEPT_MAP: Record<string, string> = {
+    logo: ".png,.jpg,.jpeg,.svg,.webp",
+    icon: ".png,.jpg,.jpeg,.svg,.webp",
+    font: ".ttf,.otf,.woff,.woff2,.eot",
+    guideline: ".pdf,.doc,.docx",
+    other: "*",
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const logoAssets = assets.filter((a) => a.asset_type === "logo" || a.asset_type === "icon");
