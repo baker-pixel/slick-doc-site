@@ -368,20 +368,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
               </div>
               <div className="space-y-2">
                 <Label>Tier</Label>
-                <Select value={newClient.tier} onValueChange={(v) => setNewClient({ ...newClient, tier: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="foundation">Foundation</SelectItem>
-                    <SelectItem value="growth">Growth</SelectItem>
-                    <SelectItem value="transformation">Transformation</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Plan Tier</Label>
-                <Select value={newClient.plan_tier} onValueChange={(v) => setNewClient({ ...newClient, plan_tier: v })}>
+                <Select value={newClient.tier} onValueChange={(v) => setNewClient({ ...newClient, tier: v, plan_tier: v })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
