@@ -14,7 +14,7 @@ serve(async (req) => {
   const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/linkedin-oauth-callback`;
 
   const portalRedirect = (params: string) =>
-    new Response(null, { status: 302, headers: { Location: `/portal?tab=integrations&${params}` } });
+    new Response(null, { status: 302, headers: { Location: `/client-portal?tab=integrations&${params}` } });
 
   if (errorParam || !code || !state) {
     return portalRedirect("error=" + encodeURIComponent(errorParam || "missing_code"));
