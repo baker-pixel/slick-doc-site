@@ -52,6 +52,7 @@ serve(async (req) => {
 
     // Fetch profile for display name
     let profileName = null;
+    let personSub = null;
     try {
       const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -59,6 +60,7 @@ serve(async (req) => {
       if (profileRes.ok) {
         const profile = await profileRes.json();
         profileName = profile.name || profile.given_name || null;
+        personSub = profile.sub || null; // LinkedIn person ID — needed for UGC post author URN
       }
     } catch { /* ignore profile fetch errors */ }
 
@@ -78,7 +80,11 @@ serve(async (req) => {
       access_token: accessToken,
       refresh_token: refreshToken,
       expires_at: expiresAt,
-      token_metadata: profileName ? { page_name: profileName } : {},
+      page_id: personSub,
+      token_metadata: {
+        ...(profileName ? { page_name: profileName } : {}),
+        ...(personSub ? { person_id: personSub } : {}),
+      },
     });
 
     if (insertErr) {
