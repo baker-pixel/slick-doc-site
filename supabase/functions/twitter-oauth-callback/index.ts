@@ -12,9 +12,10 @@ serve(async (req) => {
   const CLIENT_ID = Deno.env.get("TWITTER_CLIENT_ID") || "";
   const CLIENT_SECRET = Deno.env.get("TWITTER_CLIENT_SECRET") || "";
   const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/twitter-oauth-callback`;
+  const APP_URL = Deno.env.get("APP_URL") || "https://slick-doc-site.lovable.app";
 
   const portalRedirect = (params: string) =>
-    new Response(null, { status: 302, headers: { Location: `/portal?tab=integrations&${params}` } });
+    new Response(null, { status: 302, headers: { Location: `${APP_URL}/client-portal?tab=integrations&${params}` } });
 
   if (errorParam || !code || !state) {
     return portalRedirect("error=" + encodeURIComponent(errorParam || "missing_code"));
