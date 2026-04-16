@@ -20,6 +20,32 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
+    // Cleanup: mark posts stuck in processing/awaiting_callback for > 2 hours as failed
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const { data: stuckPosts } = await supabase
+      .from("content_calendar")
+      .update({
+        status: "failed",
+        metadata: { error: "Publishing timed out — no callback received after 2 hours" },
+      })
+      .in("status", ["processing", "awaiting_callback"])
+      .lt("updated_at", twoHoursAgo)
+      .select("id");
+
+    if (stuckPosts?.length) {
+      console.log(`Cleaned up ${stuckPosts.length} stuck posts`);
+      for (const post of stuckPosts) {
+        await supabase.from("automation_alerts").insert({
+          alert_type: "content_publish_timeout",
+          severity: "warning",
+          title: "Publishing Timed Out",
+          message: `Post ${post.id} was stuck for over 2 hours and marked as failed.`,
+          source: "publish-scheduled-content",
+          source_id: post.id,
+        });
+      }
+    }
+
     // Get all scheduled content that's due AND client-approved
     const now = new Date().toISOString();
     const { data: scheduledContent, error: fetchError } = await supabase
