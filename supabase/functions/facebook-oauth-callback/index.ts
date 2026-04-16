@@ -15,7 +15,7 @@ serve(async (req) => {
   const APP_URL = Deno.env.get("APP_URL") || "https://slick-doc-site.lovable.app";
 
   const portalRedirect = (params: string) =>
-    new Response(null, { status: 302, headers: { Location: `${APP_URL}/client-portal?tab=integrations&${params}` } });
+    new Response(null, { status: 302, headers: { Location: `${APP_URL}/portal?tab=integrations&${params}` } });
 
   if (errorParam || !code || !state) {
     return portalRedirect("error=" + encodeURIComponent(errorParam || "missing_code"));
