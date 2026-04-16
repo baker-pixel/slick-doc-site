@@ -79,40 +79,52 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
     }
   };
 
-  const handleSave = async (status: "draft" | "scheduled") => {
+  const handleSave = async (action: "draft" | "scheduled" | "now") => {
     if (!generatedContent.trim()) {
       toast({ title: "No content", description: "Generate or write content first.", variant: "destructive" });
       return;
     }
 
-    if (status === "scheduled" && !scheduledAt) {
+    if (action === "scheduled" && !scheduledAt) {
       toast({ title: "Pick a date", description: "Select when you want this post published.", variant: "destructive" });
       return;
     }
 
     setSaving(true);
     try {
+      const scheduledFor = action === "now" ? new Date().toISOString() : scheduledAt;
       const posts = selectedPlatforms.map((platform) => ({
         client_account_id: clientAccountId,
         platform,
         content: generatedContent,
-        status,
-        scheduled_at: status === "scheduled" ? scheduledAt : null,
-        ai_generated: true,
-        topic,
-        tone,
-        hashtags,
+        title: topic || "Social Post",
+        content_type: "social_post",
+        scheduled_for: scheduledFor,
+        status: action === "draft" ? "draft" : "scheduled",
+        client_approved: action !== "draft",
+        metadata: {
+          source: "client_composer",
+          ai_generated: true,
+          topic,
+          tone,
+          hashtags,
+        },
       }));
 
-      const { error } = await supabase.from("social_media_posts").insert(posts);
+      const { error } = await supabase.from("content_calendar").insert(posts);
       if (error) throw error;
 
+      const timeLabel = action === "now"
+        ? "now"
+        : new Date(scheduledFor).toLocaleString();
+
       toast({
-        title: status === "draft" ? "Draft saved" : "Post scheduled",
-        description: `Saved to ${selectedPlatforms.length} platform${selectedPlatforms.length > 1 ? "s" : ""}.`,
+        title: action === "draft" ? "Draft saved" : "Post scheduled",
+        description: action === "draft"
+          ? `Saved to ${selectedPlatforms.length} platform${selectedPlatforms.length > 1 ? "s" : ""}.`
+          : `Post scheduled — it will go live at ${timeLabel}.`,
       });
 
-      // Reset
       setGeneratedContent("");
       setHashtags([]);
       setTopic("");
@@ -267,11 +279,22 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
               Save Draft
             </Button>
             <Button
-              onClick={() => handleSave("scheduled")}
-              disabled={saving || !generatedContent.trim() || !scheduledAt}
+              onClick={() => handleSave("now")}
+              disabled={saving || !generatedContent.trim()}
               className="flex-1 gap-1.5"
             >
               <Send className="h-3.5 w-3.5" />
+              Post Now
+            </Button>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => handleSave("scheduled")}
+              disabled={saving || !generatedContent.trim() || !scheduledAt}
+              className="w-full gap-1.5"
+              variant="secondary"
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
               Schedule
             </Button>
           </div>
