@@ -297,6 +297,7 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
     },
   });
 
+  const isLoading = wfLoading || tasksLoading;
   const hasWorkflow = workflowSteps.length > 0;
 
   // Build steps map for dependency checking
