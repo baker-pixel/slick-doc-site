@@ -272,7 +272,31 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
     },
   });
 
-  const isLoading = wfLoading || tasksLoading;
+  // Check for expired tokens + failed posts
+  const { data: expiredTokenAlert } = useQuery({
+    queryKey: ["expired-token-alert", clientAccountId],
+    queryFn: async () => {
+      const { data: expiredTokens } = await supabase
+        .from("client_oauth_tokens")
+        .select("platform, expires_at")
+        .eq("client_id", clientAccountId)
+        .lt("expires_at", new Date().toISOString());
+
+      if (!expiredTokens || expiredTokens.length === 0) return null;
+
+      const { count } = await supabase
+        .from("content_calendar")
+        .select("id", { count: "exact", head: true })
+        .eq("client_account_id", clientAccountId)
+        .eq("status", "failed");
+
+      if (!count || count === 0) return null;
+
+      const platforms = expiredTokens.map((t) => t.platform);
+      return { platforms, failedCount: count };
+    },
+  });
+
   const hasWorkflow = workflowSteps.length > 0;
 
   // Build steps map for dependency checking
