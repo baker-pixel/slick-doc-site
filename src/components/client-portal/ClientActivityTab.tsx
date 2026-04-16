@@ -683,6 +683,27 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
   if (hasWorkflow) {
     return (
       <div className="max-w-2xl mx-auto space-y-8">
+        {/* Expired token alert */}
+        {expiredTokenAlert && (
+          <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>LinkedIn Posts Failed — Token Expired</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Your {expiredTokenAlert.platforms.join(", ")} connection expired. {expiredTokenAlert.failedCount} post{expiredTokenAlert.failedCount > 1 ? "s" : ""} couldn't be published. Reconnect to reschedule them.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 shrink-0 border-red-500/30 hover:bg-red-500/10"
+                onClick={() => onTabChange?.("integrations")}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reconnect
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {/* SYSTEM Score Card */}
         {renderScoreCard()}
         {/* Progress header */}
