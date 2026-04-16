@@ -29,19 +29,19 @@ serve(async (req) => {
       throw new Error("clientId is required");
     }
 
-    const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL");
+    const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL_PROD");
     if (!N8N_WEBHOOK_URL) {
-      console.error("N8N_WEBHOOK_URL not configured");
+      console.error("N8N_WEBHOOK_URL_PROD not configured");
 
       if (contentCalendarId) {
         await supabase
           .from("content_calendar")
-          .update({ status: "failed", metadata: { error_message: "N8N_WEBHOOK_URL not configured" } })
+          .update({ status: "failed", metadata: { error_message: "N8N_WEBHOOK_URL_PROD not configured" } })
           .eq("id", contentCalendarId);
       }
 
       return new Response(
-        JSON.stringify({ error: "N8N_WEBHOOK_URL not configured" }),
+        JSON.stringify({ error: "N8N_WEBHOOK_URL_PROD not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
