@@ -115,7 +115,7 @@ serve(async (req) => {
         trigger: trigger || "run_auto",
         metadata: metadata || {},
         callback_url: callbackUrl,
-        callback_api_key: Deno.env.get("SUPABASE_ANON_KEY"),
+        callback_api_key: Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
       };
     }
 
