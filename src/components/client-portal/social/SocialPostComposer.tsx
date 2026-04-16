@@ -279,11 +279,22 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
               Save Draft
             </Button>
             <Button
-              onClick={() => handleSave("scheduled")}
-              disabled={saving || !generatedContent.trim() || !scheduledAt}
+              onClick={() => handleSave("now")}
+              disabled={saving || !generatedContent.trim()}
               className="flex-1 gap-1.5"
             >
               <Send className="h-3.5 w-3.5" />
+              Post Now
+            </Button>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => handleSave("scheduled")}
+              disabled={saving || !generatedContent.trim() || !scheduledAt}
+              className="w-full gap-1.5"
+              variant="secondary"
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
               Schedule
             </Button>
           </div>
