@@ -19,7 +19,7 @@ serve(async (req) => {
   try {
     // Validate callback authentication
     const authHeader = req.headers.get("Authorization") || "";
-    const expectedKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const expectedKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
     const campaignKey = Deno.env.get("CAMPAIGN_API_KEY") || "";
     const token = authHeader.replace("Bearer ", "");
 
