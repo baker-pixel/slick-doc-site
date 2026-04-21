@@ -257,6 +257,77 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_fixes: {
+        Row: {
+          after_snapshot: Json | null
+          applied_at: string | null
+          applied_by: string | null
+          apply_target: string | null
+          before_snapshot: Json | null
+          client_account_id: string
+          created_at: string
+          error_message: string | null
+          fix_plan: Json
+          id: string
+          issue_summary: string | null
+          issue_title: string
+          ready_to_apply: Json | null
+          severity: string | null
+          source: string
+          source_reference_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          after_snapshot?: Json | null
+          applied_at?: string | null
+          applied_by?: string | null
+          apply_target?: string | null
+          before_snapshot?: Json | null
+          client_account_id: string
+          created_at?: string
+          error_message?: string | null
+          fix_plan?: Json
+          id?: string
+          issue_summary?: string | null
+          issue_title: string
+          ready_to_apply?: Json | null
+          severity?: string | null
+          source: string
+          source_reference_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          after_snapshot?: Json | null
+          applied_at?: string | null
+          applied_by?: string | null
+          apply_target?: string | null
+          before_snapshot?: Json | null
+          client_account_id?: string
+          created_at?: string
+          error_message?: string | null
+          fix_plan?: Json
+          id?: string
+          issue_summary?: string | null
+          issue_title?: string
+          ready_to_apply?: Json | null
+          severity?: string | null
+          source?: string
+          source_reference_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_fixes_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_alerts: {
         Row: {
           acknowledged_at: string | null
