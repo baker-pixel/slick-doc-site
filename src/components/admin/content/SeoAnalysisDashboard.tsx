@@ -33,6 +33,7 @@ import {
   Smartphone
 } from "lucide-react";
 import { format } from "date-fns";
+import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 
 interface SeoAnalysis {
   id: string;
