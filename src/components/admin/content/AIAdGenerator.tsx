@@ -50,6 +50,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { toast } from "sonner";
 import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
 
@@ -1297,6 +1298,18 @@ ${ad.videoScriptOutline}
 
                 {generatedAds.map((ad, i) => (
                   <TabsContent key={i} value={ad.platform} className="space-y-4">
+                    {selectedClientId && (
+                      <AiFixCard
+                        clientAccountId={selectedClientId}
+                        source="ads"
+                        sourceReferenceId={`${currentCampaignId || 'draft'}:${ad.platform}`}
+                        issueTitle={`Improve ${ad.platform === 'google' ? 'Google' : 'Meta'} ad — ${campaignName || 'Untitled'}`}
+                        issueSummary="Get an AI critique and rewrite suggestions for this ad's headlines, descriptions, and CTA."
+                        severity="medium"
+                        context={{ platform: ad.platform, headlines: ad.headlines, descriptions: ad.descriptions, callToAction: ad.callToAction, goal, industry, location }}
+                        compact
+                      />
+                    )}
                     {/* Headlines & Descriptions */}
                     <Card>
                       <CardHeader>

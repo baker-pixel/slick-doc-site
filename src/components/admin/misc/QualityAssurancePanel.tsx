@@ -25,6 +25,7 @@ import {
   Wand2,
   Download
 } from "lucide-react";
+import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 
 interface QAReport {
   id: string;
@@ -300,7 +301,8 @@ export default function QualityAssurancePanel() {
                                   <AccordionContent>
                                     <div className="space-y-2">
                                       {issues.slice(0, 5).map((issue, idx) => (
-                                        <div key={idx} className="flex items-start justify-between p-2 bg-muted/50 rounded text-sm">
+                                        <div key={idx} className="space-y-2">
+                                        <div className="flex items-start justify-between p-2 bg-muted/50 rounded text-sm">
                                           <div className="flex-1">
                                             {cat.key === 'broken_links' && (
                                               <>
@@ -333,17 +335,28 @@ export default function QualityAssurancePanel() {
                                               </>
                                             )}
                                           </div>
-                                          <Button 
-                                            variant="ghost" 
-                                            size="sm"
-                                            onClick={() => applyFixMutation.mutate({ 
-                                              reportId: report.id, 
-                                              fixType: `${cat.key}:${idx}` 
-                                            })}
-                                          >
-                                            <Wand2 className="h-4 w-4 mr-1" />
-                                            Fix
-                                          </Button>
+                                        </div>
+                                          <AiFixCard
+                                            clientAccountId={report.client_account_id}
+                                            source="qa"
+                                            sourceReferenceId={`${report.id}:${cat.key}:${idx}`}
+                                            issueTitle={
+                                              cat.key === 'broken_links' ? `Broken link: ${issue.url}` :
+                                              cat.key === 'spelling_errors' ? `Spelling: ${issue.word}` :
+                                              cat.key === 'missing_metadata' ? `Missing metadata: ${issue.type}` :
+                                              issue.issue
+                                            }
+                                            issueSummary={
+                                              cat.key === 'spelling_errors' ? `Suggestions: ${issue.suggestions?.join(', ')}` :
+                                              cat.key === 'missing_metadata' ? issue.description :
+                                              cat.key === 'accessibility_issues' ? `WCAG: ${issue.wcag}` :
+                                              cat.key === 'mobile_issues' ? issue.element :
+                                              `Status: ${issue.statusCode}`
+                                            }
+                                            severity={issue.severity === 'high' ? 'high' : 'medium'}
+                                            context={{ url: report.url, page_title: report.page_title, category: cat.label }}
+                                            compact
+                                          />
                                         </div>
                                       ))}
                                       {issues.length > 5 && (

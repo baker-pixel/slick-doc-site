@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Plus } from "lucide-react";
+import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 
 interface GeneratedContent {
   id: string;
@@ -437,6 +438,20 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
               {previewContent?.content}
             </pre>
           </div>
+          {previewContent && (
+            <div className="mt-4">
+              <AiFixCard
+                clientAccountId={previewContent.client_id}
+                source="content"
+                sourceReferenceId={previewContent.id}
+                issueTitle={`Strengthen ${formatContentType(previewContent.content_type)}: ${previewContent.title || 'Untitled'}`}
+                issueSummary="Get an AI critique with rewrite suggestions to boost engagement and clarity."
+                severity={previewContent.status === 'rejected' ? 'high' : 'medium'}
+                context={{ content_type: previewContent.content_type, title: previewContent.title, content_preview: previewContent.content?.slice(0, 1500) }}
+                compact
+              />
+            </div>
+          )}
           <DialogFooter className="mt-4 flex-wrap gap-2">
             {previewContent?.status === "draft" && (
               <>
