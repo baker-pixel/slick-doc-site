@@ -503,6 +503,7 @@ export default function SeoAnalysisDashboard() {
                     </CardHeader>
                     <CardContent>
                       {selectedAnalysis.technical_issues?.length > 0 ? (
+                        <>
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -521,6 +522,23 @@ export default function SeoAnalysisDashboard() {
                             ))}
                           </TableBody>
                         </Table>
+                        <div className="mt-4 space-y-2">
+                          <p className="text-sm font-semibold text-muted-foreground">Get AI to fix these:</p>
+                          {selectedAnalysis.technical_issues.map((issue: any, i: number) => (
+                            <AiFixCard
+                              key={`fix-tech-${i}`}
+                              clientAccountId={selectedAnalysis.client_account_id}
+                              source="seo"
+                              sourceReferenceId={`${selectedAnalysis.id}:tech:${i}`}
+                              issueTitle={issue.issue}
+                              issueSummary={issue.fix}
+                              severity={issue.severity === "high" ? "high" : issue.severity === "low" ? "low" : "medium"}
+                              context={{ url: selectedAnalysis.url, page_title: selectedAnalysis.page_title, meta_title: selectedAnalysis.meta_title, meta_description: selectedAnalysis.meta_description }}
+                              compact
+                            />
+                          ))}
+                        </div>
+                        </>
                       ) : (
                         <div className="flex items-center gap-2 text-green-600">
                           <CheckCircle className="h-5 w-5" />
@@ -539,13 +557,19 @@ export default function SeoAnalysisDashboard() {
                     </CardHeader>
                     <CardContent>
                       {selectedAnalysis.readability_issues?.length > 0 ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {selectedAnalysis.readability_issues.map((issue: any, i: number) => (
-                            <div key={i} className="flex items-center gap-2 p-2 bg-yellow-50 rounded">
-                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                              <span>{issue.issue}</span>
-                              {getSeverityBadge(issue.severity)}
-                            </div>
+                            <AiFixCard
+                              key={i}
+                              clientAccountId={selectedAnalysis.client_account_id}
+                              source="seo"
+                              sourceReferenceId={`${selectedAnalysis.id}:read:${i}`}
+                              issueTitle={issue.issue}
+                              issueSummary={issue.fix || issue.suggestion}
+                              severity={issue.severity === "high" ? "high" : issue.severity === "low" ? "low" : "medium"}
+                              context={{ url: selectedAnalysis.url, word_count: selectedAnalysis.word_count, readability_score: selectedAnalysis.readability_score }}
+                              compact
+                            />
                           ))}
                         </div>
                       ) : (
@@ -649,14 +673,17 @@ export default function SeoAnalysisDashboard() {
                       {selectedAnalysis.suggestions?.length > 0 ? (
                         <div className="space-y-3">
                           {selectedAnalysis.suggestions.map((sug: any, i: number) => (
-                            <div key={i} className="flex items-start gap-3 p-3 bg-muted rounded-lg">
-                              <Lightbulb className="h-5 w-5 text-yellow-500 mt-0.5" />
-                              <div className="flex-1">
-                                <p className="font-medium">{sug.suggestion}</p>
-                                <Badge variant="outline" className="mt-1">{sug.type}</Badge>
-                              </div>
-                              <Badge>{sug.priority}</Badge>
-                            </div>
+                            <AiFixCard
+                              key={i}
+                              clientAccountId={selectedAnalysis.client_account_id}
+                              source="seo"
+                              sourceReferenceId={`${selectedAnalysis.id}:sug:${i}`}
+                              issueTitle={sug.suggestion}
+                              issueSummary={sug.type}
+                              severity={sug.priority === "high" ? "high" : sug.priority === "low" ? "low" : "medium"}
+                              context={{ url: selectedAnalysis.url, suggestion_type: sug.type, meta_title: selectedAnalysis.meta_title, meta_description: selectedAnalysis.meta_description }}
+                              compact
+                            />
                           ))}
                         </div>
                       ) : (
