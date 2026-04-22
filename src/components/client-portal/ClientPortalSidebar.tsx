@@ -20,7 +20,6 @@ import {
   FileSignature,
   GraduationCap,
   Send,
-  Plug,
   Share2,
 } from "lucide-react";
 import {
@@ -52,7 +51,6 @@ export type PortalTab =
   | "agreements"
   | "brand"
   | "access"
-  | "integrations"
   | "social"
   | "team"
   | "analytics"
@@ -105,7 +103,6 @@ const brandToolsItems: NavItemDef[] = [
   { id: "brand", label: "Brand Assets", icon: Palette },
   { id: "access", label: "Platform Access", icon: KeyRound },
   { id: "social", label: "Social Media", icon: Share2 },
-  { id: "integrations", label: "Integrations", icon: Plug },
   { id: "learning", label: "Learning Hub", icon: GraduationCap },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
 ];

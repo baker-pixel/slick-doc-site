@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalTab } from "./ClientPortalSidebar";
-import { ConnectedAccountsSection } from "./ConnectedAccountsSection";
 
 interface ClientSettingsTabProps {
   userId: string;
@@ -523,9 +522,6 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
           </div>
         </CardContent>
       </Card>
-
-      {/* Connected Accounts */}
-      <ConnectedAccountsSection clientAccountId={clientAccountId} />
 
       {/* Save Button - Bottom */}
       {hasChanges && (

@@ -696,7 +696,7 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
                 size="sm"
                 variant="outline"
                 className="gap-1.5 shrink-0 border-red-500/30 hover:bg-red-500/10"
-                onClick={() => onTabChange?.("integrations")}
+                onClick={() => onTabChange?.("social")}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 Reconnect

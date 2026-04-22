@@ -64,7 +64,6 @@ const tabTitles: Record<PortalTab, string> = {
   agreements: "Agreements",
   brand: "Brand Assets",
   access: "Platform Access",
-  integrations: "Social & Accounts",
   social: "Social & Accounts",
   team: "Your Team",
   analytics: "Analytics",
@@ -88,7 +87,6 @@ const tabDescriptions: Record<PortalTab, string> = {
   agreements: "Manage your service agreements",
   brand: "Access your brand assets and guidelines",
   access: "Share your platform login credentials securely",
-  integrations: "Create, schedule, and manage social media posts with AI",
   social: "Create, schedule, and manage social media posts with AI",
   team: "Meet your dedicated team",
   analytics: "View your performance metrics",
@@ -327,7 +325,6 @@ export default function ClientPortal() {
         return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
       case "access":
         return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
-      case "integrations":
       case "social":
         return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
