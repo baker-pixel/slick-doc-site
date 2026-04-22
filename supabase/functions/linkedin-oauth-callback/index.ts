@@ -26,6 +26,8 @@ serve(async (req) => {
   }
 
   try {
+    const LINKEDIN_VERSION = "202504";
+
     // Exchange code for token
     const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
       method: "POST",
@@ -65,6 +67,77 @@ serve(async (req) => {
       }
     } catch { /* ignore profile fetch errors */ }
 
+    const linkedinHeaders = {
+      Authorization: `Bearer ${accessToken}`,
+      "X-Restli-Protocol-Version": "2.0.0",
+      "Linkedin-Version": LINKEDIN_VERSION,
+      "Content-Type": "application/json",
+    };
+
+    let organizations: Array<{ id: string; name: string; urn: string }> = [];
+    try {
+      const orgAclRes = await fetch(
+        "https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&state=APPROVED",
+        { headers: linkedinHeaders },
+      );
+
+      if (!orgAclRes.ok) {
+        const aclText = await orgAclRes.text();
+        console.error("LinkedIn organization lookup failed:", aclText);
+        return portalRedirect(
+          "error=" + encodeURIComponent("LinkedIn company pages are unavailable. Make sure this LinkedIn login is a company page admin and your LinkedIn app has organization permissions approved."),
+        );
+      }
+
+      const orgAclData = await orgAclRes.json();
+      const organizationIds = Array.from(
+        new Set(
+          (orgAclData.elements || [])
+            .map((entry: { organization?: string }) => entry.organization || "")
+            .filter(Boolean)
+            .map((urn: string) => urn.split(":").pop() || "")
+            .filter(Boolean),
+        ),
+      );
+
+      if (organizationIds.length === 0) {
+        return portalRedirect(
+          "error=" + encodeURIComponent("No LinkedIn company pages were found for this login. Use a LinkedIn user who admins the company page you want to connect."),
+        );
+      }
+
+      const orgLookupRes = await fetch(
+        `https://api.linkedin.com/rest/organizations?ids=List(${organizationIds.join(",")})`,
+        { headers: linkedinHeaders },
+      );
+
+      if (!orgLookupRes.ok) {
+        const lookupText = await orgLookupRes.text();
+        console.error("LinkedIn organization details lookup failed:", lookupText);
+        return portalRedirect(
+          "error=" + encodeURIComponent("Connected to LinkedIn, but couldn’t load your company pages. Please verify organization access for your LinkedIn app and try again."),
+        );
+      }
+
+      const orgLookupData = await orgLookupRes.json();
+      organizations = organizationIds
+        .map((id) => {
+          const org = orgLookupData.results?.[id];
+          if (!org) return null;
+          return {
+            id,
+            name: org.localizedName || org.vanityName || `Organization ${id}`,
+            urn: `urn:li:organization:${id}`,
+          };
+        })
+        .filter(Boolean);
+    } catch (orgError) {
+      console.error("LinkedIn organization fetch error:", orgError);
+      return portalRedirect(
+        "error=" + encodeURIComponent("Connected to LinkedIn, but we couldn’t load your company pages. Please try again."),
+      );
+    }
+
     // Store in DB
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -75,16 +148,27 @@ serve(async (req) => {
       .eq("client_id", state)
       .eq("platform", "linkedin");
 
+    const defaultOrganization = organizations.length === 1 ? organizations[0] : null;
+
     const { error: insertErr } = await supabase.from("client_oauth_tokens").insert({
       client_id: state,
       platform: "linkedin",
       access_token: accessToken,
       refresh_token: refreshToken,
       expires_at: expiresAt,
-      page_id: personSub,
+      page_id: defaultOrganization?.urn || null,
       token_metadata: {
-        ...(profileName ? { page_name: profileName } : {}),
+        ...(defaultOrganization?.name ? { page_name: defaultOrganization.name } : {}),
         ...(personSub ? { person_id: personSub } : {}),
+        ...(profileName ? { member_name: profileName } : {}),
+        selection_required: organizations.length > 1,
+        organization_options: organizations,
+        ...(defaultOrganization
+          ? {
+              organization_id: defaultOrganization.id,
+              organization_urn: defaultOrganization.urn,
+            }
+          : {}),
       },
     });
 
