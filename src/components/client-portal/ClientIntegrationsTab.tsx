@@ -84,7 +84,7 @@ const PLATFORMS = [
     gradient: "from-[#0A66C2]/5 to-transparent",
     description: "Post updates, articles, and share content to your LinkedIn profile or company page.",
     oauthUrl: "https://www.linkedin.com/oauth/v2/authorization",
-    scopes: "w_member_social%20r_organization_social%20w_organization_social%20openid%20profile",
+    scopes: "w_member_social%20openid%20profile",
     callbackFn: "linkedin-oauth-callback",
     tokenLifeDays: 60,
   },
