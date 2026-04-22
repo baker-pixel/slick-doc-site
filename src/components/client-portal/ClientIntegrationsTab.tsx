@@ -32,6 +32,32 @@ interface LinkedInOrganization {
   urn: string;
 }
 
+const parseLinkedInOrganizations = (value: unknown): LinkedInOrganization[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+
+    const maybeOrg = item as Record<string, unknown>;
+    if (
+      typeof maybeOrg.id !== "string" ||
+      typeof maybeOrg.name !== "string" ||
+      typeof maybeOrg.urn !== "string"
+    ) {
+      return [];
+    }
+
+    return [{ id: maybeOrg.id, name: maybeOrg.name, urn: maybeOrg.urn }];
+  });
+};
+
+const serializeLinkedInOrganizations = (organizations: LinkedInOrganization[]): Record<string, string>[] =>
+  organizations.map((organization) => ({
+    id: organization.id,
+    name: organization.name,
+    urn: organization.urn,
+  }));
+
 interface ClientIntegrationsTabProps {
   clientAccountId: string;
 }
@@ -232,9 +258,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
 
       const linkedInToken = nextTokens.find((token) => token.platform === "linkedin");
       const selectionRequired = linkedInToken?.token_metadata?.selection_required === true;
-      const organizations = Array.isArray(linkedInToken?.token_metadata?.organization_options)
-        ? (linkedInToken?.token_metadata?.organization_options as LinkedInOrganization[])
-        : [];
+      const organizations = parseLinkedInOrganizations(linkedInToken?.token_metadata?.organization_options);
 
       if (selectionRequired && organizations.length > 0) {
         setLinkedInOrganizations(organizations);
@@ -316,7 +340,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
             organization_id: organization.id,
             organization_urn: organization.urn,
             selection_required: false,
-            organization_options: linkedInOrganizations,
+            organization_options: serializeLinkedInOrganizations(linkedInOrganizations),
           },
         })
         .eq("id", token.id);
@@ -334,7 +358,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                 organization_id: organization.id,
                 organization_urn: organization.urn,
                 selection_required: false,
-                organization_options: linkedInOrganizations,
+                organization_options: serializeLinkedInOrganizations(linkedInOrganizations),
               },
             }
           : item
