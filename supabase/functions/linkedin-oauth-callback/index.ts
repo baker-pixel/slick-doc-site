@@ -81,61 +81,47 @@ serve(async (req) => {
         { headers: linkedinHeaders },
       );
 
-      if (!orgAclRes.ok) {
+      if (orgAclRes.ok) {
+        const orgAclData = await orgAclRes.json();
+        const organizationIds = Array.from(
+          new Set(
+            (orgAclData.elements || [])
+              .map((entry: { organization?: string }) => entry.organization || "")
+              .filter(Boolean)
+              .map((urn: string) => urn.split(":").pop() || "")
+              .filter(Boolean),
+          ),
+        ) as string[];
+
+        if (organizationIds.length > 0) {
+          const orgLookupRes = await fetch(
+            `https://api.linkedin.com/rest/organizations?ids=List(${organizationIds.join(",")})`,
+            { headers: linkedinHeaders },
+          );
+
+          if (orgLookupRes.ok) {
+            const orgLookupData = await orgLookupRes.json();
+            organizations = organizationIds
+              .map((id) => {
+                const org = orgLookupData.results?.[id];
+                if (!org) return null;
+                return {
+                  id,
+                  name: org.localizedName || org.vanityName || `Organization ${id}`,
+                  urn: `urn:li:organization:${id}`,
+                };
+              })
+              .filter(Boolean) as Array<{ id: string; name: string; urn: string }>;
+          } else {
+            console.warn("LinkedIn org details lookup failed — falling back to personal profile");
+          }
+        }
+      } else {
         const aclText = await orgAclRes.text();
-        console.error("LinkedIn organization lookup failed:", aclText);
-        return portalRedirect(
-          "error=" + encodeURIComponent("LinkedIn company pages are unavailable. Make sure this LinkedIn login is a company page admin and your LinkedIn app has organization permissions approved."),
-        );
+        console.warn("LinkedIn organization lookup failed (likely missing MDP approval) — falling back to personal profile:", aclText);
       }
-
-      const orgAclData = await orgAclRes.json();
-      const organizationIds = Array.from(
-        new Set(
-          (orgAclData.elements || [])
-            .map((entry: { organization?: string }) => entry.organization || "")
-            .filter(Boolean)
-            .map((urn: string) => urn.split(":").pop() || "")
-            .filter(Boolean),
-        ),
-      );
-
-      if (organizationIds.length === 0) {
-        return portalRedirect(
-          "error=" + encodeURIComponent("No LinkedIn company pages were found for this login. Use a LinkedIn user who admins the company page you want to connect."),
-        );
-      }
-
-      const orgLookupRes = await fetch(
-        `https://api.linkedin.com/rest/organizations?ids=List(${organizationIds.join(",")})`,
-        { headers: linkedinHeaders },
-      );
-
-      if (!orgLookupRes.ok) {
-        const lookupText = await orgLookupRes.text();
-        console.error("LinkedIn organization details lookup failed:", lookupText);
-        return portalRedirect(
-          "error=" + encodeURIComponent("Connected to LinkedIn, but couldn’t load your company pages. Please verify organization access for your LinkedIn app and try again."),
-        );
-      }
-
-      const orgLookupData = await orgLookupRes.json();
-      organizations = organizationIds
-        .map((id) => {
-          const org = orgLookupData.results?.[id];
-          if (!org) return null;
-          return {
-            id,
-            name: org.localizedName || org.vanityName || `Organization ${id}`,
-            urn: `urn:li:organization:${id}`,
-          };
-        })
-        .filter(Boolean);
     } catch (orgError) {
-      console.error("LinkedIn organization fetch error:", orgError);
-      return portalRedirect(
-        "error=" + encodeURIComponent("Connected to LinkedIn, but we couldn’t load your company pages. Please try again."),
-      );
+      console.warn("LinkedIn organization fetch error — falling back to personal profile:", orgError);
     }
 
     // Store in DB
