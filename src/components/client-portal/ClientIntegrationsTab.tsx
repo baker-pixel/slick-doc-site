@@ -42,7 +42,7 @@ interface OAuthToken {
   page_id: string | null;
   expires_at: string | null;
   created_at: string | null;
-  token_metadata: Record<string, string> | null;
+  token_metadata: Record<string, unknown> | null;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -58,7 +58,7 @@ const PLATFORMS = [
     gradient: "from-[#0A66C2]/5 to-transparent",
     description: "Post updates, articles, and share content to your LinkedIn profile or company page.",
     oauthUrl: "https://www.linkedin.com/oauth/v2/authorization",
-    scopes: "w_member_social%20openid%20profile",
+    scopes: "w_member_social%20w_organization_social%20rw_organization_admin%20openid%20profile",
     callbackFn: "linkedin-oauth-callback",
     tokenLifeDays: 60,
   },
@@ -227,7 +227,20 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
         .eq("client_id", clientAccountId);
 
       if (error) throw error;
-      setTokens((data as OAuthToken[]) || []);
+      const nextTokens = (data as OAuthToken[]) || [];
+      setTokens(nextTokens);
+
+      const linkedInToken = nextTokens.find((token) => token.platform === "linkedin");
+      const selectionRequired = linkedInToken?.token_metadata?.selection_required === true;
+      const organizations = Array.isArray(linkedInToken?.token_metadata?.organization_options)
+        ? (linkedInToken?.token_metadata?.organization_options as LinkedInOrganization[])
+        : [];
+
+      if (selectionRequired && organizations.length > 0) {
+        setLinkedInOrganizations(organizations);
+        setSelectedLinkedInOrganization(organizations[0]?.id || "");
+        setSelectingLinkedInPage(true);
+      }
     } catch (err) {
       console.error("Error fetching oauth tokens:", err);
     } finally {
@@ -303,6 +316,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
             organization_id: organization.id,
             organization_urn: organization.urn,
             selection_required: false,
+            organization_options: linkedInOrganizations,
           },
         })
         .eq("id", token.id);
@@ -320,6 +334,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                 organization_id: organization.id,
                 organization_urn: organization.urn,
                 selection_required: false,
+                organization_options: linkedInOrganizations,
               },
             }
           : item
@@ -470,9 +485,10 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
           const token = getToken(platform.id);
           const connected = !!token;
           const expired = connected && isExpired(token.expires_at);
+          const selectionRequired = token?.token_metadata?.selection_required === true;
           const needsAction = !connected || expired;
           const Icon = platform.icon;
-          const pageName = token?.token_metadata?.page_name || token?.page_id || null;
+          const pageName = (typeof token?.token_metadata?.page_name === "string" ? token.token_metadata.page_name : token?.page_id) || null;
 
           return (
             <Card
@@ -497,10 +513,15 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                     </div>
                     <div>
                       <CardTitle className="text-base">{platform.name}</CardTitle>
-                      {connected && !expired ? (
+                       {connected && !expired && !selectionRequired ? (
                         <div className="mt-1">
                           <TokenStatus expiresAt={token.expires_at} />
                         </div>
+                       ) : selectionRequired ? (
+                         <Badge variant="outline" className="mt-1 text-xs gap-1">
+                           <Building2 className="h-3 w-3" />
+                           Choose company page
+                         </Badge>
                       ) : expired ? (
                         <Badge variant="outline" className="mt-1 text-xs bg-red-500/10 text-red-600 border-red-500/20 gap-1">
                           <AlertTriangle className="h-3 w-3" />
@@ -520,7 +541,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                 </p>
 
                 {/* Page / Account Info */}
-                {connected && !expired && pageName && (
+                {connected && !expired && !selectionRequired && pageName && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 text-sm">
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                     <span className="text-muted-foreground">Page:</span>
@@ -546,7 +567,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
 
                 {/* Action Buttons */}
                 <div className="flex gap-2 pt-1">
-                  {connected && !expired ? (
+                  {connected && !expired && !selectionRequired ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -566,6 +587,15 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                     >
                       <RefreshCw className={cn("h-3.5 w-3.5", connecting === platform.id && "animate-spin")} />
                       Reconnect
+                    </Button>
+                  ) : selectionRequired && platform.id === "linkedin" ? (
+                    <Button
+                      size="sm"
+                      className="gap-1.5 rounded-lg"
+                      onClick={() => setSelectingLinkedInPage(true)}
+                    >
+                      <Building2 className="h-3.5 w-3.5" />
+                      Choose page
                     </Button>
                   ) : (
                     <Button
