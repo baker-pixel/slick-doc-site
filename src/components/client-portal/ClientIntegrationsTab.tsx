@@ -20,8 +20,17 @@ import {
   Plug,
   ShieldCheck,
   Info,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface LinkedInOrganization {
+  id: string;
+  name: string;
+  urn: string;
+}
 
 interface ClientIntegrationsTabProps {
   clientAccountId: string;
@@ -150,6 +159,10 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [selectingLinkedInPage, setSelectingLinkedInPage] = useState(false);
+  const [savingLinkedInPage, setSavingLinkedInPage] = useState(false);
+  const [linkedInOrganizations, setLinkedInOrganizations] = useState<LinkedInOrganization[]>([]);
+  const [selectedLinkedInOrganization, setSelectedLinkedInOrganization] = useState<string>("");
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -157,6 +170,27 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     const connected = searchParams.get("connected");
     const success = searchParams.get("success");
     const errorMsg = searchParams.get("error");
+    const linkedInNeedsSelection = searchParams.get("linkedin_select") === "true";
+    const linkedInOrgsRaw = searchParams.get("linkedin_orgs");
+
+    if (linkedInNeedsSelection && linkedInOrgsRaw) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(linkedInOrgsRaw)) as LinkedInOrganization[];
+        if (parsed.length > 0) {
+          setLinkedInOrganizations(parsed);
+          setSelectedLinkedInOrganization(parsed[0].id);
+          setSelectingLinkedInPage(true);
+        }
+      } catch (err) {
+        console.error("Failed to parse LinkedIn organizations:", err);
+      }
+
+      const next = new URLSearchParams(searchParams);
+      next.delete("linkedin_select");
+      next.delete("linkedin_orgs");
+      setSearchParams(next, { replace: true });
+      return;
+    }
 
     if (connected && success === "true") {
       const platformName = PLATFORMS.find((p) => p.id === connected)?.name || connected;
@@ -242,6 +276,72 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     }
 
     window.location.href = url.toString();
+  };
+
+  const handleLinkedInOrganizationSave = async () => {
+    const token = tokens.find((t) => t.platform === "linkedin");
+    const organization = linkedInOrganizations.find((org) => org.id === selectedLinkedInOrganization);
+
+    if (!token || !organization) {
+      toast({
+        title: "Unable to save selection",
+        description: "Reconnect LinkedIn and choose your company page again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingLinkedInPage(true);
+    try {
+      const { error } = await supabase
+        .from("client_oauth_tokens")
+        .update({
+          page_id: organization.urn,
+          token_metadata: {
+            ...(token.token_metadata || {}),
+            page_name: organization.name,
+            organization_id: organization.id,
+            organization_urn: organization.urn,
+            selection_required: false,
+          },
+        })
+        .eq("id", token.id);
+
+      if (error) throw error;
+
+      setTokens((prev) => prev.map((item) => (
+        item.id === token.id
+          ? {
+              ...item,
+              page_id: organization.urn,
+              token_metadata: {
+                ...(item.token_metadata || {}),
+                page_name: organization.name,
+                organization_id: organization.id,
+                organization_urn: organization.urn,
+                selection_required: false,
+              },
+            }
+          : item
+      )));
+
+      setSelectingLinkedInPage(false);
+      setLinkedInOrganizations([]);
+      setSelectedLinkedInOrganization("");
+      toast({
+        title: "LinkedIn page selected",
+        description: `${organization.name} is now the company page used for publishing.`,
+      });
+    } catch (err) {
+      console.error("Error saving LinkedIn organization:", err);
+      toast({
+        title: "Could not save company page",
+        description: "Please try reconnecting LinkedIn.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingLinkedInPage(false);
+    }
   };
 
   const handleDisconnect = async (platformId: string) => {
@@ -333,6 +433,36 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
           Tokens are encrypted at rest and only used to publish content you've approved.
         </div>
       </div>
+
+      {selectingLinkedInPage && linkedInOrganizations.length > 0 && (
+        <Alert>
+          <Building2 className="h-4 w-4" />
+          <AlertTitle>Select your LinkedIn company page</AlertTitle>
+          <AlertDescription className="space-y-4">
+            <p>
+              We found {linkedInOrganizations.length} company page{linkedInOrganizations.length === 1 ? "" : "s"} on your LinkedIn account.
+              Choose which one this client should publish to.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Select value={selectedLinkedInOrganization} onValueChange={setSelectedLinkedInOrganization}>
+                <SelectTrigger className="sm:max-w-sm">
+                  <SelectValue placeholder="Choose a company page" />
+                </SelectTrigger>
+                <SelectContent>
+                  {linkedInOrganizations.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleLinkedInOrganizationSave} disabled={savingLinkedInPage || !selectedLinkedInOrganization}>
+                {savingLinkedInPage ? "Saving..." : "Use this page"}
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Platform Cards */}
       <div className="grid gap-4 sm:grid-cols-2">
