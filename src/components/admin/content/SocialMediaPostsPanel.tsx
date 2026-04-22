@@ -553,7 +553,7 @@ export default function SocialMediaPostsPanel() {
         authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=instagram_basic,instagram_content_publish,pages_show_list`;
         break;
       case "linkedin":
-        authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=w_member_social`;
+        authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=${encodeURIComponent("w_member_social w_organization_social rw_organization_admin openid profile")}`;
         break;
       case "twitter":
         authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=tweet.read+tweet.write+users.read&code_challenge=challenge&code_challenge_method=plain`;
