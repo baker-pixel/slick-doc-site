@@ -475,6 +475,8 @@ export default function ClientPortalAuth() {
         .update({ accepted_at: new Date().toISOString() })
         .eq("id", invitation.id);
 
+      await seedWorkflowSafe(invitation.client_account_id);
+
       toast({
         title: "Welcome!",
         description: "Your account has been created successfully.",
