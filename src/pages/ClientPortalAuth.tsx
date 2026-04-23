@@ -477,6 +477,26 @@ export default function ClientPortalAuth() {
     );
   }
 
+  if (confirmEmailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
+            <CardDescription>
+              We've sent a confirmation link to {invitation?.email ?? email}. Click it to finish setting up your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground text-center">
+              Once confirmed, you'll be signed in automatically and your portal access will be activated.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (forgotPasswordMode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
