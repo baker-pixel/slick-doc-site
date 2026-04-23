@@ -101,6 +101,8 @@ export default function ClientPortalAuth() {
 
       sessionStorage.removeItem("pending_invitation");
 
+      await seedWorkflowSafe(pending.client_account_id);
+
       toast({
         title: "Welcome!",
         description: "Your account has been confirmed and set up successfully.",
@@ -109,6 +111,29 @@ export default function ClientPortalAuth() {
       navigate("/portal");
     } catch (err) {
       console.error("Finalize portal setup error:", err);
+    }
+  };
+
+  /** Fire-and-forget workflow seeding. Never blocks portal access. */
+  const seedWorkflowSafe = async (clientAccountId: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("seed-tier-workflow", {
+        body: { client_id: clientAccountId },
+      });
+      // 409 (workflow already exists) is fine — ignore
+      if (error && !String(error.message || "").includes("409")) {
+        console.warn("seed-tier-workflow failed:", error);
+        toast({
+          title: "Setup pending",
+          description: "Your onboarding workflow will be set up shortly.",
+        });
+      }
+    } catch (e) {
+      console.warn("seed-tier-workflow exception:", e);
+      toast({
+        title: "Setup pending",
+        description: "Your onboarding workflow will be set up shortly.",
+      });
     }
   };
 
@@ -328,6 +353,8 @@ export default function ClientPortalAuth() {
           .update({ accepted_at: new Date().toISOString() })
           .eq("id", invitation.id);
 
+        await seedWorkflowSafe(invitation.client_account_id);
+
         toast({
           title: "Welcome!",
           description: "You've been signed in successfully.",
@@ -447,6 +474,8 @@ export default function ClientPortalAuth() {
         .from("client_invitations")
         .update({ accepted_at: new Date().toISOString() })
         .eq("id", invitation.id);
+
+      await seedWorkflowSafe(invitation.client_account_id);
 
       toast({
         title: "Welcome!",

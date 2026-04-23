@@ -119,14 +119,19 @@ export default function ClientPortal() {
     queryKey: ["onboarding-complete", portalUser?.client_account_id],
     enabled: !!portalUser?.client_account_id,
     queryFn: async () => {
-      const { data: wf } = await supabase
+      // Check ANY workflow (not just active) — if none exist, onboarding hasn't started
+      const { data: workflows } = await supabase
         .from("client_workflows")
-        .select("id")
+        .select("id, status")
         .eq("client_id", portalUser!.client_account_id)
-        .eq("status", "active")
-        .maybeSingle();
+        .order("created_at", { ascending: false });
 
-      if (!wf) return true; // No workflow = no gating
+      if (!workflows || workflows.length === 0) {
+        // No workflow at all — onboarding not started, keep gate active
+        return false;
+      }
+
+      const wf = workflows.find((w) => w.status === "active") ?? workflows[0];
 
       const { data: steps } = await supabase
         .from("workflow_steps")
@@ -135,7 +140,7 @@ export default function ClientPortal() {
         .lte("step_number", 5)
         .order("step_number", { ascending: true });
 
-      if (!steps || steps.length === 0) return true;
+      if (!steps || steps.length === 0) return false;
       return steps.every((s) => s.status === "completed");
     },
   });
