@@ -20,6 +20,7 @@ export default function ClientPortalAuth() {
   const [existingUserMode, setExistingUserMode] = useState(false);
   const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [confirmEmailSent, setConfirmEmailSent] = useState(false);
   const [invitation, setInvitation] = useState<{
     id: string;
     email: string;
@@ -29,6 +30,26 @@ export default function ClientPortalAuth() {
   } | null>(null);
 
   useEffect(() => {
+    // Listen for SIGNED_IN — finalizes portal setup after email confirmation
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        const pendingRaw = sessionStorage.getItem("pending_invitation");
+        if (pendingRaw) {
+          // Defer to avoid deadlock inside the auth callback
+          setTimeout(() => {
+            try {
+              const pending = JSON.parse(pendingRaw);
+              finalizePortalSetup(session.user.id, pending);
+            } catch (e) {
+              console.error("Pending invitation parse error:", e);
+            }
+          }, 0);
+        } else {
+          checkClientPortalAccess(session.user.id);
+        }
+      }
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         checkClientPortalAccess(session.user.id);
@@ -38,7 +59,58 @@ export default function ClientPortalAuth() {
     if (inviteToken) {
       loadInvitation(inviteToken);
     }
+
+    return () => subscription.unsubscribe();
   }, [inviteToken]);
+
+  const finalizePortalSetup = async (
+    userId: string,
+    pending: { id: string; client_account_id: string; first_name: string | null; last_name: string | null }
+  ) => {
+    try {
+      const { data: existing } = await supabase
+        .from("client_portal_users")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("client_account_id", pending.client_account_id)
+        .maybeSingle();
+
+      if (!existing) {
+        const { error: portalError } = await supabase
+          .from("client_portal_users")
+          .insert({
+            user_id: userId,
+            client_account_id: pending.client_account_id,
+            first_name: pending.first_name,
+            last_name: pending.last_name,
+            invited_by: "admin",
+          });
+        if (portalError && portalError.code !== "23505") {
+          console.error("Portal user creation error (post-confirm):", portalError);
+        }
+      }
+
+      await supabase
+        .from("user_roles")
+        .upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
+
+      await supabase
+        .from("client_invitations")
+        .update({ accepted_at: new Date().toISOString() })
+        .eq("id", pending.id);
+
+      sessionStorage.removeItem("pending_invitation");
+
+      toast({
+        title: "Welcome!",
+        description: "Your account has been confirmed and set up successfully.",
+      });
+
+      navigate("/portal");
+    } catch (err) {
+      console.error("Finalize portal setup error:", err);
+    }
+  };
 
   const checkClientPortalAccess = async (userId: string) => {
     const { data } = await supabase
@@ -314,6 +386,26 @@ export default function ClientPortalAuth() {
         return;
       }
 
+      // If email confirmation is required, defer portal setup until SIGNED_IN
+      if (!authData.user?.email_confirmed_at && !authData.session) {
+        sessionStorage.setItem(
+          "pending_invitation",
+          JSON.stringify({
+            id: invitation.id,
+            client_account_id: invitation.client_account_id,
+            first_name: invitation.first_name,
+            last_name: invitation.last_name,
+          })
+        );
+        setConfirmEmailSent(true);
+        toast({
+          title: "Check Your Email",
+          description: "We've sent a confirmation link to your email. Click it to finish setting up your account.",
+        });
+        setLoading(false);
+        return;
+      }
+
       const { error: portalError } = await supabase
         .from("client_portal_users")
         .insert({
@@ -381,6 +473,26 @@ export default function ClientPortalAuth() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (confirmEmailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
+            <CardDescription>
+              We've sent a confirmation link to {invitation?.email ?? email}. Click it to finish setting up your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground text-center">
+              Once confirmed, you'll be signed in automatically and your portal access will be activated.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
