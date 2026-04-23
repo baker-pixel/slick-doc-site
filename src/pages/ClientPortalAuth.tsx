@@ -368,7 +368,7 @@ export default function ClientPortalAuth() {
         email: invitation.email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/portal`,
+          emailRedirectTo: `${window.location.origin}/portal/auth`,
         },
       });
 

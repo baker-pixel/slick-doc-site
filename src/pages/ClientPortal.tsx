@@ -115,7 +115,7 @@ export default function ClientPortal() {
   const [activeTab, setActiveTab] = useState<PortalTab>(preferences.default_landing_page || "activity");
 
   // Check if onboarding steps 1-5 are all completed
-  const { data: isOnboardingComplete = true } = useQuery({
+  const { data: isOnboardingComplete = false } = useQuery({
     queryKey: ["onboarding-complete", portalUser?.client_account_id],
     enabled: !!portalUser?.client_account_id,
     queryFn: async () => {
