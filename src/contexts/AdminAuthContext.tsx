@@ -9,22 +9,39 @@ interface AdminAuthContextType {
 
 const AdminAuthContext = createContext<AdminAuthContextType | null>(null);
 
-const SESSION_KEY = "admin_session_password";
+const SESSION_FLAG_KEY = "admin_authenticated";
 const LAST_ACTIVITY_KEY = "admin_last_activity";
 const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [adminPassword, setAdminPassword] = useState(() => sessionStorage.getItem(SESSION_KEY) || "");
-  const [isAuthenticated, setIsAuthenticated] = useState(() => !!sessionStorage.getItem(SESSION_KEY));
+  // Password lives ONLY in memory — never persisted to storage.
+  const [adminPassword, setAdminPassword] = useState("");
+  // Restore auth flag from sessionStorage, but only if within timeout window.
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const flag = sessionStorage.getItem(SESSION_FLAG_KEY) === "true";
+    if (!flag) return false;
+    const lastActivity = parseInt(sessionStorage.getItem(LAST_ACTIVITY_KEY) || "0", 10);
+    if (!lastActivity || Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
+      sessionStorage.removeItem(SESSION_FLAG_KEY);
+      sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+      return false;
+    }
+    // Flag is valid but password is gone (page refresh) — force re-auth.
+    sessionStorage.removeItem(SESSION_FLAG_KEY);
+    sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+    return false;
+  });
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const logout = useCallback(() => {
     setAdminPassword("");
     setIsAuthenticated(false);
-    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_FLAG_KEY);
     sessionStorage.removeItem(LAST_ACTIVITY_KEY);
     // Also clean up legacy localStorage
     localStorage.removeItem("admin_password");
+    // Clean up legacy sessionStorage key
+    sessionStorage.removeItem("admin_session_password");
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
   }, []);
 
@@ -38,7 +55,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback((password: string) => {
     setAdminPassword(password);
     setIsAuthenticated(true);
-    sessionStorage.setItem(SESSION_KEY, password);
+    sessionStorage.setItem(SESSION_FLAG_KEY, "true");
     sessionStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
   }, []);
 
