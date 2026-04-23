@@ -141,7 +141,26 @@ export default function ClientPortal() {
         .order("step_number", { ascending: true });
 
       if (!steps || steps.length === 0) return false;
-      return steps.every((s) => s.status === "completed");
+      const allComplete = steps.every((s) => s.status === "completed");
+
+      // Stamp onboarded_at once when all 5 steps are done
+      if (allComplete) {
+        const { data: account } = await supabase
+          .from("client_accounts")
+          .select("onboarded_at")
+          .eq("id", portalUser!.client_account_id)
+          .maybeSingle();
+
+        if (account && account.onboarded_at === null) {
+          await supabase
+            .from("client_accounts")
+            .update({ onboarded_at: new Date().toISOString() })
+            .eq("id", portalUser!.client_account_id)
+            .is("onboarded_at", null);
+        }
+      }
+
+      return allComplete;
     },
   });
 
