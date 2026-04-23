@@ -386,6 +386,26 @@ export default function ClientPortalAuth() {
         return;
       }
 
+      // If email confirmation is required, defer portal setup until SIGNED_IN
+      if (!authData.user?.email_confirmed_at && !authData.session) {
+        sessionStorage.setItem(
+          "pending_invitation",
+          JSON.stringify({
+            id: invitation.id,
+            client_account_id: invitation.client_account_id,
+            first_name: invitation.first_name,
+            last_name: invitation.last_name,
+          })
+        );
+        setConfirmEmailSent(true);
+        toast({
+          title: "Check Your Email",
+          description: "We've sent a confirmation link to your email. Click it to finish setting up your account.",
+        });
+        setLoading(false);
+        return;
+      }
+
       const { error: portalError } = await supabase
         .from("client_portal_users")
         .insert({
