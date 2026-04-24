@@ -134,26 +134,24 @@ ${fetchFailed ? "Note: The website could not be fetched. Be transparent about th
 
 Return only the JSON. No extra text, no markdown, no code blocks.`;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    const aiResponse = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      }
-    );
+    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
@@ -164,7 +162,7 @@ Return only the JSON. No extra text, no markdown, no code blocks.`;
     }
 
     const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    const rawContent = aiData.content?.[0]?.text || "";
 
     // Parse JSON from response (strip markdown fences if present)
     let parsed;

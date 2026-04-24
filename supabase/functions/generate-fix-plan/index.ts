@@ -88,14 +88,14 @@ Rules:
 
 Return ONLY the JSON. No markdown, no fences, no preamble.`;
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-sonnet-4-6",
         max_tokens: 1200,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -108,7 +108,7 @@ Return ONLY the JSON. No markdown, no fences, no preamble.`;
     }
 
     const aiData = await aiRes.json();
-    const raw = aiData.choices?.[0]?.message?.content || "";
+    const raw = aiData.content?.[0]?.text || "";
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     let parsed: Record<string, unknown>;
     try {

@@ -30,106 +30,94 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-      const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const rawBody = await req.text();
-    console.log("Raw request body:", rawBody);
-    
     let body: any = {};
     try {
       body = JSON.parse(rawBody);
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError);
+    } catch {
       return new Response(JSON.stringify({ error: "Invalid JSON in request body" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    
+
     const messages = body?.messages;
-    console.log("Messages received:", messages ? messages.length : "none");
-    
     if (!messages || !Array.isArray(messages)) {
-      console.error("Messages validation failed. Body keys:", Object.keys(body));
       return new Response(JSON.stringify({ error: "Messages array is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
 
-    console.log("Chat request received with", messages.length, "messages");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          ...messages,
-        ],
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        messages,
         stream: true,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      
+      console.error("Anthropic error:", response.status, errorText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "I'm a bit busy right now. Please try again in a moment!" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Service temporarily unavailable. Please try again later." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
       return new Response(JSON.stringify({ error: "Something went wrong. Please try again." }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("Streaming response from AI gateway");
-    
-    return new Response(response.body, {
+    // Transform Anthropic SSE → OpenAI SSE format expected by ChatWidget
+    const transformer = new TransformStream({
+      transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk);
+        for (const line of text.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") { controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n")); continue; }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
+              const openaiChunk = JSON.stringify({ choices: [{ delta: { content: parsed.delta.text } }] });
+              controller.enqueue(new TextEncoder().encode(`data: ${openaiChunk}\n\n`));
+            } else if (parsed.type === "message_stop") {
+              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            }
+          } catch { /* skip non-JSON lines */ }
+        }
+      },
+    });
+
+    return new Response(response.body!.pipeThrough(transformer), {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {
     console.error("Chat error:", error);
-
     try {
-      await _sb.from('automation_alerts').insert({
-        alert_type: 'function_error',
-        severity: 'error',
-        title: `Error in chat`,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        source: 'chat',
-        metadata: {
-          function_name: 'chat',
-          client_id: null,
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          timestamp: new Date().toISOString(),
-        },
+      await _sb.from("automation_alerts").insert({
+        alert_type: "function_error", severity: "error", title: "Error in chat",
+        message: error instanceof Error ? error.message : "Unknown error", source: "chat",
+        metadata: { function_name: "chat", client_id: null, error_message: error instanceof Error ? error.message : "Unknown error", timestamp: new Date().toISOString() },
       });
-    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
+    } catch (_e) { /* ignore */ }
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
