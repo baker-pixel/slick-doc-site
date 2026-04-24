@@ -11,12 +11,13 @@ const AdminAuthContext = createContext<AdminAuthContextType | null>(null);
 
 const SESSION_FLAG_KEY = "admin_authenticated";
 const LAST_ACTIVITY_KEY = "admin_last_activity";
+const SESSION_PASSWORD_KEY = "admin_session_pw";
 const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  // Password lives ONLY in memory — never persisted to storage.
-  const [adminPassword, setAdminPassword] = useState("");
-  // Restore auth flag from sessionStorage, but only if within timeout window.
+  const [adminPassword, setAdminPassword] = useState(() =>
+    sessionStorage.getItem(SESSION_PASSWORD_KEY) || ""
+  );
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     const flag = sessionStorage.getItem(SESSION_FLAG_KEY) === "true";
     if (!flag) return false;
@@ -24,12 +25,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     if (!lastActivity || Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
       sessionStorage.removeItem(SESSION_FLAG_KEY);
       sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+      sessionStorage.removeItem(SESSION_PASSWORD_KEY);
       return false;
     }
-    // Flag is valid but password is gone (page refresh) — force re-auth.
-    sessionStorage.removeItem(SESSION_FLAG_KEY);
-    sessionStorage.removeItem(LAST_ACTIVITY_KEY);
-    return false;
+    return !!sessionStorage.getItem(SESSION_PASSWORD_KEY);
   });
   const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,9 +37,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(false);
     sessionStorage.removeItem(SESSION_FLAG_KEY);
     sessionStorage.removeItem(LAST_ACTIVITY_KEY);
-    // Also clean up legacy localStorage
+    sessionStorage.removeItem(SESSION_PASSWORD_KEY);
     localStorage.removeItem("admin_password");
-    // Clean up legacy sessionStorage key
     sessionStorage.removeItem("admin_session_password");
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
   }, []);
@@ -57,6 +55,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(true);
     sessionStorage.setItem(SESSION_FLAG_KEY, "true");
     sessionStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+    sessionStorage.setItem(SESSION_PASSWORD_KEY, password);
   }, []);
 
   // On mount, check if session has expired
