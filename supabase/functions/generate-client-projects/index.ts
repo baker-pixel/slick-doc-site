@@ -33,7 +33,7 @@ serve(async (req) => {
       );
     }
 
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
 
     // Fetch client info
@@ -130,14 +130,14 @@ Return your response as a JSON object with this structure:
 }`;
 
     // Call Lovable AI
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-sonnet-4-6",
         messages: [
           { role: "system", content: "You are a project management AI. Always respond with valid JSON only." },
           { role: "user", content: prompt }
@@ -167,7 +167,7 @@ Return your response as a JSON object with this structure:
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content;
+    const content = aiData.content?.[0]?.text;
     
     if (!content) {
       throw new Error("No content from AI");

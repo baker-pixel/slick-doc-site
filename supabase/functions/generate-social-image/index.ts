@@ -6,17 +6,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function generateSingleImage(apiKey: string, prompt: string): Promise<string | null> {
+async function generateSingleImage(_apiKey: string, _prompt: string): Promise<string | null> {
+  // Image generation not available — requires dedicated image generation service
+  return null;
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${_apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image-preview",
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: _prompt }],
         modalities: ["image", "text"],
       }),
     });

@@ -207,14 +207,14 @@ Rules:
 Return JSON: { "subject": "email subject line", "html": "body html" }`;
 
   try {
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "claude-sonnet-4-6",
         max_tokens: 800,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -226,7 +226,7 @@ Return JSON: { "subject": "email subject line", "html": "body html" }`;
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
+    const content = aiData.content?.[0]?.text || '';
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
@@ -251,7 +251,7 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>";
 
@@ -324,7 +324,7 @@ serve(async (req) => {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
               "X-Connection-Api-Key": RESEND_API_KEY,
             },
             body: JSON.stringify({

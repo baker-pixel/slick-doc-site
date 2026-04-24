@@ -1359,10 +1359,10 @@ Keyword gap analysis helps identify:
   );
 
   // Ask AI to compare and identify gaps
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   let gapResults: any;
 
-  if (LOVABLE_API_KEY && clientData) {
+  if (ANTHROPIC_API_KEY && clientData) {
     try {
       const prompt = `You are an SEO keyword gap analyst. Compare the client's website with their competitors and identify keyword opportunities.
 
@@ -1394,21 +1394,23 @@ Return a JSON object with this exact structure:
 
 Return only JSON.`;
 
-      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "claude-sonnet-4-6",
+          max_tokens: 1024,
           messages: [{ role: "user", content: prompt }],
         }),
       });
 
       if (aiRes.ok) {
         const aiData = await aiRes.json();
-        const content = aiData.choices?.[0]?.message?.content || "";
+        const content = aiData.content?.[0]?.text || "";
         const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
         gapResults = JSON.parse(cleaned);
       }

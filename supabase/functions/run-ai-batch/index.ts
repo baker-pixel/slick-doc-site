@@ -20,19 +20,19 @@ interface ClientData {
 }
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    throw new Error('LOVABLE_API_KEY not configured');
+  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is not configured");
   }
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: "claude-sonnet-4-6",
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
@@ -47,7 +47,7 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  return data.content?.[0]?.text || '';
 }
 
 // Map our content types to DB-allowed values
@@ -102,7 +102,7 @@ async function generateContent(supabase: any, client: ClientData, contentType: s
       metadata: {
         generated_at: new Date().toISOString(),
         original_type: contentType,
-        model: 'google/gemini-2.5-flash',
+        model: "claude-sonnet-4-6",
       },
     })
     .select()
