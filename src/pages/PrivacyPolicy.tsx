@@ -1,21 +1,25 @@
-import { Helmet } from "react-helmet-async";
+import { useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
 const PrivacyPolicy = () => {
   const lastUpdated = "April 28, 2026";
 
+  useEffect(() => {
+    document.title = "Privacy Policy | Orange Door Marketing";
+    const desc =
+      "Orange Door Marketing privacy policy explaining how we collect, use, store, and protect data — including data accessed via LinkedIn integrations.";
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "description");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", desc);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>Privacy Policy | Orange Door Marketing</title>
-        <meta
-          name="description"
-          content="Orange Door Marketing privacy policy explaining how we collect, use, store, and protect data — including data accessed via LinkedIn integrations."
-        />
-        <link rel="canonical" href="https://orangedoormarketing.com/privacy-policy" />
-      </Helmet>
-
       <Header />
 
       <main className="container mx-auto max-w-3xl px-6 py-16 md:py-24">
