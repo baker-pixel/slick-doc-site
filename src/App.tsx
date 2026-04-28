@@ -29,6 +29,7 @@ import EmailPreferences from "./pages/EmailPreferences";
 import ClientPortal from "./pages/ClientPortal";
 import ClientPortalAuth from "./pages/ClientPortalAuth";
 import Portfolio from "./pages/Portfolio";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ function AnimatedRoutes() {
         <Route path="/email-preferences" element={<PageTransition><EmailPreferences /></PageTransition>} />
         <Route path="/portal" element={<PageTransition><ClientPortal /></PageTransition>} />
         <Route path="/portal/auth" element={<PageTransition><ClientPortalAuth /></PageTransition>} />
+        <Route path="/privacy-policy" element={<PageTransition><PrivacyPolicy /></PageTransition>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
       </Routes>
