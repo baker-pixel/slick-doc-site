@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Calendar as CalendarIcon, Plus, Clock, Trash2, Edit, Loader2,
   Mail, Linkedin, Facebook, Twitter, FileText, Sparkles, RefreshCw,
-  CheckCircle, AlertCircle
+  CheckCircle, AlertCircle, Globe, Instagram
 } from "lucide-react";
 import { format, isSameDay, startOfDay } from "date-fns";
 
@@ -88,8 +88,15 @@ export function ContentCalendarPanel() {
 
   const fetchData = async () => {
     setIsLoading(true);
+    const rangeStart = new Date();
+    rangeStart.setDate(rangeStart.getDate() - 7);
+    const rangeEnd = new Date();
+    rangeEnd.setDate(rangeEnd.getDate() + 60);
     const [calendarRes, contentRes, clientsRes] = await Promise.all([
-      supabase.from("content_calendar").select("*").order("scheduled_for", { ascending: true }),
+      supabase.from("content_calendar").select("*")
+        .gte("scheduled_for", rangeStart.toISOString())
+        .lte("scheduled_for", rangeEnd.toISOString())
+        .order("scheduled_for", { ascending: true }),
       supabase.from("generated_content").select("id, title, content, content_type").eq("status", "published").order("created_at", { ascending: false }).limit(50),
       supabase.from("client_accounts").select("id, business_name, tier").eq("status", "active").order("business_name", { ascending: true })
     ]);
@@ -122,13 +129,14 @@ export function ContentCalendarPanel() {
 
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("run-ai-batch", {
-        body: { clientId: filterClientId, batchType: "daily" },
+      const { data, error } = await supabase.functions.invoke("fill-scheduled-content", {
+        body: { client_id: filterClientId, limit: 20 },
       });
       if (error) throw error;
+      const filled = (data as any)?.successful ?? 0;
       toast({
-        title: "AI content generated",
-        description: `Content created for ${client.business_name} — check Content Approvals to review.`,
+        title: "Calendar filled",
+        description: `${filled} slot${filled !== 1 ? "s" : ""} filled with AI content for ${client.business_name}.`,
       });
       fetchApprovalsForClient(filterClientId);
       fetchData();
@@ -156,7 +164,7 @@ export function ContentCalendarPanel() {
       if (error) throw error;
       toast({
         title: "Calendar seeded",
-        description: `${data?.items_created ?? 0} slots added for ${client.business_name} (${tier} tier). Now click "Generate AI Content" to fill them.`,
+        description: `${(data as any)?.total_created ?? 0} slots added for ${client.business_name} (${tier} tier). Now click "Generate AI Content" to fill them.`,
       });
       fetchData();
     } catch (err: any) {
@@ -271,12 +279,17 @@ export function ContentCalendarPanel() {
     }
   };
 
+  const PLACEHOLDER_TEXT = "[Auto-generated placeholder — content will be created by AI]";
+  const isPlaceholder = (item: CalendarItem) => item.content === PLACEHOLDER_TEXT || item.status === "draft";
+
   const getPlatformIcon = (platform: string | null) => {
     switch (platform) {
       case "email": return <Mail className="w-4 h-4" />;
       case "linkedin": return <Linkedin className="w-4 h-4" />;
       case "facebook": return <Facebook className="w-4 h-4" />;
       case "twitter": return <Twitter className="w-4 h-4" />;
+      case "instagram": return <Instagram className="w-4 h-4" />;
+      case "google_business": return <Globe className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
   };
@@ -289,6 +302,7 @@ export function ContentCalendarPanel() {
     switch (status) {
       case "published": return "bg-green-600";
       case "failed": return "bg-destructive";
+      case "draft": return "bg-muted text-muted-foreground border";
       default: return "bg-blue-600";
     }
   };
@@ -430,7 +444,11 @@ export function ContentCalendarPanel() {
                           {format(new Date(item.scheduled_for), "h:mm a")} · {getClientName(item.client_account_id)}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                          {item.content.substring(0, 100)}...
+                          {isPlaceholder(item)
+                            ? "Pending AI generation — click \"Generate AI Content\" to fill"
+                            : item.content.length > 100
+                              ? item.content.substring(0, 100) + "..."
+                              : item.content}
                         </p>
                       </div>
                       <div className="flex gap-1">
@@ -508,15 +526,15 @@ export function ContentCalendarPanel() {
           <CardTitle className="text-base">Upcoming Scheduled Content</CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredItems.filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date()).length === 0 ? (
+          {filteredItems.filter(i => i.status === "scheduled" && !isPlaceholder(i) && new Date(i.scheduled_for) >= new Date()).length === 0 ? (
             <p className="text-center py-4 text-muted-foreground">No upcoming content scheduled</p>
           ) : (
             <div className="space-y-2">
               {filteredItems
-                .filter(i => i.status === "scheduled" && new Date(i.scheduled_for) >= new Date())
+                .filter(i => i.status === "scheduled" && !isPlaceholder(i) && new Date(i.scheduled_for) >= new Date())
                 .slice(0, 10)
                 .map(item => (
-                  <div 
+                  <div
                     key={item.id}
                     className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
                   >
@@ -530,10 +548,10 @@ export function ContentCalendarPanel() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{item.content_type.replace("_", " ")}</Badge>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
+                      <Badge variant="outline">{item.content_type.replace(/_/g, " ")}</Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-8 w-8"
                         onClick={() => openEditModal(item)}
                       >
@@ -626,6 +644,8 @@ export function ContentCalendarPanel() {
                     <SelectItem value="linkedin">LinkedIn</SelectItem>
                     <SelectItem value="facebook">Facebook</SelectItem>
                     <SelectItem value="twitter">Twitter/X</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="google_business">Google Business</SelectItem>
                     <SelectItem value="blog">Blog</SelectItem>
                   </SelectContent>
                 </Select>

@@ -71,28 +71,36 @@ serve(async (req) => {
         .eq("id", approval_id);
 
       // 2. Bridge: Insert into content_calendar with client_approved = true
-      // The pg_cron job on publish-scheduled-content will pick this up
-      const scheduledFor = approval.scheduled_for || new Date().toISOString();
-      const { error: calInsertError } = await supabase
+      // Guard against duplicates — check if this approval already has a calendar entry
+      const { data: existing } = await supabase
         .from("content_calendar")
-        .insert({
-          client_account_id: clientId,
-          content_id: approval.id,
-          content_type: approval.content_type,
-          platform: approval.platform || null,
-          content: approval.full_content || approval.content_preview || "",
-          title: approval.title || "",
-          status: "scheduled",
-          client_approved: true,
-          scheduled_for: scheduledFor,
-          metadata: {
-            source: "content_approvals",
-            content_approval_id: approval_id,
-          },
-        });
+        .select("id")
+        .eq("content_id", approval.id)
+        .maybeSingle();
 
-      if (calInsertError) {
-        console.error("Failed to insert content_calendar row:", calInsertError);
+      if (!existing) {
+        const scheduledFor = approval.scheduled_for || new Date().toISOString();
+        const { error: calInsertError } = await supabase
+          .from("content_calendar")
+          .insert({
+            client_account_id: clientId,
+            content_id: approval.id,
+            content_type: approval.content_type,
+            platform: approval.platform || null,
+            content: approval.full_content || approval.content_preview || "",
+            title: approval.title || "",
+            status: "scheduled",
+            client_approved: true,
+            scheduled_for: scheduledFor,
+            metadata: {
+              source: "content_approvals",
+              content_approval_id: approval_id,
+            },
+          });
+
+        if (calInsertError) {
+          console.error("Failed to insert content_calendar row:", calInsertError);
+        }
       }
 
       // Log activity
