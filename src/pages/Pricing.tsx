@@ -158,6 +158,34 @@ export default function Pricing() {
             <BackButton />
           </div>
 
+          {/* Sign-up gating banner */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-4xl mx-auto mb-10"
+          >
+            <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-5 md:gap-6">
+              <div className="shrink-0 w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center">
+                <Zap className="text-primary" size={22} />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl md:text-2xl font-display font-semibold text-foreground mb-1">
+                  Start with a free Gap Analysis first
+                </h2>
+                <p className="text-muted-foreground">
+                  Before signing up for a plan, take our free Gap Analysis. It only takes a few minutes,
+                  and the results help us recommend the right tier for your business.
+                </p>
+              </div>
+              <Link to="/gap-analysis" className="shrink-0">
+                <Button size="lg" className="bg-primary hover:bg-orange-dark text-primary-foreground">
+                  Take Gap Analysis
+                  <ArrowRight className="ml-2" size={18} />
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
+
           {/* Hero */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
