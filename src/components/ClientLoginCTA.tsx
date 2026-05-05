@@ -41,13 +41,13 @@ export function ClientLoginCTA() {
                   <ArrowRight className="ml-2" size={18} />
                 </Button>
               </Link>
-              <Link to="/portal/auth?mode=signup" className="w-full sm:w-auto">
+              <Link to="/pricing" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   variant="outline"
                   className="w-full sm:w-auto bg-transparent border-background/30 text-background hover:bg-background/10 text-base px-8 py-6"
                 >
-                  Create Account
+                  Sign Up
                 </Button>
               </Link>
             </div>
