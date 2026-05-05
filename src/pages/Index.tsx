@@ -8,6 +8,7 @@ import { SystemSection } from "@/components/SystemSection";
 import { Testimonials } from "@/components/Testimonials";
 import { Pricing } from "@/components/Pricing";
 import { Contact } from "@/components/Contact";
+import { ClientLoginCTA } from "@/components/ClientLoginCTA";
 import { Footer } from "@/components/Footer";
 
 const Index = () => {
@@ -23,6 +24,7 @@ const Index = () => {
         <SystemSection />
         <Testimonials />
         <Pricing />
+        <ClientLoginCTA />
         <Contact />
       </main>
       <Footer />
