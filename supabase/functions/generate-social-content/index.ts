@@ -57,10 +57,10 @@ Return ONLY the post content, nothing else. No quotes, no explanations.`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
+        max_tokens: 1024,
         messages: [
           { role: "user", content: prompt },
         ],
-        stream: false,
       }),
     });
 
