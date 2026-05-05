@@ -66,7 +66,7 @@ export function Header() {
               <LogIn size={16} />
               Sign In
             </Link>
-            <Link to="/gap-analysis">
+            <Link to="/pricing">
               <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                 Sign Up
               </Button>
@@ -126,7 +126,7 @@ export function Header() {
                 >
                   Sign In
                 </Link>
-                <Link to="/gap-analysis" onClick={() => setIsMenuOpen(false)}>
+                <Link to="/pricing" onClick={() => setIsMenuOpen(false)}>
                   <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                     Sign Up
                   </Button>
