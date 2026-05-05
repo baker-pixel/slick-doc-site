@@ -32,61 +32,15 @@ serve(async (req) => {
       imagePrompt,
     } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is not configured');
     }
 
-    // Image-only generation path (used by AIAdGenerator to create creative images)
+    // Image-only generation path — not available without dedicated image service
     if (generateImageOnly) {
-      if (!imagePrompt || typeof imagePrompt !== "string" || !imagePrompt.trim()) {
-        return new Response(JSON.stringify({ error: "imagePrompt is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      console.log("Generating image for prompt:", imagePrompt.slice(0, 120));
-
-      const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image-preview",
-          messages: [
-            {
-              role: "user",
-              content: imagePrompt,
-            },
-          ],
-          modalities: ["image", "text"],
-        }),
-      });
-
-      if (!imgResp.ok) {
-        const errorText = await imgResp.text();
-        console.error("AI image gateway error:", imgResp.status, errorText);
-        return new Response(JSON.stringify({ error: "AI image generation failed" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const imgData = await imgResp.json();
-      const url = imgData?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
-      if (!url) {
-        console.error("AI image response missing image_url:", imgData);
-        return new Response(JSON.stringify({ error: "AI image response missing image" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ imageUrl: url }), {
+      return new Response(JSON.stringify({ error: "Image generation not available" }), {
+        status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -242,43 +196,37 @@ Return ONLY valid JSON in this exact format:
 
     console.log("Generating enhanced ads for:", { goal, location, industry, platform, generateVariants, includePredictions, includeBudgetRecs });
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only." },
-          { role: "user", content: prompt }
-        ],
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        system: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only.",
+        messages: [{ role: "user", content: prompt }],
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
-      
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits to continue." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      
+
       throw new Error(`AI gateway error: ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const content = data.content?.[0]?.text;
     
     if (!content) {
       throw new Error("No content in AI response");

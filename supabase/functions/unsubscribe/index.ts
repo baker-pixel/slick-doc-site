@@ -80,7 +80,7 @@ serve(async (req: Request) => {
             <h1>✓ Successfully Unsubscribed</h1>
             <p>You've been unsubscribed from our marketing emails.</p>
             <p>You'll still receive important transactional emails about your account.</p>
-            <a href="${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || '/'}/email-preferences?email=${encodeURIComponent(email)}&token=${token}" class="btn">Manage Preferences</a>
+            <a href="${Deno.env.get('APP_URL') || 'https://orangedoormarketing.com'}/email-preferences?email=${encodeURIComponent(email)}&token=${token}" class="btn">Manage Preferences</a>
           </div>
         </body>
         </html>

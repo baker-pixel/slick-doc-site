@@ -537,7 +537,7 @@ export function generateGapReportPDF(data: GapReportPDFData): void {
   doc.text("Orange Door handles all of this for you.", PAGE_W / 2, ctaY + 12, { align: "center" });
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text("Book your free strategy call at orangedoorconsulting.com/schedule", PAGE_W / 2, ctaY + 22, { align: "center" });
+  doc.text("Book your free strategy call at orangedoormarketing.com/schedule", PAGE_W / 2, ctaY + 22, { align: "center" });
 
   drawFooter(doc, 4);
 

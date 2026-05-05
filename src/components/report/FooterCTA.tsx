@@ -22,7 +22,7 @@ export function FooterCTA() {
         </div>
 
         <a
-          href="https://orangedoorconsulting.com/schedule"
+          href="https://orangedoormarketing.com/schedule"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block bg-[#E8521A] hover:bg-[#E8521A]/90 text-white text-[13px] font-semibold tracking-[0.02em] px-7 py-3.5 rounded-lg transition-colors shrink-0"

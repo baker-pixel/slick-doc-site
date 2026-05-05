@@ -181,10 +181,9 @@ Remember to return valid JSON with name, slug, subject, html_content, descriptio
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
         temperature: 0.7,
       }),
     });

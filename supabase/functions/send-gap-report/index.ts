@@ -433,7 +433,7 @@ function buildEmailHtml(params: ReportEmailRequest): string {
 
     <!-- CTA -->
     <div style="text-align:center;margin:32px 0 28px;">
-      <a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">Book a Free Strategy Call</a>
+      <a href="https://orangedoormarketing.com/schedule" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">Book a Free Strategy Call</a>
     </div>
 
     <p style="font-size:13px;color:#7A6355;line-height:1.7;text-align:center;margin:0 0 8px;">

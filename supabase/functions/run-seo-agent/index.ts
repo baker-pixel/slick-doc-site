@@ -149,6 +149,7 @@ Return only the JSON. No extra text, no markdown, no code blocks.`;
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 1000,
+        temperature: 0,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -158,7 +159,7 @@ Return only the JSON. No extra text, no markdown, no code blocks.`;
       console.error("AI gateway error:", aiResponse.status, errText);
       if (aiResponse.status === 429) throw new Error("Rate limit exceeded. Please try again later.");
       if (aiResponse.status === 402) throw new Error("AI credits exhausted. Please add funds.");
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      throw new Error(`Anthropic API error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();

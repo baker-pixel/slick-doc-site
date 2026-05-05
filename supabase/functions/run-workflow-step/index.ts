@@ -14,7 +14,6 @@ const TIER_ALLOWED_TASKS: Record<string, string[]> = {
   foundation: FOUNDATION_TASKS,
   growth: GROWTH_TASKS,
   transformation: TRANSFORMATION_TASKS,
-  scale: TRANSFORMATION_TASKS,
 };
 
 serve(async (req) => {

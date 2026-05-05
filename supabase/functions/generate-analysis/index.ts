@@ -95,7 +95,7 @@ serve(async (req) => {
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
+      console.error("ANTHROPIC_API_KEY is not configured");
       throw new Error("AI service not configured");
     }
 
@@ -220,8 +220,9 @@ Generate a comprehensive analysis in JSON format.`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
         temperature: 0.7,

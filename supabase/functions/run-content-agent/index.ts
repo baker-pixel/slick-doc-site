@@ -92,7 +92,6 @@ Write a ${contentType}.
 Topic: ${topic}
 Keep it under 150 words. Make it engaging and ready to post.`;
 
-    // Call Lovable AI Gateway
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY is not configured");
@@ -108,7 +107,8 @@ Keep it under 150 words. Make it engaging and ready to post.`;
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 500,
+          max_tokens: 800,
+          temperature: 0.7,
           messages: [{ role: "user", content: prompt }],
         }),
       }

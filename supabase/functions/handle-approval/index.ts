@@ -50,6 +50,13 @@ serve(async (req) => {
 
     const clientId = approval.client_account_id;
 
+    if (!clientId) {
+      return new Response(
+        JSON.stringify({ error: "Approval has no associated client account" }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (action === "approved") {
       // 1. Update approval status
       await supabase

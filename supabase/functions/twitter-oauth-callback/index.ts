@@ -12,7 +12,7 @@ serve(async (req) => {
   const CLIENT_ID = Deno.env.get("TWITTER_CLIENT_ID") || "";
   const CLIENT_SECRET = Deno.env.get("TWITTER_CLIENT_SECRET") || "";
   const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/twitter-oauth-callback`;
-  const APP_URL = Deno.env.get("APP_URL") || "https://slick-doc-site.lovable.app";
+  const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
 
   const portalRedirect = (params: string) =>
     new Response(null, { status: 302, headers: { Location: `${APP_URL}/portal?tab=integrations&${params}` } });

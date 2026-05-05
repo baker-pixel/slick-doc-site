@@ -238,10 +238,11 @@ serve(async (req) => {
   );
 
   let clientId: string | undefined;
+  let taskId: string | undefined;
   try {
     const body: AutomationRequest = await req.json();
     clientId = body.clientId;
-    const taskId = body.taskId;
+    taskId = body.taskId;
     const inputData = body.inputData;
 
     const jobTypeRaw = body.jobType;
@@ -399,13 +400,11 @@ serve(async (req) => {
 
     // Update job status to failed if job was created
     try {
-      const body: AutomationRequest = await req.clone().json().catch(() => ({})) as any;
-      // Try to find the running job for this client to mark it failed
-      if (body.clientId) {
+      if (clientId) {
         const { data: runningJobs } = await supabase
           .from("automation_jobs")
           .select("id")
-          .eq("client_id", body.clientId)
+          .eq("client_id", clientId)
           .eq("status", "running")
           .order("created_at", { ascending: false })
           .limit(1);
@@ -422,15 +421,14 @@ serve(async (req) => {
         }
       }
 
-      // Update task status to failed if taskId was provided
-      if (body.taskId) {
+      if (taskId) {
         await supabase
           .from("client_tasks")
           .update({
             status: "failed",
             notes: `Error: ${errorMessage}`,
           })
-          .eq("id", body.taskId);
+          .eq("id", taskId);
       }
     } catch (cleanupErr) {
       console.error("Failed to update error status:", cleanupErr);
@@ -447,7 +445,7 @@ serve(async (req) => {
 
 async function sendIntakeForm(supabase: any, client: ClientData) {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-  const APP_URL = Deno.env.get("APP_URL") || "https://slick-doc-site.lovable.app";
+  const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
   const intakeUrl = `${APP_URL}/intake?clientId=${client.id}`;
 
   if (RESEND_API_KEY) {
@@ -622,7 +620,7 @@ Once the client schedules their kickoff call, we'll prepare:
 }
 
 async function runPageSpeedTest(supabase: any, client: ClientData) {
-  const websiteUrl = client.industry ? `https://${client.business_name.toLowerCase().replace(/\s+/g, '')}.com` : "";
+  const websiteUrl = client.website_url || "";
   
   if (!websiteUrl) {
     const reportDate = formatDate();
@@ -1707,24 +1705,23 @@ Context: ${JSON.stringify(inputData || {})}`;
       break;
   }
 
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY is not configured");
+  const ANTHROPIC_API_KEY_LOCAL = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!ANTHROPIC_API_KEY_LOCAL) {
+    throw new Error("ANTHROPIC_API_KEY is not configured");
   }
 
-  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "x-api-key": ANTHROPIC_API_KEY_LOCAL,
+      "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
     }),
   });
 
@@ -1733,7 +1730,7 @@ Context: ${JSON.stringify(inputData || {})}`;
   }
 
   const aiData = await aiResponse.json();
-  const aiContent = aiData.choices?.[0]?.message?.content || "";
+  const aiContent = aiData.content?.[0]?.text || "";
 
   let parsedOutput: Record<string, unknown> = {};
   try {
@@ -2155,8 +2152,7 @@ async function buildRenewalReminderSequence(
     .single();
 
   if (seqError) {
-    console.error("Failed to create renewal sequence:", seqError);
-
+    throw new Error(`Failed to create renewal sequence: ${seqError.message}`);
   }
 
   // Create a deliverable with the sequence details

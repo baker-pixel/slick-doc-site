@@ -34,7 +34,9 @@ serve(async (req) => {
     }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-
+    if (!ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY is not configured");
+    }
 
     // Fetch client info
     const { data: client, error: clientError } = await supabase
@@ -114,7 +116,7 @@ Generate 3-5 projects that cover the key areas of the ${client.tier} tier servic
 Focus on these project types based on tier:
 - Foundation: Website optimization, Google Business Profile setup, Review generation, Basic SEO
 - Growth: Lead generation, Email marketing, Content marketing, Paid ads setup
-- Dominate/Scale: Advanced SEO, Multi-channel campaigns, Automation, Reporting dashboards
+- Transformation: Advanced SEO, Multi-channel campaigns, Automation, Reporting dashboards
 
 Return your response as a JSON object with this structure:
 {
@@ -129,7 +131,6 @@ Return your response as a JSON object with this structure:
   ]
 }`;
 
-    // Call Lovable AI
     const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -138,10 +139,9 @@ Return your response as a JSON object with this structure:
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        messages: [
-          { role: "system", content: "You are a project management AI. Always respond with valid JSON only." },
-          { role: "user", content: prompt }
-        ],
+        max_tokens: 2048,
+        system: "You are a project management AI. Always respond with valid JSON only.",
+        messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
       }),
     });

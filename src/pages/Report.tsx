@@ -252,7 +252,7 @@ export default function Report() {
 
         <div className="bg-[#1A1410] py-4 text-center border-t border-white/5">
           <Link to="/" className="text-white/20 hover:text-white/40 text-xs transition-colors">
-            ← Return to orangedoorconsulting.com
+            ← Return to orangedoormarketing.com
           </Link>
         </div>
       </div>

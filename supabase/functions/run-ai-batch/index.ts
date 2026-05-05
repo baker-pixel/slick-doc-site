@@ -33,10 +33,9 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
     }),
   });
 
@@ -204,7 +203,7 @@ Provide a detailed output that can be reviewed by the team.`;
       status: 'completed',
       input_data: { task_id: task.id, task_name: task.name },
       output_data: { result: output },
-      ai_model_used: 'google/gemini-2.5-flash',
+      ai_model_used: 'claude-sonnet-4-6',
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
     })

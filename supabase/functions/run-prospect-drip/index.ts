@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
+const RESEND_API_URL = "https://api.resend.com";
 
 interface Prospect {
   id: string;
@@ -46,7 +46,7 @@ const wrapHtml = (body: string, email: string = '') => `
     ${body}
   </div>
   <div style="background:#f5f5f5;padding:16px 40px;text-align:center;font-size:12px;color:#999;">
-    <a href="https://slick-doc-site.lovable.app/email-preferences?email=${encodeURIComponent(email)}" style="color:#999;">Unsubscribe</a>
+    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(email)}" style="color:#999;">Unsubscribe</a>
   </div>
 </div>
 </body></html>`;
@@ -58,8 +58,8 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
   const businessType = prospect.business_type || "local business";
   const url = prospect.website_url;
 
-  const callCta = `<div style="text-align:center;margin:25px 0;"><a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Book a Free Call</a></div>`;
-  const signupCta = `<div style="text-align:center;margin:10px 0;"><a href="https://slick-doc-site.lovable.app/pricing" style="color:#E8521A;font-weight:bold;text-decoration:underline;">See Our Plans</a></div>`;
+  const callCta = `<div style="text-align:center;margin:25px 0;"><a href="https://orangedoormarketing.com/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Book a Free Call</a></div>`;
+  const signupCta = `<div style="text-align:center;margin:10px 0;"><a href="https://orangedoormarketing.com/pricing" style="color:#E8521A;font-weight:bold;text-decoration:underline;">See Our Plans</a></div>`;
 
   switch (step) {
     case 1:
@@ -130,8 +130,8 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
           <p>If the honest answer is "not really" or "I don't have time for it," we should talk.</p>
           <p>No pressure, no long sales pitch. Just a 15-minute call to see if we can help.</p>
           <div style="text-align:center;margin:25px 0;">
-            <a href="https://slick-doc-site.lovable.app/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;margin:5px;">Schedule a Call</a>
-            <a href="https://slick-doc-site.lovable.app/pricing" style="display:inline-block;padding:14px 28px;background:#fff;color:#E8521A;text-decoration:none;border-radius:6px;font-weight:bold;border:2px solid #E8521A;margin:5px;">Sign Up Now</a>
+            <a href="https://orangedoormarketing.com/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;margin:5px;">Schedule a Call</a>
+            <a href="https://orangedoormarketing.com/pricing" style="display:inline-block;padding:14px 28px;background:#fff;color:#E8521A;text-decoration:none;border-radius:6px;font-weight:bold;border:2px solid #E8521A;margin:5px;">Sign Up Now</a>
           </div>
           <p>Either way, I hope the free report was helpful!</p>
           <p>— The Orange Door Team</p>
@@ -145,8 +145,7 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
 
 async function buildPersonalizedEmail(
   prospect: Prospect & { context_profile?: Record<string, unknown> },
-  step: number,
-  lovableApiKey: string
+  step: number
 ): Promise<{ subject: string; html: string } | null> {
   const ctx = prospect.context_profile;
   if (!ctx) return null;
@@ -193,8 +192,8 @@ ${ctx.fears ? `- Their biggest fear about agencies: ${ctx.fears}` : ''}
 Email theme for step ${step}: ${theme}
 
 Orange Door CTAs:
-- Book a call: https://slick-doc-site.lovable.app/schedule
-- See plans: https://slick-doc-site.lovable.app/pricing
+- Book a call: https://orangedoormarketing.com/schedule
+- See plans: https://orangedoormarketing.com/pricing
 
 Rules:
 - Write ONLY the email body HTML (no <html>, <head>, or <body> tags — just the inner content paragraphs, lists, CTAs)
@@ -210,7 +209,8 @@ Return JSON: { "subject": "email subject line", "html": "body html" }`;
     const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
+        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY") || "",
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -221,7 +221,8 @@ Return JSON: { "subject": "email subject line", "html": "body html" }`;
     });
 
     if (!aiResponse.ok) {
-      console.error(`AI email gen failed: ${aiResponse.status}`);
+      const errBody = await aiResponse.text();
+      console.error(`AI email gen failed: ${aiResponse.status}`, errBody);
       return null;
     }
 
@@ -255,7 +256,7 @@ serve(async (req) => {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>";
 
-  if (!LOVABLE_API_KEY || !RESEND_API_KEY) {
+  if (!ANTHROPIC_API_KEY || !RESEND_API_KEY) {
     return new Response(JSON.stringify({ error: "Email API keys not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -276,11 +277,13 @@ serve(async (req) => {
 
     if (pendingProspects && pendingProspects.length > 0) {
       const ids = pendingProspects.map((p: { id: string }) => p.id);
-      await supabase
+      const { count } = await supabase
         .from("prospects")
         .update({ status: "nurture", drip_step: 0 })
-        .in("id", ids);
-      prospectsNurtured = ids.length;
+        .in("id", ids)
+        .eq("status", "pending")  // guard: only update if still pending (concurrent-safe)
+        .select("id", { count: "exact", head: true });
+      prospectsNurtured = count ?? ids.length;
       console.log(`Moved ${ids.length} prospects to nurture status`);
     }
 
@@ -305,7 +308,7 @@ serve(async (req) => {
         if (daysSinceCreated < daysRequired) continue;
 
         // Try personalized first, fall back to static template
-        let emailContent = await buildPersonalizedEmail(prospect as any, nextStep, LOVABLE_API_KEY);
+        let emailContent = await buildPersonalizedEmail(prospect as any, nextStep);
         if (!emailContent) {
           emailContent = buildEmail(prospect as Prospect, nextStep);
         }
@@ -320,12 +323,11 @@ serve(async (req) => {
           };
         }
         try {
-          const emailRes = await fetch(`${GATEWAY_URL}/emails`, {
+          const emailRes = await fetch(`${RESEND_API_URL}/emails`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
-              "X-Connection-Api-Key": RESEND_API_KEY,
+              "Authorization": `Bearer ${RESEND_API_KEY}`,
             },
             body: JSON.stringify({
               from: EMAIL_FROM,
@@ -336,11 +338,13 @@ serve(async (req) => {
           });
 
           if (emailRes.ok) {
-            await supabase
+            const { count: updated } = await supabase
               .from("prospects")
               .update({ drip_step: nextStep })
-              .eq("id", prospect.id);
-            emailsSent++;
+              .eq("id", prospect.id)
+              .eq("drip_step", prospect.drip_step)  // optimistic lock: skip if already advanced
+              .select("id", { count: "exact", head: true });
+            if (updated && updated > 0) emailsSent++;
             console.log(`Drip email ${nextStep} sent to ${prospect.email}`);
           } else {
             const errText = await emailRes.text();

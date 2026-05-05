@@ -328,10 +328,9 @@ Return only valid JSON, no markdown fences.`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        messages: [
-          { role: "system", content: "You are an SEO expert. Return only valid JSON. No extra text." },
-          { role: "user", content: prompt },
-        ],
+        max_tokens: 1024,
+        system: "You are an SEO expert. Return only valid JSON. No extra text.",
+        messages: [{ role: "user", content: prompt }],
       }),
     });
 

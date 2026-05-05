@@ -1,3 +1,18 @@
+# Environment variables (never commit real keys)
+.env
+.env.local
+.env.production
+
+# Internal tooling
+.agents/
+.claude/
+.windsurf/
+skills/
+skills-lock.json
+
+# Supabase temp
+supabase/.temp/
+
 # Logs
 logs
 *.log
