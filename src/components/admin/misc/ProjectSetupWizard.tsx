@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -14,23 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Loader2,
-  Plus,
-  Trash2,
-  GripVertical,
-  Calendar,
-  Target,
-  Rocket,
-  TrendingUp,
-} from "lucide-react";
+import { Loader2, Plus, Trash2, Calendar, Sparkles, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface MilestoneTemplate {
   id: string;
   name: string;
   description: string;
-  defaultDays: number; // Days from project start
+  defaultDays: number;
   selected: boolean;
 }
 
@@ -46,305 +37,164 @@ interface ProjectSetupWizardProps {
   onSuccess: () => void;
 }
 
-const getTierMilestones = (tier: string): MilestoneTemplate[] => {
-  const baseMilestones: MilestoneTemplate[] = [
-    {
-      id: "kickoff",
-      name: "Project Kickoff",
-      description: "Initial strategy session and goal alignment",
-      defaultDays: 0,
-      selected: true,
-    },
-    {
-      id: "discovery",
-      name: "Discovery & Research",
-      description: "Competitor analysis, audience research, current state audit",
-      defaultDays: 7,
-      selected: true,
-    },
-  ];
-
-  if (tier === "foundation") {
-    return [
-      ...baseMilestones,
-      {
-        id: "gbp_setup",
-        name: "Google Business Profile Optimization",
-        description: "Complete GBP setup with photos, categories, and business info",
-        defaultDays: 10,
-        selected: true,
-      },
-      {
-        id: "citation_building",
-        name: "Citation Building",
-        description: "Submit to top 20 local directories and data aggregators",
-        defaultDays: 14,
-        selected: true,
-      },
-      {
-        id: "review_strategy",
-        name: "Review Generation Strategy",
-        description: "Set up review request system and response templates",
-        defaultDays: 21,
-        selected: true,
-      },
-      {
-        id: "local_seo_audit",
-        name: "Local SEO Audit Delivery",
-        description: "Present findings and recommendations report",
-        defaultDays: 14,
-        selected: true,
-      },
-      {
-        id: "website_optimization",
-        name: "On-Page SEO Optimization",
-        description: "Optimize title tags, meta descriptions, and local schema",
-        defaultDays: 28,
-        selected: true,
-      },
-      {
-        id: "first_month_review",
-        name: "30-Day Performance Review",
-        description: "Review initial results and adjust strategy",
-        defaultDays: 30,
-        selected: true,
-      },
-    ];
-  }
-
-  if (tier === "growth") {
-    return [
-      ...baseMilestones,
-      {
-        id: "gbp_setup",
-        name: "Google Business Profile Optimization",
-        description: "Complete GBP setup with photos, categories, and business info",
-        defaultDays: 10,
-        selected: true,
-      },
-      {
-        id: "ad_account_setup",
-        name: "Ad Account Setup",
-        description: "Configure Google/Meta ad accounts and tracking pixels",
-        defaultDays: 7,
-        selected: true,
-      },
-      {
-        id: "campaign_launch",
-        name: "First Campaign Launch",
-        description: "Launch initial paid advertising campaigns",
-        defaultDays: 14,
-        selected: true,
-      },
-      {
-        id: "email_sequences",
-        name: "Email Automation Setup",
-        description: "Set up welcome sequences and nurture campaigns",
-        defaultDays: 21,
-        selected: true,
-      },
-      {
-        id: "content_calendar",
-        name: "Content Calendar Creation",
-        description: "Plan 30 days of social and blog content",
-        defaultDays: 14,
-        selected: true,
-      },
-      {
-        id: "lead_tracking",
-        name: "Lead Tracking Implementation",
-        description: "Set up CRM integrations and lead scoring",
-        defaultDays: 21,
-        selected: true,
-      },
-      {
-        id: "first_month_review",
-        name: "30-Day Performance Review",
-        description: "Review campaign performance and ROI",
-        defaultDays: 30,
-        selected: true,
-      },
-    ];
-  }
-
-  // Scale / Transformation tier
-  return [
-    ...baseMilestones,
-    {
-      id: "full_audit",
-      name: "Comprehensive Marketing Audit",
-      description: "Full-funnel analysis across all channels",
-      defaultDays: 10,
-      selected: true,
-    },
-    {
-      id: "strategy_presentation",
-      name: "Strategy Presentation",
-      description: "Present 90-day marketing roadmap",
-      defaultDays: 14,
-      selected: true,
-    },
-    {
-      id: "tech_stack_setup",
-      name: "Marketing Tech Stack Setup",
-      description: "CRM, automation, analytics, and integrations",
-      defaultDays: 21,
-      selected: true,
-    },
-    {
-      id: "campaign_launch",
-      name: "Multi-Channel Campaign Launch",
-      description: "Launch coordinated campaigns across all channels",
-      defaultDays: 28,
-      selected: true,
-    },
-    {
-      id: "content_engine",
-      name: "Content Engine Activation",
-      description: "Blog, social, email, and video content production",
-      defaultDays: 21,
-      selected: true,
-    },
-    {
-      id: "conversion_optimization",
-      name: "Conversion Rate Optimization",
-      description: "Landing page tests and funnel optimization",
-      defaultDays: 35,
-      selected: true,
-    },
-    {
-      id: "attribution_setup",
-      name: "Attribution & Reporting Setup",
-      description: "Multi-touch attribution and executive dashboards",
-      defaultDays: 28,
-      selected: true,
-    },
-    {
-      id: "first_month_review",
-      name: "30-Day Performance Review",
-      description: "Review results across all channels",
-      defaultDays: 30,
-      selected: true,
-    },
-    {
-      id: "quarterly_planning",
-      name: "Quarterly Strategy Session",
-      description: "Plan next quarter based on learnings",
-      defaultDays: 90,
-      selected: true,
-    },
-  ];
-};
-
-const getTierIcon = (tier: string) => {
-  switch (tier) {
-    case "foundation":
-      return <Target className="h-5 w-5" />;
-    case "growth":
-      return <Rocket className="h-5 w-5" />;
-    default:
-      return <TrendingUp className="h-5 w-5" />;
-  }
-};
-
-const getTierProjectName = (tier: string) => {
-  switch (tier) {
-    case "foundation":
-      return "Local SEO Setup";
-    case "growth":
-      return "Marketing Campaign Launch";
-    default:
-      return "Full Marketing OS Implementation";
-  }
-};
+const GENERIC_STARTERS: MilestoneTemplate[] = [
+  { id: "g1", name: "Project Kickoff", description: "Initial strategy session and goal alignment", defaultDays: 3, selected: true },
+  { id: "g2", name: "Discovery & Research", description: "Audit, competitor research, current state analysis", defaultDays: 10, selected: true },
+  { id: "g3", name: "30-Day Performance Review", description: "Review initial results and adjust strategy", defaultDays: 30, selected: true },
+];
 
 export function ProjectSetupWizard({
   open,
   onClose,
   client,
-  adminPassword,
   onSuccess,
 }: ProjectSetupWizardProps) {
   const [step, setStep] = useState<"details" | "milestones">("details");
   const [loading, setLoading] = useState(false);
-  
-  // Project details
-  const [projectName, setProjectName] = useState(`${client.business_name} — ${getTierProjectName(client.tier)}`);
-  const [projectDescription, setProjectDescription] = useState(
-    `${client.tier.charAt(0).toUpperCase() + client.tier.slice(1)} tier project for ${client.business_name}`
-  );
-  
-  // Milestones
-  const [milestones, setMilestones] = useState<MilestoneTemplate[]>(
-    getTierMilestones(client.tier)
-  );
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
+  const [milestones, setMilestones] = useState<MilestoneTemplate[]>([]);
+
   const [customMilestoneName, setCustomMilestoneName] = useState("");
   const [customMilestoneDesc, setCustomMilestoneDesc] = useState("");
   const [customMilestoneDays, setCustomMilestoneDays] = useState(14);
 
-  const handleToggleMilestone = (id: string) => {
-    setMilestones((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, selected: !m.selected } : m))
-    );
+  // Reset and fetch AI suggestions every time the dialog opens
+  useEffect(() => {
+    if (!open) return;
+    setStep("details");
+    setProjectName("");
+    setProjectDescription("");
+    setMilestones([]);
+    setAiError(null);
+    setCustomMilestoneName("");
+    setCustomMilestoneDesc("");
+    fetchSuggestions();
+  }, [open]);
+
+  const fetchSuggestions = async () => {
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-client-projects", {
+        body: { clientAccountId: client.id, returnOnly: true },
+      });
+
+      if (error || data?.error) throw new Error(data?.error || "AI unavailable");
+
+      const first = data.projects?.[0];
+      if (first) {
+        setProjectName(first.name || `${client.business_name} — Project`);
+        setProjectDescription(first.description || "");
+        setMilestones(
+          (first.milestones || []).map((m: any, i: number) => ({
+            id: `ai_${i}`,
+            name: m.name,
+            description: m.description || "",
+            defaultDays: typeof m.days_from_start === "number" && m.days_from_start > 0
+              ? m.days_from_start
+              : (i + 1) * 7,
+            selected: true,
+          }))
+        );
+      } else {
+        throw new Error("No suggestions returned");
+      }
+    } catch {
+      setAiError("AI suggestions unavailable — loaded SOP templates instead");
+      await fetchSOPFallback();
+    } finally {
+      setAiLoading(false);
+    }
   };
+
+  const fetchSOPFallback = async () => {
+    try {
+      const { data: sop } = await supabase
+        .from("sop_documents")
+        .select("name, action_items")
+        .eq("tier", client.tier)
+        .eq("is_active", true)
+        .limit(1)
+        .single();
+
+      if (sop?.action_items && (sop.action_items as any[]).length > 0) {
+        setProjectName(`${client.business_name} — ${sop.name}`);
+        setMilestones(
+          (sop.action_items as any[]).slice(0, 10).map((item: any, i: number) => ({
+            id: `sop_${i}`,
+            name: item.step || (item.action || "").slice(0, 80) || `Step ${i + 1}`,
+            description: item.action || "",
+            defaultDays:
+              item.automation_potential === "HIGH" ? 7
+              : item.automation_potential === "MEDIUM" ? 14
+              : 21,
+            selected: true,
+          }))
+        );
+        return;
+      }
+    } catch {
+      // SOP also unavailable — use generic starters
+    }
+
+    setProjectName(`${client.business_name} — ${client.tier.charAt(0).toUpperCase() + client.tier.slice(1)} Kickoff`);
+    setMilestones(GENERIC_STARTERS);
+  };
+
+  const handleToggleMilestone = (id: string) =>
+    setMilestones(prev => prev.map(m => m.id === id ? { ...m, selected: !m.selected } : m));
 
   const handleAddCustomMilestone = () => {
     if (!customMilestoneName.trim()) return;
-    
-    const newMilestone: MilestoneTemplate = {
-      id: `custom_${Date.now()}`,
-      name: customMilestoneName,
-      description: customMilestoneDesc || "Custom milestone",
-      defaultDays: customMilestoneDays,
-      selected: true,
-    };
-    
-    setMilestones((prev) => [...prev, newMilestone]);
+    setMilestones(prev => [
+      ...prev,
+      {
+        id: `custom_${Date.now()}`,
+        name: customMilestoneName,
+        description: customMilestoneDesc || "",
+        defaultDays: customMilestoneDays,
+        selected: true,
+      },
+    ]);
     setCustomMilestoneName("");
     setCustomMilestoneDesc("");
     setCustomMilestoneDays(14);
   };
 
-  const handleRemoveMilestone = (id: string) => {
-    setMilestones((prev) => prev.filter((m) => m.id !== id));
-  };
+  const handleRemoveMilestone = (id: string) =>
+    setMilestones(prev => prev.filter(m => m.id !== id));
 
   const handleCreateProject = async () => {
+    const selected = milestones.filter(m => m.selected);
     if (!projectName.trim()) {
       toast.error("Project name is required");
       return;
     }
-
-    const selectedMilestones = milestones.filter((m) => m.selected);
-    if (selectedMilestones.length === 0) {
+    if (selected.length === 0) {
       toast.error("Select at least one milestone");
       return;
     }
 
     setLoading(true);
     try {
-      const resp = await supabase.functions.invoke("admin", {
-        body: {
-          action: "create_project_with_milestones",
-          password: adminPassword,
-          data: {
-            client_account_id: client.id,
-            name: projectName,
-            description: projectDescription || null,
-            milestones: selectedMilestones.map((m, index) => ({
-              name: m.name,
-              description: m.description,
-              days_from_start: m.defaultDays,
-              sort_order: index,
-            })),
-          },
-        },
+      const { error } = await supabase.rpc("create_project_with_milestones", {
+        p_client_account_id: client.id,
+        p_name: projectName.trim(),
+        p_description: projectDescription.trim() || null,
+        p_milestones: selected.map((m, i) => ({
+          name: m.name,
+          description: m.description || null,
+          days_from_start: m.defaultDays,
+          sort_order: i,
+        })),
       });
 
-      if (resp.error) throw resp.error;
-      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
+      if (error) throw error;
 
-      toast.success(`Project created with ${selectedMilestones.length} milestones!`);
+      toast.success(`Project created with ${selected.length} milestones!`);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -355,176 +205,179 @@ export function ProjectSetupWizard({
     }
   };
 
-  const selectedCount = milestones.filter((m) => m.selected).length;
+  const selectedCount = milestones.filter(m => m.selected).length;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {getTierIcon(client.tier)}
-            <span>Create Project for {client.business_name}</span>
-            <Badge variant="outline" className="ml-2 capitalize">
-              {client.tier}
-            </Badge>
+            <Sparkles className="h-5 w-5 text-primary" />
+            Create Project for {client.business_name}
+            <Badge variant="outline" className="ml-2 capitalize">{client.tier}</Badge>
           </DialogTitle>
         </DialogHeader>
 
-        {step === "details" && (
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="project-name">Project Name</Label>
-              <Input
-                id="project-name"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder="Enter project name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-desc">Description (optional)</Label>
-              <Textarea
-                id="project-desc"
-                value={projectDescription}
-                onChange={(e) => setProjectDescription(e.target.value)}
-                placeholder="Brief project description"
-                rows={3}
-              />
-            </div>
-
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-              <h4 className="font-medium text-sm">What's included:</h4>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• {milestones.length} recommended milestones for {client.tier} tier</li>
-                <li>• Automatic due date calculation based on project start</li>
-                <li>• Client visibility in their portal</li>
-                <li>• Progress tracking and notifications</li>
-              </ul>
-            </div>
+        {aiLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Generating AI suggestions for {client.business_name}…</p>
           </div>
-        )}
-
-        {step === "milestones" && (
-          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Select milestones to include ({selectedCount} selected)
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setMilestones((prev) =>
-                    prev.map((m) => ({ ...m, selected: true }))
-                  )
-                }
-              >
-                Select All
-              </Button>
-            </div>
-
-            <ScrollArea className="flex-1 -mx-6 px-6">
-              <div className="space-y-2">
-                {milestones.map((milestone) => (
-                  <div
-                    key={milestone.id}
-                    className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                      milestone.selected
-                        ? "bg-primary/5 border-primary/20"
-                        : "bg-muted/30 border-transparent"
-                    }`}
-                  >
-                    <Checkbox
-                      checked={milestone.selected}
-                      onCheckedChange={() => handleToggleMilestone(milestone.id)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{milestone.name}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          Day {milestone.defaultDays}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {milestone.description}
-                      </p>
-                    </div>
-                    {milestone.id.startsWith("custom_") && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => handleRemoveMilestone(milestone.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+        ) : (
+          <>
+            {aiError && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {aiError}
               </div>
+            )}
 
-              {/* Add custom milestone */}
-              <div className="mt-4 p-4 border border-dashed rounded-lg space-y-3">
-                <h4 className="text-sm font-medium flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Custom Milestone
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <Input
-                      placeholder="Milestone name"
-                      value={customMilestoneName}
-                      onChange={(e) => setCustomMilestoneName(e.target.value)}
-                    />
-                  </div>
+            {step === "details" && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="project-name">Project Name</Label>
                   <Input
-                    placeholder="Description (optional)"
-                    value={customMilestoneDesc}
-                    onChange={(e) => setCustomMilestoneDesc(e.target.value)}
+                    id="project-name"
+                    value={projectName}
+                    onChange={e => setProjectName(e.target.value)}
+                    placeholder="Enter project name"
                   />
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="Days"
-                      value={customMilestoneDays}
-                      onChange={(e) => setCustomMilestoneDays(Number(e.target.value))}
-                      className="w-20"
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={handleAddCustomMilestone}
-                      disabled={!customMilestoneName.trim()}
-                      className="flex-1"
-                    >
-                      Add
-                    </Button>
-                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="project-desc">Description (optional)</Label>
+                  <Textarea
+                    id="project-desc"
+                    value={projectDescription}
+                    onChange={e => setProjectDescription(e.target.value)}
+                    placeholder="Brief project description"
+                    rows={3}
+                  />
+                </div>
+                <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">Ready to review:</p>
+                  <p>• {milestones.length} AI-suggested milestones for {client.tier} tier</p>
+                  <p>• Due dates calculated from task complexity</p>
+                  <p>• You can edit, remove, or add milestones in the next step</p>
                 </div>
               </div>
-            </ScrollArea>
-          </div>
+            )}
+
+            {step === "milestones" && (
+              <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedCount} of {milestones.length} selected
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setMilestones(prev => prev.map(m => ({ ...m, selected: true })))}
+                  >
+                    Select All
+                  </Button>
+                </div>
+
+                <ScrollArea className="flex-1 -mx-6 px-6">
+                  <div className="space-y-2">
+                    {milestones.map(milestone => (
+                      <div
+                        key={milestone.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                          milestone.selected
+                            ? "bg-primary/5 border-primary/20"
+                            : "bg-muted/30 border-transparent"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={milestone.selected}
+                          onCheckedChange={() => handleToggleMilestone(milestone.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{milestone.name}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              Day {milestone.defaultDays}
+                            </Badge>
+                          </div>
+                          {milestone.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{milestone.description}</p>
+                          )}
+                        </div>
+                        {milestone.id.startsWith("custom_") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            onClick={() => handleRemoveMilestone(milestone.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 p-4 border border-dashed rounded-lg space-y-3">
+                    <h4 className="text-sm font-medium flex items-center gap-2">
+                      <Plus className="h-4 w-4" />
+                      Add Custom Milestone
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <Input
+                          placeholder="Milestone name"
+                          value={customMilestoneName}
+                          onChange={e => setCustomMilestoneName(e.target.value)}
+                        />
+                      </div>
+                      <Input
+                        placeholder="Description (optional)"
+                        value={customMilestoneDesc}
+                        onChange={e => setCustomMilestoneDesc(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Days"
+                          value={customMilestoneDays}
+                          onChange={e => setCustomMilestoneDays(Number(e.target.value))}
+                          className="w-20"
+                        />
+                        <Button
+                          variant="secondary"
+                          onClick={handleAddCustomMilestone}
+                          disabled={!customMilestoneName.trim()}
+                          className="flex-1"
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+          </>
         )}
 
         <DialogFooter className="gap-2">
-          {step === "milestones" && (
-            <Button variant="outline" onClick={() => setStep("details")}>
-              Back
-            </Button>
+          {step === "milestones" && !aiLoading && (
+            <Button variant="outline" onClick={() => setStep("details")}>Back</Button>
           )}
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          {step === "details" ? (
-            <Button onClick={() => setStep("milestones")}>
-              Next: Configure Milestones
-            </Button>
-          ) : (
-            <Button onClick={handleCreateProject} disabled={loading || selectedCount === 0}>
-              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Project ({selectedCount} milestones)
-            </Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {!aiLoading && (
+            step === "details" ? (
+              <Button onClick={() => setStep("milestones")} disabled={!projectName.trim()}>
+                Next: Review Milestones
+              </Button>
+            ) : (
+              <Button onClick={handleCreateProject} disabled={loading || selectedCount === 0}>
+                {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Project ({selectedCount} milestones)
+              </Button>
+            )
           )}
         </DialogFooter>
       </DialogContent>

@@ -24,8 +24,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
-    const { clientAccountId } = await req.json();
-    
+    const { clientAccountId, returnOnly = false } = await req.json();
+
     if (!clientAccountId) {
       return new Response(
         JSON.stringify({ error: "clientAccountId is required" }),
@@ -38,17 +38,19 @@ serve(async (req) => {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    // Guard: refuse if client already has projects
-    const { data: existingProjects } = await supabase
-      .from("client_projects")
-      .select("id")
-      .eq("client_account_id", clientAccountId);
+    // Duplicate guard only when actually saving to DB
+    if (!returnOnly) {
+      const { data: existingProjects } = await supabase
+        .from("client_projects")
+        .select("id")
+        .eq("client_account_id", clientAccountId);
 
-    if (existingProjects && existingProjects.length > 0) {
-      return new Response(
-        JSON.stringify({ error: `Client already has ${existingProjects.length} project(s). Delete existing projects before regenerating.` }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (existingProjects && existingProjects.length > 0) {
+        return new Response(
+          JSON.stringify({ error: `Client already has ${existingProjects.length} project(s). Delete existing projects before regenerating.` }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Fetch client info including context fields
@@ -218,63 +220,46 @@ Return ONLY valid JSON with this structure:
       throw new Error("Failed to parse AI response");
     }
 
-    // Create projects and milestones in database
-    const createdProjects = [];
-    const today = new Date();
-
-    for (const project of projectsPlan.projects || []) {
-      // Create project
-      const { data: newProject, error: projectError } = await supabase
-        .from("client_projects")
-        .insert({
-          client_account_id: clientAccountId,
-          name: project.name,
-          description: project.description,
-          status: "pending",
-          start_date: today.toISOString().split('T')[0],
-          progress_percentage: 0,
-        })
-        .select()
-        .single();
-
-      if (projectError) {
-        console.error("Project creation error:", projectError);
-        continue;
-      }
-
-      // Create milestones
-      const milestones = project.milestones || [];
-      for (let i = 0; i < milestones.length; i++) {
-        const milestone = milestones[i];
-        const dueDate = new Date(today);
-        const daysOffset = typeof milestone.days_from_start === 'number' && milestone.days_from_start > 0
-          ? milestone.days_from_start
-          : (i + 1) * 7;
-        dueDate.setDate(dueDate.getDate() + daysOffset);
-
-        await supabase
-          .from("project_milestones")
-          .insert({
-            project_id: newProject.id,
-            name: milestone.name,
-            description: milestone.description,
-            status: "pending",
-            sort_order: i + 1,
-            due_date: dueDate.toISOString().split('T')[0],
-          });
-      }
-
-      createdProjects.push(newProject);
+    // returnOnly: return AI suggestions to the caller without touching the DB.
+    // The Wizard uses this to pre-populate its form; admin reviews before committing.
+    if (returnOnly) {
+      return new Response(
+        JSON.stringify({ success: true, projects: projectsPlan.projects || [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log(`Created ${createdProjects.length} projects for client ${client.business_name}`);
+    // Save to DB atomically via the create_project_with_milestones RPC
+    const today = new Date().toISOString().split('T')[0];
+    const createdCount = { projects: 0 };
+
+    for (const project of projectsPlan.projects || []) {
+      const milestones = (project.milestones || []).map((m: any, i: number) => ({
+        name: m.name,
+        description: m.description || null,
+        days_from_start: typeof m.days_from_start === 'number' && m.days_from_start > 0 ? m.days_from_start : (i + 1) * 7,
+        sort_order: i,
+      }));
+
+      const { error: rpcError } = await supabase.rpc('create_project_with_milestones', {
+        p_client_account_id: clientAccountId,
+        p_name: project.name,
+        p_description: project.description || null,
+        p_start_date: today,
+        p_milestones: milestones,
+      });
+
+      if (rpcError) {
+        console.error("RPC project creation error:", rpcError);
+        continue;
+      }
+      createdCount.projects++;
+    }
+
+    console.log(`Created ${createdCount.projects} projects for client ${client.business_name}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        projectsCreated: createdProjects.length,
-        projects: createdProjects
-      }),
+      JSON.stringify({ success: true, projectsCreated: createdCount.projects }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

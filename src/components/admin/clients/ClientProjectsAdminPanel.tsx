@@ -9,12 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Plus, Trash2, Edit, Target, Milestone, Sparkles, Loader2, MessageCircle, Send, RefreshCw, CornerDownRight } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { ProjectSetupWizard } from "../misc/ProjectSetupWizard";
 
 interface ClientAccountWithTier {
   id: string;
@@ -73,11 +73,9 @@ interface ClientProject {
 }
 
 export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId?: string; adminPassword?: string } = {}) {
-  const [isOpen, setIsOpen] = useState(false);
   const [isMilestoneOpen, setIsMilestoneOpen] = useState(false);
-  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
-  const [selectedClientForAI, setSelectedClientForAI] = useState<string>("");
   const [editingProject, setEditingProject] = useState<ClientProject | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     client_account_id: '',
@@ -94,6 +92,11 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     due_date: '',
     status: 'pending',
   });
+
+  // Wizard state
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isClientSelectOpen, setIsClientSelectOpen] = useState(false);
+  const [wizardClientId, setWizardClientId] = useState<string>("");
   const [projectComments, setProjectComments] = useState<Record<string, AdminComment[]>>({});
   const [projectUpdateRequests, setProjectUpdateRequests] = useState<Record<string, AdminUpdateRequest[]>>({});
   const [replyText, setReplyText] = useState('');
@@ -165,64 +168,6 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     },
   });
 
-  const generateProjectsMutation = useMutation({
-    mutationFn: async (clientAccountId: string) => {
-      const { data, error } = await supabase.functions.invoke('generate-client-projects', {
-        body: { clientAccountId }
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
-      toast.success(`Generated ${data.projectsCreated} projects with milestones!`);
-      setIsAIDialogOpen(false);
-      setSelectedClientForAI("");
-    },
-    onError: (error: Error) => {
-      console.error('AI generation error:', error);
-      if (error.message.includes('Rate limit')) {
-        toast.error("Rate limit exceeded. Please wait a moment and try again.");
-      } else if (error.message.includes('credits')) {
-        toast.error("AI credits exhausted. Please add funds to continue.");
-      } else {
-        toast.error("Failed to generate projects: " + error.message);
-      }
-    },
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase.functions.invoke('admin', {
-        body: {
-          action: 'create',
-          table: 'client_projects',
-          password: adminPassword,
-          data: {
-            client_account_id: data.client_account_id,
-            name: data.name,
-            description: data.description || null,
-            status: data.status,
-            start_date: data.start_date || null,
-            target_end_date: data.target_end_date || null,
-            progress_percentage: parseInt(data.progress_percentage) || 0,
-          },
-        },
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
-      toast.success("Project created");
-      resetForm();
-    },
-    onError: (error) => {
-      console.error('Create error:', error);
-      toast.error("Failed to create project");
-    },
-  });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: string } & typeof formData) => {
@@ -478,7 +423,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       progress_percentage: '0',
     });
     setEditingProject(null);
-    setIsOpen(false);
+    setIsEditOpen(false);
   };
 
   const handleEdit = (project: ClientProject) => {
@@ -492,7 +437,16 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       target_end_date: project.target_end_date || '',
       progress_percentage: String(project.progress_percentage),
     });
-    setIsOpen(true);
+    setIsEditOpen(true);
+  };
+
+  const handleOpenWizard = (preselectedClientId?: string) => {
+    if (preselectedClientId || clientId) {
+      setWizardClientId(preselectedClientId || clientId || '');
+      setIsWizardOpen(true);
+    } else {
+      setIsClientSelectOpen(true);
+    }
   };
 
   const handleSubmit = () => {
@@ -500,11 +454,8 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       toast.error("Please fill in all required fields");
       return;
     }
-
     if (editingProject) {
       updateMutation.mutate({ id: editingProject.id, ...formData });
-    } else {
-      createMutation.mutate(formData);
     }
   };
 
@@ -551,153 +502,45 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
           <p className="text-muted-foreground">Manage projects and milestones for clients.</p>
         </div>
         <div className="flex gap-2">
-          {/* AI Generate Projects Button */}
-          <Dialog open={isAIDialogOpen} onOpenChange={setIsAIDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Sparkles className="h-4 w-4 mr-2" />
-                AI Generate Projects
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  Generate Projects with AI
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <p className="text-sm text-muted-foreground">
-                  AI will analyze the client's tier and SOPs to generate appropriate projects with milestones.
-                </p>
-                <div className="space-y-2">
-                  <Label>Select Client</Label>
-                  <Select value={selectedClientForAI} onValueChange={setSelectedClientForAI}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a client..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients?.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.business_name} 
-                          <Badge variant="outline" className="ml-2 text-xs">
-                            {client.tier}
-                          </Badge>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {selectedClientForAI && (
-                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                    <p className="font-medium">What AI will generate:</p>
-                    <ul className="mt-2 space-y-1 text-muted-foreground">
-                      <li>• 3-5 projects based on {clients?.find(c => c.id === selectedClientForAI)?.tier} tier</li>
-                      <li>• Milestones with weekly due dates</li>
-                      <li>• Categories from SOP action items</li>
-                    </ul>
-                  </div>
-                )}
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsAIDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={() => selectedClientForAI && generateProjectsMutation.mutate(selectedClientForAI)}
-                    disabled={!selectedClientForAI || generateProjectsMutation.isPending}
-                  >
-                    {generateProjectsMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Generate Projects
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Manual Create Project Button */}
-          <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsOpen(open); }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Project
-              </Button>
-            </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingProject ? 'Edit Project' : 'Create New Project'}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Client *</Label>
-                <Select value={formData.client_account_id} onValueChange={(v) => setFormData({ ...formData, client_account_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>{client.business_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Project Name *</Label>
-                <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Website Redesign" />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Project description" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Target End Date</Label>
-                  <Input type="date" value={formData.target_end_date} onChange={(e) => setFormData({ ...formData, target_end_date: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="on_hold">On Hold</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Progress ({formData.progress_percentage}%)</Label>
-                  <Input type="range" min="0" max="100" value={formData.progress_percentage} onChange={(e) => setFormData({ ...formData, progress_percentage: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={resetForm}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
-                  {editingProject ? 'Update' : 'Create'}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <Button onClick={() => handleOpenWizard()}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Create Project
+          </Button>
         </div>
       </div>
+
+      {/* Client selector pre-step (when no clientId prop) */}
+      <Dialog open={isClientSelectOpen} onOpenChange={setIsClientSelectOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Select Client</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Select value={wizardClientId} onValueChange={setWizardClientId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a client…" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients?.map(c => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.business_name}
+                    <Badge variant="outline" className="ml-2 text-xs">{c.tier}</Badge>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsClientSelectOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!wizardClientId}
+                onClick={() => { setIsClientSelectOpen(false); setIsWizardOpen(true); }}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Milestone Dialog */}
       <Dialog open={isMilestoneOpen} onOpenChange={setIsMilestoneOpen}>
@@ -951,6 +794,65 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
           </Accordion>
         </CardContent>
       </Card>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={open => { if (!open) resetForm(); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Project Name *</Label>
+              <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Input type="date" value={formData.start_date} onChange={e => setFormData({ ...formData, start_date: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Target End Date</Label>
+                <Input type="date" value={formData.target_end_date} onChange={e => setFormData({ ...formData, target_end_date: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={formData.status} onValueChange={v => setFormData({ ...formData, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={resetForm}>Cancel</Button>
+              <Button onClick={handleSubmit} disabled={updateMutation.isPending}>Update</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Project Setup Wizard */}
+      {wizardClientId && clients && (
+        <ProjectSetupWizard
+          open={isWizardOpen}
+          onClose={() => { setIsWizardOpen(false); setWizardClientId(''); }}
+          client={(() => {
+            const c = clients.find(c => c.id === wizardClientId);
+            return { id: wizardClientId, business_name: c?.business_name || '', tier: c?.tier || 'foundation' };
+          })()}
+          adminPassword={adminPassword || ''}
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] })}
+        />
+      )}
     </div>
   );
 }
