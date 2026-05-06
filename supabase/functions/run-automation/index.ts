@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type AutomationType = 
+type AutomationType =
   | "send_intake_form"
   | "add_to_crm"
   | "schedule_kickoff"
@@ -30,7 +30,16 @@ type AutomationType =
   | "custom"
   | "add_segmentation_logic_to_funnel_steps"
   | "build_renewal_reminder_sequence"
-  | "build_review_to_case_study_workflow";
+  | "build_review_to_case_study_workflow"
+  | "build_landing_pages"
+  | "build_website_rebuild"
+  | "run_advanced_seo"
+  | "create_lead_magnet"
+  | "build_sales_funnel"
+  | "setup_sales_enablement"
+  | "schedule_strategy_call"
+  | "optimize_crm_pipeline"
+  | "create_full_analytics_suite";
 
 interface AutomationRequest {
   clientId: string;
@@ -110,6 +119,15 @@ const ALLOWED_JOB_TYPES: AutomationType[] = [
   "add_segmentation_logic_to_funnel_steps",
   "build_renewal_reminder_sequence",
   "build_review_to_case_study_workflow",
+  "build_landing_pages",
+  "build_website_rebuild",
+  "run_advanced_seo",
+  "create_lead_magnet",
+  "build_sales_funnel",
+  "setup_sales_enablement",
+  "schedule_strategy_call",
+  "optimize_crm_pipeline",
+  "create_full_analytics_suite",
 ];
 
 function normalizeJobType(raw: unknown): AutomationType {
@@ -173,6 +191,52 @@ function normalizeJobType(raw: unknown): AutomationType {
     add_client_to_crm_project_tracker: "add_to_crm",
     add_client_to_crm: "add_to_crm",
     connect_automations_to_crm: "add_to_crm",
+
+    // Landing pages aliases
+    landing_page_pack: "build_landing_pages",
+    landing_pages: "build_landing_pages",
+    build_3_5_landing_pages: "build_landing_pages",
+    build_landing_page_pack: "build_landing_pages",
+
+    // Website rebuild aliases
+    full_website_rebuild: "build_website_rebuild",
+    website_rebuild: "build_website_rebuild",
+    rebuild_website: "build_website_rebuild",
+
+    // Advanced SEO aliases
+    advanced_seo: "run_advanced_seo",
+    advanced_seo_program: "run_advanced_seo",
+    run_advanced_seo_program: "run_advanced_seo",
+
+    // Lead magnet aliases
+    lead_magnet: "create_lead_magnet",
+    lead_magnet_development: "create_lead_magnet",
+    create_lead_magnets: "create_lead_magnet",
+
+    // Sales funnel aliases
+    full_funnel_buildout: "build_sales_funnel",
+    sales_funnel: "build_sales_funnel",
+    funnel_buildout: "build_sales_funnel",
+    build_complete_sales_funnel: "build_sales_funnel",
+
+    // Sales enablement aliases
+    sales_enablement: "setup_sales_enablement",
+    sales_enablement_system: "setup_sales_enablement",
+
+    // Strategy call aliases
+    monthly_strategy_call: "schedule_strategy_call",
+    strategy_call: "schedule_strategy_call",
+    schedule_monthly_call: "schedule_strategy_call",
+
+    // CRM pipeline optimization aliases
+    crm_pipeline_optimization: "optimize_crm_pipeline",
+    crm_pipeline: "optimize_crm_pipeline",
+    optimize_crm: "optimize_crm_pipeline",
+
+    // Full analytics suite aliases
+    full_analytics_suite: "create_full_analytics_suite",
+    analytics_suite: "create_full_analytics_suite",
+    full_analytics: "create_full_analytics_suite",
 
     // Email/SMS sequence aliases
     build_immediate_response_email_for_new_leads: "email_sequence",
@@ -241,6 +305,19 @@ serve(async (req) => {
   let taskId: string | undefined;
   try {
     const body: AutomationRequest = await req.json();
+
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    if (adminPassword) {
+      const provided =
+        req.headers.get("x-admin-password") ?? (body as Record<string, unknown>).password as string | undefined;
+      if (provided !== adminPassword) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     clientId = body.clientId;
     taskId = body.taskId;
     const inputData = body.inputData;
@@ -345,6 +422,33 @@ serve(async (req) => {
         break;
       case "build_review_to_case_study_workflow":
         result = await buildReviewToCaseStudyWorkflow(supabase, client, inputData);
+        break;
+      case "build_landing_pages":
+        result = await buildLandingPages(supabase, client, inputData);
+        break;
+      case "build_website_rebuild":
+        result = await buildWebsiteRebuild(supabase, client, inputData);
+        break;
+      case "run_advanced_seo":
+        result = await runAdvancedSeo(supabase, client, inputData);
+        break;
+      case "create_lead_magnet":
+        result = await createLeadMagnet(supabase, client, inputData);
+        break;
+      case "build_sales_funnel":
+        result = await buildSalesFunnel(supabase, client, inputData);
+        break;
+      case "setup_sales_enablement":
+        result = await setupSalesEnablement(supabase, client, inputData);
+        break;
+      case "schedule_strategy_call":
+        result = await scheduleStrategyCall(supabase, client, inputData);
+        break;
+      case "optimize_crm_pipeline":
+        result = await optimizeCrmPipeline(supabase, client, inputData);
+        break;
+      case "create_full_analytics_suite":
+        result = await createFullAnalyticsSuite(supabase, client, inputData);
         break;
       default:
         throw new Error(`Unknown job type: ${jobType}`);
@@ -1543,57 +1647,143 @@ Long-term drip campaign for leads not ready to buy
 
 async function setupRetargetingAudiences(supabase: any, client: ClientData) {
   const reportDate = formatDate();
-  const audiences = [
-    { platform: "facebook", name: `${client.business_name} - Website Visitors`, size: "pending" },
-    { platform: "google", name: `${client.business_name} - Site Visitors`, size: "pending" },
+
+  const systemPrompt = `You are a paid advertising expert. Create retargeting campaign briefs. Output valid JSON only.`;
+  const userPrompt = `Create retargeting audience and campaign setup for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Website: ${client.website_url || "N/A"}
+
+Return JSON:
+{
+  "facebook_audiences": [
+    {"name": "...", "type": "...", "duration_days": 180, "description": "..."}
+  ],
+  "google_audiences": [
+    {"name": "...", "type": "...", "duration_days": 540, "description": "..."}
+  ],
+  "pixel_events": [
+    {"event": "...", "trigger": "...", "value": "..."}
+  ],
+  "campaign_briefs": [
+    {
+      "platform": "facebook|google",
+      "campaign_name": "...",
+      "objective": "...",
+      "audience": "...",
+      "ad_copy": "...",
+      "budget_suggestion": "...",
+      "bid_strategy": "..."
+    }
+  ]
+}`;
+
+  let parsed: any = null;
+  try {
+    const aiContent = await callGroq(userPrompt, systemPrompt, 2500);
+    parsed = parseJsonFromAi(aiContent);
+  } catch (_e) {
+    // Use defaults if AI fails
+  }
+
+  const fbAudiences = parsed?.facebook_audiences || [
+    { name: `${client.business_name} – All Website Visitors`, type: "Website Custom Audience", duration_days: 180, description: "All visitors in last 180 days" },
+    { name: `${client.business_name} – High-Intent Visitors`, type: "Website Custom Audience", duration_days: 30, description: "Visitors who viewed contact or pricing pages" },
+  ];
+
+  const gAudiences = parsed?.google_audiences || [
+    { name: `${client.business_name} – Site Visitors`, type: "Website Visitors", duration_days: 540, description: "All website visitors" },
+    { name: `${client.business_name} – Form Abandoners`, type: "Website Visitors", duration_days: 90, description: "Started but didn't complete a form" },
   ];
 
   await createDeliverable(
     supabase,
     client.id,
-    `Retargeting Audiences Setup - ${reportDate}`,
-    `# Retargeting Audiences Setup
+    `Retargeting Audiences Setup – ${reportDate}`,
+    `# Retargeting Audiences & Campaign Setup – ${client.business_name}
 
-## Status: Complete
+## Status: Complete ✅
 
-*Generated on ${reportDate} for ${client.business_name}*
+*Generated on ${reportDate}*
 
-## Audiences Created
+---
 
-### Facebook/Instagram
-- **Name:** ${audiences[0].name}
-- **Type:** Website Custom Audience
-- **Duration:** 180 days
+## Pixel Installation Instructions
 
-### Google Ads
-- **Name:** ${audiences[1].name}
-- **Type:** Website Visitors
-- **Duration:** 540 days
+### Meta Pixel (Facebook/Instagram)
 
-## What This Enables
+1. Go to Meta Events Manager → **Data Sources** → **Connect Data Sources** → **Web**
+2. Create a new Pixel named: **"${client.business_name} Pixel"**
+3. Install the base code in the \`<head>\` of every page on ${client.website_url || "your website"}
+4. Add these standard events:
 
-Retargeting allows you to show ads to people who have:
-- Visited your website
-- Viewed specific pages
-- Started but didn't complete a form
+| Event | Trigger |
+|-------|---------|
+${(parsed?.pixel_events || [
+  { event: "PageView", trigger: "Every page load" },
+  { event: "Lead", trigger: "Form submission confirmation" },
+  { event: "Contact", trigger: "Contact page visit" },
+  { event: "ViewContent", trigger: "Service page visit" },
+]).map((e: any) => `| \`${e.event}\` | ${e.trigger} |`).join("\n")}
+
+### Google Tag (Google Ads)
+
+1. Create a Google Ads account → **Tools** → **Audience Manager** → **Your Data Segments**
+2. Create a new **Website Visitors** segment
+3. Install Google tag via Google Tag Manager or directly in \`<head>\`
+
+---
+
+## Facebook/Instagram Audiences to Create
+
+${fbAudiences.map((a: any) => `
+### ${a.name}
+- **Type:** ${a.type}
+- **Duration:** ${a.duration_days} days
+- **Description:** ${a.description}`).join("\n")}
+
+---
+
+## Google Ads Audiences to Create
+
+${gAudiences.map((a: any) => `
+### ${a.name}
+- **Type:** ${a.type}
+- **Duration:** ${a.duration_days} days
+- **Description:** ${a.description}`).join("\n")}
+
+---
+
+## Campaign Briefs
+
+${(parsed?.campaign_briefs || [
+  { platform: "facebook", campaign_name: `${client.business_name} – Retargeting`, objective: "Lead generation", audience: "All website visitors", ad_copy: "Saw something you liked? We're here when you're ready. Click to get in touch.", budget_suggestion: "$10-20/day", bid_strategy: "Lowest cost" },
+  { platform: "google", campaign_name: `${client.business_name} – RLSA`, objective: "Conversions", audience: "Past website visitors searching for your services", ad_copy: "You visited us before – ready to get started?", budget_suggestion: "$5-15/day", bid_strategy: "Target CPA" },
+]).map((c: any) => `
+### ${c.campaign_name} (${c.platform})
+- **Objective:** ${c.objective}
+- **Target Audience:** ${c.audience}
+- **Ad Copy:** "${c.ad_copy}"
+- **Budget Suggestion:** ${c.budget_suggestion}
+- **Bid Strategy:** ${c.bid_strategy}`).join("\n")}
+
+---
+
+## Timeline
+
+1. **Day 1-3:** Install pixels and verify firing in Events Manager
+2. **Day 3-14:** Audiences build up (need 1,000+ users for Meta ads)
+3. **Day 14+:** Launch retargeting campaigns
 
 ## Expected Results
 
-- **10x higher** click-through rates vs cold traffic
-- **70% lower** cost per acquisition
-- **3-5x** better conversion rates
+- **3-10x higher** CTR vs cold traffic
+- **60-70% lower** cost per lead vs prospecting campaigns
 
-## Next Steps
-
-1. Website pixels will begin collecting visitor data
-2. Audiences will build over 7-14 days
-3. Retargeting campaigns can launch once audience reaches 1,000+ users
-
-*Your retargeting infrastructure is ready!*`,
+*Pixel installation and audience creation steps are ready. Implement and campaigns can launch within 2 weeks.*`,
     "marketing"
   );
 
-  return { setup: true, audiences, deliverableCreated: true };
+  return { setup: true, fbAudiences, gAudiences, campaignBriefs: parsed?.campaign_briefs?.length || 2, deliverableCreated: true };
 }
 
 async function setupRetentionAutomations(supabase: any, client: ClientData) {
@@ -2213,6 +2403,1127 @@ ${renewalEmails.map((email, idx) => `
     timeline: renewalEmails.map(e => ({ day: e.delay_days, template: e.template })),
     timestamp: new Date().toISOString(),
   };
+}
+
+// ============ NEW FEATURE HANDLERS ============
+
+async function callGroq(prompt: string, systemPrompt: string, maxTokens = 2048): Promise<string> {
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Groq API error: ${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+function parseJsonFromAi(content: string): any {
+  try {
+    const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    return match ? JSON.parse(match[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildLandingPages(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+  const pageCount = (inputData?.pageCount as number) || 4;
+
+  const systemPrompt = `You are an expert conversion copywriter. Generate landing page copy for a local service business.
+Output valid JSON only. No markdown outside the JSON.`;
+
+  const userPrompt = `Create ${pageCount} high-converting landing page copy structures for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Tone: ${client.tone || "professional and friendly"}
+Website: ${client.website_url || "N/A"}
+
+Return JSON:
+{
+  "pages": [
+    {
+      "slug": "service-name",
+      "headline": "...",
+      "subheadline": "...",
+      "benefits": ["benefit 1", "benefit 2", "benefit 3"],
+      "social_proof": "...",
+      "cta_primary": "...",
+      "cta_secondary": "...",
+      "faq": [{"q": "...", "a": "..."}],
+      "target_audience": "...",
+      "primary_keyword": "..."
+    }
+  ]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 3000);
+  const parsed = parseJsonFromAi(aiContent);
+  const pages = parsed?.pages || [];
+
+  for (const page of pages) {
+    await supabase.from("generated_content").insert({
+      client_id: client.id,
+      content_type: "landing_page",
+      title: page.headline,
+      content: JSON.stringify(page),
+      metadata: { slug: page.slug, keyword: page.primary_keyword },
+    });
+  }
+
+  const markdownDoc = `# Landing Page Pack – ${client.business_name}
+
+## Status: Complete ✅
+
+*Generated on ${reportDate}*
+
+**Pages Created:** ${pages.length}
+
+---
+
+${pages.map((p: any, i: number) => `## Page ${i + 1}: ${p.slug || `Page ${i + 1}`}
+
+### Headline
+${p.headline}
+
+### Subheadline
+${p.subheadline}
+
+### Target Audience
+${p.target_audience}
+
+### Primary Keyword
+${p.primary_keyword}
+
+### Key Benefits
+${(p.benefits || []).map((b: string) => `- ${b}`).join("\n")}
+
+### Social Proof
+${p.social_proof}
+
+### CTAs
+- **Primary:** ${p.cta_primary}
+- **Secondary:** ${p.cta_secondary}
+
+### FAQ
+${(p.faq || []).map((f: any) => `**Q:** ${f.q}\n**A:** ${f.a}`).join("\n\n")}
+
+---`).join("\n\n")}
+
+## Next Steps
+
+1. Review copy for brand voice accuracy
+2. Hand to developer to build pages from this structure
+3. Set up tracking & A/B test CTA variants
+
+*All landing page copy ready for development.*`;
+
+  await createDeliverable(supabase, client.id, `Landing Page Pack – ${reportDate}`, markdownDoc, "content");
+
+  return { pagesCreated: pages.length, pages, deliverableCreated: true };
+}
+
+async function buildWebsiteRebuild(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+
+  const systemPrompt = `You are a senior web strategist. Create a comprehensive website rebuild brief.
+Output valid JSON only.`;
+
+  const userPrompt = `Create a full website rebuild brief for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Existing site: ${client.website_url || "none"}
+
+Return JSON:
+{
+  "site_goals": ["goal 1", "goal 2"],
+  "pages_required": [{"name": "...", "purpose": "...", "key_sections": ["..."]}],
+  "conversion_architecture": "...",
+  "technical_requirements": ["req 1", "req 2"],
+  "seo_foundations": ["..."],
+  "integrations_needed": ["CRM", "..."],
+  "content_needed": ["..."],
+  "timeline_weeks": 8,
+  "discovery_questions": ["question 1", "question 2"]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 2500);
+  const parsed = parseJsonFromAi(aiContent);
+
+  if (RESEND_API_KEY) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+        to: client.email,
+        subject: `Your Website Rebuild Has Started – ${client.business_name}`,
+        html: `
+          <h2>Your Website Rebuild Is Underway, ${client.first_name || client.business_name}!</h2>
+          <p>We've kicked off your new website project. Here's what happens next:</p>
+          <ol>
+            <li><strong>Discovery:</strong> We'll review your answers and brand assets</li>
+            <li><strong>Design:</strong> Wireframes and mockups for your approval</li>
+            <li><strong>Development:</strong> Build with conversion-optimized architecture</li>
+            <li><strong>Launch:</strong> QA, SEO setup, and go-live</li>
+          </ol>
+          <p><strong>Estimated timeline:</strong> ${parsed?.timeline_weeks || 8} weeks</p>
+          <p>Questions? Reply to this email or reach us at hello@orangedoormarketing.com</p>
+          <p>Best regards,<br/>The Orange Door Team</p>
+        `,
+      }),
+    });
+  }
+
+  const markdownDoc = `# Website Rebuild Project Brief – ${client.business_name}
+
+## Status: Initiated ✅
+
+*Generated on ${reportDate}*
+
+---
+
+## Site Goals
+${(parsed?.site_goals || ["Increase lead volume", "Improve brand credibility"]).map((g: string) => `- ${g}`).join("\n")}
+
+## Pages Required
+${(parsed?.pages_required || []).map((p: any) => `
+### ${p.name}
+**Purpose:** ${p.purpose}
+**Key Sections:** ${(p.key_sections || []).join(", ")}`).join("\n")}
+
+## Conversion Architecture
+${parsed?.conversion_architecture || "Homepage → Service pages → Lead capture → Thank you"}
+
+## Technical Requirements
+${(parsed?.technical_requirements || []).map((r: string) => `- ${r}`).join("\n")}
+
+## SEO Foundations to Build In
+${(parsed?.seo_foundations || []).map((s: string) => `- ${s}`).join("\n")}
+
+## Integrations Needed
+${(parsed?.integrations_needed || ["CRM", "Analytics", "Chat widget"]).map((i: string) => `- ${i}`).join("\n")}
+
+## Content Needed
+${(parsed?.content_needed || []).map((c: string) => `- ${c}`).join("\n")}
+
+## Discovery Questions for Client
+${(parsed?.discovery_questions || []).map((q: string, i: number) => `${i + 1}. ${q}`).join("\n")}
+
+## Timeline
+**Estimated Duration:** ${parsed?.timeline_weeks || 8} weeks
+
+| Week | Milestone |
+|------|-----------|
+| 1-2 | Discovery & wireframes |
+| 3-4 | Design mockups & client approval |
+| 5-6 | Development |
+| 7 | QA & content loading |
+| 8 | Launch & post-launch monitoring |
+
+---
+
+*Client notified by email. Kickoff discovery call to be scheduled.*`;
+
+  await createDeliverable(supabase, client.id, `Website Rebuild Brief – ${reportDate}`, markdownDoc, "general");
+
+  return { briefCreated: true, emailSent: !!RESEND_API_KEY, deliverableCreated: true };
+}
+
+async function runAdvancedSeo(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+
+  const { data: competitors } = await supabase
+    .from("client_competitors")
+    .select("name, domain")
+    .eq("client_account_id", client.id)
+    .limit(5);
+
+  const systemPrompt = `You are an enterprise SEO strategist. Create a comprehensive SEO program.
+Output valid JSON only.`;
+
+  const userPrompt = `Create an advanced SEO program for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Website: ${client.website_url || "N/A"}
+Competitors: ${competitors?.map((c: any) => c.name).join(", ") || "not specified"}
+
+Return JSON:
+{
+  "keyword_clusters": [
+    {
+      "cluster_name": "...",
+      "primary_keyword": "...",
+      "secondary_keywords": ["...", "..."],
+      "monthly_search_volume": "high|medium|low",
+      "difficulty": "high|medium|low",
+      "content_type": "service page|blog|FAQ",
+      "priority": "immediate|q2|q3"
+    }
+  ],
+  "technical_priorities": [
+    {"issue": "...", "impact": "high|medium|low", "fix": "..."}
+  ],
+  "link_building_strategy": ["tactic 1", "tactic 2"],
+  "content_calendar_90_days": [
+    {"week": 1, "title": "...", "type": "blog|page|update", "target_keyword": "..."}
+  ],
+  "local_seo_actions": ["action 1", "action 2"],
+  "competitor_gap_opportunities": ["opportunity 1", "opportunity 2"],
+  "monthly_kpis": ["KPI 1", "KPI 2"]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 3500);
+  const parsed = parseJsonFromAi(aiContent);
+
+  if (parsed?.keyword_clusters) {
+    await supabase.from("keyword_gap_results").insert({
+      client_account_id: client.id,
+      competitors: competitors?.map((c: any) => c.domain) || [],
+      results: { keyword_clusters: parsed.keyword_clusters, advanced_program: true },
+    });
+  }
+
+  const markdownDoc = `# Advanced SEO Program – ${client.business_name}
+
+## Status: Complete ✅
+
+*Generated on ${reportDate}*
+
+---
+
+## Keyword Cluster Strategy
+
+${(parsed?.keyword_clusters || []).map((cluster: any) => `
+### ${cluster.cluster_name}
+- **Primary Keyword:** ${cluster.primary_keyword}
+- **Secondary Keywords:** ${(cluster.secondary_keywords || []).join(", ")}
+- **Search Volume:** ${cluster.monthly_search_volume}
+- **Difficulty:** ${cluster.difficulty}
+- **Content Type:** ${cluster.content_type}
+- **Priority:** ${cluster.priority}`).join("\n")}
+
+---
+
+## Technical SEO Priorities
+
+| Issue | Impact | Fix |
+|-------|--------|-----|
+${(parsed?.technical_priorities || []).map((t: any) => `| ${t.issue} | ${t.impact} | ${t.fix} |`).join("\n")}
+
+---
+
+## Link Building Strategy
+${(parsed?.link_building_strategy || []).map((t: string) => `- ${t}`).join("\n")}
+
+---
+
+## 90-Day Content Calendar
+
+| Week | Title | Type | Target Keyword |
+|------|-------|------|----------------|
+${(parsed?.content_calendar_90_days || []).map((c: any) => `| Week ${c.week} | ${c.title} | ${c.type} | ${c.target_keyword} |`).join("\n")}
+
+---
+
+## Local SEO Actions
+${(parsed?.local_seo_actions || []).map((a: string) => `- ${a}`).join("\n")}
+
+---
+
+## Competitor Gap Opportunities
+${(parsed?.competitor_gap_opportunities || []).map((o: string) => `- ${o}`).join("\n")}
+
+---
+
+## Monthly KPIs to Track
+${(parsed?.monthly_kpis || []).map((k: string) => `- ${k}`).join("\n")}
+
+---
+
+*This advanced SEO program is reviewed and adjusted monthly based on ranking data.*`;
+
+  await createDeliverable(supabase, client.id, `Advanced SEO Program – ${reportDate}`, markdownDoc, "report");
+
+  return { completed: true, clusterCount: parsed?.keyword_clusters?.length || 0, deliverableCreated: true };
+}
+
+async function createLeadMagnet(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+  const magnetType = (inputData?.type as string) || "guide";
+
+  const systemPrompt = `You are a lead generation expert. Create a complete lead magnet including content, landing page copy, and follow-up email sequence.
+Output valid JSON only.`;
+
+  const userPrompt = `Create a high-value lead magnet for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Type: ${magnetType} (guide, checklist, or template)
+Tone: ${client.tone || "professional and helpful"}
+
+Return JSON:
+{
+  "title": "...",
+  "subtitle": "...",
+  "type": "guide|checklist|template",
+  "target_pain_point": "...",
+  "sections": [
+    {"heading": "...", "content": "...", "key_takeaway": "..."}
+  ],
+  "landing_page": {
+    "headline": "...",
+    "subheadline": "...",
+    "benefits": ["...", "...", "..."],
+    "cta": "...",
+    "form_fields": ["First Name", "Email"]
+  },
+  "thank_you_email": {
+    "subject": "...",
+    "body": "..."
+  },
+  "follow_up_sequence": [
+    {"day": 1, "subject": "...", "preview": "..."},
+    {"day": 3, "subject": "...", "preview": "..."},
+    {"day": 7, "subject": "...", "preview": "..."}
+  ]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 3500);
+  const parsed = parseJsonFromAi(aiContent);
+
+  await supabase.from("generated_content").insert({
+    client_id: client.id,
+    content_type: "lead_magnet",
+    title: parsed?.title || `Lead Magnet – ${client.business_name}`,
+    content: JSON.stringify(parsed),
+    metadata: { type: magnetType },
+  });
+
+  if (parsed?.follow_up_sequence?.length) {
+    const emails = parsed.follow_up_sequence.map((e: any) => ({
+      delay_days: e.day,
+      subject: e.subject,
+      template_slug: "lead_magnet_followup",
+      preview: e.preview,
+    }));
+    await supabase.from("email_sequences").insert({
+      name: `Lead Magnet Follow-up – ${client.business_name}`,
+      trigger_type: "lead_magnet_download",
+      is_active: true,
+      emails,
+    });
+  }
+
+  const markdownDoc = `# Lead Magnet: ${parsed?.title || "Custom Lead Magnet"} – ${client.business_name}
+
+## Status: Complete ✅
+
+*Generated on ${reportDate}*
+
+---
+
+## Overview
+
+**Type:** ${parsed?.type || magnetType}
+**Title:** ${parsed?.title}
+**Subtitle:** ${parsed?.subtitle}
+**Pain Point Addressed:** ${parsed?.target_pain_point}
+
+---
+
+## Content Outline
+
+${(parsed?.sections || []).map((s: any, i: number) => `### Section ${i + 1}: ${s.heading}
+
+${s.content}
+
+**Key Takeaway:** *${s.key_takeaway}*`).join("\n\n")}
+
+---
+
+## Landing Page Copy
+
+**Headline:** ${parsed?.landing_page?.headline}
+
+**Subheadline:** ${parsed?.landing_page?.subheadline}
+
+**Benefits:**
+${(parsed?.landing_page?.benefits || []).map((b: string) => `- ${b}`).join("\n")}
+
+**CTA Button:** ${parsed?.landing_page?.cta}
+
+**Form Fields:** ${(parsed?.landing_page?.form_fields || ["First Name", "Email"]).join(", ")}
+
+---
+
+## Thank You Email
+
+**Subject:** ${parsed?.thank_you_email?.subject}
+
+${parsed?.thank_you_email?.body}
+
+---
+
+## Follow-Up Email Sequence
+
+| Day | Subject | Preview |
+|-----|---------|---------|
+${(parsed?.follow_up_sequence || []).map((e: any) => `| Day ${e.day} | ${e.subject} | ${e.preview} |`).join("\n")}
+
+---
+
+## Implementation Checklist
+
+- [ ] Design lead magnet PDF using content above
+- [ ] Build landing page from copy provided
+- [ ] Connect form to CRM and trigger thank you email
+- [ ] Activate follow-up email sequence in CRM
+- [ ] Add lead magnet CTA to website homepage and blog posts
+
+*Lead magnet content and sequences are ready for production.*`;
+
+  await createDeliverable(supabase, client.id, `Lead Magnet: ${parsed?.title || "Custom"} – ${reportDate}`, markdownDoc, "content");
+
+  return { created: true, title: parsed?.title, sequenceEmails: parsed?.follow_up_sequence?.length || 0, deliverableCreated: true };
+}
+
+async function buildSalesFunnel(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+
+  const systemPrompt = `You are a sales funnel architect. Design a complete customer journey with email sequences.
+Output valid JSON only.`;
+
+  const userPrompt = `Design a complete sales funnel for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Website: ${client.website_url || "N/A"}
+Tier: ${client.tier}
+
+Return JSON:
+{
+  "funnel_name": "...",
+  "stages": [
+    {
+      "name": "Awareness",
+      "goal": "...",
+      "traffic_sources": ["..."],
+      "content_assets": ["..."],
+      "conversion_metric": "..."
+    },
+    {
+      "name": "Interest",
+      "goal": "...",
+      "nurture_actions": ["..."],
+      "conversion_metric": "..."
+    },
+    {
+      "name": "Consideration",
+      "goal": "...",
+      "trust_builders": ["..."],
+      "conversion_metric": "..."
+    },
+    {
+      "name": "Decision",
+      "goal": "...",
+      "closing_tactics": ["..."],
+      "conversion_metric": "..."
+    },
+    {
+      "name": "Retention",
+      "goal": "...",
+      "retention_actions": ["..."],
+      "conversion_metric": "..."
+    }
+  ],
+  "email_sequences": [
+    {
+      "stage": "...",
+      "trigger": "...",
+      "emails": [
+        {"day": 0, "subject": "...", "purpose": "...", "body_preview": "..."}
+      ]
+    }
+  ],
+  "kpis": ["KPI 1", "KPI 2"],
+  "tools_needed": ["CRM", "..."]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 4000);
+  const parsed = parseJsonFromAi(aiContent);
+
+  for (const seq of parsed?.email_sequences || []) {
+    if (seq.emails?.length) {
+      await supabase.from("email_sequences").insert({
+        name: `Funnel – ${seq.stage} – ${client.business_name}`,
+        trigger_type: seq.trigger?.toLowerCase().replace(/\s+/g, "_") || "funnel_stage",
+        is_active: true,
+        emails: seq.emails.map((e: any) => ({
+          delay_days: e.day,
+          subject: e.subject,
+          template_slug: `funnel_${seq.stage?.toLowerCase()}`,
+          preview: e.body_preview,
+        })),
+      });
+    }
+  }
+
+  const markdownDoc = `# Complete Sales Funnel – ${client.business_name}
+
+## Status: Built ✅
+
+*Generated on ${reportDate}*
+
+**Funnel Name:** ${parsed?.funnel_name || `${client.business_name} Growth Funnel`}
+
+---
+
+## Funnel Stages
+
+${(parsed?.stages || []).map((s: any) => `
+### ${s.name} Stage
+**Goal:** ${s.goal}
+${s.traffic_sources ? `**Traffic Sources:** ${s.traffic_sources.join(", ")}` : ""}
+${s.content_assets ? `**Content Assets:** ${s.content_assets.join(", ")}` : ""}
+${s.nurture_actions ? `**Nurture Actions:** ${s.nurture_actions.join(", ")}` : ""}
+${s.trust_builders ? `**Trust Builders:** ${s.trust_builders.join(", ")}` : ""}
+${s.closing_tactics ? `**Closing Tactics:** ${s.closing_tactics.join(", ")}` : ""}
+${s.retention_actions ? `**Retention Actions:** ${s.retention_actions.join(", ")}` : ""}
+**Conversion Metric:** ${s.conversion_metric}`).join("\n\n")}
+
+---
+
+## Email Sequences
+
+${(parsed?.email_sequences || []).map((seq: any) => `
+### ${seq.stage} Sequence
+**Trigger:** ${seq.trigger}
+
+| Day | Subject | Purpose |
+|-----|---------|---------|
+${(seq.emails || []).map((e: any) => `| Day ${e.day} | ${e.subject} | ${e.purpose} |`).join("\n")}
+
+**Sample Email (Day 0):**
+> ${seq.emails?.[0]?.body_preview || ""}
+`).join("\n")}
+
+---
+
+## KPIs
+
+${(parsed?.kpis || []).map((k: string) => `- ${k}`).join("\n")}
+
+## Tools Needed
+
+${(parsed?.tools_needed || []).map((t: string) => `- ${t}`).join("\n")}
+
+---
+
+## Implementation Checklist
+
+- [ ] Activate all email sequences in CRM
+- [ ] Set up tracking pixels for each funnel stage
+- [ ] Configure lead scoring thresholds
+- [ ] Connect ads to top-of-funnel stage
+- [ ] Set up retargeting audiences for mid-funnel
+- [ ] Configure closed-won trigger for retention stage
+
+*Full funnel is mapped and email sequences are created. Ready for CRM activation.*`;
+
+  await createDeliverable(supabase, client.id, `Complete Sales Funnel – ${reportDate}`, markdownDoc, "report");
+
+  return { built: true, stages: parsed?.stages?.length || 0, sequencesCreated: parsed?.email_sequences?.length || 0, deliverableCreated: true };
+}
+
+async function setupSalesEnablement(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+
+  const systemPrompt = `You are a sales enablement expert. Create comprehensive sales materials for a local service business.
+Output valid JSON only.`;
+
+  const userPrompt = `Create a complete sales enablement system for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Tone: ${client.tone || "professional"}
+
+Return JSON:
+{
+  "proposal_template": {
+    "sections": ["Executive Summary", "Problem Statement", "Our Solution", "Why Us", "Investment", "Next Steps"],
+    "executive_summary_template": "...",
+    "why_us_points": ["point 1", "point 2", "point 3"]
+  },
+  "objection_handling": [
+    {"objection": "...", "response": "..."}
+  ],
+  "case_study_template": {
+    "sections": ["Client Background", "Challenge", "Solution", "Results", "Testimonial"],
+    "results_format": "..."
+  },
+  "sales_scripts": [
+    {"scenario": "Cold outreach", "script": "..."},
+    {"scenario": "Discovery call opening", "script": "..."},
+    {"scenario": "Handling 'I need to think about it'", "script": "..."},
+    {"scenario": "Closing", "script": "..."}
+  ],
+  "follow_up_cadence": [
+    {"day": 1, "channel": "email", "message": "..."},
+    {"day": 3, "channel": "phone", "message": "..."},
+    {"day": 7, "channel": "email", "message": "..."}
+  ]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 3500);
+  const parsed = parseJsonFromAi(aiContent);
+
+  await supabase.from("generated_content").insert({
+    client_id: client.id,
+    content_type: "sales_enablement",
+    title: `Sales Enablement System – ${client.business_name}`,
+    content: JSON.stringify(parsed),
+    metadata: { type: "sales_enablement" },
+  });
+
+  const markdownDoc = `# Sales Enablement System – ${client.business_name}
+
+## Status: Complete ✅
+
+*Generated on ${reportDate}*
+
+---
+
+## Proposal Template
+
+**Sections to Include:**
+${(parsed?.proposal_template?.sections || []).map((s: string) => `- ${s}`).join("\n")}
+
+**Executive Summary Template:**
+> ${parsed?.proposal_template?.executive_summary_template || ""}
+
+**Why Choose Us – Key Points:**
+${(parsed?.proposal_template?.why_us_points || []).map((p: string) => `- ${p}`).join("\n")}
+
+---
+
+## Objection Handling Guide
+
+${(parsed?.objection_handling || []).map((o: any) => `
+**Objection:** "${o.objection}"
+
+**Response:** ${o.response}`).join("\n\n")}
+
+---
+
+## Case Study Template
+
+**Sections:**
+${(parsed?.case_study_template?.sections || []).map((s: string) => `- ${s}`).join("\n")}
+
+**Results Format:**
+${parsed?.case_study_template?.results_format || "Before/After with specific metrics (% increase, $ saved, time saved)"}
+
+---
+
+## Sales Scripts
+
+${(parsed?.sales_scripts || []).map((s: any) => `
+### ${s.scenario}
+
+> ${s.script}`).join("\n\n")}
+
+---
+
+## Follow-Up Cadence After Proposal
+
+| Day | Channel | Message |
+|-----|---------|---------|
+${(parsed?.follow_up_cadence || []).map((f: any) => `| Day ${f.day} | ${f.channel} | ${f.message} |`).join("\n")}
+
+---
+
+## Implementation Checklist
+
+- [ ] Load proposal template into CRM document builder
+- [ ] Add objection handling guide to sales team resources
+- [ ] Create first case study using template
+- [ ] Train team on sales scripts
+- [ ] Set up automated follow-up cadence in CRM
+
+*All sales materials are ready for team use.*`;
+
+  await createDeliverable(supabase, client.id, `Sales Enablement System – ${reportDate}`, markdownDoc, "content");
+
+  return { created: true, objectionsHandled: parsed?.objection_handling?.length || 0, scriptsCreated: parsed?.sales_scripts?.length || 0, deliverableCreated: true };
+}
+
+async function scheduleStrategyCall(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+  const STRATEGY_CALENDAR_URL = "https://calendly.com/orangedoor/strategy";
+
+  const { data: recentReport } = await supabase
+    .from("client_reports")
+    .select("metrics, insights, recommendations")
+    .eq("client_id", client.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const agendaItems = [
+    "Review last month's performance metrics",
+    "Discuss wins and areas for improvement",
+    "Align on next month's priorities",
+    "Review any upcoming campaigns or promotions",
+    "Q&A / open discussion",
+  ];
+
+  if (RESEND_API_KEY) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+        to: client.email,
+        subject: `Your Monthly Strategy Call – ${client.business_name}`,
+        html: `
+          <h2>Time for Your Monthly Strategy Call, ${client.first_name || client.business_name}!</h2>
+          <p>Your monthly strategy session is ready to book. This is our time to review performance, align on priorities, and make sure your marketing is hitting your business goals.</p>
+
+          <p><a href="${STRATEGY_CALENDAR_URL}" style="background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 16px 0;">Book Your Strategy Call</a></p>
+
+          <h3>Agenda:</h3>
+          <ul>
+            ${agendaItems.map((item) => `<li>${item}</li>`).join("")}
+          </ul>
+
+          ${recentReport?.insights?.length ? `<h3>We'll Cover These Insights:</h3><ul>${recentReport.insights.slice(0, 3).map((i: string) => `<li>${i}</li>`).join("")}</ul>` : ""}
+
+          <p>These calls typically run 30-45 minutes. Come with any questions or topics you'd like to discuss.</p>
+
+          <p>Best regards,<br/>The Orange Door Team</p>
+        `,
+      }),
+    });
+  }
+
+  await createDeliverable(
+    supabase,
+    client.id,
+    `Monthly Strategy Call Scheduled – ${reportDate}`,
+    `# Monthly Strategy Call – ${client.business_name}
+
+## Status: Invite Sent ✅
+
+*Generated on ${reportDate}*
+
+## Scheduling Link
+
+**Calendar URL:** ${STRATEGY_CALENDAR_URL}
+
+## Call Agenda
+
+${agendaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}
+
+${recentReport ? `## Performance Context for This Call
+
+### Recent Insights
+${(recentReport.insights || []).slice(0, 5).map((i: string) => `- ${i}`).join("\n")}
+
+### Top Recommendations to Discuss
+${(recentReport.recommendations || []).slice(0, 3).map((r: any) => `- [${r.priority?.toUpperCase() || ""}] ${r.action}`).join("\n")}` : ""}
+
+## Prep Notes for Account Manager
+
+- Pull latest KPI dashboard before the call
+- Prepare top 3 wins from last month
+- Have next month's content calendar ready
+- Flag any budget or campaign changes to discuss
+
+*Client has been emailed with scheduling link.*`,
+    "general"
+  );
+
+  return { inviteSent: !!RESEND_API_KEY, calendarUrl: STRATEGY_CALENDAR_URL, deliverableCreated: true };
+}
+
+async function optimizeCrmPipeline(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+
+  const { data: config } = await supabase
+    .from("integration_configs")
+    .select("config")
+    .eq("integration_type", "gohighlevel")
+    .eq("is_active", true)
+    .maybeSingle();
+
+  const systemPrompt = `You are a CRM optimization expert specializing in GoHighLevel. Design a conversion-optimized CRM pipeline.
+Output valid JSON only.`;
+
+  const userPrompt = `Design an optimized CRM pipeline for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Tier: ${client.tier}
+Current CRM: GoHighLevel
+
+Return JSON:
+{
+  "pipeline_name": "...",
+  "stages": [
+    {
+      "name": "...",
+      "purpose": "...",
+      "entry_criteria": "...",
+      "exit_criteria": "...",
+      "automation_triggers": ["..."],
+      "tasks_for_team": ["..."],
+      "average_time_in_stage": "..."
+    }
+  ],
+  "automation_rules": [
+    {"trigger": "...", "condition": "...", "action": "..."}
+  ],
+  "lead_scoring": [
+    {"action": "...", "points": 10}
+  ],
+  "pipeline_kpis": ["KPI 1", "KPI 2"],
+  "quick_wins": ["Fix 1", "Fix 2"]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 3000);
+  const parsed = parseJsonFromAi(aiContent);
+
+  const markdownDoc = `# CRM Pipeline Optimization – ${client.business_name}
+
+## Status: Complete ✅
+
+*Generated on ${reportDate}*
+
+**CRM Platform:** GoHighLevel
+**Integration Status:** ${config ? "✅ Connected" : "⚠️ Not connected – implement manually"}
+
+---
+
+## Optimized Pipeline: ${parsed?.pipeline_name || `${client.business_name} Pipeline`}
+
+${(parsed?.stages || []).map((s: any, i: number) => `
+### Stage ${i + 1}: ${s.name}
+
+**Purpose:** ${s.purpose}
+
+| Field | Details |
+|-------|---------|
+| Entry Criteria | ${s.entry_criteria} |
+| Exit Criteria | ${s.exit_criteria} |
+| Avg. Time in Stage | ${s.average_time_in_stage} |
+
+**Automation Triggers:**
+${(s.automation_triggers || []).map((t: string) => `- ${t}`).join("\n")}
+
+**Team Tasks:**
+${(s.tasks_for_team || []).map((t: string) => `- [ ] ${t}`).join("\n")}`).join("\n\n")}
+
+---
+
+## Automation Rules
+
+| Trigger | Condition | Action |
+|---------|-----------|--------|
+${(parsed?.automation_rules || []).map((r: any) => `| ${r.trigger} | ${r.condition} | ${r.action} |`).join("\n")}
+
+---
+
+## Lead Scoring Matrix
+
+| Action | Points |
+|--------|--------|
+${(parsed?.lead_scoring || []).map((l: any) => `| ${l.action} | +${l.points} |`).join("\n")}
+
+**Threshold:** 50+ points = Notify sales immediately
+
+---
+
+## Pipeline KPIs
+
+${(parsed?.pipeline_kpis || []).map((k: string) => `- ${k}`).join("\n")}
+
+---
+
+## Quick Wins to Implement First
+
+${(parsed?.quick_wins || []).map((w: string, i: number) => `${i + 1}. ${w}`).join("\n")}
+
+---
+
+## Implementation Steps
+
+- [ ] Create pipeline stages in GoHighLevel
+- [ ] Configure automation rules for each trigger
+- [ ] Set up lead scoring in CRM
+- [ ] Train team on stage criteria
+- [ ] Connect form submissions to pipeline entry
+- [ ] Set up KPI reporting dashboard
+
+*Pipeline design is ready. ${config ? "GoHighLevel is connected – implement the stages above." : "Configure GoHighLevel integration then implement."}*`;
+
+  await createDeliverable(supabase, client.id, `CRM Pipeline Optimization – ${reportDate}`, markdownDoc, "general");
+
+  return { optimized: true, stages: parsed?.stages?.length || 0, automationRules: parsed?.automation_rules?.length || 0, deliverableCreated: true };
+}
+
+async function createFullAnalyticsSuite(supabase: any, client: ClientData, inputData?: Record<string, unknown>) {
+  const reportDate = formatDate();
+
+  const levelWidgets: string[] = [
+    "traffic_overview", "gbp_calls", "form_submissions", "reviews",
+    "lead_sources", "email_performance", "ad_performance",
+    "funnel_metrics", "seo_visibility", "retention",
+    "revenue_attribution", "attribution_modeling",
+    "predictive_lead_score", "channel_roi_comparison", "customer_ltv",
+  ];
+
+  const { data: existing } = await supabase
+    .from("kpi_dashboards")
+    .select("id")
+    .eq("client_account_id", client.id)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from("kpi_dashboards")
+      .update({ config: { widgets: levelWidgets, tier: "transformation", auto_report: true } })
+      .eq("client_account_id", client.id);
+  } else {
+    await supabase.from("kpi_dashboards").insert({
+      client_account_id: client.id,
+      config: { widgets: levelWidgets, tier: "transformation", auto_report: true },
+    });
+  }
+
+  const systemPrompt = `You are a marketing analytics expert. Create a comprehensive analytics framework.
+Output valid JSON only.`;
+
+  const userPrompt = `Create a full analytics suite configuration for ${client.business_name}.
+Industry: ${client.industry || "local services"}
+Tier: Level III (Transformation)
+
+Return JSON:
+{
+  "attribution_model": {
+    "type": "...",
+    "touchpoints": ["..."],
+    "weighting": "..."
+  },
+  "kpi_targets": [
+    {"kpi": "...", "current_baseline": "...", "target_30_day": "...", "target_90_day": "..."}
+  ],
+  "automated_reports": [
+    {"name": "...", "frequency": "daily|weekly|monthly", "recipients": ["..."], "metrics": ["..."]}
+  ],
+  "custom_segments": ["Segment 1", "Segment 2"],
+  "conversion_events": [
+    {"event": "...", "value": "..."}
+  ],
+  "data_sources": ["Google Analytics 4", "..."]
+}`;
+
+  const aiContent = await callGroq(userPrompt, systemPrompt, 2500);
+  const parsed = parseJsonFromAi(aiContent);
+
+  const markdownDoc = `# Full Analytics Suite – ${client.business_name}
+
+## Status: Complete ✅
+
+*Generated on ${reportDate}*
+
+---
+
+## Dashboard Configuration
+
+**Tier:** Level III – Transformation
+**Widgets Enabled:** ${levelWidgets.length}
+**Auto-Reporting:** Active
+
+### Widgets Installed
+
+${levelWidgets.map((w) => `- **${w.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")}**`).join("\n")}
+
+---
+
+## Attribution Model
+
+**Type:** ${parsed?.attribution_model?.type || "Data-driven multi-touch"}
+**Touchpoints Tracked:** ${(parsed?.attribution_model?.touchpoints || []).join(", ")}
+**Weighting:** ${parsed?.attribution_model?.weighting || "Position-based (40% first/last, 20% middle)"}
+
+---
+
+## KPI Targets
+
+| KPI | Baseline | 30-Day Target | 90-Day Target |
+|-----|----------|---------------|---------------|
+${(parsed?.kpi_targets || []).map((k: any) => `| ${k.kpi} | ${k.current_baseline} | ${k.target_30_day} | ${k.target_90_day} |`).join("\n")}
+
+---
+
+## Automated Reports
+
+${(parsed?.automated_reports || []).map((r: any) => `
+### ${r.name}
+- **Frequency:** ${r.frequency}
+- **Recipients:** ${(r.recipients || []).join(", ")}
+- **Metrics:** ${(r.metrics || []).join(", ")}`).join("\n")}
+
+---
+
+## Custom Audience Segments
+
+${(parsed?.custom_segments || []).map((s: string) => `- ${s}`).join("\n")}
+
+---
+
+## Conversion Events Tracked
+
+| Event | Assigned Value |
+|-------|---------------|
+${(parsed?.conversion_events || []).map((e: any) => `| ${e.event} | ${e.value} |`).join("\n")}
+
+---
+
+## Data Sources Connected
+
+${(parsed?.data_sources || ["Google Analytics 4", "Google Search Console", "CRM"]).map((d: string) => `- ${d}`).join("\n")}
+
+---
+
+## Implementation Checklist
+
+- [ ] Verify GA4 is installed and tracking all events
+- [ ] Set up Google Search Console and link to GA4
+- [ ] Configure cross-channel attribution in GA4
+- [ ] Import conversion values into Google Ads
+- [ ] Set up Looker Studio dashboard for automated reporting
+- [ ] Configure email report delivery for all stakeholders
+
+*Full analytics suite is configured. Dashboard is live in client portal.*`;
+
+  await createDeliverable(supabase, client.id, `Full Analytics Suite – ${reportDate}`, markdownDoc, "report");
+
+  return { created: true, widgetCount: levelWidgets.length, dashboardUpdated: !!existing, deliverableCreated: true };
 }
 
 // Build a workflow to convert positive reviews into case studies

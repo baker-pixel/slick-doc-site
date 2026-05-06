@@ -4,14 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isSameMonth } from "date-fns";
+import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, ExternalLink } from "lucide-react";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface ClientCalendarTabProps {
   clientAccountId: string;
   clientTier?: string;
+  clientEmail?: string;
 }
 
 interface CalendarItem {
@@ -53,10 +55,22 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
   failed: "Failed",
 };
 
-export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }: ClientCalendarTabProps) {
+export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", clientEmail }: ClientCalendarTabProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const { data: hasContext } = useQuery({
+    queryKey: ["client-has-context", clientAccountId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("client_accounts")
+        .select("context_profile")
+        .eq("id", clientAccountId)
+        .maybeSingle();
+      return !!(data?.context_profile);
+    },
+  });
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["client-calendar", clientAccountId],
@@ -99,8 +113,31 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
     );
   }
 
+  const intakeUrl = clientEmail
+    ? `/gap-analysis?email=${encodeURIComponent(clientEmail)}`
+    : "/gap-analysis";
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Intake reminder — shown when context_profile is missing */}
+      {hasContext === false && (
+        <Alert className="border-orange-400/40 bg-orange-500/5">
+          <AlertTriangle className="h-4 w-4 text-orange-500" />
+          <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your intake form</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
+            <span className="text-sm text-muted-foreground">
+              Your content calendar can't be filled until we know more about your business. Complete the SYSTEM Gap Analysis — it takes about 10 minutes.
+            </span>
+            <a href={intakeUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white">
+                Start Intake Form
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Button>
+            </a>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Tier banner */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="p-4 flex items-center gap-3">

@@ -445,6 +445,33 @@ Generate a comprehensive analysis in JSON format.`;
         }
       }
 
+      // Sync context_profile to client_accounts if this email is an existing client
+      if (sub?.email && contextProfile) {
+        try {
+          const { data: clientAccount } = await supabase
+            .from("client_accounts")
+            .select("id, context_profile")
+            .ilike("email", sub.email)
+            .maybeSingle();
+
+          if (clientAccount) {
+            const existingCtx = (clientAccount.context_profile || {}) as Record<string, unknown>;
+            const mergedCtx = {
+              ...existingCtx,
+              ...contextProfile,
+              source: 'gap_form',
+            };
+            await supabase
+              .from("client_accounts")
+              .update({ context_profile: mergedCtx, intake_completed_at: new Date().toISOString() })
+              .eq("id", clientAccount.id);
+            console.log(`Synced context_profile to client_accounts for ${sub.email}`);
+          }
+        } catch (clientSyncErr) {
+          console.error("Failed to sync context_profile to client_accounts:", clientSyncErr);
+        }
+      }
+
       // Trigger report email
       if (sub?.email) {
         const baseUrl = Deno.env.get("SUPABASE_URL")!;

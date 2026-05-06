@@ -403,7 +403,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
 
     try {
       const { data, error } = await supabase.functions.invoke("run-automation", {
-        body: { clientId, jobType },
+        body: { clientId, jobType, password: adminPassword },
       });
       if (error) throw error;
 

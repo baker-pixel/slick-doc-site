@@ -41,6 +41,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ProjectSetupWizard } from "../misc/ProjectSetupWizard";
+import type { Json } from "@/integrations/supabase/types";
 
 interface OnboardingStep {
   id: string;
@@ -64,7 +65,7 @@ interface ClientAccount {
   intake_completed_at: string | null;
   onboarded_at: string | null;
   website_url: string | null;
-  context_profile: Record<string, unknown> | null;
+  context_profile: Json | null;
 }
 
 interface ClientOnboardingChecklistProps {
@@ -363,7 +364,7 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
 
       const { error: updateError } = await supabase
         .from("client_accounts")
-        .update({ context_profile: { ...contextProfile, source: "website_scan", partial: false } })
+        .update({ context_profile: { ...(contextProfile as Record<string, unknown>), source: "website_scan", partial: false } })
         .eq("id", selectedClient.id);
       if (updateError) throw updateError;
 

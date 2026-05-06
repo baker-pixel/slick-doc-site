@@ -28,10 +28,11 @@ export async function runAutoTasks(clientId: string): Promise<{
 export async function runSingleTask(
   clientId: string,
   taskId: string,
-  jobType: string
+  jobType: string,
+  password?: string
 ): Promise<{ success: boolean; error?: string }> {
   const { data, error } = await supabase.functions.invoke("run-automation", {
-    body: { clientId, taskId, jobType },
+    body: { clientId, taskId, jobType, password },
   });
 
   if (error) {

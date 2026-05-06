@@ -376,6 +376,33 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Queueing sequence for trigger: ${triggerType}, recipient: ${recipientEmail}, tier: ${tier || 'any'}`);
 
+    // Skip nurture sequences for existing clients (matched by email or website_url)
+    const NURTURE_TRIGGERS = ["gap_analysis_complete", "gap_analysis_partial", "gap_analysis", "new_lead"];
+    if (NURTURE_TRIGGERS.includes(triggerType) && recipientEmail) {
+      const websiteUrl: string | undefined = data.websiteUrl || data.website_url;
+
+      let clientQuery = supabase
+        .from("client_accounts")
+        .select("id, email, status")
+        .neq("status", "cancelled");
+
+      if (websiteUrl) {
+        clientQuery = clientQuery.or(`email.eq.${recipientEmail},website_url.eq.${websiteUrl}`);
+      } else {
+        clientQuery = clientQuery.eq("email", recipientEmail);
+      }
+
+      const { data: existingClient } = await clientQuery.maybeSingle();
+
+      if (existingClient) {
+        console.log(`Skipping nurture for existing client: ${recipientEmail} (status: ${existingClient.status})`);
+        return new Response(
+          JSON.stringify({ queued: 0, skipped: true, reason: "existing_client" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Try tier-specific sequence first, then fall back to generic (tier IS NULL)
     let sequence: any = null;
 

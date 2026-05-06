@@ -43,7 +43,7 @@ const ONBOARDING_STEPS = [
   { key: "onboarding_completed_at", label: "Complete Onboarding", icon: Rocket, automation: null },
 ];
 
-export function OnboardingAutomationPanel() {
+export function OnboardingAutomationPanel({ adminPassword }: { adminPassword?: string }) {
   const [onboardings, setOnboardings] = useState<ClientOnboarding[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOnboarding, setSelectedOnboarding] = useState<ClientOnboarding | null>(null);
@@ -93,6 +93,7 @@ export function OnboardingAutomationPanel() {
         body: {
           clientId: onboarding.client_account_id,
           jobType: automationType,
+          password: adminPassword,
           metadata: {
             onboardingId: onboarding.id,
             stepKey,

@@ -37,6 +37,7 @@ import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig"
 
 interface ClientActivityTabProps {
   clientAccountId: string;
+  clientEmail?: string;
   onTabChange?: (tab: string) => void;
 }
 
@@ -127,7 +128,7 @@ function computeStepState(step: WorkflowStep, stepsMap: Map<number, WorkflowStep
   return "available";
 }
 
-export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivityTabProps) {
+export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }: ClientActivityTabProps) {
   const queryClient = useQueryClient();
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
@@ -660,22 +661,27 @@ export function ClientActivityTab({ clientAccountId, onTabChange }: ClientActivi
       );
     }
 
-    // No gap analysis found — show "in progress" state, do NOT link to public page
+    // No gap analysis found — prompt the client to fill out the intake form
+    const intakeUrl = clientEmail
+      ? `/gap-analysis?email=${encodeURIComponent(clientEmail)}`
+      : "/gap-analysis";
+
     return (
-      <Card className="border-dashed border-2">
-        <CardContent className="p-6 flex items-center gap-4">
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <BarChart3 className="h-5 w-5 text-primary" />
-          </div>
-          <div className="flex-1">
-            <p className="font-medium text-sm">Your SYSTEM Gap Analysis is being prepared</p>
-            <p className="text-xs text-muted-foreground">
-              Your marketing team is reviewing your website and building your personalised score. You'll see your results here as soon as they're ready.
-            </p>
-          </div>
-          <Badge variant="outline" className="flex-shrink-0 whitespace-nowrap">In Progress</Badge>
-        </CardContent>
-      </Card>
+      <Alert className="border-orange-400/40 bg-orange-500/5">
+        <AlertTriangle className="h-4 w-4 text-orange-500" />
+        <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your intake form</AlertTitle>
+        <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
+          <span className="text-sm text-muted-foreground">
+            Your personalized content can't be created until we know more about your business. Fill out the SYSTEM Gap Analysis — it takes about 10 minutes.
+          </span>
+          <a href={intakeUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white">
+              Start Intake Form
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Button>
+          </a>
+        </AlertDescription>
+      </Alert>
     );
   };
 

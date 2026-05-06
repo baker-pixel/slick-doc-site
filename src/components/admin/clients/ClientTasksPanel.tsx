@@ -143,7 +143,7 @@ export function ClientTasksPanel({ adminPassword, clientId }: { adminPassword: s
     try {
       const { runSingleTask } = await import("@/lib/n8n");
       const jobType = task.name.toLowerCase().replace(/\s+/g, "_");
-      await runSingleTask(task.client_account_id, task.id, jobType);
+      await runSingleTask(task.client_account_id, task.id, jobType, adminPassword);
 
       toast.success(`Task "${task.name}" completed`);
       fetchTasks();

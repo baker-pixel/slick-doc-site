@@ -1370,7 +1370,7 @@ const AdminInner = () => {
       case "seo-dashboard":
         return <SeoAnalysisDashboard />;
       case "onboarding":
-        return <OnboardingAutomationPanel />;
+        return <OnboardingAutomationPanel adminPassword={storedPassword} />;
       case "integrations":
         return <IntegrationConfigPanel />;
       case "approvals":

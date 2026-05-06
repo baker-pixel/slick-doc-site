@@ -76,15 +76,32 @@ serve(async (req) => {
 
     console.log(`Found ${slots.length} placeholder slots to fill`);
 
-    // Fetch client info — including context_profile
+    // Fetch client info — including context_profile and intake status
     const clientIds = [...new Set(slots.map((s: any) => s.client_account_id))];
     const { data: clients } = await supabase
       .from("client_accounts")
-      .select("id, business_name, tier, industry, website_url, context_profile")
+      .select("id, business_name, tier, industry, website_url, context_profile, intake_completed_at")
       .in("id", clientIds);
 
+    // Alert for any clients missing context_profile — content generation is blocked for them
+    const clientsWithoutContext = (clients || []).filter((c: any) => !c.context_profile);
+    for (const c of clientsWithoutContext) {
+      console.warn(`Skipping content for ${c.business_name} — no context_profile and intake not complete`);
+      await supabase.from("automation_alerts").insert({
+        alert_type: "missing_context",
+        severity: "warning",
+        title: `Content blocked for ${c.business_name} — intake form not submitted`,
+        message: `${c.business_name} has scheduled content slots but no context profile. Ask the client to complete their intake form so AI content can be generated.`,
+        source: "fill-scheduled-content",
+        metadata: { client_id: c.id, business_name: c.business_name, timestamp: new Date().toISOString() },
+      }).select().maybeSingle(); // fire-and-forget, ignore dupe errors
+    }
+
+    // Only process clients that have a context_profile
     const clientMap = Object.fromEntries(
-      (clients || []).map((c: any) => [c.id, c as ClientInfo])
+      (clients || [])
+        .filter((c: any) => !!c.context_profile)
+        .map((c: any) => [c.id, c as ClientInfo])
     );
 
     // Fetch recent content per client to avoid topic repetition

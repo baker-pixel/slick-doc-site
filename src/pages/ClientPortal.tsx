@@ -328,7 +328,7 @@ export default function ClientPortal() {
 
     switch (activeTab) {
       case "activity":
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
       case "projects":
@@ -352,7 +352,7 @@ export default function ClientPortal() {
       case "social":
         return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
-        return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} />;
+        return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} clientEmail={clientAccount?.email} />;
       case "team":
         return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":
@@ -374,7 +374,7 @@ export default function ClientPortal() {
       case "learning":
         return <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />;
       default:
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
     }
   };
 
