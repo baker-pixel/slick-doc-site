@@ -59,10 +59,10 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
     try {
       const { data, error } = await supabase.functions.invoke("generate-social-content", {
         body: {
+          clientAccountId,
+          platforms: selectedPlatforms,
           topic,
           tone,
-          platforms: selectedPlatforms,
-          clientAccountId,
         },
       });
 
@@ -93,10 +93,12 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
     setSaving(true);
     try {
       const scheduledFor = action === "now" ? new Date().toISOString() : scheduledAt;
+      const hashtagSuffix = hashtags.length > 0 ? "\n\n" + hashtags.map((t) => `#${t}`).join(" ") : "";
+      const finalContent = generatedContent + hashtagSuffix;
       const posts = selectedPlatforms.map((platform) => ({
         client_account_id: clientAccountId,
         platform,
-        content: generatedContent,
+        content: finalContent,
         title: topic || "Social Post",
         content_type: "social_post",
         scheduled_for: scheduledFor,
@@ -305,7 +307,8 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
               size="sm"
               className="w-full gap-1.5 text-muted-foreground"
               onClick={() => {
-                navigator.clipboard.writeText(generatedContent);
+                const hashtagSuffix = hashtags.length > 0 ? "\n\n" + hashtags.map((t) => `#${t}`).join(" ") : "";
+                navigator.clipboard.writeText(generatedContent + hashtagSuffix);
                 toast({ title: "Copied!", description: "Content copied to clipboard." });
               }}
             >
