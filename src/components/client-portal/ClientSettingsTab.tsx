@@ -8,11 +8,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Palette, 
-  Layout, 
-  Bell, 
-  LayoutGrid, 
+import {
+  Palette,
+  Layout,
+  Bell,
+  LayoutGrid,
   Save,
   Sun,
   Moon,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalTab } from "./ClientPortalSidebar";
+import { CompanyContextCard } from "./CompanyContextCard";
 
 interface ClientSettingsTabProps {
   userId: string;
@@ -223,6 +224,9 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
 
   return (
     <div className="space-y-6">
+      {/* Company Context */}
+      <CompanyContextCard clientAccountId={clientAccountId} />
+
       {/* Save Button - Sticky */}
       {hasChanges && (
         <div className="sticky top-0 z-10 flex justify-end p-3 -m-3 mb-3 bg-background/80 backdrop-blur-sm border-b">
