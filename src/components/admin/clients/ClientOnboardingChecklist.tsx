@@ -36,6 +36,7 @@ import {
   Loader2,
   Sparkles,
   Send,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -62,6 +63,8 @@ interface ClientAccount {
   kickoff_scheduled_at: string | null;
   intake_completed_at: string | null;
   onboarded_at: string | null;
+  website_url: string | null;
+  context_profile: Record<string, unknown> | null;
 }
 
 interface ClientOnboardingChecklistProps {
@@ -343,8 +346,42 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     }
   };
 
+  const handleScanWebsite = async () => {
+    if (!selectedClient) return;
+    if (!selectedClient.website_url) {
+      toast.error("No website URL on file for this client. Add one in Client Management first.");
+      return;
+    }
+    setActionLoading("business_context");
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-website", {
+        body: { url: selectedClient.website_url },
+      });
+      if (error) throw error;
+      const contextProfile = data?.analysis?.context_profile;
+      if (!contextProfile) throw new Error("No context profile returned from scan");
+
+      const { error: updateError } = await supabase
+        .from("client_accounts")
+        .update({ context_profile: { ...contextProfile, source: "website_scan", partial: false } })
+        .eq("id", selectedClient.id);
+      if (updateError) throw updateError;
+
+      toast.success("Context profile built from website scan. Content generation will now use this data.");
+      await fetchNewClients();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message ? `Scan failed: ${err.message}` : "Website scan failed");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleStepAction = (stepId: string) => {
     switch (stepId) {
+      case "business_context":
+        handleScanWebsite();
+        break;
       case "kickoff":
         setMeetingModalOpen(true);
         break;
@@ -376,6 +413,19 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     const onboarding = onboardingData.onboarding;
     
     return [
+      {
+        id: "business_context",
+        title: "Build Business Context Profile",
+        description: selectedClient.context_profile
+          ? "Context profile populated — AI content will be tailored to this client."
+          : selectedClient.website_url
+          ? "Scan the client's website to extract services, tone, audience, and differentiators for AI content."
+          : "No website URL on file. Add one in Client Management, then scan to build the context profile.",
+        icon: <Globe className="h-5 w-5" />,
+        isComplete: !!selectedClient.context_profile,
+        actionLabel: selectedClient.website_url ? (selectedClient.context_profile ? "Re-scan" : "Scan Website") : undefined,
+        priority: "high" as const,
+      },
       {
         id: "kickoff",
         title: "Schedule Kickoff Call",
@@ -583,7 +633,7 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
                         </div>
-                        {(step.actionLabel && (!step.isComplete || step.id === "project_setup")) && (
+                        {(step.actionLabel && (!step.isComplete || step.id === "project_setup" || step.id === "business_context")) && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -593,8 +643,6 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
                           >
                             {actionLoading === step.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : step.id === "project_setup" && step.isComplete ? (
-                              "Create Another Project"
                             ) : (
                               step.actionLabel
                             )}

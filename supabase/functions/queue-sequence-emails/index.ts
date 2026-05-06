@@ -428,6 +428,25 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
+    // Deduplication: skip if this recipient already has emails from this sequence queued/processing/sent in the last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: existingEmails } = await supabase
+      .from("email_queue")
+      .select("id")
+      .eq("recipient_email", recipientEmail)
+      .in("status", ["pending", "processing", "sent"])
+      .gte("created_at", thirtyDaysAgo)
+      .filter("metadata->>sequence_id", "eq", sequence.id)
+      .limit(1);
+
+    if (existingEmails && existingEmails.length > 0) {
+      console.log(`Sequence ${sequence.id} already queued for ${recipientEmail}, skipping duplicate`);
+      return new Response(
+        JSON.stringify({ queued: 0, skipped: true, reason: "already_queued_for_recipient" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Parse sequence settings
     const settings: SequenceSettings = (sequence as any).settings || {};
     const useRecipientTimezone = settings.use_recipient_timezone ?? true;

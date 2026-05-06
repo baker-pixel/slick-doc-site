@@ -92,21 +92,21 @@ Write a ${contentType}.
 Topic: ${topic}
 Keep it under 150 words. Make it engaging and ready to post.`;
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const aiResponse = await fetch(
-      "https://api.anthropic.com/v1/messages",
+      "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: "llama-3.3-70b-versatile",
           max_tokens: 800,
           temperature: 0.7,
           messages: [{ role: "user", content: prompt }],
@@ -129,7 +129,7 @@ Keep it under 150 words. Make it engaging and ready to post.`;
 
     const aiData = await aiResponse.json();
     const generatedContent =
-      aiData.content?.[0]?.text || "No content generated";
+      aiData.choices?.[0]?.message?.content || "No content generated";
 
     // Save result and mark completed
     await supabase

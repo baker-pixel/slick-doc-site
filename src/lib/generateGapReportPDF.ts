@@ -1,36 +1,30 @@
 import jsPDF from "jspdf";
 
-// Brand colors
-const ORANGE = [232, 93, 36]; // #E85D24
-const DARK_TEXT = [30, 30, 30];
-const MEDIUM_GRAY = [100, 100, 100];
-const LIGHT_GRAY = [160, 160, 160];
-const WHITE = [255, 255, 255];
-const PAGE_BG = [255, 255, 255];
+// ── Palette ────────────────────────────────────────────────────────────────
+const TEAL:       [number,number,number] = [29,  158, 117];  // #1D9E75
+const TEAL_BG:    [number,number,number] = [225, 245, 238];  // #E1F5EE
+const TEAL_TEXT:  [number,number,number] = [15,  110, 86 ];  // #0F6E56
+const AMBER:      [number,number,number] = [239, 159, 39 ];  // #EF9F27
+const AMBER_BG:   [number,number,number] = [250, 238, 218];  // #FAEEDA
+const AMBER_TEXT: [number,number,number] = [133, 79,  11 ];  // #854F0B
+const BLUE:       [number,number,number] = [55,  138, 221];  // #378ADD
+const BLUE_BG:    [number,number,number] = [230, 241, 251];  // #E6F1FB
+const BLUE_TEXT:  [number,number,number] = [24,  95,  165];  // #185FA5
+const RED:        [number,number,number] = [226, 75,  74 ];  // #E24B4A
+const RED_BG:     [number,number,number] = [253, 234, 234];  // #FDEAEA
+const RED_TEXT:   [number,number,number] = [163, 45,  45 ];  // #A32D2D
+const TEXT:       [number,number,number] = [26,  29,  35 ];  // #1A1D23
+const MUTED:      [number,number,number] = [138, 143, 155];  // #8A8F9B
+const BODY_TXT:   [number,number,number] = [74,  79,  92 ];  // #4A4F5C
+const PAGE_BG:    [number,number,number] = [247, 248, 250];  // #F7F8FA
+const BORDER:     [number,number,number] = [234, 236, 240];  // #EAECF0
+const WHITE:      [number,number,number] = [255, 255, 255];
+const CARD_BORDER:[number,number,number] = [220, 224, 228];
 
-// Grade colors
-const RED = [220, 53, 53];
-const AMBER = [217, 150, 30];
-const BLUE = [59, 130, 246];
-const GREEN = [22, 163, 74];
-
-const PAGE_W = 210; // A4 mm
+const PAGE_W = 210;
 const PAGE_H = 297;
-const MARGIN = 20;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-
-interface ScoreItem {
-  category: string;
-  label: string;
-  score: number;
-  status: string;
-}
-
-interface Recommendation {
-  title: string;
-  description: string;
-  priority: string;
-}
+const M = 18;
+const CW = PAGE_W - M * 2;
 
 export interface GapReportPDFData {
   businessName: string;
@@ -39,509 +33,597 @@ export interface GapReportPDFData {
   overallScore: number;
   overallStatus?: string;
   plainEnglishSummary?: string;
-  scores?: ScoreItem[];
+  scores?: { category: string; label: string; score: number; status: string }[];
   strengths?: string[];
   gaps?: string[];
-  recommendations?: Recommendation[];
+  recommendations?: { title: string; description: string; priority: string }[];
   executiveSummary?: string;
+  biggestOpportunity?: string;
 }
 
-function getGradeInfo(score: number): { label: string; color: number[] } {
-  if (score >= 81) return { label: "Strong Performance", color: GREEN };
-  if (score >= 56) return { label: "Good Foundation", color: BLUE };
-  if (score >= 31) return { label: "Room to Grow", color: AMBER };
-  return { label: "Needs Urgent Attention", color: RED };
+// ── Helpers ────────────────────────────────────────────────────────────────
+function rgb(doc: jsPDF, type: "fill" | "text" | "draw", c: [number,number,number]) {
+  if (type === "fill") doc.setFillColor(c[0], c[1], c[2]);
+  else if (type === "text") doc.setTextColor(c[0], c[1], c[2]);
+  else doc.setDrawColor(c[0], c[1], c[2]);
 }
 
-function getScoreColor(score: number): number[] {
-  if (score >= 70) return GREEN;
-  if (score >= 50) return AMBER;
-  if (score >= 30) return [232, 93, 36]; // orange
-  return RED;
+function gradeColors(score: number): {
+  fill: [number,number,number]; bg: [number,number,number]; label: [number,number,number]; name: string
+} {
+  if (score >= 80) return { fill: TEAL, bg: TEAL_BG, label: TEAL_TEXT, name: "Strong Performance" };
+  if (score >= 60) return { fill: AMBER, bg: AMBER_BG, label: AMBER_TEXT, name: "Good Foundation" };
+  if (score >= 40) return { fill: BLUE, bg: BLUE_BG, label: BLUE_TEXT, name: "Needs Work" };
+  return { fill: RED, bg: RED_BG, label: RED_TEXT, name: "Needs Urgent Attention" };
 }
 
-function drawHeaderBar(doc: jsPDF) {
-  doc.setFillColor(245, 245, 245);
-  doc.rect(0, 0, PAGE_W, 12, "F");
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(LIGHT_GRAY[0], LIGHT_GRAY[1], LIGHT_GRAY[2]);
-  doc.text("Orange Door — Confidential Report", MARGIN, 8);
-}
-
-function drawFooter(doc: jsPDF, pageNum: number) {
-  doc.setFillColor(245, 245, 245);
-  doc.rect(0, PAGE_H - 12, PAGE_W, 12, "F");
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(LIGHT_GRAY[0], LIGHT_GRAY[1], LIGHT_GRAY[2]);
-  doc.text(`Page ${pageNum}`, PAGE_W / 2, PAGE_H - 5, { align: "center" });
-}
-
-function drawProgressBar(doc: jsPDF, x: number, y: number, width: number, height: number, percent: number, color: number[]) {
-  // Background
-  doc.setFillColor(235, 235, 235);
-  doc.roundedRect(x, y, width, height, height / 2, height / 2, "F");
-  // Fill
-  if (percent > 0) {
-    const fillW = Math.max(height, (width * percent) / 100);
-    doc.setFillColor(color[0], color[1], color[2]);
-    doc.roundedRect(x, y, fillW, height, height / 2, height / 2, "F");
+function statusColors(status: string): {
+  fill: [number,number,number]; bg: [number,number,number]; label: [number,number,number]
+} {
+  switch ((status || "").toLowerCase()) {
+    case "strong":   return { fill: TEAL,  bg: TEAL_BG,  label: TEAL_TEXT  };
+    case "moderate": return { fill: AMBER, bg: AMBER_BG, label: AMBER_TEXT };
+    case "weak":     return { fill: BLUE,  bg: BLUE_BG,  label: BLUE_TEXT  };
+    default:         return { fill: RED,   bg: RED_BG,   label: RED_TEXT   };
   }
 }
 
+function scoreColors(score: number) {
+  return statusColors(score >= 70 ? "strong" : score >= 50 ? "moderate" : score >= 30 ? "weak" : "critical");
+}
+
+function mapPriority(priority: string, index: number): string {
+  const p = (priority || "").toLowerCase();
+  if (p.includes("high") || p.includes("quick") || p.includes("immediate") || p.includes("urgent")) return "Quick Win";
+  if (p.includes("low") || p.includes("long")) return "Long Term";
+  if (p.includes("medium") || p.includes("mid")) return "Medium Term";
+  return index < 2 ? "Quick Win" : "Medium Term";
+}
+
+function tagColors(tag: string): { fill: [number,number,number]; bg: [number,number,number]; text: [number,number,number] } {
+  if (tag === "Quick Win")  return { fill: TEAL,  bg: TEAL_BG,  text: TEAL_TEXT  };
+  if (tag === "Long Term")  return { fill: BLUE,  bg: BLUE_BG,  text: BLUE_TEXT  };
+  return                           { fill: AMBER, bg: AMBER_BG, text: AMBER_TEXT };
+}
+
+function progressBar(
+  doc: jsPDF, x: number, y: number, w: number, h: number, pct: number,
+  trackColor: [number,number,number], fillColor: [number,number,number]
+) {
+  rgb(doc, "fill", trackColor);
+  doc.roundedRect(x, y, w, h, h / 2, h / 2, "F");
+  if (pct > 0) {
+    const fw = Math.max(h, (w * pct) / 100);
+    rgb(doc, "fill", fillColor);
+    doc.roundedRect(x, y, fw, h, h / 2, h / 2, "F");
+  }
+}
+
+// Draw ring chart using line segments to approximate arc stroke
+function drawRing(
+  doc: jsPDF, cx: number, cy: number, r: number, lw: number,
+  pct: number, trackColor: [number,number,number], fillColor: [number,number,number]
+) {
+  // Track: full circle
+  doc.setDrawColor(trackColor[0], trackColor[1], trackColor[2]);
+  doc.setLineWidth(lw);
+  doc.circle(cx, cy, r, "S");
+
+  // Fill: partial arc via line segments
+  const endDeg = -90 + (pct / 100) * 360;
+  const steps = Math.max(4, Math.round((pct / 100) * 120));
+  doc.setLineWidth(lw + 0.3);
+  for (let i = 0; i < steps; i++) {
+    const a1 = (-90 + (pct / 100) * 360 * (i / steps)) * (Math.PI / 180);
+    const a2 = (-90 + (pct / 100) * 360 * ((i + 1) / steps)) * (Math.PI / 180);
+    doc.setDrawColor(fillColor[0], fillColor[1], fillColor[2]);
+    doc.line(cx + r * Math.cos(a1), cy + r * Math.sin(a1), cx + r * Math.cos(a2), cy + r * Math.sin(a2));
+  }
+  void endDeg;
+}
+
+function pageHeader(doc: jsPDF, businessName: string, reportDate: string) {
+  // Light header bar
+  rgb(doc, "fill", PAGE_BG);
+  doc.rect(0, 0, PAGE_W, 12, "F");
+  rgb(doc, "draw", BORDER);
+  doc.setLineWidth(0.3);
+  doc.line(0, 12, PAGE_W, 12);
+
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  rgb(doc, "text", TEXT);
+  doc.text(businessName, M, 8);
+
+  doc.setFont("helvetica", "normal");
+  rgb(doc, "text", MUTED);
+  doc.text(reportDate + "  ·  Confidential", PAGE_W - M, 8, { align: "right" });
+}
+
+function pageFooter(doc: jsPDF, pageNum: number) {
+  rgb(doc, "fill", PAGE_BG);
+  doc.rect(0, PAGE_H - 10, PAGE_W, 10, "F");
+  rgb(doc, "draw", BORDER);
+  doc.setLineWidth(0.3);
+  doc.line(0, PAGE_H - 10, PAGE_W, PAGE_H - 10);
+
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  rgb(doc, "text", MUTED);
+  doc.text(`Page ${pageNum}`, PAGE_W / 2, PAGE_H - 3.5, { align: "center" });
+  doc.text("orangedoormarketing.com", PAGE_W - M, PAGE_H - 3.5, { align: "right" });
+}
+
+function sectionLabel(doc: jsPDF, text: string, x: number, y: number) {
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  rgb(doc, "text", TEAL_TEXT);
+  doc.text(text.toUpperCase(), x, y);
+}
+
+function sectionHeading(doc: jsPDF, text: string, x: number, y: number, maxW = CW) {
+  doc.setFontSize(17);
+  doc.setFont("times", "bold");
+  rgb(doc, "text", TEXT);
+  const lines = doc.splitTextToSize(text, maxW);
+  doc.text(lines, x, y);
+  return lines.length;
+}
+
+// ── Main export ────────────────────────────────────────────────────────────
 export function generateGapReportPDF(data: GapReportPDFData): void {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const {
-    businessName,
-    websiteUrl,
-    overallScore,
-    plainEnglishSummary,
-    scores,
-    strengths,
-    gaps,
-    recommendations,
-    executiveSummary,
+    businessName, websiteUrl, overallScore,
+    plainEnglishSummary, scores, strengths, gaps, recommendations, executiveSummary, biggestOpportunity,
   } = data;
 
-  const grade = getGradeInfo(overallScore);
-  const dateStr = new Date().toLocaleDateString("en-AU", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const grade = gradeColors(overallScore);
+  const displayDomain = websiteUrl
+    ? websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+    : businessName;
+  const dateStr = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  let pageNum = 1;
 
-  // ============================================================
-  // PAGE 1 — Cover
-  // ============================================================
-  drawHeaderBar(doc);
+  // ── PAGE 1: HERO + PILLARS + INSIGHTS ──────────────────────────────────
+  rgb(doc, "fill", WHITE);
+  doc.rect(0, 0, PAGE_W, PAGE_H, "F");
 
-  // Orange accent bar at top
-  doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.rect(0, 12, PAGE_W, 4, "F");
+  pageHeader(doc, displayDomain, dateStr);
 
-  // Logo wordmark
-  let y = 40;
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.text("ORANGE DOOR", PAGE_W / 2, y, { align: "center" });
-  doc.setFontSize(7);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(MEDIUM_GRAY[0], MEDIUM_GRAY[1], MEDIUM_GRAY[2]);
-  doc.text("DIGITAL MARKETING", PAGE_W / 2, y + 5, { align: "center" });
+  let y = 20;
 
-  // Main heading
-  y = 75;
-  doc.setFontSize(28);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text("Your Marketing", PAGE_W / 2, y, { align: "center" });
-  doc.text("Gap Analysis", PAGE_W / 2, y + 12, { align: "center" });
+  // Hero section ─────────────────────────────────────────────────────────
+  // Card background
+  rgb(doc, "fill", WHITE);
+  doc.setDrawColor(CARD_BORDER[0], CARD_BORDER[1], CARD_BORDER[2]);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(M, y, CW, 46, 3, 3, "FD");
 
-  // Decorative line
-  y += 22;
-  doc.setDrawColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.setLineWidth(0.8);
-  doc.line(PAGE_W / 2 - 25, y, PAGE_W / 2 + 25, y);
+  // Ring dial (left)
+  const ringCx = M + 24;
+  const ringCy = y + 23;
+  const ringR  = 14;
+  const ringLW = 3.5;
+  drawRing(doc, ringCx, ringCy, ringR, ringLW, overallScore, grade.bg, grade.fill);
 
-  // Business name
-  y += 14;
+  // Score text in ring
   doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text(businessName, PAGE_W / 2, y, { align: "center" });
+  doc.setFont("times", "bold");
+  rgb(doc, "text", TEXT);
+  doc.text(String(overallScore), ringCx, ringCy + 2.5, { align: "center" });
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  rgb(doc, "text", MUTED);
+  doc.text("/ 100", ringCx, ringCy + 8, { align: "center" });
 
-  if (websiteUrl) {
-    y += 7;
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(MEDIUM_GRAY[0], MEDIUM_GRAY[1], MEDIUM_GRAY[2]);
-    const urlDisplay = websiteUrl.length > 60 ? websiteUrl.substring(0, 57) + "..." : websiteUrl;
-    doc.text(urlDisplay, PAGE_W / 2, y, { align: "center" });
+  // Right column
+  const heroX = M + 50;
+  let heroY = y + 10;
+
+  // Grade label
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  rgb(doc, "text", grade.label);
+  doc.text(grade.name.toUpperCase(), heroX, heroY);
+  heroY += 7;
+
+  // Headline
+  doc.setFontSize(13);
+  doc.setFont("times", "bold");
+  rgb(doc, "text", TEXT);
+  const headline = overallScore >= 80
+    ? "Your Marketing Foundation Is Solid"
+    : overallScore >= 60
+    ? "Good Foundation With Room to Grow"
+    : "Significant Opportunities to Unlock";
+  const hlLines = doc.splitTextToSize(headline, CW - 56);
+  doc.text(hlLines, heroX, heroY);
+  heroY += hlLines.length * 6 + 3;
+
+  // Subline
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  rgb(doc, "text", BODY_TXT);
+  const sub = overallScore >= 80
+    ? `${businessName} scores in the top tier. A few fixes can push into the 90s.`
+    : `${businessName} has clear opportunities. Prioritise the actions on the next page.`;
+  const subLines = doc.splitTextToSize(sub, CW - 56);
+  doc.text(subLines.slice(0, 2), heroX, heroY);
+
+  y += 52;
+
+  // Pillar cards (3 per row) ─────────────────────────────────────────────
+  const cats = scores || [];
+  if (cats.length > 0) {
+    sectionLabel(doc, "Category Scores", M, y + 6);
+    y += 12;
+
+    const cols = 3;
+    const cardW = (CW - (cols - 1) * 4) / cols;
+    const cardH = 28;
+
+    cats.slice(0, 6).forEach((cat, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const cx2 = M + col * (cardW + 4);
+      const cy2 = y + row * (cardH + 4);
+      const sc = statusColors(cat.status);
+
+      // Card
+      rgb(doc, "fill", WHITE);
+      doc.setDrawColor(CARD_BORDER[0], CARD_BORDER[1], CARD_BORDER[2]);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(cx2, cy2, cardW, cardH, 2, 2, "FD");
+
+      // Score
+      doc.setFontSize(13);
+      doc.setFont("times", "bold");
+      rgb(doc, "text", sc.label);
+      doc.text(String(cat.score), cx2 + 4, cy2 + 10);
+
+      // Label
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "normal");
+      rgb(doc, "text", BODY_TXT);
+      const lbl = doc.splitTextToSize(cat.label, cardW - 8);
+      doc.text(lbl.slice(0, 2), cx2 + 4, cy2 + 16);
+
+      // Progress bar
+      progressBar(doc, cx2 + 4, cy2 + cardH - 6, cardW - 8, 2, cat.score, BORDER, sc.fill);
+    });
+
+    const rowCount = Math.ceil(Math.min(cats.length, 6) / cols);
+    y += rowCount * (cardH + 4) + 2;
   }
 
-  // Score display
-  y += 25;
-  // Score circle background
-  doc.setFillColor(grade.color[0], grade.color[1], grade.color[2]);
-  doc.circle(PAGE_W / 2, y + 15, 22, "F");
-  // Score number
-  doc.setFontSize(28);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-  doc.text(String(overallScore), PAGE_W / 2, y + 19, { align: "center" });
-  doc.setFontSize(8);
-  doc.text("/ 100", PAGE_W / 2, y + 26, { align: "center" });
+  // Insight boxes (2 columns) ────────────────────────────────────────────
+  const topStrength = strengths?.[0] || null;
+  const topGap = gaps?.[0] || null;
 
-  // Grade badge
-  y += 45;
-  const badgeW = 60;
-  const badgeH = 9;
-  doc.setFillColor(grade.color[0], grade.color[1], grade.color[2]);
-  doc.roundedRect(PAGE_W / 2 - badgeW / 2, y, badgeW, badgeH, 4, 4, "F");
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-  doc.text(grade.label, PAGE_W / 2, y + 6.2, { align: "center" });
+  if ((topStrength || topGap) && y < PAGE_H - 42) {
+    y += 4;
+    sectionLabel(doc, "Analysis", M, y + 6);
+    y += 12;
 
-  // Date
-  y += 20;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(MEDIUM_GRAY[0], MEDIUM_GRAY[1], MEDIUM_GRAY[2]);
-  doc.text(dateStr, PAGE_W / 2, y, { align: "center" });
+    const insW = (CW - 5) / 2;
+    const insH = 28;
 
-  // Tagline at bottom
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "italic");
-  doc.setTextColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.text("Prepared by Orange Door — Your AI Marketing Team", PAGE_W / 2, PAGE_H - 22, { align: "center" });
+    if (topStrength) {
+      // Working card
+      rgb(doc, "fill", WHITE);
+      doc.setDrawColor(CARD_BORDER[0], CARD_BORDER[1], CARD_BORDER[2]);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(M, y, insW, insH, 2, 2, "FD");
 
-  drawFooter(doc, 1);
+      // Green dot + label
+      rgb(doc, "fill", TEAL);
+      doc.circle(M + 5, y + 7, 1.5, "F");
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      rgb(doc, "text", TEAL_TEXT);
+      doc.text("WHAT'S WORKING", M + 9, y + 8);
 
-  // ============================================================
-  // PAGE 2 — Plain English Summary
-  // ============================================================
-  doc.addPage();
-  drawHeaderBar(doc);
-  doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.rect(0, 12, PAGE_W, 4, "F");
-
-  y = 28;
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text("What This Means For Your Business", MARGIN, y);
-
-  // Orange underline
-  y += 3;
-  doc.setDrawColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.setLineWidth(0.6);
-  doc.line(MARGIN, y, MARGIN + 80, y);
-
-  // Summary text
-  y += 10;
-  const summaryText = plainEnglishSummary || executiveSummary || "Your marketing system has been analyzed across key areas. See the detailed findings below.";
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  const summaryLines = doc.splitTextToSize(summaryText, CONTENT_W);
-  doc.text(summaryLines, MARGIN, y);
-  y += summaryLines.length * 5.5 + 10;
-
-  // Three callout boxes
-  const boxW = (CONTENT_W - 8) / 3;
-  const boxH = 50;
-  const boxY = Math.max(y, 100);
-
-  const callouts = [
-    {
-      title: "Your Biggest Opportunity",
-      body: recommendations?.[0]?.title || strengths?.[0] || "Review your full report for details",
-      color: ORANGE,
-    },
-    {
-      title: "What's Working",
-      body: strengths?.[0] || "See detailed findings below",
-      color: GREEN,
-    },
-    {
-      title: "Your Priority This Month",
-      body: gaps?.[0] || recommendations?.[0]?.description?.substring(0, 80) || "Check the action plan",
-      color: BLUE,
-    },
-  ];
-
-  callouts.forEach((callout, i) => {
-    const bx = MARGIN + i * (boxW + 4);
-    // Box background
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(bx, boxY, boxW, boxH, 3, 3, "F");
-    // Top accent bar
-    doc.setFillColor(callout.color[0], callout.color[1], callout.color[2]);
-    doc.rect(bx, boxY, boxW, 2.5, "F");
-    // Title
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(callout.color[0], callout.color[1], callout.color[2]);
-    doc.text(callout.title, bx + 4, boxY + 10);
-    // Body
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-    const bodyLines = doc.splitTextToSize(callout.body, boxW - 8);
-    doc.text(bodyLines.slice(0, 5), bx + 4, boxY + 17);
-  });
-
-  // Score bar visualization
-  const barY = boxY + boxH + 20;
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text("Your Score Position", MARGIN, barY);
-
-  const barTop = barY + 6;
-  const barH = 10;
-  const zones = [
-    { from: 0, to: 30, color: RED, label: "0-30" },
-    { from: 30, to: 55, color: AMBER, label: "31-55" },
-    { from: 55, to: 80, color: BLUE, label: "56-80" },
-    { from: 80, to: 100, color: GREEN, label: "81-100" },
-  ];
-
-  zones.forEach((zone) => {
-    const zx = MARGIN + (CONTENT_W * zone.from) / 100;
-    const zw = (CONTENT_W * (zone.to - zone.from)) / 100;
-    // Use lighter version of the color for zone background
-    const r = Math.min(255, zone.color[0] + Math.round((255 - zone.color[0]) * 0.7));
-    const g = Math.min(255, zone.color[1] + Math.round((255 - zone.color[1]) * 0.7));
-    const b = Math.min(255, zone.color[2] + Math.round((255 - zone.color[2]) * 0.7));
-    doc.setFillColor(r, g, b);
-    doc.rect(zx, barTop, zw, barH, "F");
-    // Label
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(zone.color[0], zone.color[1], zone.color[2]);
-    doc.text(zone.label, zx + zw / 2, barTop + barH + 5, { align: "center" });
-  });
-
-  // Reset alpha (jsPDF doesn't have setGlobalAlpha, so the zones will be full color — that's fine)
-  // Score marker
-  const markerX = MARGIN + (CONTENT_W * overallScore) / 100;
-  doc.setFillColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.triangle(markerX - 2, barTop - 1, markerX + 2, barTop - 1, markerX, barTop + 2, "F");
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text(String(overallScore), markerX, barTop - 3, { align: "center" });
-
-  drawFooter(doc, 2);
-
-  // ============================================================
-  // PAGE 3 — Detailed Findings (SYSTEM Scorecard)
-  // ============================================================
-  doc.addPage();
-  drawHeaderBar(doc);
-  doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.rect(0, 12, PAGE_W, 4, "F");
-
-  y = 28;
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text("Detailed Findings", MARGIN, y);
-  y += 3;
-  doc.setDrawColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.setLineWidth(0.6);
-  doc.line(MARGIN, y, MARGIN + 50, y);
-
-  y += 10;
-
-  const systemCategories = scores || [
-    { category: "S", label: "Search & Visibility", score: 0, status: "critical" },
-    { category: "Y", label: "Your Website", score: 0, status: "critical" },
-    { category: "S2", label: "Sequences & Email", score: 0, status: "critical" },
-    { category: "T", label: "Transactions & Sales", score: 0, status: "critical" },
-    { category: "E", label: "Engagement & Reviews", score: 0, status: "critical" },
-    { category: "M", label: "Metrics & Analytics", score: 0, status: "critical" },
-  ];
-
-  // Table header
-  doc.setFillColor(245, 245, 245);
-  doc.rect(MARGIN, y, CONTENT_W, 9, "F");
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(MEDIUM_GRAY[0], MEDIUM_GRAY[1], MEDIUM_GRAY[2]);
-  doc.text("CATEGORY", MARGIN + 4, y + 6);
-  doc.text("SCORE", MARGIN + CONTENT_W - 40, y + 6);
-  doc.text("STATUS", MARGIN + CONTENT_W - 18, y + 6);
-  y += 12;
-
-  systemCategories.forEach((cat, idx) => {
-    const rowH = 22;
-    const rowY = y;
-    const color = getScoreColor(cat.score);
-    const letter = cat.category.replace("S2", "S");
-
-    // Alternating row bg
-    if (idx % 2 === 0) {
-      doc.setFillColor(252, 252, 252);
-      doc.rect(MARGIN, rowY, CONTENT_W, rowH, "F");
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      rgb(doc, "text", TEXT);
+      const sLines = doc.splitTextToSize(topStrength, insW - 8);
+      doc.text(sLines.slice(0, 3), M + 4, y + 16);
     }
 
-    // Letter circle
-    doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-    doc.circle(MARGIN + 8, rowY + rowH / 2, 5, "F");
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-    doc.text(letter, MARGIN + 8, rowY + rowH / 2 + 1.5, { align: "center" });
+    if (topGap) {
+      // Gap card
+      const gx = M + insW + 5;
+      rgb(doc, "fill", WHITE);
+      doc.setDrawColor(CARD_BORDER[0], CARD_BORDER[1], CARD_BORDER[2]);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(gx, y, insW, insH, 2, 2, "FD");
 
-    // Category name
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-    doc.text(cat.label, MARGIN + 18, rowY + 8);
+      // Red dot + label
+      rgb(doc, "fill", RED);
+      doc.circle(gx + 5, y + 7, 1.5, "F");
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      rgb(doc, "text", RED_TEXT);
+      doc.text("CRITICAL GAP", gx + 9, y + 8);
 
-    // Mini progress bar
-    const barX = MARGIN + 18;
-    const miniBarW = CONTENT_W - 70;
-    drawProgressBar(doc, barX, rowY + 12, miniBarW, 3, cat.score, color);
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      rgb(doc, "text", TEXT);
+      const gLines = doc.splitTextToSize(topGap, insW - 8);
+      doc.text(gLines.slice(0, 3), gx + 4, y + 16);
+    }
 
-    // Score number
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(color[0], color[1], color[2]);
-    doc.text(`${cat.score}`, MARGIN + CONTENT_W - 34, rowY + rowH / 2 + 1, { align: "center" });
-
-    // Status badge
-    const statusLabel = cat.status === "strong" ? "Strong" : cat.status === "moderate" ? "Moderate" : cat.status === "weak" ? "Weak" : "Critical";
-    const badgeX = MARGIN + CONTENT_W - 22;
-    const bW = 20;
-    const bH2 = 6;
-    doc.setFillColor(color[0], color[1], color[2]);
-    doc.roundedRect(badgeX, rowY + rowH / 2 - 3, bW, bH2, 2, 2, "F");
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-    doc.text(statusLabel, badgeX + bW / 2, rowY + rowH / 2 + 1, { align: "center" });
-
-    y += rowH + 2;
-  });
-
-  // Key findings below table
-  y += 8;
-  if (strengths && strengths.length > 0) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
-    doc.text("✓  Key Strengths", MARGIN, y);
-    y += 6;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-    strengths.slice(0, 3).forEach((s) => {
-      const lines = doc.splitTextToSize(s, CONTENT_W - 10);
-      doc.text(lines, MARGIN + 6, y);
-      y += lines.length * 4 + 3;
-    });
-    y += 4;
+    y += insH + 4;
   }
 
-  if (gaps && gaps.length > 0) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-    doc.text("⚠  Critical Gaps", MARGIN, y);
-    y += 6;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-    gaps.slice(0, 3).forEach((g) => {
-      const lines = doc.splitTextToSize(g, CONTENT_W - 10);
-      doc.text(lines, MARGIN + 6, y);
-      y += lines.length * 4 + 3;
-    });
-  }
+  pageFooter(doc, pageNum);
 
-  drawFooter(doc, 3);
-
-  // ============================================================
-  // PAGE 4 — Action Plan
-  // ============================================================
+  // ── PAGE 2: EXECUTIVE SUMMARY + ACTION PLAN ────────────────────────────
   doc.addPage();
-  drawHeaderBar(doc);
-  doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.rect(0, 12, PAGE_W, 4, "F");
+  pageNum++;
 
-  y = 28;
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-  doc.text("Your Top Recommended Actions", MARGIN, y);
-  y += 3;
-  doc.setDrawColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.setLineWidth(0.6);
-  doc.line(MARGIN, y, MARGIN + 70, y);
-  y += 10;
+  rgb(doc, "fill", WHITE);
+  doc.rect(0, 0, PAGE_W, PAGE_H, "F");
 
-  const actions = recommendations || [];
-  const displayActions = actions.slice(0, 10);
+  pageHeader(doc, displayDomain, dateStr);
+  y = 20;
 
-  if (displayActions.length === 0) {
-    doc.setFontSize(10);
+  // Executive summary ────────────────────────────────────────────────────
+  const summaryText = plainEnglishSummary || executiveSummary || "";
+  if (summaryText) {
+    sectionLabel(doc, "Executive Summary", M, y + 6);
+    y += 11;
+
+    const headLines = sectionHeading(doc, "What this means for your business", M, y);
+    y += headLines * 7 + 4;
+
+    doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(MEDIUM_GRAY[0], MEDIUM_GRAY[1], MEDIUM_GRAY[2]);
-    doc.text("Detailed recommendations will be discussed in your strategy call.", MARGIN, y);
+    rgb(doc, "text", BODY_TXT);
+    const sumLines = doc.splitTextToSize(summaryText, CW);
+    doc.text(sumLines.slice(0, 5), M, y);
+    y += Math.min(sumLines.length, 5) * 4.8 + 8;
+
+    // Opportunity callout
+    const opp = biggestOpportunity || recommendations?.[0]?.title || gaps?.[0] || null;
+    if (opp) {
+      rgb(doc, "fill", TEAL_BG);
+      doc.roundedRect(M, y, CW, 20, 2, 2, "F");
+      rgb(doc, "fill", TEAL);
+      doc.rect(M, y, 2.5, 20, "F");
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      rgb(doc, "text", TEAL_TEXT);
+      doc.text("YOUR BIGGEST OPPORTUNITY", M + 7, y + 7);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      rgb(doc, "text", TEXT);
+      const oppLines = doc.splitTextToSize(opp, CW - 14);
+      doc.text(oppLines.slice(0, 2), M + 7, y + 14);
+      y += 28;
+    }
+
+    y += 6;
+  }
+
+  // Strengths & Gaps ─────────────────────────────────────────────────────
+  const sItems = (strengths || []).slice(0, 4);
+  const gItems = (gaps || []).slice(0, 4);
+
+  if (sItems.length > 0 || gItems.length > 0) {
+    if (y > PAGE_H - 70) {
+      pageFooter(doc, pageNum);
+      doc.addPage();
+      pageNum++;
+      rgb(doc, "fill", WHITE);
+      doc.rect(0, 0, PAGE_W, PAGE_H, "F");
+      pageHeader(doc, displayDomain, dateStr);
+      y = 20;
+    }
+
+    sectionLabel(doc, "Analysis", M, y + 6);
+    y += 11;
+
+    const sgHeadLines = sectionHeading(doc, "Key strengths & critical gaps", M, y);
+    y += sgHeadLines * 7 + 6;
+
+    const colW = (CW - 5) / 2;
+    const leftX = M;
+    const rightX = M + colW + 5;
+    const itemTextW = colW - 14;
+    const maxItems = Math.max(sItems.length, gItems.length);
+
+    // Column headers
+    rgb(doc, "fill", TEAL);
+    doc.circle(leftX + 4, y + 3.5, 1.5, "F");
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    rgb(doc, "text", TEAL_TEXT);
+    doc.text("WHAT'S WORKING", leftX + 8, y + 4.5);
+
+    rgb(doc, "fill", RED);
+    doc.circle(rightX + 4, y + 3.5, 1.5, "F");
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    rgb(doc, "text", RED_TEXT);
+    doc.text("CRITICAL GAPS", rightX + 8, y + 4.5);
+
     y += 10;
-  } else {
-    displayActions.forEach((rec, idx) => {
-      if (y > 250) {
-        drawFooter(doc, 4);
+
+    for (let i = 0; i < maxItems; i++) {
+      if (y > PAGE_H - 24) {
+        pageFooter(doc, pageNum);
         doc.addPage();
-        drawHeaderBar(doc);
-        doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-        doc.rect(0, 12, PAGE_W, 4, "F");
-        y = 24;
+        pageNum++;
+        rgb(doc, "fill", WHITE);
+        doc.rect(0, 0, PAGE_W, PAGE_H, "F");
+        pageHeader(doc, displayDomain, dateStr);
+        y = 20;
       }
 
-      // Number circle
-      doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-      doc.circle(MARGIN + 5, y + 2, 4, "F");
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-      doc.text(String(idx + 1), MARGIN + 5, y + 3.5, { align: "center" });
+      let leftH = 0;
+      let rightH = 0;
 
-      // Title
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(DARK_TEXT[0], DARK_TEXT[1], DARK_TEXT[2]);
-      const titleLines = doc.splitTextToSize(rec.title, CONTENT_W - 50);
-      doc.text(titleLines, MARGIN + 14, y + 3);
+      if (i < sItems.length) {
+        rgb(doc, "fill", TEAL_BG);
+        doc.circle(leftX + 4, y + 3, 3, "F");
+        doc.setFontSize(6.5);
+        doc.setFont("helvetica", "bold");
+        rgb(doc, "text", TEAL_TEXT);
+        doc.text("v", leftX + 4, y + 4.5, { align: "center" });
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "normal");
+        rgb(doc, "text", TEXT);
+        const sLines = doc.splitTextToSize(sItems[i], itemTextW);
+        doc.text(sLines.slice(0, 2), leftX + 10, y + 4);
+        leftH = Math.min(sLines.length, 2) * 4.5 + 4;
+      }
 
-      // Priority tag
-      const priorityLabel = rec.priority || "Medium Term";
-      const effortColor = priorityLabel.toLowerCase().includes("quick") || priorityLabel.toLowerCase().includes("high")
-        ? GREEN
-        : priorityLabel.toLowerCase().includes("long") || priorityLabel.toLowerCase().includes("low")
-          ? AMBER
-          : BLUE;
-      const tagW = doc.getTextWidth(priorityLabel) + 6;
-      doc.setFillColor(effortColor[0], effortColor[1], effortColor[2]);
-      doc.roundedRect(MARGIN + CONTENT_W - tagW, y - 1, tagW, 6, 2, 2, "F");
-      doc.setFontSize(6);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-      doc.text(priorityLabel, MARGIN + CONTENT_W - tagW / 2, y + 3, { align: "center" });
+      if (i < gItems.length) {
+        rgb(doc, "fill", RED_BG);
+        doc.circle(rightX + 4, y + 3, 3, "F");
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "bold");
+        rgb(doc, "text", RED_TEXT);
+        doc.text("!", rightX + 4, y + 4.5, { align: "center" });
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "normal");
+        rgb(doc, "text", TEXT);
+        const gLines = doc.splitTextToSize(gItems[i], itemTextW);
+        doc.text(gLines.slice(0, 2), rightX + 10, y + 4);
+        rightH = Math.min(gLines.length, 2) * 4.5 + 4;
+      }
 
-      // Description
-      y += titleLines.length * 5 + 4;
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(MEDIUM_GRAY[0], MEDIUM_GRAY[1], MEDIUM_GRAY[2]);
-      const descLines = doc.splitTextToSize(rec.description, CONTENT_W - 14);
-      doc.text(descLines.slice(0, 2), MARGIN + 14, y);
-      y += Math.min(descLines.length, 2) * 4 + 8;
-    });
+      y += Math.max(leftH, rightH, 10);
+    }
+
+    y += 8;
   }
 
-  // CTA Box at bottom
-  const ctaY = Math.max(y + 10, PAGE_H - 60);
-  doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]);
-  doc.roundedRect(MARGIN, ctaY, CONTENT_W, 30, 4, 4, "F");
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(WHITE[0], WHITE[1], WHITE[2]);
-  doc.text("Orange Door handles all of this for you.", PAGE_W / 2, ctaY + 12, { align: "center" });
-  doc.setFontSize(10);
+  // Action plan ──────────────────────────────────────────────────────────
+  sectionLabel(doc, "Action Plan", M, y + 6);
+  y += 11;
+
+  const ahLines = sectionHeading(doc, "Your top recommended actions", M, y);
+  y += ahLines * 7 + 2;
+
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
-  doc.text("Book your free strategy call at orangedoormarketing.com/schedule", PAGE_W / 2, ctaY + 22, { align: "center" });
+  rgb(doc, "text", MUTED);
+  doc.text("Prioritised by impact — address in order for fastest gains.", M, y);
+  y += 8;
 
-  drawFooter(doc, 4);
+  const actions = recommendations || [];
+  actions.slice(0, 10).forEach((rec, idx) => {
+    const tag = mapPriority(rec.priority, idx);
+    const tc = tagColors(tag);
 
-  // Save
+    if (y > PAGE_H - 24) {
+      pageFooter(doc, pageNum);
+      doc.addPage();
+      pageNum++;
+      rgb(doc, "fill", WHITE);
+      doc.rect(0, 0, PAGE_W, PAGE_H, "F");
+      pageHeader(doc, displayDomain, dateStr);
+      y = 20;
+    }
+
+    const rowH = 10;
+
+    // Number circle
+    rgb(doc, "fill", tc.fill);
+    doc.roundedRect(M, y, 7, 7, 1.5, 1.5, "F");
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "bold");
+    rgb(doc, "text", WHITE);
+    doc.text(String(idx + 1), M + 3.5, y + 5.3, { align: "center" });
+
+    // Title
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "bold");
+    rgb(doc, "text", TEXT);
+    const titleLines = doc.splitTextToSize(rec.title, CW - 42);
+    doc.text(titleLines.slice(0, 1), M + 11, y + 5);
+
+    // Tag pill
+    const tw = doc.getTextWidth(tag) + 6;
+    rgb(doc, "fill", tc.bg);
+    doc.roundedRect(M + CW - tw, y, tw, 7, 1.5, 1.5, "F");
+    doc.setFontSize(5.5);
+    doc.setFont("helvetica", "bold");
+    rgb(doc, "text", tc.text);
+    doc.text(tag, M + CW - tw / 2, y + 5, { align: "center" });
+
+    y += rowH;
+
+    // Description (one line)
+    if (rec.description) {
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      rgb(doc, "text", BODY_TXT);
+      const dLines = doc.splitTextToSize(rec.description, CW - 11);
+      doc.text(dLines.slice(0, 1), M + 11, y);
+      y += 5;
+    }
+
+    // Divider
+    doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]);
+    doc.setLineWidth(0.3);
+    doc.line(M + 11, y, PAGE_W - M, y);
+    y += 3;
+  });
+
+  // CTA box ──────────────────────────────────────────────────────────────
+  const ctaH = 32;
+  const ctaY2 = y + 8 > PAGE_H - (ctaH + 14) ? (() => {
+    pageFooter(doc, pageNum);
+    doc.addPage();
+    pageNum++;
+    rgb(doc, "fill", WHITE);
+    doc.rect(0, 0, PAGE_W, PAGE_H, "F");
+    pageHeader(doc, displayDomain, dateStr);
+    return 20;
+  })() : y + 8;
+
+  rgb(doc, "fill", PAGE_BG);
+  doc.setDrawColor(CARD_BORDER[0], CARD_BORDER[1], CARD_BORDER[2]);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(M, ctaY2, CW, ctaH, 3, 3, "FD");
+
+  // Left text — constrained width so it never runs into the button
+  const ctaTextMaxW = CW - 62;
+  doc.setFontSize(12);
+  doc.setFont("times", "bold");
+  rgb(doc, "text", TEXT);
+  doc.text("Ready to close the gaps?", M + 8, ctaY2 + 12);
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  rgb(doc, "text", BODY_TXT);
+  const ctaSubLines = doc.splitTextToSize(
+    "Book a free 30-minute strategy call and let's build your path to 95+.",
+    ctaTextMaxW
+  );
+  doc.text(ctaSubLines.slice(0, 2), M + 8, ctaY2 + 21);
+
+  // Button — vertically centered in card, right-aligned with consistent padding
+  const btnW = 52;
+  const btnH = 13;
+  const btnX = M + CW - btnW - 4;
+  const btnY = ctaY2 + (ctaH - btnH) / 2;
+
+  rgb(doc, "fill", TEAL_TEXT);
+  doc.roundedRect(btnX, btnY, btnW, btnH, 2.5, 2.5, "F");
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  rgb(doc, "text", TEAL_BG);
+  // "→" doesn't render in Helvetica — use plain text only
+  doc.text("Schedule Your Call", btnX + btnW / 2, btnY + btnH / 2 + 1.5, { align: "center" });
+  doc.link(btnX, btnY, btnW, btnH, { url: "https://orangedoormarketing.com/schedule" });
+
+  pageFooter(doc, pageNum);
+
   const filename = `Gap-Analysis-${businessName.replace(/[^a-zA-Z0-9]/g, "-")}-${new Date().toISOString().split("T")[0]}.pdf`;
   doc.save(filename);
 }

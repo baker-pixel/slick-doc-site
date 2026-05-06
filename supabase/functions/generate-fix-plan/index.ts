@@ -88,14 +88,14 @@ Rules:
 
 Return ONLY the JSON. No markdown, no fences, no preamble.`;
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY not configured");
 
-    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 1200,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -108,7 +108,7 @@ Return ONLY the JSON. No markdown, no fences, no preamble.`;
     }
 
     const aiData = await aiRes.json();
-    const raw = aiData.content?.[0]?.text || "";
+    const raw = aiData.choices?.[0]?.message?.content || "";
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     let parsed: Record<string, unknown>;
     try {

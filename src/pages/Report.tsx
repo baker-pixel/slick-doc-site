@@ -129,6 +129,7 @@ export default function Report() {
       overallScore: scorecard.overallScore,
       overallStatus: scorecard.overallStatus,
       scores: scorecard.scores,
+      biggestOpportunity: aiAnalysis?.plain_english_summary?.biggest_opportunity,
       plainEnglishSummary: aiAnalysis?.executiveSummary,
       executiveSummary: aiAnalysis?.executiveSummary,
       strengths: aiAnalysis?.strengths,
@@ -139,10 +140,10 @@ export default function Report() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#1A1410]">
+      <div className="min-h-screen flex items-center justify-center bg-[#F7F8FA]">
         <div className="text-center">
-          <Loader2 className="animate-spin mx-auto mb-4 text-[#E8521A]" size={40} />
-          <p className="text-white/50">Loading your report...</p>
+          <Loader2 className="animate-spin mx-auto mb-4 text-[#1D9E75]" size={36} />
+          <p className="text-[#8A8F9B] text-[13px]">Loading your report…</p>
         </div>
       </div>
     );
@@ -150,14 +151,14 @@ export default function Report() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
         <div className="text-center px-4">
-          <h1 className="text-3xl font-semibold text-[#1A1410] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
+          <h1 className="text-3xl font-semibold text-[#1A1D23] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
             Report Not Found
           </h1>
-          <p className="text-[#1A1410]/50 mb-8">This report doesn't exist or may have expired.</p>
+          <p className="text-[#8A8F9B] text-[13px] mb-8">This report doesn't exist or may have expired.</p>
           <Link to="/">
-            <Button className="gap-2 bg-[#E8521A] hover:bg-[#E8521A]/90 text-white">
+            <Button className="gap-2 bg-[#0F6E56] hover:bg-[#0a4f3e] text-[#E1F5EE]">
               <Home size={16} />
               Return Home
             </Button>
@@ -184,32 +185,50 @@ export default function Report() {
       }))
     : [];
 
+  const mapPriority = (priority: string, index: number): "Quick Win" | "Medium Term" | "Long Term" => {
+    const p = (priority || "").toLowerCase();
+    if (p.includes("high") || p.includes("quick") || p.includes("immediate") || p.includes("urgent")) return "Quick Win";
+    if (p.includes("low") || p.includes("long")) return "Long Term";
+    if (p.includes("medium") || p.includes("mid")) return "Medium Term";
+    return index < 3 ? "Quick Win" : index < 6 ? "Medium Term" : "Long Term";
+  };
+
   // Build action plan from recommendations
   const actions = (aiAnalysis?.recommendations || []).map((rec, i) => ({
     title: rec.title,
     description: rec.description,
-    tag: (i < 3 ? "Quick Win" : "Medium Term") as "Quick Win" | "Medium Term" | "Long Term",
+    tag: mapPriority(rec.priority, i),
   }));
 
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+    <div className="min-h-screen bg-[#F7F8FA]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Sticky toolbar */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-[#1A1410]/95 backdrop-blur-sm border-b border-white/5">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-b border-[rgba(0,0,0,0.08)]">
         <div className="max-w-[820px] mx-auto px-10 flex items-center justify-between h-12">
-          <span className="text-white/30 text-xs tracking-wide">
-            Orange Door — Confidential Report
-          </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-[#0F6E56] text-[10px] tracking-[0.15em] uppercase font-semibold shrink-0">
+              Orange Door
+            </span>
+            {report?.business_name && (
+              <>
+                <span className="text-[#8A8F9B] text-xs">·</span>
+                <span className="text-[#8A8F9B] text-xs truncate">{report.business_name}</span>
+              </>
+            )}
+          </div>
+          <div className="flex gap-3 shrink-0">
             <button
               onClick={downloadPDF}
-              className="flex items-center gap-1.5 text-white/50 hover:text-white text-xs transition-colors"
+              disabled={!scorecard}
+              className="flex items-center gap-1.5 text-[#8A8F9B] hover:text-[#1A1D23] text-xs transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title={!scorecard ? "Report still loading…" : "Download PDF"}
             >
               <Download size={14} />
               PDF
             </button>
             <button
               onClick={copyShareLink}
-              className="flex items-center gap-1.5 text-white/50 hover:text-white text-xs transition-colors"
+              className="flex items-center gap-1.5 text-[#8A8F9B] hover:text-[#1A1D23] text-xs transition-colors"
             >
               {copied ? <Check size={14} /> : <Share2 size={14} />}
               {copied ? "Copied" : "Share"}
@@ -219,8 +238,9 @@ export default function Report() {
       </div>
 
       {/* Report shell */}
-      <div className="pt-12 max-w-[820px] mx-auto bg-white shadow-[0_4px_40px_rgba(0,0,0,0.07)]">
+      <div className="pt-12 max-w-[820px] mx-auto bg-white shadow-[0_2px_24px_rgba(0,0,0,0.06)]">
         <CoverSection
+          businessName={report?.business_name}
           clientDomain={clientDomain}
           reportDate={reportDate}
           overallScore={scorecard?.overallScore ?? 0}
@@ -230,6 +250,8 @@ export default function Report() {
           <ExecutiveSummarySection
             summary={aiAnalysis.executiveSummary}
             biggestOpportunity={aiAnalysis.plain_english_summary?.biggest_opportunity}
+            topGap={aiAnalysis.gaps?.[0]}
+            topRecommendation={aiAnalysis.recommendations?.[0]?.title}
           />
         )}
 
@@ -250,8 +272,8 @@ export default function Report() {
 
         <FooterCTA />
 
-        <div className="bg-[#1A1410] py-4 text-center border-t border-white/5">
-          <Link to="/" className="text-white/20 hover:text-white/40 text-xs transition-colors">
+        <div className="bg-[#F7F8FA] py-4 text-center border-t border-[rgba(0,0,0,0.06)]">
+          <Link to="/" className="text-[#8A8F9B] hover:text-[#1A1D23] text-xs transition-colors">
             ← Return to orangedoormarketing.com
           </Link>
         </div>

@@ -360,6 +360,20 @@ const handler = async (req: Request): Promise<Response> => {
 
     for (const email of pendingEmails || []) {
       try {
+        // Atomically claim this email — prevents duplicate sends when two cron instances overlap
+        const { data: claimed } = await supabase
+          .from("email_queue")
+          .update({ status: "processing" })
+          .eq("id", email.id)
+          .eq("status", "pending")
+          .select("id")
+          .maybeSingle();
+
+        if (!claimed) {
+          console.log(`Email ${email.id} already claimed by another process, skipping`);
+          continue;
+        }
+
         // Check if recipient is unsubscribed
         const unsubscribed = await isUnsubscribed(email.recipient_email, supabase);
         if (unsubscribed) {
@@ -367,7 +381,8 @@ const handler = async (req: Request): Promise<Response> => {
           await supabase
             .from("email_queue")
             .update({ status: "skipped", error_message: "Recipient unsubscribed" })
-            .eq("id", email.id);
+            .eq("id", email.id)
+            .eq("status", "processing");
           results.push({ id: email.id, status: "skipped", reason: "unsubscribed" });
           continue;
         }
@@ -395,7 +410,8 @@ const handler = async (req: Request): Promise<Response> => {
         await supabase
           .from("email_queue")
           .update({ status: "sent", sent_at: new Date().toISOString() })
-          .eq("id", email.id);
+          .eq("id", email.id)
+          .eq("status", "processing");
 
         // Log the sent email with tracking_id
         await supabase.from("email_logs").insert({
@@ -422,14 +438,14 @@ const handler = async (req: Request): Promise<Response> => {
             scheduled_for: retryAt,
             error_message: `Attempt ${retryCount} failed: ${emailError.message}. Retrying at ${retryAt}.`,
             metadata: { ...email.metadata, retry_count: retryCount },
-          }).eq("id", email.id);
+          }).eq("id", email.id).eq("status", "processing");
           results.push({ id: email.id, status: "retrying", attempt: retryCount });
         } else {
           await supabase.from("email_queue").update({
             status: "failed",
             error_message: `All ${maxRetries} attempts failed. Last error: ${emailError.message}`,
             metadata: { ...email.metadata, retry_count: retryCount },
-          }).eq("id", email.id);
+          }).eq("id", email.id).eq("status", "processing");
           await supabase.from("email_logs").insert({
             recipient_email: email.recipient_email,
             subject: email.subject,

@@ -39,11 +39,11 @@ serve(async (req: Request) => {
         business_name,
         last_activity_at,
         pipeline_stage_id,
-        pipeline_stages!inner(name)
+        pipeline_stages(name)
       `)
-      .lt("last_activity_at", thresholdDate.toISOString())
-      .neq("pipeline_stages.name", "Customer")
-      .neq("status", "converted");
+      .or(`last_activity_at.is.null,last_activity_at.lt.${thresholdDate.toISOString()}`)
+      .neq("status", "converted")
+      .filter("pipeline_stages.name", "neq", "Customer");
 
     if (fetchError) {
       console.error("Error fetching inactive leads:", fetchError);
@@ -63,6 +63,13 @@ serve(async (req: Request) => {
       );
     }
 
+    // Exclude any leads whose email is already a client account
+    const { data: clientRows } = await supabase
+      .from("client_accounts")
+      .select("email")
+      .in("email", inactiveLeads.map(l => l.email));
+    const clientEmailSet = new Set((clientRows || []).map((c: { email: string }) => c.email.toLowerCase()));
+
     // Check which leads have already received the inactive_lead sequence
     const { data: recentEmails, error: emailError } = await supabase
       .from("email_queue")
@@ -73,8 +80,10 @@ serve(async (req: Request) => {
 
     const recentlyEmailedSet = new Set(recentEmails?.map(e => e.recipient_email) || []);
 
-    // Filter out leads that were already emailed
-    const leadsToProcess = inactiveLeads.filter(lead => !recentlyEmailedSet.has(lead.email));
+    // Filter out leads that were already emailed OR are now clients
+    const leadsToProcess = inactiveLeads.filter(
+      lead => !recentlyEmailedSet.has(lead.email) && !clientEmailSet.has(lead.email.toLowerCase())
+    );
 
     console.log(`${leadsToProcess.length} leads to process (excluding recently emailed)`);
 

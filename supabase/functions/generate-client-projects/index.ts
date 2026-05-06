@@ -33,9 +33,9 @@ serve(async (req) => {
       );
     }
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     // Fetch client info
@@ -131,17 +131,19 @@ Return your response as a JSON object with this structure:
   ]
 }`;
 
-    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 2048,
-        system: "You are a project management AI. Always respond with valid JSON only.",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: "You are a project management AI. Always respond with valid JSON only." },
+          { role: "user", content: prompt },
+        ],
         temperature: 0.7,
       }),
     });
@@ -167,7 +169,7 @@ Return your response as a JSON object with this structure:
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.content?.[0]?.text;
+    const content = aiData.choices?.[0]?.message?.content;
     
     if (!content) {
       throw new Error("No content from AI");

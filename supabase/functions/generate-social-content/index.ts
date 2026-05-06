@@ -14,10 +14,10 @@ serve(async (req) => {
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const { clientName, industry, platform, topic, tone, websiteSummary } = await req.json();
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const platformStyles: Record<string, string> = {
@@ -49,14 +49,14 @@ Return ONLY the post content, nothing else. No quotes, no explanations.`;
 
     console.log("Generating content for:", clientName, platform, "tone:", brandTone);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 1024,
         messages: [
           { role: "user", content: prompt },
@@ -85,7 +85,7 @@ Return ONLY the post content, nothing else. No quotes, no explanations.`;
     }
 
     const data = await response.json();
-    const content = data.content?.[0]?.text?.trim() || "";
+    const content = data.choices?.[0]?.message?.content?.trim() || "";
 
     console.log("Generated content length:", content.length);
 

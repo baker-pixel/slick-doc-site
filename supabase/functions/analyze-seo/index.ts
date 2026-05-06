@@ -285,9 +285,9 @@ async function getAiSuggestions(
   analysis: ReturnType<typeof analyzeHtml>,
   targetKeywords: string[]
 ) {
-  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
-  if (!ANTHROPIC_API_KEY) {
+  if (!GROQ_API_KEY) {
     return { suggestions: [], rewrites: [] };
   }
 
@@ -320,17 +320,19 @@ ${analysis.textContent.slice(0, 800)}
 
 Return only valid JSON, no markdown fences.`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 1024,
-        system: "You are an SEO expert. Return only valid JSON. No extra text.",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: "You are an SEO expert. Return only valid JSON. No extra text." },
+          { role: "user", content: prompt },
+        ],
       }),
     });
 
@@ -340,7 +342,7 @@ Return only valid JSON, no markdown fences.`;
     }
 
     const data = await response.json();
-    const content = data.content?.[0]?.text || "";
+    const content = data.choices?.[0]?.message?.content || "";
 
     // Parse JSON from AI response
     let parsed: any;

@@ -21,10 +21,10 @@ export interface ReportConfig {
 }
 
 export function getGradeBadge(score: number): string {
-  if (score >= 80) return "Excellent";
-  if (score >= 65) return "Good Foundation";
-  if (score >= 45) return "Needs Work";
-  return "Critical";
+  if (score >= 80) return "Strong Performance";
+  if (score >= 60) return "Good Foundation";
+  if (score >= 40) return "Needs Work";
+  return "Needs Urgent Attention";
 }
 
 export function getStatusColor(status: string): {
@@ -32,35 +32,45 @@ export function getStatusColor(status: string): {
   bg: string;
   bar: string;
   badge: string;
+  hex: string;
+  hexBg: string;
 } {
   switch (status) {
     case "Strong":
       return {
-        text: "text-[#2D6A4F]",
-        bg: "bg-[#2D6A4F]/10",
-        bar: "bg-[#2D6A4F]",
-        badge: "bg-[#2D6A4F]/15 text-[#2D6A4F] border-[#2D6A4F]/30",
+        text: "text-[#0F6E56]",
+        bg: "bg-[#E1F5EE]",
+        bar: "bg-[#1D9E75]",
+        badge: "bg-[#E1F5EE] text-[#0F6E56] border border-[#1D9E75]/25",
+        hex: "#1D9E75",
+        hexBg: "#E1F5EE",
       };
     case "Moderate":
       return {
-        text: "text-[#B45309]",
-        bg: "bg-[#B45309]/10",
-        bar: "bg-[#B45309]",
-        badge: "bg-[#B45309]/15 text-[#B45309] border-[#B45309]/30",
+        text: "text-[#854F0B]",
+        bg: "bg-[#FAEEDA]",
+        bar: "bg-[#EF9F27]",
+        badge: "bg-[#FAEEDA] text-[#854F0B] border border-[#EF9F27]/25",
+        hex: "#EF9F27",
+        hexBg: "#FAEEDA",
       };
     case "Weak":
       return {
-        text: "text-[#E8521A]",
-        bg: "bg-[#E8521A]/10",
-        bar: "bg-[#E8521A]",
-        badge: "bg-[#E8521A]/15 text-[#E8521A] border-[#E8521A]/30",
+        text: "text-[#185FA5]",
+        bg: "bg-[#E6F1FB]",
+        bar: "bg-[#378ADD]",
+        badge: "bg-[#E6F1FB] text-[#185FA5] border border-[#378ADD]/25",
+        hex: "#378ADD",
+        hexBg: "#E6F1FB",
       };
-    default:
+    default: // Critical
       return {
-        text: "text-red-600",
-        bg: "bg-red-500/10",
-        bar: "bg-red-500",
-        badge: "bg-red-500/15 text-red-600 border-red-500/30",
+        text: "text-[#A32D2D]",
+        bg: "bg-[#FDEAEA]",
+        bar: "bg-[#E24B4A]",
+        badge: "bg-[#FDEAEA] text-[#A32D2D] border border-[#E24B4A]/25",
+        hex: "#E24B4A",
+        hexBg: "#FDEAEA",
       };
   }
 }

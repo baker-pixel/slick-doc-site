@@ -20,22 +20,24 @@ interface ClientData {
 }
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is not configured");
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not configured");
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: "llama-3.3-70b-versatile",
       max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
     }),
   });
 
@@ -46,7 +48,7 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || '';
+  return data.choices?.[0]?.message?.content || '';
 }
 
 // Map our content types to DB-allowed values
@@ -57,31 +59,47 @@ const contentTypeMap: Record<string, string> = {
   'blog_post': 'blog_post',
 };
 
-async function generateContent(supabase: any, client: ClientData, contentType: string): Promise<any> {
-  const systemPrompt = `You are a professional marketing content writer for ${client.business_name}${client.industry ? ` in the ${client.industry} industry` : ''}. Create engaging, professional content.`;
-  
+async function generateContent(supabase: any, client: ClientData & { context_profile?: any }, contentType: string): Promise<any> {
+  const ctx = client.context_profile;
+  const industry = client.industry || "local business";
+  const biz = client.business_name;
+
+  const contextBlock = ctx ? [
+    ctx.business_summary || `${biz} is a ${industry} business.`,
+    ctx.services?.length ? `Services: ${ctx.services.slice(0, 5).join(", ")}.` : "",
+    ctx.differentiators?.length ? `Differentiators: ${ctx.differentiators.slice(0, 3).join(", ")}.` : "",
+    ctx.target_audience ? `Target audience: ${ctx.target_audience}.` : "",
+    ctx.location ? `Location: ${ctx.location}.` : "",
+  ].filter(Boolean).join(" ") : `${biz} is a ${industry} business.`;
+
+  const tone = ctx?.tone || "professional";
+  const services = ctx?.services || [];
+  const audience = ctx?.target_audience || "customers";
+
+  const systemPrompt = `You are a professional marketing content writer for ${biz}. ${contextBlock} Brand tone: ${tone}. Write specific, authentic content — never generic filler.`;
+
   let prompt = '';
   let title = '';
-  
+
   switch (contentType) {
     case 'google_post':
-      prompt = `Write a Google Business Profile post for ${client.business_name}. Keep it under 1500 characters, engaging, and include a call to action. Focus on building trust and showcasing expertise.`;
+      prompt = `Write a Google Business Profile post for ${biz}. Highlight a specific service${services.length ? ` (${services[0]})` : ""} or a trust-building fact. Under 1,500 characters. Include a clear call to action. Speak directly to ${audience}.`;
       title = 'Google Business Profile Post';
       break;
     case 'social_post':
-      prompt = `Write a professional social media post for ${client.business_name}. Make it engaging with relevant hashtags. Focus on providing value to followers.`;
+      prompt = `Write a LinkedIn post for ${biz}. Share an insight, tip, or win relevant to ${audience}${services.length ? ` around ${services[0]}` : ""}. 150–250 words. End with 3–5 hashtags.`;
       title = 'Social Media Post';
       break;
     case 'email_newsletter':
-      prompt = `Write a short email newsletter for ${client.business_name} customers. Include a compelling subject line, brief valuable content, and a clear call to action. Keep it under 300 words.`;
+      prompt = `Write a marketing email for ${biz}.\nFormat:\nSubject: [specific subject line]\n---\nHi [First Name],\n\n[2–3 short paragraphs of value for ${audience}${services.length ? ` related to ${services[0]}` : ""}]\n\n[Clear CTA]\n\nThe ${biz} Team\n\nUnder 200 words. Helpful, not salesy.`;
       title = 'Email Newsletter';
       break;
     case 'blog_post':
-      prompt = `Write a blog post outline with introduction for ${client.business_name}. Include a catchy title, 3-5 main sections with bullet points, and a conclusion. Focus on topics relevant to their customers.`;
+      prompt = `Write a blog post for ${biz}. Topic: a practical how-to or FAQ that ${audience} would find genuinely useful${services.length ? ` about ${services[0]}` : ""}. Include: engaging title, intro, 3–4 sections with H2 headers, conclusion with CTA. 500–700 words.`;
       title = 'Blog Post Draft';
       break;
     default:
-      prompt = `Write marketing content for ${client.business_name}.`;
+      prompt = `Write marketing content for ${biz} targeting ${audience}. 150–200 words. Reference their services (${services.slice(0, 2).join(", ") || industry}). Professional, specific, with a CTA.`;
       title = 'Marketing Content';
   }
 
@@ -101,7 +119,7 @@ async function generateContent(supabase: any, client: ClientData, contentType: s
       metadata: {
         generated_at: new Date().toISOString(),
         original_type: contentType,
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
       },
     })
     .select()
@@ -203,7 +221,7 @@ Provide a detailed output that can be reviewed by the team.`;
       status: 'completed',
       input_data: { task_id: task.id, task_name: task.name },
       output_data: { result: output },
-      ai_model_used: 'claude-sonnet-4-6',
+      ai_model_used: 'llama-3.3-70b-versatile',
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
     })
@@ -255,7 +273,7 @@ serve(async (req) => {
     // Get active clients
     let clientQuery = supabase
       .from('client_accounts')
-      .select('*')
+      .select('id, business_name, email, tier, industry, context_profile')
       .eq('status', 'active');
     
     if (clientId) {

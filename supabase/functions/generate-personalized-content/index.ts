@@ -30,9 +30,9 @@ serve(async (req) => {
       );
     }
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const segmentDesc = SEGMENT_DESCRIPTIONS[segment] || segment;
@@ -49,19 +49,20 @@ Rewrite the ${componentDesc} to resonate specifically with this user segment. Ke
 
 Return ONLY the personalized content text — no explanation, no quotes, no extra formatting.`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 512,
         temperature: 0.7,
-        system: "You are a conversion copywriter specializing in personalized website content. Return only the rewritten content text with no extra commentary.",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: "You are a conversion copywriter specializing in personalized website content. Return only the rewritten content text with no extra commentary." },
+          { role: "user", content: prompt },
+        ],
       }),
     });
 
@@ -72,7 +73,7 @@ Return ONLY the personalized content text — no explanation, no quotes, no extr
     }
 
     const data = await response.json();
-    const personalizedContent = data.content?.[0]?.text?.trim() || originalContent;
+    const personalizedContent = data.choices?.[0]?.message?.content?.trim() || originalContent;
 
     return new Response(
       JSON.stringify({ success: true, personalizedContent }),

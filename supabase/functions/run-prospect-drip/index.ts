@@ -206,15 +206,14 @@ Rules:
 Return JSON: { "subject": "email subject line", "html": "body html" }`;
 
   try {
-    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY") || "",
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${Deno.env.get("GROQ_API_KEY") || ""}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 800,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -227,7 +226,7 @@ Return JSON: { "subject": "email subject line", "html": "body html" }`;
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.content?.[0]?.text || '';
+    const content = aiData.choices?.[0]?.message?.content || '';
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
@@ -252,11 +251,11 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>";
 
-  if (!ANTHROPIC_API_KEY || !RESEND_API_KEY) {
+  if (!GROQ_API_KEY || !RESEND_API_KEY) {
     return new Response(JSON.stringify({ error: "Email API keys not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -294,8 +293,26 @@ serve(async (req) => {
       .eq("status", "nurture")
       .lt("drip_step", 4);
 
+    // Build a set of client emails to suppress drip sends for onboarded clients
+    const { data: clientRows } = await supabase
+      .from("client_accounts")
+      .select("email")
+      .eq("status", "active");
+    const clientEmailSet = new Set(
+      (clientRows || []).map((c: { email: string }) => c.email.toLowerCase())
+    );
+
     if (nurtureProspects) {
       for (const prospect of nurtureProspects as Prospect[]) {
+        // Skip (and auto-convert) if this prospect became a client
+        if (clientEmailSet.has(prospect.email.toLowerCase())) {
+          await supabase
+            .from("prospects")
+            .update({ status: "converted" })
+            .eq("id", prospect.id);
+          console.log(`Prospect ${prospect.email} is now a client — marked converted, skipping drip`);
+          continue;
+        }
         const nextStep = prospect.drip_step + 1;
         const daysRequired = DRIP_SCHEDULE[nextStep];
         if (!daysRequired) continue;

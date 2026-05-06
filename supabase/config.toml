@@ -110,3 +110,30 @@ verify_jwt = false
 
 [functions.fill-scheduled-content]
 verify_jwt = false
+
+[functions.auto-schedule-content]
+verify_jwt = false
+
+[functions.handle-approval]
+verify_jwt = false
+
+[functions.run-content-agent]
+verify_jwt = false
+
+[functions.run-seo-agent]
+verify_jwt = false
+
+[functions.generate-personalized-content]
+verify_jwt = false
+
+[functions.trigger-n8n]
+verify_jwt = false
+
+[functions.n8n-callback]
+verify_jwt = false
+
+[functions.run-workflow-step]
+verify_jwt = false
+
+[functions.trigger-task]
+verify_jwt = false

@@ -6,13 +6,26 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface ContextProfile {
+  services?: string[];
+  differentiators?: string[];
+  target_audience?: string;
+  location?: string;
+  tone?: string;
+  business_summary?: string;
+}
+
 interface ClientInfo {
   id: string;
   business_name: string;
   tier: string;
   industry: string | null;
   website_url: string | null;
+  context_profile?: ContextProfile | null;
 }
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const SEASONS: Record<number, string> = { 0:"winter",1:"winter",2:"spring",3:"spring",4:"spring",5:"summer",6:"summer",7:"summer",8:"fall",9:"fall",10:"fall",11:"winter" };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -24,10 +37,10 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!ANTHROPIC_API_KEY) {
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  if (!GROQ_API_KEY) {
     return new Response(
-      JSON.stringify({ error: "ANTHROPIC_API_KEY is not configured" }),
+      JSON.stringify({ error: "GROQ_API_KEY is not configured" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -63,16 +76,35 @@ serve(async (req) => {
 
     console.log(`Found ${slots.length} placeholder slots to fill`);
 
-    // Fetch client info for all unique clients in one query
+    // Fetch client info — including context_profile
     const clientIds = [...new Set(slots.map((s: any) => s.client_account_id))];
     const { data: clients } = await supabase
       .from("client_accounts")
-      .select("id, business_name, tier, industry, website_url")
+      .select("id, business_name, tier, industry, website_url, context_profile")
       .in("id", clientIds);
 
     const clientMap = Object.fromEntries(
       (clients || []).map((c: any) => [c.id, c as ClientInfo])
     );
+
+    // Fetch recent content per client to avoid topic repetition
+    const { data: recentContent } = await supabase
+      .from("content_calendar")
+      .select("client_account_id, platform, title, content")
+      .in("client_account_id", clientIds)
+      .not("content", "like", "[Auto-generated placeholder%")
+      .in("status", ["scheduled", "published"])
+      .order("scheduled_for", { ascending: false })
+      .limit(clientIds.length * 8);
+
+    // Group recent content by client
+    const recentByClient: Record<string, string[]> = {};
+    for (const item of recentContent || []) {
+      if (!recentByClient[item.client_account_id]) recentByClient[item.client_account_id] = [];
+      if (recentByClient[item.client_account_id].length < 6) {
+        recentByClient[item.client_account_id].push(item.title);
+      }
+    }
 
     const results: { id: string; success: boolean; error?: string }[] = [];
 
@@ -81,9 +113,9 @@ serve(async (req) => {
         const client = clientMap[slot.client_account_id];
         if (!client) throw new Error("Client not found");
 
-        const generatedContent = await generateContent(slot, client, ANTHROPIC_API_KEY);
+        const recentTopics = recentByClient[slot.client_account_id] || [];
+        const generatedContent = await generateContent(slot, client, recentTopics, GROQ_API_KEY);
 
-        // Update the slot: auto-approve so publish-scheduled-content picks it up
         const { error: updateErr } = await supabase
           .from("content_calendar")
           .update({
@@ -94,13 +126,13 @@ serve(async (req) => {
               ...((slot.metadata as object) || {}),
               ai_generated: true,
               generated_at: new Date().toISOString(),
+              context_used: !!(client.context_profile),
             },
           })
           .eq("id", slot.id);
 
         if (updateErr) throw new Error(`Failed to update slot: ${updateErr.message}`);
 
-        // Create content_approvals row for audit trail / client portal visibility
         await supabase.from("content_approvals").insert({
           client_account_id: slot.client_account_id,
           content_type: mapApprovalContentType(slot.content_type),
@@ -115,7 +147,7 @@ serve(async (req) => {
           metadata: { content_calendar_id: slot.id, auto_approved: true },
         });
 
-        console.log(`Filled ${slot.id} (${slot.platform}/${slot.content_type})`);
+        console.log(`Filled ${slot.id} (${slot.platform}/${slot.content_type}) context=${!!(client.context_profile)}`);
         results.push({ id: slot.id, success: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -143,10 +175,7 @@ serve(async (req) => {
         title: "Error in fill-scheduled-content",
         message: error instanceof Error ? error.message : "Unknown error",
         source: "fill-scheduled-content",
-        metadata: {
-          function_name: "fill-scheduled-content",
-          timestamp: new Date().toISOString(),
-        },
+        metadata: { function_name: "fill-scheduled-content", timestamp: new Date().toISOString() },
       });
     } catch (_) { /* ignore */ }
 
@@ -157,125 +186,309 @@ serve(async (req) => {
   }
 });
 
-async function generateContent(slot: any, client: ClientInfo, apiKey: string): Promise<string> {
-  const biz = client.business_name;
-  const industry = client.industry || "local business";
-  const locationStr = "";
-  const tier = (client.tier || "foundation").toLowerCase();
+async function generateContent(
+  slot: any,
+  client: ClientInfo,
+  recentTopics: string[],
+  apiKey: string
+): Promise<string> {
+  const now = new Date();
+  const month = MONTHS[now.getMonth()];
+  const season = SEASONS[now.getMonth()];
 
-  const { system, user } = buildPrompt(slot.content_type, slot.platform, biz, industry, locationStr, tier);
+  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, month, season);
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system,
-      messages: [{ role: "user", content: user }],
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 1200,
+      temperature: 0.75,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
     }),
   });
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Anthropic API ${res.status}: ${err.slice(0, 200)}`);
+    throw new Error(`Groq API ${res.status}: ${err.slice(0, 200)}`);
   }
 
   const data = await res.json();
-  const content = data.content?.[0]?.text?.trim();
+  const content = data.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error("No content returned from AI");
   return content;
+}
+
+function buildClientContext(client: ClientInfo): string {
+  const ctx = client.context_profile;
+  const industry = client.industry || "local business";
+  const biz = client.business_name;
+
+  if (!ctx) {
+    return `${biz} is a ${industry} business.`;
+  }
+
+  const parts: string[] = [];
+
+  if (ctx.business_summary) {
+    parts.push(ctx.business_summary);
+  } else {
+    parts.push(`${biz} is a ${industry} business.`);
+  }
+
+  if (ctx.services?.length) {
+    parts.push(`Services offered: ${ctx.services.slice(0, 6).join(", ")}.`);
+  }
+
+  if (ctx.differentiators?.length) {
+    parts.push(`What sets them apart: ${ctx.differentiators.slice(0, 4).join(", ")}.`);
+  }
+
+  if (ctx.target_audience) {
+    parts.push(`Target audience: ${ctx.target_audience}.`);
+  }
+
+  if (ctx.location) {
+    parts.push(`Located in: ${ctx.location}.`);
+  }
+
+  return parts.join(" ");
+}
+
+function getBrandVoice(client: ClientInfo): string {
+  const tone = client.context_profile?.tone;
+  const map: Record<string, string> = {
+    professional: "professional, authoritative, and trustworthy",
+    friendly: "warm, approachable, and conversational",
+    casual: "casual, relaxed, and relatable",
+    expert: "expert-level, data-driven, and confident",
+  };
+  return map[tone || ""] || "professional yet approachable";
+}
+
+function avoidRepetitionInstruction(recentTopics: string[]): string {
+  if (!recentTopics.length) return "";
+  return `\n\nRecently covered topics to avoid repeating: ${recentTopics.slice(0, 5).join(" | ")}. Choose a fresh angle.`;
 }
 
 function buildPrompt(
   contentType: string,
   platform: string,
-  biz: string,
-  industry: string,
-  locationStr: string,
-  tier: string
+  client: ClientInfo,
+  recentTopics: string[],
+  month: string,
+  season: string
 ): { system: string; user: string } {
-  const system = `You are a professional digital marketing copywriter for ${biz}, a ${industry} business${locationStr}. Write compelling, authentic content that fits naturally on ${platform}. Return only the final content — no labels, preamble, or extra formatting.`;
+  const biz = client.business_name;
+  const industry = client.industry || "local business";
+  const clientContext = buildClientContext(client);
+  const brandVoice = getBrandVoice(client);
+  const avoidRepeat = avoidRepetitionInstruction(recentTopics);
+  const services = client.context_profile?.services || [];
+  const differentiators = client.context_profile?.differentiators || [];
+  const location = client.context_profile?.location || "";
+  const targetAudience = client.context_profile?.target_audience || "local customers";
+
+  const system = `You are an expert digital marketing copywriter for ${biz}.
+
+BUSINESS CONTEXT:
+${clientContext}
+
+BRAND VOICE: ${brandVoice}
+PLATFORM: ${platform}
+CURRENT MONTH: ${month} (${season} season)
+
+RULES:
+- Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
+- Be specific to ${biz}'s actual services and differentiators — never generic filler
+- Every piece must sound like it comes from this specific business, not a template
+- Reference ${month} or ${season} naturally only when it adds genuine value`;
 
   switch (contentType) {
     case "social_post": {
       if (platform === "google_business") {
         return {
           system,
-          user: `Write a Google Business Profile post for ${biz} (${industry}${locationStr}). Choose a relevant topic: a recent achievement, a tip for customers, a service highlight, a seasonal message, or a customer success story. Keep it under 1,500 characters. Include one clear call-to-action. Conversational and trust-building.`,
+          user: `Write a Google Business Profile post for ${biz}.
+
+Pick ONE of these angles (choose what hasn't been covered recently):
+${services.length ? `- Highlight a specific service: ${services.slice(0, 3).join(", ")}` : "- A service highlight"}
+${differentiators.length ? `- Emphasize a differentiator: ${differentiators[0]}` : "- A trust-building fact"}
+- A timely ${month} tip relevant to ${industry} customers
+- A customer outcome or before/after story
+- A seasonal reminder relevant to ${industry}
+
+Requirements:
+- 150–300 words
+- One clear CTA (call, visit, book, get a quote)
+- Specific to ${biz} — mention actual services, not vague industry terms
+- Conversational and trust-building${avoidRepeat}`,
         };
       }
+
       if (platform === "linkedin") {
         return {
           system,
-          user: `Write a professional LinkedIn post for ${biz} (${industry}${locationStr}). Choose a relevant topic: an industry insight, a business win, a tip for clients, or a behind-the-scenes story. 150–250 words. End with 3–5 relevant hashtags. Authoritative but approachable tone.`,
+          user: `Write a LinkedIn post for ${biz}.
+
+Audience: ${targetAudience}, professionals in ${location || "the area"}.
+
+Pick ONE angle:
+${differentiators.length ? `- Thought leadership around: ${differentiators.slice(0, 2).join(" or ")}` : "- An industry insight"}
+${services.length ? `- A business insight tied to: ${services[0]}` : "- A service highlight"}
+- A behind-the-scenes story showing expertise
+- A lesson learned or industry trend in ${industry} for ${month}
+- A client win (anonymized)
+
+Requirements:
+- 150–250 words
+- Hook in the first line (no "I" opener)
+- 3–5 targeted hashtags at the end
+- Authoritative but human${avoidRepeat}`,
         };
       }
+
       if (platform === "facebook") {
         return {
           system,
-          user: `Write a Facebook post for ${biz} (${industry}${locationStr}). Choose an engaging topic: a customer story, a local community connection, a special offer, or a helpful tip. 100–200 words. Warm, friendly tone. End with a question to drive engagement.`,
+          user: `Write a Facebook post for ${biz}.
+
+Audience: ${targetAudience}${location ? ` in ${location}` : ""}.
+
+Pick ONE angle:
+${services.length ? `- A helpful tip related to: ${services[Math.floor(Math.random() * Math.min(services.length, 3))]}` : "- A helpful tip"}
+- A community connection or local story
+${differentiators.length ? `- Show off: ${differentiators[0]}` : "- A trust signal"}
+- A ${season} reminder or seasonal offer
+- Ask a question that drives comments
+
+Requirements:
+- 100–200 words
+- Warm, friendly, community-focused tone
+- End with an engaging question or CTA
+- Feel human, not corporate${avoidRepeat}`,
         };
       }
+
       if (platform === "instagram") {
         return {
           system,
-          user: `Write an Instagram caption for ${biz} (${industry}${locationStr}). Choose a visual, engaging topic: a behind-the-scenes moment, a transformation, a quote, or a product/service feature. 80–150 words. Conversational tone. Add 5–10 relevant hashtags at the end.`,
+          user: `Write an Instagram caption for ${biz}.
+
+Pick ONE angle:
+${services.length ? `- Visual service showcase: ${services[0]}` : "- A service feature"}
+- A transformation or before/after concept
+- A motivational or relatable moment for ${targetAudience}
+- Behind-the-scenes of the ${industry} process
+- A ${month} themed visual moment
+
+Requirements:
+- 80–150 words of caption
+- Hook in the first line (before the "more" cut)
+- 8–12 relevant hashtags after a line break
+- Conversational, visual, aspirational${avoidRepeat}`,
         };
       }
+
+      // Generic social
       return {
         system,
-        user: `Write a social media post for ${biz} (${industry}${locationStr}) for ${platform}. 100–200 words. Engaging, platform-appropriate, with a clear call-to-action.`,
+        user: `Write a ${platform} post for ${biz} (${industry}). 100–200 words. Specific to their services (${services.slice(0, 3).join(", ") || industry}). Clear CTA.${avoidRepeat}`,
       };
     }
 
     case "blog_post": {
-      const depth = tier === "transformation" ? "1,000–1,200 words" : tier === "growth" ? "600–800 words" : "400–500 words";
+      const tier = (client.tier || "foundation").toLowerCase();
+      const wordCount = tier === "transformation" ? "1,000–1,200 words" : tier === "growth" ? "600–800 words" : "400–600 words";
+      const serviceFocus = services.length ? `Focus on one of these services: ${services.slice(0, 4).join(", ")}.` : "";
       return {
         system,
-        user: `Write a blog post for ${biz} (${industry}${locationStr}). Choose a topic that their ideal customers would find genuinely useful — a how-to guide, an FAQ, a comparison, or an industry insight. Structure: engaging H1 title, intro paragraph, 3–4 sections with H2 subheadings, and a conclusion with a CTA to contact ${biz}. Length: ${depth}. Conversational but professional.`,
+        user: `Write a blog post for ${biz}.
+
+${serviceFocus}
+Target reader: ${targetAudience}
+
+Pick ONE topic that would genuinely help this audience:
+- A how-to guide solving a common ${industry} problem
+- An FAQ answering questions ${targetAudience} always ask
+- A seasonal guide relevant to ${month} for ${industry} customers
+- Mistakes to avoid when choosing a ${industry} provider
+${differentiators.length ? `- Why ${differentiators[0]} matters (educational angle)` : "- What to look for in a quality provider"}
+
+Structure:
+- Engaging H1 title
+- Intro (why this matters to the reader)
+- 3–4 sections with H2 subheadings
+- Specific tips, not vague advice
+- Conclusion with a CTA to contact ${biz}
+
+Length: ${wordCount}
+Tone: ${brandVoice}${avoidRepeat}`,
       };
     }
 
     case "email_copy": {
       return {
         system,
-        user: `Write a marketing email for ${biz} (${industry}${locationStr}). Format:
-Subject: [compelling subject line]
+        user: `Write a marketing email for ${biz}.
+
+Recipient: ${targetAudience}
+Month context: ${month}
+
+Format exactly:
+Subject: [compelling, specific subject line — not generic]
 ---
-[Greeting],
+Hi [First Name],
 
-[2–3 short paragraphs of value — a tip, update, or offer relevant to ${industry} customers]
+[Opening line that references something timely — ${month}, a common ${industry} challenge, or a seasonal need]
 
-[Clear CTA button text and reason to click]
+[1–2 paragraphs of genuine value: a tip, an insight, or a relevant offer tied to ${services[0] || industry}]
+
+${differentiators.length ? `[One sentence on what makes ${biz} different: ${differentiators[0]}]` : ""}
+
+[CTA — specific action with a reason to click now]
 
 The ${biz} Team
 
-Keep it under 200 words, scannable, friendly but professional.`,
+Requirements:
+- Under 220 words total
+- Subject line under 50 characters
+- Specific to ${biz}'s services — no generic marketing fluff
+- Conversational, helpful, not salesy${avoidRepeat}`,
       };
     }
 
     case "ad_copy": {
       return {
         system,
-        user: `Write Google Ads copy for ${biz} (${industry}${locationStr}). Format exactly:
-Headline 1: [max 30 chars]
-Headline 2: [max 30 chars]
-Headline 3: [max 30 chars]
-Description 1: [max 90 chars]
-Description 2: [max 90 chars]
-Focus on the business's strongest benefit and a clear call-to-action.`,
+        user: `Write Google Ads copy for ${biz}.
+
+Service focus: ${services[0] || industry}
+Audience: ${targetAudience}${location ? ` in ${location}` : ""}
+${differentiators.length ? `Key differentiator: ${differentiators[0]}` : ""}
+
+Format exactly (respect character limits):
+Headline 1: [max 30 chars — lead with service/benefit]
+Headline 2: [max 30 chars — differentiator or location]
+Headline 3: [max 30 chars — CTA]
+Description 1: [max 90 chars — specific benefit + social proof if possible]
+Description 2: [max 90 chars — CTA + urgency]
+
+Be specific. "Same-Day HVAC Repair" beats "Quality Service". Use real differentiators.${avoidRepeat}`,
       };
     }
 
     default:
       return {
         system,
-        user: `Write marketing content for ${biz} (${industry}${locationStr}). 150–200 words. Professional, engaging, with a call-to-action.`,
+        user: `Write marketing content for ${biz} on ${platform}. 150–200 words. Reference their actual services (${services.slice(0, 3).join(", ") || industry}). Professional, engaging, with a clear CTA.${avoidRepeat}`,
       };
   }
 }

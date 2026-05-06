@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing Gap Analysis — navtech.io</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --teal:      #1D9E75;
+    --teal-bg:   #E1F5EE;
+    --teal-text: #0F6E56;
+    --amber:     #EF9F27;
+    --amber-bg:  #FAEEDA;
+    --amber-text:#854F0B;
+    --blue:      #378ADD;
+    --blue-bg:   #E6F1FB;
+    --blue-text: #185FA5;
+    --red:       #E24B4A;
+    --red-text:  #A32D2D;
+    --border:    rgba(0,0,0,0.08);
+    --muted:     #8A8F9B;
+    --body-bg:   #F7F8FA;
+    --card-bg:   #FFFFFF;
+    --text:      #1A1D23;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--body-bg);
+    min-height: 100vh;
+  }
+
+  .serif { font-family: 'DM Serif Display', serif; }
+
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+
+  /* ── PAGE WRAPPER ── */
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+
+  /* ── HEADER ── */
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .site-header .company {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+  }
+  .site-header .meta {
+    text-align: right;
+  }
+  .site-header .meta .date {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .site-header .meta .confidential {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  /* ── SCORE HERO ── */
+  .hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 32px;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .ring-wrap {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    flex-shrink: 0;
+  }
+  .ring-wrap svg {
+    transform: rotate(-90deg);
+  }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .ring-score {
+    font-family: 'DM Serif Display', serif;
+    font-size: 36px;
+    line-height: 1;
+    color: var(--text);
+  }
+  .ring-denom {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .hero-content .performance-label {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--teal-text);
+    margin-bottom: 8px;
+  }
+  .hero-content h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .hero-content p {
+    font-size: 13px;
+    color: #4A4F5C;
+    max-width: 420px;
+    line-height: 1.6;
+  }
+
+  /* ── PILLAR GRID ── */
+  .pillars {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .pillar-card {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .pillar-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+  .pillar-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .pillar-score {
+    font-family: 'DM Serif Display', serif;
+    font-size: 36px;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .pillar-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #4A4F5C;
+    margin-bottom: 12px;
+  }
+  .progress-track {
+    height: 3px;
+    border-radius: 99px;
+    background: #EAECF0;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    padding: 2px 8px;
+    border-radius: 99px;
+  }
+
+  /* teal pillar */
+  .p-teal .pillar-icon  { background: var(--teal-bg); }
+  .p-teal .pillar-icon svg { stroke: var(--teal); }
+  .p-teal .pillar-score { color: var(--teal-text); }
+  .p-teal .progress-fill { background: var(--teal); }
+  .p-teal .status-badge { background: var(--teal-bg); color: var(--teal-text); }
+
+  /* amber pillar */
+  .p-amber .pillar-icon  { background: var(--amber-bg); }
+  .p-amber .pillar-icon svg { stroke: var(--amber); }
+  .p-amber .pillar-score { color: var(--amber-text); }
+  .p-amber .progress-fill { background: var(--amber); }
+  .p-amber .status-badge { background: var(--amber-bg); color: var(--amber-text); }
+
+  /* blue pillar */
+  .p-blue .pillar-icon  { background: var(--blue-bg); }
+  .p-blue .pillar-icon svg { stroke: var(--blue); }
+  .p-blue .pillar-score { color: var(--blue-text); }
+  .p-blue .progress-fill { background: var(--blue); }
+  .p-blue .status-badge { background: var(--blue-bg); color: var(--blue-text); }
+
+  /* ── INSIGHTS ROW ── */
+  .insights {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .insight-card {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .insight-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+  }
+  .insight-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .insight-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .insight-card h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 17px;
+    line-height: 1.3;
+    margin-bottom: 6px;
+  }
+  .insight-card p {
+    font-size: 13px;
+    color: #4A4F5C;
+    line-height: 1.6;
+  }
+  .insight-working .insight-dot   { background: #1D9E75; }
+  .insight-working .insight-label { color: var(--teal-text); }
+  .insight-gap .insight-dot        { background: var(--red); }
+  .insight-gap .insight-label      { color: var(--red-text); }
+
+  /* ── ACTION PLAN ── */
+  .action-plan {
+    background: var(--card-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .section-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .section-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .action-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .action-item {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .action-item:last-child { border-bottom: none; }
+  .action-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--body-bg);
+    border: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .action-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .tag {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    padding: 3px 9px;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+  .tag-green  { background: var(--teal-bg);  color: var(--teal-text); }
+  .tag-amber  { background: var(--amber-bg); color: var(--amber-text); }
+
+  /* ── CTA BAR ── */
+  .cta-bar {
+    background: #F0F1F3;
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .cta-bar h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .cta-bar p {
+    font-size: 13px;
+    color: #4A4F5C;
+    margin-top: 4px;
+    max-width: 380px;
+  }
+  .cta-btn {
+    display: inline-block;
+    background: var(--teal-text);
+    color: var(--teal-bg);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 11px 22px;
+    border-radius: 8px;
+    white-space: nowrap;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .cta-btn:hover { background: #0a4f3e; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .hero {
+      grid-template-columns: 1fr;
+      text-align: center;
+    }
+    .ring-wrap { margin: 0 auto; }
+    .hero-content p { max-width: 100%; }
+    .pillars { grid-template-columns: 1fr; }
+    .insights { grid-template-columns: 1fr; }
+    .cta-bar { flex-direction: column; align-items: flex-start; }
+    .site-header { flex-direction: column; align-items: flex-start; }
+    .site-header .meta { text-align: left; }
+  }
+  @media (max-width: 375px) {
+    .page { padding: 20px 14px 48px; }
+    .hero-content h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="company">navtech.io</div>
+    <div class="meta">
+      <div class="date">May 6, 2026</div>
+      <div class="confidential">Confidential</div>
+    </div>
+  </header>
+
+  <!-- SCORE HERO -->
+  <div class="card hero" style="margin-bottom:24px;">
+    <div class="ring-wrap">
+      <svg width="140" height="140" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- track -->
+        <circle cx="70" cy="70" r="58" stroke="#E1F5EE" stroke-width="11" fill="none"/>
+        <!-- fill: circumference = 2π×58 ≈ 364.4, 82% = 298.8 -->
+        <circle
+          id="ring-arc"
+          cx="70" cy="70" r="58"
+          stroke="#1D9E75" stroke-width="11" fill="none"
+          stroke-linecap="round"
+          stroke-dasharray="364.4"
+          stroke-dashoffset="364.4"
+        />
+      </svg>
+      <div class="ring-center">
+        <span class="ring-score">82</span>
+        <span class="ring-denom">/ 100</span>
+      </div>
+    </div>
+    <div class="hero-content">
+      <span class="performance-label">Strong Performance</span>
+      <h1 class="serif">Your Marketing Foundation Is Solid</h1>
+      <p>navtech.io scores in the top quartile for technical performance and SEO fundamentals. A few targeted fixes can push you into the 90s.</p>
+    </div>
+  </div>
+
+  <!-- PILLAR CARDS -->
+  <div class="pillars">
+
+    <div class="pillar-card p-teal">
+      <div class="pillar-icon">
+        <!-- search icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </div>
+      <div class="pillar-score" id="seo-score">0</div>
+      <div class="pillar-name">SEO &amp; Visibility</div>
+      <div class="progress-track"><div class="progress-fill" id="seo-bar" style="width:0%"></div></div>
+      <span class="status-badge">Good standing</span>
+    </div>
+
+    <div class="pillar-card p-amber">
+      <div class="pillar-icon">
+        <!-- cursor / pointer icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4l7.07 17 2.51-7.39L21 11.07z"/>
+        </svg>
+      </div>
+      <div class="pillar-score" id="conv-score">0</div>
+      <div class="pillar-name">Conversion Elements</div>
+      <div class="progress-track"><div class="progress-fill" id="conv-bar" style="width:0%"></div></div>
+      <span class="status-badge">Needs attention</span>
+    </div>
+
+    <div class="pillar-card p-blue">
+      <div class="pillar-icon">
+        <!-- bolt icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+      </div>
+      <div class="pillar-score" id="tech-score">0</div>
+      <div class="pillar-name">Technical Performance</div>
+      <div class="progress-track"><div class="progress-fill" id="tech-bar" style="width:0%"></div></div>
+      <span class="status-badge">Excellent</span>
+    </div>
+
+  </div>
+
+  <!-- INSIGHT CARDS -->
+  <div class="insights">
+    <div class="insight-card insight-working">
+      <div class="insight-header">
+        <span class="insight-dot"></span>
+        <span class="insight-label">What's working</span>
+      </div>
+      <h3 class="serif">Title tag is properly set</h3>
+      <p>Your page title is descriptive, keyword-relevant, and within the recommended 50–60 character limit — a strong signal for search engines.</p>
+    </div>
+    <div class="insight-card insight-gap">
+      <div class="insight-header">
+        <span class="insight-dot"></span>
+        <span class="insight-label">Critical gap</span>
+      </div>
+      <h3 class="serif">No meta description tag</h3>
+      <p>Missing meta description means search engines write their own snippets. Adding one can meaningfully lift click-through rates from search results.</p>
+    </div>
+  </div>
+
+  <!-- ACTION PLAN -->
+  <div class="action-plan">
+    <div class="section-title serif">Action Plan</div>
+    <div class="section-sub">Prioritised by impact — address in order for fastest gains.</div>
+    <ol class="action-list">
+      <li class="action-item">
+        <div class="action-num">1</div>
+        <span class="action-text">Add meta description tag</span>
+        <span class="tag tag-green">Quick win</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">2</div>
+        <span class="action-text">Optimise CTAs</span>
+        <span class="tag tag-green">Quick win</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">3</div>
+        <span class="action-text">Refine title tag</span>
+        <span class="tag tag-amber">Medium term</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">4</div>
+        <span class="action-text">Add schema markup</span>
+        <span class="tag tag-amber">Medium term</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">5</div>
+        <span class="action-text">Add pricing information</span>
+        <span class="tag tag-amber">Medium term</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">6</div>
+        <span class="action-text">Add trust signals (testimonials, reviews)</span>
+        <span class="tag tag-amber">Medium term</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">7</div>
+        <span class="action-text">Add alt text to all images</span>
+        <span class="tag tag-amber">Medium term</span>
+      </li>
+      <li class="action-item">
+        <div class="action-num">8</div>
+        <span class="action-text">Expand ARIA / screen reader support</span>
+        <span class="tag tag-amber">Medium term</span>
+      </li>
+    </ol>
+  </div>
+
+  <!-- CTA BAR -->
+  <div class="cta-bar">
+    <div>
+      <h2 class="serif">Ready to close the gaps?</h2>
+      <p>Book a free 30-minute strategy call with Orange Door Digital Marketing and let's build your path to 95+.</p>
+    </div>
+    <a class="cta-btn" href="https://orangedoormarketing.com/schedule" target="_blank" rel="noopener">
+      Schedule a call →
+    </a>
+  </div>
+
+</main>
+
+<script>
+  /* Animate ring arc on load */
+  const circumference = 2 * Math.PI * 58; // ≈ 364.4
+
+  function animateValue(el, end, duration, suffix) {
+    const start = 0;
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      el.textContent = Math.round(start + (end - start) * ease) + (suffix || '');
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function animateBar(el, pct, delay) {
+    setTimeout(() => { el.style.width = pct + '%'; }, delay);
+  }
+
+  function animateRing(score, delay) {
+    const arc = document.getElementById('ring-arc');
+    const offset = circumference * (1 - score / 100);
+    setTimeout(() => {
+      arc.style.transition = 'stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1)';
+      arc.style.strokeDashoffset = offset;
+    }, delay);
+  }
+
+  window.addEventListener('load', () => {
+    animateRing(82, 200);
+    animateValue(document.getElementById('seo-score'),  85, 900);
+    animateValue(document.getElementById('conv-score'), 80, 900);
+    animateValue(document.getElementById('tech-score'), 90, 900);
+    animateBar(document.getElementById('seo-bar'),  85, 300);
+    animateBar(document.getElementById('conv-bar'), 80, 300);
+    animateBar(document.getElementById('tech-bar'), 90, 300);
+  });
+</script>
+</body>
+</html>

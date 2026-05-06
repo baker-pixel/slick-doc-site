@@ -70,41 +70,69 @@ serve(async (req) => {
         let errorMessage = "";
 
         switch (item.platform) {
-          case "email":
-            if (!resend) {
-              errorMessage = "Resend API key not configured";
-              console.error(errorMessage);
+          case "email": {
+            const metadata = item.metadata as { recipients?: string[]; subject?: string } | null;
+            const recipients = metadata?.recipients || [];
+
+            if (recipients.length > 0 && resend) {
+              // Targeted email with known recipients — send via Resend directly
+              const emailResponse = await resend.emails.send({
+                from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+                to: recipients,
+                subject: metadata?.subject || item.title,
+                html: item.content,
+              });
+              if (emailResponse.error) {
+                errorMessage = emailResponse.error.message;
+                console.error("Email send error:", errorMessage);
+              } else {
+                published = true;
+                console.log(`Email sent via Resend for item ${item.id}`);
+              }
             } else {
-              // For email, we need recipient info from metadata
-              const metadata = item.metadata as { recipients?: string[]; subject?: string } | null;
-              const recipients = metadata?.recipients || [];
-              
-              if (recipients.length === 0) {
-                errorMessage = "No recipients specified for email";
+              // Newsletter content from fill-scheduled-content — route via n8n
+              console.log(`Routing newsletter email to n8n: ${item.title}`);
+              const n8nResponse = await supabase.functions.invoke("trigger-n8n", {
+                body: {
+                  clientId: item.client_account_id,
+                  trigger: "publish_email_newsletter",
+                  tasks: [],
+                  metadata: {
+                    content_calendar_id: item.id,
+                    platform: "email",
+                    title: item.title,
+                    content: item.content,
+                    scheduled_for: item.scheduled_for,
+                  },
+                },
+              });
+              if (n8nResponse.error) {
+                errorMessage = `n8n email trigger failed: ${n8nResponse.error.message}`;
                 console.error(errorMessage);
               } else {
-                const emailResponse = await resend.emails.send({
-                  from: "Orange Door Consultants <hello@orangedoormarketing.com>",
-                  to: recipients,
-                  subject: metadata?.subject || item.title,
-                  html: item.content,
-                });
-                
-                if (emailResponse.error) {
-                  errorMessage = emailResponse.error.message;
-                  console.error("Email send error:", errorMessage);
+                const { error: awaitError } = await supabase
+                  .from("content_calendar")
+                  .update({
+                    status: "awaiting_callback",
+                    metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() },
+                  })
+                  .eq("id", item.id);
+                if (awaitError) {
+                  results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: awaitError.message });
                 } else {
-                  published = true;
-                  console.log(`Email sent successfully for item ${item.id}`);
+                  results.push({ id: item.id, platform: item.platform || "unknown", success: true });
                 }
+                continue;
               }
             }
             break;
+          }
 
           case "twitter":
           case "facebook":
           case "linkedin":
-          case "instagram": {
+          case "instagram":
+          case "google_business": {
             // Route social posts through trigger-n8n → n8n → n8n-callback
             console.log(`Routing ${item.platform} post to n8n: ${item.title}`);
             const n8nResponse = await supabase.functions.invoke("trigger-n8n", {

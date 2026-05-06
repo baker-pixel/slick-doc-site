@@ -45,9 +45,9 @@ serve(async (req) => {
     }
 
     // Call Lovable AI to parse the SOP
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const systemPrompt = `You are an expert at analyzing Standard Operating Procedures (SOPs) for marketing agencies. 
@@ -72,18 +72,19 @@ Output a JSON object with:
   "frequency": "daily | weekly | monthly | as_needed"
 }`;
 
-    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 2048,
-        system: systemPrompt,
-        messages: [{ role: "user", content: `Parse this SOP document:\n\n${contentToAnalyze}` }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Parse this SOP document:\n\n${contentToAnalyze}` },
+        ],
       }),
     });
 
@@ -98,7 +99,7 @@ Output a JSON object with:
     }
 
     const aiData = await aiResponse.json();
-    const aiContent = aiData.content?.[0]?.text || "";
+    const aiContent = aiData.choices?.[0]?.message?.content || "";
     
     // Parse AI response
     let parsedContent: Record<string, unknown> = {};

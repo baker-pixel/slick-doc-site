@@ -73,6 +73,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     tier: "foundation",
     plan_tier: "foundation",
     website_url: "",
+    industry: "",
   });
 
   const [newInvite, setNewInvite] = useState({
@@ -187,7 +188,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     } else {
       toast.success("Client added! Seeding workflow and running onboarding automations...");
       setAddDialogOpen(false);
-      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", plan_tier: "foundation", website_url: "" });
+      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", plan_tier: "foundation", website_url: "", industry: "" });
       fetchClients();
 
       // Seed the tier-based workflow for this client
@@ -220,6 +221,50 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       } catch (err) {
         console.error("Auto-run error:", err);
       }
+
+      // Scan website to populate context_profile
+      let contextProfile: Record<string, unknown> | null = null;
+      if (newClient.website_url && isValidUrl(newClient.website_url)) {
+        try {
+          toast.info("Scanning website to build client context profile...");
+          const { data: scanData, error: scanError } = await supabase.functions.invoke("analyze-website", {
+            body: { url: newClient.website_url, industry: newClient.industry || undefined },
+          });
+          if (!scanError && scanData?.analysis?.context_profile) {
+            contextProfile = { ...scanData.analysis.context_profile, source: "website_scan", partial: false };
+          } else {
+            console.warn("Website scan returned no context_profile:", scanError);
+          }
+        } catch (err) {
+          console.warn("Website scan failed:", err);
+        }
+      }
+
+      // Fallback: copy context_profile from prospects by email
+      if (!contextProfile) {
+        try {
+          const { data: prospect } = await supabase
+            .from("prospects")
+            .select("context_profile")
+            .ilike("email", newClient.email)
+            .not("context_profile", "is", null)
+            .limit(1)
+            .maybeSingle();
+          if (prospect?.context_profile) {
+            contextProfile = prospect.context_profile as Record<string, unknown>;
+          }
+        } catch (err) {
+          console.warn("Prospect context lookup failed:", err);
+        }
+      }
+
+      if (contextProfile || newClient.industry) {
+        const updateFields: Record<string, unknown> = {};
+        if (contextProfile) updateFields.context_profile = contextProfile;
+        if (newClient.industry) updateFields.industry = newClient.industry;
+        await supabase.from("client_accounts").update(updateFields).eq("id", insertedClient.id);
+        if (contextProfile) toast.success("Client context profile built from website scan.");
+      }
     }
   };
 
@@ -241,23 +286,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
 
     setSendingInvite(true);
     try {
-      // Check for existing active invitation
-      const { data: existingInvites } = await supabase
-        .from("client_invitations")
-        .select("id")
-        .eq("client_account_id", selectedClientForInvite.id)
-        .eq("email", newInvite.email)
-        .is("accepted_at", null)
-        .gt("expires_at", new Date().toISOString())
-        .limit(1);
-
-      if (existingInvites && existingInvites.length > 0) {
-        toast.error("An active invitation already exists for this email. Copy the existing link or delete it first.");
-        setSendingInvite(false);
-        return;
-      }
-
-      // Create the invitation through admin function (bypasses RLS)
+      // Create the invitation through admin function (bypasses RLS, checks for duplicates)
       const { data: inviteResult, error: insertError } = await supabase.functions.invoke("admin", {
         body: {
           action: "create_invitation",
@@ -272,7 +301,14 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       });
 
       if (insertError) throw insertError;
-      if (inviteResult?.error) throw new Error(inviteResult.error);
+      if (inviteResult?.error) {
+        if (inviteResult.error.includes("already exists")) {
+          toast.error("An active invitation already exists for this email. Copy the existing link or delete it first.");
+          setSendingInvite(false);
+          return;
+        }
+        throw new Error(inviteResult.error);
+      }
 
       const invitation = inviteResult?.data;
 
@@ -307,44 +343,30 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const resendInvitation = async (oldInvite: ClientInvitation) => {
     setSendingInvite(true);
     try {
-      // Delete old invitation
-      await supabase.functions.invoke("admin", {
-        body: { action: "delete_invitation", password: adminPassword, id: oldInvite.id },
+      // Atomically refresh token + expiry on the existing record — no delete/create gap
+      const { data: refreshResult, error: refreshError } = await supabase.functions.invoke("admin", {
+        body: { action: "refresh_invitation", password: adminPassword, id: oldInvite.id },
       });
 
-      // Create new invitation
-      const { data: inviteResult, error: insertError } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "create_invitation",
-          password: adminPassword,
-          data: {
-            client_account_id: oldInvite.client_account_id,
-            email: oldInvite.email,
-            first_name: oldInvite.first_name || null,
-            last_name: oldInvite.last_name || null,
-          },
-        },
-      });
+      if (refreshError) throw refreshError;
+      if (refreshResult?.error) throw new Error(refreshResult.error);
 
-      if (insertError) throw insertError;
-      if (inviteResult?.error) throw new Error(inviteResult.error);
+      const refreshed = refreshResult?.data;
 
-      const newInvitation = inviteResult?.data;
-
-      // Send the invitation email
+      // Send the invitation email with the new token
       const { error: emailError } = await supabase.functions.invoke("send-client-invite", {
         body: {
-          invitationId: newInvitation.id,
-          email: oldInvite.email,
-          firstName: oldInvite.first_name,
-          businessName: getClientName(oldInvite.client_account_id),
-          token: newInvitation.token,
+          invitationId: refreshed.id,
+          email: refreshed.email,
+          firstName: refreshed.first_name,
+          businessName: getClientName(refreshed.client_account_id),
+          token: refreshed.token,
         },
       });
 
       if (emailError) {
         console.error("Email send error:", emailError);
-        toast.warning("Invitation recreated but email may not have sent");
+        toast.warning("Invitation refreshed but email may not have sent");
       } else {
         toast.success("Invitation resent successfully!");
       }
@@ -482,6 +504,14 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label>Industry</Label>
+                <Input
+                  placeholder="e.g. HVAC, Dental, Real Estate"
+                  value={newClient.industry}
+                  onChange={(e) => setNewClient({ ...newClient, industry: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Website URL</Label>
                 <div className="relative">
                   <Input
@@ -496,6 +526,9 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                 </div>
                 {newClient.website_url && !isValidUrl(newClient.website_url) && (
                   <p className="text-xs text-destructive">Must start with http:// or https://</p>
+                )}
+                {newClient.website_url && isValidUrl(newClient.website_url) && (
+                  <p className="text-xs text-muted-foreground">Website will be scanned automatically to build the client's content context profile.</p>
                 )}
               </div>
               <Button onClick={addClient} className="w-full">Add Client</Button>

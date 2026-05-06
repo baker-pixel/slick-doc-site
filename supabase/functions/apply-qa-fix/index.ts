@@ -40,33 +40,34 @@ serve(async (req) => {
       );
     }
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
     let fixDescription = "";
 
     // Generate AI-powered fix suggestion if possible
-    if (ANTHROPIC_API_KEY) {
+    if (GROQ_API_KEY) {
       const fixContext = buildFixContext(report, fixType);
 
       try {
-        const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
+            "Authorization": `Bearer ${GROQ_API_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "claude-sonnet-4-6",
+            model: "llama-3.3-70b-versatile",
             max_tokens: 512,
-            system: "You are a web QA specialist. Provide a concise, actionable fix description in 1-3 sentences.",
-            messages: [{ role: "user", content: fixContext }],
+            messages: [
+              { role: "system", content: "You are a web QA specialist. Provide a concise, actionable fix description in 1-3 sentences." },
+              { role: "user", content: fixContext },
+            ],
           }),
         });
 
         if (aiRes.ok) {
           const aiData = await aiRes.json();
-          fixDescription = aiData.content?.[0]?.text?.trim() || "";
+          fixDescription = aiData.choices?.[0]?.message?.content?.trim() || "";
         }
       } catch (aiErr) {
         console.error("AI fix generation failed:", aiErr);

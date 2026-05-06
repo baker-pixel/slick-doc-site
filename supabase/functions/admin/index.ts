@@ -575,11 +575,29 @@ Deno.serve(async (req) => {
 
       case "create_invitation": {
         const { client_account_id, email, first_name, last_name } = data || {};
-        
+
         if (!client_account_id || !email) {
           return new Response(
             JSON.stringify({ error: "client_account_id and email are required" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Guard against duplicate active invitations (DB constraint would also catch this,
+        // but return a human-readable message instead of a raw 23505 error)
+        const { data: existingInvite } = await supabase
+          .from("client_invitations")
+          .select("id")
+          .eq("client_account_id", client_account_id)
+          .ilike("email", email)
+          .is("accepted_at", null)
+          .gt("expires_at", new Date().toISOString())
+          .maybeSingle();
+
+        if (existingInvite) {
+          return new Response(
+            JSON.stringify({ error: "An active invitation already exists for this email. Delete it first or copy the existing link." }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
@@ -681,6 +699,28 @@ Deno.serve(async (req) => {
         console.log(`Deleted invitation ${id}`);
         return new Response(
           JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Atomically refresh an invitation: new token + extended expiry.
+      // Safer than delete-then-create because it's a single UPDATE with no gap.
+      case "refresh_invitation": {
+        const newToken = crypto.randomUUID();
+        const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { data: refreshed, error: refreshError } = await supabase
+          .from("client_invitations")
+          .update({ token: newToken, expires_at: newExpiresAt })
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (refreshError) throw refreshError;
+
+        console.log(`Refreshed invitation ${id}`);
+        return new Response(
+          JSON.stringify({ data: refreshed }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

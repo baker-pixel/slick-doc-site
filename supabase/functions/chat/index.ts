@@ -51,28 +51,26 @@ serve(async (req) => {
       });
     }
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "llama-3.1-8b-instant",
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        messages,
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
         stream: true,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Anthropic error:", response.status, errorText);
+      console.error("Groq error:", response.status, errorText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "I'm a bit busy right now. Please try again in a moment!" }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -83,28 +81,8 @@ serve(async (req) => {
       });
     }
 
-    // Transform Anthropic SSE → OpenAI SSE format expected by ChatWidget
-    const transformer = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        for (const line of text.split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") { controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n")); continue; }
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-              const openaiChunk = JSON.stringify({ choices: [{ delta: { content: parsed.delta.text } }] });
-              controller.enqueue(new TextEncoder().encode(`data: ${openaiChunk}\n\n`));
-            } else if (parsed.type === "message_stop") {
-              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-            }
-          } catch { /* skip non-JSON lines */ }
-        }
-      },
-    });
-
-    return new Response(response.body!.pipeThrough(transformer), {
+    // Groq uses OpenAI-compatible SSE format natively — pipe directly
+    return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {

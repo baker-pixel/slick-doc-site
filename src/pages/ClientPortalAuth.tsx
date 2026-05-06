@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,19 +29,43 @@ export default function ClientPortalAuth() {
     client_account_id: string;
   } | null>(null);
 
+  // Prevents onAuthStateChange from double-finalizing when handleAcceptInvite is mid-flight
+  const processingInviteRef = useRef(false);
+
   useEffect(() => {
     // Listen for SIGNED_IN — finalizes portal setup after email confirmation
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session?.user) {
+        // If handleAcceptInvite is actively running, let it handle finalization
+        if (processingInviteRef.current) return;
+
         const pendingRaw = sessionStorage.getItem("pending_invitation");
         if (pendingRaw) {
-          // Defer to avoid deadlock inside the auth callback
+          // Legacy sessionStorage path (same-tab confirmation)
           setTimeout(() => {
             try {
               const pending = JSON.parse(pendingRaw);
               finalizePortalSetup(session.user.id, pending);
             } catch (e) {
               console.error("Pending invitation parse error:", e);
+            }
+          }, 0);
+        } else if (inviteToken) {
+          // User confirmed email and landed back on invite URL — re-fetch and finalize.
+          // This handles the common case where the confirmation link opens in a new tab
+          // (sessionStorage is not shared across tabs).
+          setTimeout(async () => {
+            const { data: inv } = await supabase
+              .from("client_invitations")
+              .select("id, email, first_name, last_name, client_account_id")
+              .eq("token", inviteToken)
+              .is("accepted_at", null)
+              .gt("expires_at", new Date().toISOString())
+              .maybeSingle();
+            if (inv) {
+              finalizePortalSetup(session.user.id, inv);
+            } else {
+              checkClientPortalAccess(session.user.id);
             }
           }, 0);
         } else {
@@ -270,7 +294,8 @@ export default function ClientPortalAuth() {
   const handleAcceptInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invitation) return;
-    
+
+    processingInviteRef.current = true;
     setLoading(true);
 
     try {
@@ -368,7 +393,8 @@ export default function ClientPortalAuth() {
         email: invitation.email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/portal/auth`,
+          // Include the invite token so confirmation redirect re-enters the invite flow
+          emailRedirectTo: `${window.location.origin}/portal/auth?invite=${inviteToken}`,
         },
       });
 
@@ -494,6 +520,7 @@ export default function ClientPortalAuth() {
         variant: "destructive",
       });
     } finally {
+      processingInviteRef.current = false;
       setLoading(false);
     }
   };

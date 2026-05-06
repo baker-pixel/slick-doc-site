@@ -15,7 +15,6 @@ import {
   CreditCard,
   HelpCircle,
   Palette,
-  KeyRound,
   Users,
   FileSignature,
   GraduationCap,
@@ -101,7 +100,6 @@ const myPortalItems: NavItemDef[] = [
 
 const brandToolsItems: NavItemDef[] = [
   { id: "brand", label: "Brand Assets", icon: Palette },
-  { id: "access", label: "Platform Access", icon: KeyRound },
   { id: "social", label: "Social Media", icon: Share2 },
   { id: "learning", label: "Learning Hub", icon: GraduationCap },
   { id: "analytics", label: "Analytics", icon: BarChart3 },

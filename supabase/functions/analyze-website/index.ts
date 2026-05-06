@@ -87,9 +87,9 @@ serve(async (req) => {
 
     const truncatedHtml = htmlContent.substring(0, 50000);
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const industryContext = industry
@@ -179,18 +179,19 @@ Provide your analysis as a valid JSON object.`;
 
     console.log("Sending to AI for analysis...");
 
-    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
       }),
     });
 
@@ -217,7 +218,7 @@ Provide your analysis as a valid JSON object.`;
     const aiData = await aiResponse.json();
     console.log("AI response received");
 
-    const content = aiData.content?.[0]?.text;
+    const content = aiData.choices?.[0]?.message?.content;
     if (!content) {
       throw new Error("No analysis content returned");
     }

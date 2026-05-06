@@ -1357,10 +1357,10 @@ Keyword gap analysis helps identify:
   );
 
   // Ask AI to compare and identify gaps
-  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
   let gapResults: any;
 
-  if (ANTHROPIC_API_KEY && clientData) {
+  if (GROQ_API_KEY && clientData) {
     try {
       const prompt = `You are an SEO keyword gap analyst. Compare the client's website with their competitors and identify keyword opportunities.
 
@@ -1392,15 +1392,14 @@ Return a JSON object with this exact structure:
 
 Return only JSON.`;
 
-      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: "llama-3.3-70b-versatile",
           max_tokens: 1024,
           messages: [{ role: "user", content: prompt }],
         }),
@@ -1408,7 +1407,7 @@ Return only JSON.`;
 
       if (aiRes.ok) {
         const aiData = await aiRes.json();
-        const content = aiData.content?.[0]?.text || "";
+        const content = aiData.choices?.[0]?.message?.content || "";
         const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
         gapResults = JSON.parse(cleaned);
       }
@@ -1705,23 +1704,24 @@ Context: ${JSON.stringify(inputData || {})}`;
       break;
   }
 
-  const ANTHROPIC_API_KEY_LOCAL = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!ANTHROPIC_API_KEY_LOCAL) {
-    throw new Error("ANTHROPIC_API_KEY is not configured");
+  const GROQ_API_KEY_LOCAL = Deno.env.get("GROQ_API_KEY");
+  if (!GROQ_API_KEY_LOCAL) {
+    throw new Error("GROQ_API_KEY is not configured");
   }
 
-  const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+  const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": ANTHROPIC_API_KEY_LOCAL,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${GROQ_API_KEY_LOCAL}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: "llama-3.3-70b-versatile",
       max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
     }),
   });
 
@@ -1730,7 +1730,7 @@ Context: ${JSON.stringify(inputData || {})}`;
   }
 
   const aiData = await aiResponse.json();
-  const aiContent = aiData.content?.[0]?.text || "";
+  const aiContent = aiData.choices?.[0]?.message?.content || "";
 
   let parsedOutput: Record<string, unknown> = {};
   try {

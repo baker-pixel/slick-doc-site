@@ -32,9 +32,9 @@ serve(async (req) => {
       imagePrompt,
     } = await req.json();
     
-    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not configured');
+    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not configured');
     }
 
     // Image-only generation path — not available without dedicated image service
@@ -196,18 +196,19 @@ Return ONLY valid JSON in this exact format:
 
     console.log("Generating enhanced ads for:", { goal, location, industry, platform, generateVariants, includePredictions, includeBudgetRecs });
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 4096,
-        system: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only.",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only." },
+          { role: "user", content: prompt },
+        ],
       }),
     });
 
@@ -226,7 +227,7 @@ Return ONLY valid JSON in this exact format:
     }
 
     const data = await response.json();
-    const content = data.content?.[0]?.text;
+    const content = data.choices?.[0]?.message?.content;
     
     if (!content) {
       throw new Error("No content in AI response");
