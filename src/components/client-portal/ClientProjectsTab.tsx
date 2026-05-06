@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Loader2, Calendar, Target, CheckCircle, Clock, ChevronDown, Circle, 
-  LayoutDashboard, Rocket, Flag, MessageCircle, Send, RefreshCw, 
-  HelpCircle, MessageSquare, Bell
+import {
+  Loader2, Calendar, Target, CheckCircle, Clock, ChevronDown, Circle,
+  LayoutDashboard, Rocket, Flag, MessageCircle, Send, RefreshCw,
+  HelpCircle, MessageSquare, Bell, AlertTriangle, FileDown, Paperclip
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,17 @@ interface UpdateRequest {
   created_at: string;
 }
 
+interface Deliverable {
+  id: string;
+  project_id: string | null;
+  title: string;
+  category: string | null;
+  file_url: string | null;
+  file_name: string | null;
+  status: string;
+  submitted_at: string | null;
+}
+
 interface ClientProjectsTabProps {
   clientAccountId: string;
 }
@@ -82,6 +93,8 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   const [selectedProjectForUpdate, setSelectedProjectForUpdate] = useState<Project | null>(null);
   const [updateMessage, setUpdateMessage] = useState("");
   const [showComments, setShowComments] = useState<string | null>(null);
+  const [deliverables, setDeliverables] = useState<Record<string, Deliverable[]>>({});
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -157,12 +170,38 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
           setUpdateRequests(grouped);
         }
 
-        await fetchComments(projectIds);
+        await Promise.all([
+          fetchComments(projectIds),
+          fetchDeliverables(projectIds),
+        ]);
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDeliverables = async (projectIds: string[]) => {
+    if (projectIds.length === 0) return;
+    try {
+      const { data } = await supabase
+        .from("deliverables")
+        .select("id, project_id, title, category, file_url, file_name, status, submitted_at")
+        .in("project_id", projectIds)
+        .order("submitted_at", { ascending: false });
+
+      if (data) {
+        const grouped = data.reduce((acc, d) => {
+          if (!d.project_id) return acc;
+          if (!acc[d.project_id]) acc[d.project_id] = [];
+          acc[d.project_id].push(d);
+          return acc;
+        }, {} as Record<string, Deliverable[]>);
+        setDeliverables(grouped);
+      }
+    } catch (error) {
+      console.error("Error fetching deliverables:", error);
     }
   };
 
@@ -272,6 +311,32 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
     return comments[projectId] || [];
   };
 
+  const getProjectHealth = (project: Project, milestoneList: Milestone[]) => {
+    if (project.status === 'completed' || project.status === 'pending') return null;
+    const today = new Date();
+    if (project.target_end_date && new Date(project.target_end_date) < today) {
+      return { label: 'Delayed', cls: 'bg-red-100 text-red-700' };
+    }
+    const overdue = milestoneList.filter(
+      m => m.due_date && new Date(m.due_date) < today && m.status !== 'completed'
+    ).length;
+    if (overdue === 0) return { label: 'On Track', cls: 'bg-emerald-100 text-emerald-700' };
+    if (overdue <= 2) return { label: 'At Risk', cls: 'bg-amber-100 text-amber-700' };
+    return { label: 'Delayed', cls: 'bg-red-100 text-red-700' };
+  };
+
+  const isMilestoneOverdue = (milestone: Milestone) => {
+    if (!milestone.due_date || milestone.status === 'completed') return false;
+    return new Date(milestone.due_date) < new Date();
+  };
+
+  const getDeliverableStatusVariant = (status: string): "default" | "success" | "warning" | "error" | "info" => {
+    if (status === 'approved') return 'success';
+    if (status === 'pending_review') return 'warning';
+    if (status === 'revision_requested') return 'error';
+    return 'default';
+  };
+
   const getLatestUpdateRequest = (projectId: string) => {
     const requests = updateRequests[projectId] || [];
     return requests[0];
@@ -298,15 +363,31 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
 
   const completedCount = projects.filter(p => p.status === 'completed').length;
   const inProgressCount = projects.filter(p => p.status === 'in_progress').length;
+  const visibleProjects = showCompleted ? projects : projects.filter(p => p.status !== 'completed');
 
   return (
     <div className="space-y-8">
-      <PageHeader 
-        title="Your Projects" 
-        description="Track progress, ask questions, and request updates on your projects"
-        icon={LayoutDashboard}
-        badge={`${projects.length} Projects`}
-      />
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <PageHeader
+          title="Your Projects"
+          description="Track progress, ask questions, and request updates on your projects"
+          icon={LayoutDashboard}
+          badge={`${projects.length} Projects`}
+        />
+        {completedCount > 0 && (
+          <button
+            onClick={() => setShowCompleted(v => !v)}
+            className={cn(
+              "mt-1 text-xs px-3 py-1.5 rounded-full border transition-colors shrink-0",
+              showCompleted
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-border text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {showCompleted ? `Showing All (${completedCount} completed)` : `Show Completed (${completedCount})`}
+          </button>
+        )}
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -351,13 +432,14 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
 
       {/* Projects List */}
       <div className="space-y-4">
-        {projects.map((project, index) => {
+        {visibleProjects.map((project, index) => {
           const projectMilestones = milestones[project.id] || [];
           const completedMilestones = projectMilestones.filter(m => m.status === 'completed').length;
           const isExpanded = expandedProject === project.id;
           const config = statusConfig[project.status] || statusConfig.pending;
           const latestUpdate = getLatestUpdateRequest(project.id);
           const projectCommentsList = getProjectComments(project.id);
+          const health = getProjectHealth(project, projectMilestones);
 
           return (
             <motion.div
@@ -373,6 +455,11 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                       <div className="flex items-center gap-3 flex-wrap mb-2">
                         <h3 className="text-lg font-semibold text-foreground">{project.name}</h3>
                         <StatusBadge status={config.label} variant={config.variant} />
+                        {health && (
+                          <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", health.cls)}>
+                            {health.label}
+                          </span>
+                        )}
                       </div>
                       {project.description && (
                         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{project.description}</p>
@@ -585,9 +672,10 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                               {projectMilestones.map((milestone, idx) => {
                                 const milestoneComments = getMilestoneComments(milestone.id);
                                 const isCommenting = commentingMilestone === milestone.id;
+                                const overdue = isMilestoneOverdue(milestone);
 
                                 return (
-                                  <motion.div 
+                                  <motion.div
                                     key={milestone.id}
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -598,21 +686,34 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                                     <div className={cn(
                                       "flex-1 p-4 rounded-xl border transition-all",
                                       milestone.status === 'completed' && "bg-emerald-500/5 border-emerald-500/20",
-                                      milestone.status === 'in_progress' && "bg-blue-500/5 border-blue-500/20",
-                                      milestone.status === 'pending' && "bg-muted/30 border-border/50"
+                                      milestone.status === 'in_progress' && !overdue && "bg-blue-500/5 border-blue-500/20",
+                                      overdue && "bg-red-500/5 border-red-500/30",
+                                      milestone.status === 'pending' && !overdue && "bg-muted/30 border-border/50"
                                     )}>
                                       <div className="flex items-start justify-between gap-2 mb-2">
-                                        <h5 className="font-medium text-foreground">{milestone.name}</h5>
-                                        <StatusBadge 
-                                          status={statusConfig[milestone.status]?.label || milestone.status} 
-                                          variant={statusConfig[milestone.status]?.variant || "default"} 
+                                        <h5 className="font-medium text-foreground flex items-center gap-2">
+                                          {milestone.name}
+                                          {overdue && (
+                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              Overdue
+                                            </span>
+                                          )}
+                                        </h5>
+                                        <StatusBadge
+                                          status={statusConfig[milestone.status]?.label || milestone.status}
+                                          variant={statusConfig[milestone.status]?.variant || "default"}
                                         />
                                       </div>
                                       {milestone.description && (
                                         <p className="text-sm text-muted-foreground mb-2">{milestone.description}</p>
                                       )}
                                       <div className="flex gap-4 text-xs text-muted-foreground mb-3">
-                                        {milestone.due_date && <span>Due: {format(new Date(milestone.due_date), "MMM d, yyyy")}</span>}
+                                        {milestone.due_date && (
+                                          <span className={cn(overdue && "text-red-500 font-medium")}>
+                                            Due: {format(new Date(milestone.due_date), "MMM d, yyyy")}
+                                          </span>
+                                        )}
                                         {milestone.completed_at && (
                                           <span className="text-emerald-600">Completed: {format(new Date(milestone.completed_at), "MMM d, yyyy")}</span>
                                         )}
@@ -708,6 +809,52 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                               })}
                             </div>
                           </div>
+
+                          {/* Deliverables linked to this project */}
+                          {(deliverables[project.id] || []).length > 0 && (
+                            <div className="mt-6 pt-6 border-t border-border/50">
+                              <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                                <Paperclip className="h-4 w-4 text-primary" />
+                                Deliverables
+                              </h4>
+                              <div className="space-y-2">
+                                {(deliverables[project.id] || []).map((d) => (
+                                  <div key={d.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border border-border/40 gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-foreground truncate">{d.title}</p>
+                                      <div className="flex items-center gap-3 mt-0.5">
+                                        {d.category && (
+                                          <span className="text-xs text-muted-foreground capitalize">{d.category}</span>
+                                        )}
+                                        {d.submitted_at && (
+                                          <span className="text-xs text-muted-foreground">
+                                            {format(new Date(d.submitted_at), "MMM d, yyyy")}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <StatusBadge
+                                        status={d.status === 'pending_review' ? 'Pending Review' : d.status === 'approved' ? 'Approved' : d.status === 'revision_requested' ? 'Revision' : d.status}
+                                        variant={getDeliverableStatusVariant(d.status)}
+                                      />
+                                      {d.file_url && (
+                                        <a
+                                          href={d.file_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                        >
+                                          <FileDown className="h-3.5 w-3.5" />
+                                          Download
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </motion.div>

@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 interface NotificationRequest {
-  type: "deliverable" | "invoice" | "analytics" | "agreement_signed";
+  type: "deliverable" | "invoice" | "analytics" | "agreement_signed" | "milestone_completed" | "project_update_response";
   client_account_id: string;
   title: string;
   description?: string;
@@ -129,6 +129,41 @@ const handler = async (req: Request): Promise<Response> => {
             </div>
             <p>You can view the signed agreement in the admin panel.</p>
             <p style="color: #888; margin-top: 30px; font-size: 12px;">This is an automated notification from the Client Portal.</p>
+          </div>
+        `;
+        break;
+
+      case "milestone_completed":
+        subject = `Milestone Complete: ${title}`;
+        htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a1a1a;">Project Milestone Completed</h1>
+            <p>Hi ${clientName},</p>
+            <p>Great news — your team just completed a milestone on your project:</p>
+            <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h2 style="margin: 0 0 8px 0; color: #15803d;">${title}</h2>
+              ${description ? `<p style="color: #166534; margin: 0;">${description}</p>` : ""}
+              ${details?.project_name ? `<p style="color: #666; margin: 8px 0 0 0; font-size: 14px;">Project: ${details.project_name}</p>` : ""}
+            </div>
+            <p>Log in to your client portal to see your updated project progress.</p>
+            <a href="${portalUrl}" style="display: inline-block; background: #22c55e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 16px;">View Project Progress</a>
+            <p style="color: #888; margin-top: 30px; font-size: 12px;">This is an automated message from your marketing team.</p>
+          </div>
+        `;
+        break;
+
+      case "project_update_response":
+        subject = `Update on Your Project: ${title}`;
+        htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a1a1a;">Project Update Available</h1>
+            <p>Hi ${clientName},</p>
+            <p>Your team has responded to your update request for <strong>${title}</strong>:</p>
+            <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="color: #1a1a1a; margin: 0;">${description || "Your team has provided an update. Log in to view the full response."}</p>
+            </div>
+            <a href="${portalUrl}" style="display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 16px;">View Update</a>
+            <p style="color: #888; margin-top: 30px; font-size: 12px;">This is an automated message from your marketing team.</p>
           </div>
         `;
         break;

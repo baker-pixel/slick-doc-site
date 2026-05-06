@@ -269,7 +269,7 @@ export function ProjectSetupWizard({
   const [loading, setLoading] = useState(false);
   
   // Project details
-  const [projectName, setProjectName] = useState(getTierProjectName(client.tier));
+  const [projectName, setProjectName] = useState(`${client.business_name} — ${getTierProjectName(client.tier)}`);
   const [projectDescription, setProjectDescription] = useState(
     `${client.tier.charAt(0).toUpperCase() + client.tier.slice(1)} tier project for ${client.business_name}`
   );

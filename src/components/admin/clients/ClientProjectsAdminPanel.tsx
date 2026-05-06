@@ -12,8 +12,8 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Plus, Trash2, Edit, Target, Milestone, Sparkles, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Trash2, Edit, Target, Milestone, Sparkles, Loader2, MessageCircle, Send, RefreshCw, CornerDownRight } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
 interface ClientAccountWithTier {
@@ -35,6 +35,27 @@ interface ProjectMilestone {
   due_date: string | null;
   status: string;
   sort_order: number;
+}
+
+interface AdminComment {
+  id: string;
+  project_id: string;
+  milestone_id: string | null;
+  sender_type: string;
+  sender_name: string | null;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+interface AdminUpdateRequest {
+  id: string;
+  project_id: string;
+  message: string | null;
+  status: string;
+  response: string | null;
+  responded_at: string | null;
+  created_at: string;
 }
 
 interface ClientProject {
@@ -73,6 +94,13 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     due_date: '',
     status: 'pending',
   });
+  const [projectComments, setProjectComments] = useState<Record<string, AdminComment[]>>({});
+  const [projectUpdateRequests, setProjectUpdateRequests] = useState<Record<string, AdminUpdateRequest[]>>({});
+  const [replyText, setReplyText] = useState('');
+  const [replyingProjectId, setReplyingProjectId] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState('');
+  const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
 
   const { data: projects, isLoading } = useQuery({
@@ -89,19 +117,35 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       const projectIds = projectRows.map((p: any) => p.id);
       const clientIds = [...new Set(projectRows.map((p: any) => p.client_account_id))];
       
-      const [milestonesRes, clientsRes] = await Promise.all([
+      const [milestonesRes, clientsRes, commentsRes, requestsRes] = await Promise.all([
         supabase.functions.invoke('admin', {
           body: { action: 'list', table: 'project_milestones', password: adminPassword },
         }),
         supabase.functions.invoke('admin', {
           body: { action: 'list', table: 'client_accounts', password: adminPassword },
         }),
+        supabase.from('project_comments').select('*').in('project_id', projectIds).order('created_at', { ascending: true }),
+        supabase.from('project_update_requests').select('*').in('project_id', projectIds).order('created_at', { ascending: false }),
       ]);
-      
+
       const milestones = milestonesRes?.data?.data || [];
       const clientAccounts = clientsRes?.data?.data || [];
       const clientMap = Object.fromEntries(clientAccounts.map((c: any) => [c.id, c.business_name]));
-      
+
+      // Group comments and update requests by project
+      const commentsByProject: Record<string, AdminComment[]> = {};
+      for (const c of (commentsRes.data || [])) {
+        if (!commentsByProject[c.project_id]) commentsByProject[c.project_id] = [];
+        commentsByProject[c.project_id].push(c);
+      }
+      const requestsByProject: Record<string, AdminUpdateRequest[]> = {};
+      for (const r of (requestsRes.data || [])) {
+        if (!requestsByProject[r.project_id]) requestsByProject[r.project_id] = [];
+        requestsByProject[r.project_id].push(r);
+      }
+      setProjectComments(commentsByProject);
+      setProjectUpdateRequests(requestsByProject);
+
       return projectRows.map((p: any) => ({
         ...p,
         client_accounts: { business_name: clientMap[p.client_account_id] || 'Unknown' },
@@ -285,16 +329,52 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
   });
 
   const updateMilestoneStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, milestoneName, clientAccountId, projectName }: {
+      id: string;
+      status: string;
+      milestoneName: string;
+      clientAccountId: string;
+      projectName: string;
+    }) => {
       const { error } = await supabase
         .from('project_milestones')
-        .update({ 
-          status, 
-          completed_at: status === 'completed' ? new Date().toISOString() : null 
+        .update({
+          status,
+          completed_at: status === 'completed' ? new Date().toISOString() : null
         })
         .eq('id', id);
 
       if (error) throw error;
+
+      if (status === 'completed') {
+        await Promise.allSettled([
+          supabase.from('client_notifications').insert({
+            client_account_id: clientAccountId,
+            notification_type: 'milestone_completed',
+            title: `Milestone Complete: ${milestoneName}`,
+            description: `Your team completed the "${milestoneName}" milestone on ${projectName}.`,
+            priority: 'medium',
+            is_positive: true,
+            is_read: false,
+          }),
+          supabase.from('activity_feed').insert({
+            client_account_id: clientAccountId,
+            activity_type: 'milestone_completed',
+            title: `Milestone completed: ${milestoneName}`,
+            description: `Progress on "${projectName}" updated.`,
+            icon: 'CheckCircle',
+            metadata: { project_name: projectName, milestone_name: milestoneName },
+          }),
+          supabase.functions.invoke('send-client-notification', {
+            body: {
+              type: 'milestone_completed',
+              client_account_id: clientAccountId,
+              title: milestoneName,
+              details: { project_name: projectName },
+            },
+          }),
+        ]);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
@@ -304,6 +384,87 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       console.error('Update milestone error:', error);
       toast.error("Failed to update milestone");
     },
+  });
+
+  const replyCommentMutation = useMutation({
+    mutationFn: async ({ projectId, clientAccountId, message }: { projectId: string; clientAccountId: string; message: string }) => {
+      const { error } = await supabase.from('project_comments').insert({
+        project_id: projectId,
+        client_account_id: clientAccountId,
+        sender_type: 'admin',
+        sender_name: 'Team',
+        message,
+      });
+      if (error) throw error;
+
+      await Promise.allSettled([
+        supabase.from('client_notifications').insert({
+          client_account_id: clientAccountId,
+          notification_type: 'project_comment_reply',
+          title: 'New reply on your project question',
+          description: message.slice(0, 120),
+          priority: 'medium',
+          is_positive: false,
+          is_read: false,
+        }),
+      ]);
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
+      toast.success('Reply sent');
+      setReplyText('');
+      setReplyingProjectId(null);
+    },
+    onError: () => toast.error('Failed to send reply'),
+  });
+
+  const respondUpdateRequestMutation = useMutation({
+    mutationFn: async ({ requestId, projectId, clientAccountId, response }: {
+      requestId: string;
+      projectId: string;
+      clientAccountId: string;
+      response: string;
+    }) => {
+      const { error } = await supabase
+        .from('project_update_requests')
+        .update({ response, status: 'responded', responded_at: new Date().toISOString() })
+        .eq('id', requestId);
+      if (error) throw error;
+
+      await Promise.allSettled([
+        supabase.from('client_notifications').insert({
+          client_account_id: clientAccountId,
+          notification_type: 'project_update_response',
+          title: 'Your update request has been answered',
+          description: response.slice(0, 120),
+          priority: 'medium',
+          is_positive: true,
+          is_read: false,
+        }),
+        supabase.from('activity_feed').insert({
+          client_account_id: clientAccountId,
+          activity_type: 'project_update_response',
+          title: 'Project update provided',
+          description: response.slice(0, 120),
+          icon: 'RefreshCw',
+        }),
+        supabase.functions.invoke('send-client-notification', {
+          body: {
+            type: 'project_update_response',
+            client_account_id: clientAccountId,
+            title: 'Project Update',
+            description: response.slice(0, 300),
+          },
+        }),
+      ]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
+      toast.success('Response sent to client');
+      setResponseText('');
+      setRespondingRequestId(null);
+    },
+    onError: () => toast.error('Failed to send response'),
   });
 
   const resetForm = () => {
@@ -629,6 +790,128 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
                         </Button>
                       </div>
 
+                      {/* Update Requests */}
+                      {(projectUpdateRequests[project.id] || []).length > 0 && (
+                        <div className="mt-4 border-t pt-4">
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <RefreshCw className="h-4 w-4 text-amber-500" />
+                            Update Requests
+                          </h4>
+                          <div className="space-y-3">
+                            {(projectUpdateRequests[project.id] || []).map((req) => (
+                              <div key={req.id} className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                                    {req.status === 'responded' ? 'Responded' : req.status === 'acknowledged' ? 'Acknowledged' : 'Pending'}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</span>
+                                </div>
+                                {req.message && <p className="text-sm text-foreground">{req.message}</p>}
+                                {req.response && (
+                                  <div className="mt-2 p-2 bg-white rounded border border-amber-100">
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">Your response:</p>
+                                    <p className="text-sm">{req.response}</p>
+                                  </div>
+                                )}
+                                {req.status !== 'responded' && (
+                                  respondingRequestId === req.id ? (
+                                    <div className="space-y-2 mt-2">
+                                      <Textarea
+                                        placeholder="Write your response..."
+                                        value={responseText}
+                                        onChange={(e) => setResponseText(e.target.value)}
+                                        rows={3}
+                                        className="text-sm"
+                                      />
+                                      <div className="flex gap-2 justify-end">
+                                        <Button variant="ghost" size="sm" onClick={() => { setRespondingRequestId(null); setResponseText(''); }}>Cancel</Button>
+                                        <Button
+                                          size="sm"
+                                          disabled={!responseText.trim() || respondUpdateRequestMutation.isPending}
+                                          onClick={() => respondUpdateRequestMutation.mutate({
+                                            requestId: req.id,
+                                            projectId: project.id,
+                                            clientAccountId: project.client_account_id,
+                                            response: responseText.trim(),
+                                          })}
+                                        >
+                                          {respondUpdateRequestMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                                          Send Response
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Button variant="outline" size="sm" onClick={() => setRespondingRequestId(req.id)}>
+                                      <CornerDownRight className="h-3 w-3 mr-1" /> Respond
+                                    </Button>
+                                  )
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Comment Thread */}
+                      {(projectComments[project.id] || []).length > 0 && (
+                        <div className="mt-4 border-t pt-4">
+                          <h4 className="font-medium mb-2 flex items-center gap-2">
+                            <MessageCircle className="h-4 w-4 text-primary" />
+                            Client Questions
+                          </h4>
+                          <div className="space-y-2 max-h-64 overflow-y-auto mb-3">
+                            {(projectComments[project.id] || []).map((comment) => (
+                              <div
+                                key={comment.id}
+                                className={`p-2.5 rounded-lg text-sm ${
+                                  comment.sender_type === 'client'
+                                    ? 'bg-blue-50 border border-blue-200'
+                                    : 'bg-muted/50 border border-border ml-6'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-xs">
+                                    {comment.sender_type === 'client' ? 'Client' : comment.sender_name || 'Team'}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
+                                </div>
+                                <p className="text-muted-foreground">{comment.message}</p>
+                              </div>
+                            ))}
+                          </div>
+                          {replyingProjectId === project.id ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                placeholder="Reply to client..."
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                rows={3}
+                                className="text-sm"
+                              />
+                              <div className="flex gap-2 justify-end">
+                                <Button variant="ghost" size="sm" onClick={() => { setReplyingProjectId(null); setReplyText(''); }}>Cancel</Button>
+                                <Button
+                                  size="sm"
+                                  disabled={!replyText.trim() || replyCommentMutation.isPending}
+                                  onClick={() => replyCommentMutation.mutate({
+                                    projectId: project.id,
+                                    clientAccountId: project.client_account_id,
+                                    message: replyText.trim(),
+                                  })}
+                                >
+                                  {replyCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+                                  Reply
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button variant="outline" size="sm" onClick={() => setReplyingProjectId(project.id)}>
+                              <CornerDownRight className="h-3 w-3 mr-1" /> Reply to Client
+                            </Button>
+                          )}
+                        </div>
+                      )}
+
                       {project.project_milestones && project.project_milestones.length > 0 && (
                         <div className="mt-4 border-t pt-4">
                           <h4 className="font-medium mb-2">Milestones</h4>
@@ -641,7 +924,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
                                   {milestone.due_date && <span className="text-xs text-muted-foreground">({format(new Date(milestone.due_date), 'MMM d')})</span>}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <Select value={milestone.status} onValueChange={(status) => updateMilestoneStatusMutation.mutate({ id: milestone.id, status })}>
+                                  <Select value={milestone.status} onValueChange={(status) => updateMilestoneStatusMutation.mutate({ id: milestone.id, status, milestoneName: milestone.name, clientAccountId: project.client_account_id, projectName: project.name })}>
                                     <SelectTrigger className="w-28 h-8">
                                       <SelectValue />
                                     </SelectTrigger>

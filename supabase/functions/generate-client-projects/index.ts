@@ -38,10 +38,23 @@ serve(async (req) => {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    // Fetch client info
+    // Guard: refuse if client already has projects
+    const { data: existingProjects } = await supabase
+      .from("client_projects")
+      .select("id")
+      .eq("client_account_id", clientAccountId);
+
+    if (existingProjects && existingProjects.length > 0) {
+      return new Response(
+        JSON.stringify({ error: `Client already has ${existingProjects.length} project(s). Delete existing projects before regenerating.` }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Fetch client info including context fields
     const { data: client, error: clientError } = await supabase
       .from("client_accounts")
-      .select("id, business_name, tier, industry")
+      .select("id, business_name, tier, industry, website_summary, tone, context_profile")
       .eq("id", clientAccountId)
       .single();
 
@@ -89,21 +102,32 @@ serve(async (req) => {
 
     // Build context for AI
     const actionItems = (sop?.action_items || []) as ActionItem[];
-    const sopContext = actionItems.map((item: ActionItem) => 
+    const sopContext = actionItems.map((item: ActionItem) =>
       `- ${item.step}: ${item.action} (Automation: ${item.automation_potential})`
     ).join("\n");
 
     const tasksContext = Object.entries(tasksByCategory)
-      .map(([category, tasks]) => 
+      .map(([category, tasks]) =>
         `${category.toUpperCase()}:\n${(tasks as any[]).map(t => `  - ${t.name}`).join("\n")}`
       ).join("\n\n");
 
-    const prompt = `You are a digital marketing agency project manager. Generate a comprehensive project plan for a new client.
+    // Build client-specific context from stored profile
+    const contextProfile = client.context_profile as Record<string, any> | null;
+    const clientContextLines: string[] = [];
+    if (client.website_summary) clientContextLines.push(`Website Overview: ${client.website_summary}`);
+    if (client.tone) clientContextLines.push(`Brand Tone: ${client.tone}`);
+    if (contextProfile?.services?.length) clientContextLines.push(`Services: ${Array.isArray(contextProfile.services) ? contextProfile.services.join(', ') : contextProfile.services}`);
+    if (contextProfile?.target_audience) clientContextLines.push(`Target Audience: ${contextProfile.target_audience}`);
+    if (contextProfile?.differentiators) clientContextLines.push(`Differentiators: ${contextProfile.differentiators}`);
+    if (contextProfile?.goals) clientContextLines.push(`Business Goals: ${contextProfile.goals}`);
+
+    const prompt = `You are a digital marketing agency project manager. Generate a tailored project plan for a specific client.
 
 CLIENT INFO:
 - Business: ${client.business_name}
 - Tier: ${client.tier}
 - Industry: ${client.industry || "General Business"}
+${clientContextLines.length > 0 ? clientContextLines.map(l => `- ${l}`).join("\n") : ""}
 
 SOP ACTION ITEMS FOR ${client.tier.toUpperCase()} TIER:
 ${sopContext || "Standard marketing operations"}
@@ -111,21 +135,28 @@ ${sopContext || "Standard marketing operations"}
 AVAILABLE TASKS BY CATEGORY:
 ${tasksContext || "Standard task templates"}
 
-Generate 3-5 projects that cover the key areas of the ${client.tier} tier service. Each project should have clear milestones.
+Generate 3-5 projects tailored specifically to ${client.business_name} and their ${client.industry || "industry"}. Use the client's actual context — their services, goals, and audience — to name and describe projects meaningfully. Do NOT use generic names like "Marketing Project 1".
 
 Focus on these project types based on tier:
-- Foundation: Website optimization, Google Business Profile setup, Review generation, Basic SEO
-- Growth: Lead generation, Email marketing, Content marketing, Paid ads setup
-- Transformation: Advanced SEO, Multi-channel campaigns, Automation, Reporting dashboards
+- Foundation: Local SEO, Google Business Profile, review generation, on-page optimisation
+- Growth: Lead generation, email automation, content marketing, paid ads
+- Transformation: Multi-channel campaigns, marketing automation, advanced analytics, CRO
 
-Return your response as a JSON object with this structure:
+For each milestone, include a realistic "days_from_start" integer based on work complexity:
+- Quick setup tasks (profile, configs, accounts): 3–7 days
+- Research, audit, or strategy tasks: 7–14 days
+- Content creation or creative work: 14–21 days
+- Technical builds or integrations: 14–28 days
+- Reviews, reports, or sign-off milestones: 30 days
+
+Return ONLY valid JSON with this structure:
 {
   "projects": [
     {
-      "name": "Project Name",
-      "description": "Brief description",
+      "name": "Project Name specific to ${client.business_name}",
+      "description": "Brief description referencing their business context",
       "milestones": [
-        { "name": "Milestone name", "description": "What this milestone covers" }
+        { "name": "Milestone name", "description": "What this covers", "days_from_start": 7 }
       ]
     }
   ]
@@ -216,7 +247,10 @@ Return your response as a JSON object with this structure:
       for (let i = 0; i < milestones.length; i++) {
         const milestone = milestones[i];
         const dueDate = new Date(today);
-        dueDate.setDate(dueDate.getDate() + (i + 1) * 7); // Weekly milestones
+        const daysOffset = typeof milestone.days_from_start === 'number' && milestone.days_from_start > 0
+          ? milestone.days_from_start
+          : (i + 1) * 7;
+        dueDate.setDate(dueDate.getDate() + daysOffset);
 
         await supabase
           .from("project_milestones")
