@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import logo from "@/assets/logo-transparent.png";
@@ -59,6 +59,18 @@ export function Header() {
                 </a>
               )
             )}
+            <Link
+              to="/portal/auth"
+              className="text-muted-foreground hover:text-foreground transition-colors font-medium inline-flex items-center gap-1.5"
+            >
+              <LogIn size={16} />
+              Sign In
+            </Link>
+            <Link to="/pricing">
+              <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+                Sign Up
+              </Button>
+            </Link>
             <Link to="/gap-analysis">
               <Button className="bg-primary hover:bg-orange-dark text-primary-foreground">
                 Get Your Gap Analysis
@@ -107,6 +119,18 @@ export function Header() {
                     </a>
                   )
                 )}
+                <Link
+                  to="/portal/auth"
+                  className="text-muted-foreground hover:text-foreground transition-colors font-medium py-2"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Sign In
+                </Link>
+                <Link to="/pricing" onClick={() => setIsMenuOpen(false)}>
+                  <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+                    Sign Up
+                  </Button>
+                </Link>
                 <Link to="/gap-analysis" onClick={() => setIsMenuOpen(false)}>
                   <Button className="bg-primary hover:bg-orange-dark text-primary-foreground w-full mt-2">
                     Get Your Gap Analysis
