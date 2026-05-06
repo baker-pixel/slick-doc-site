@@ -29,9 +29,17 @@ const TONES = [
   { value: "humorous", label: "Humorous" },
 ];
 
+const WORD_COUNTS = [
+  { value: "50", label: "Short (~50 words)" },
+  { value: "100", label: "Medium (~100 words)" },
+  { value: "150", label: "Long (~150 words)" },
+  { value: "250", label: "Extended (~250 words)" },
+];
+
 export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps) {
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("professional");
+  const [wordCount, setWordCount] = useState("100");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["linkedin"]);
   const [generatedContent, setGeneratedContent] = useState("");
   const [hashtags, setHashtags] = useState<string[]>([]);
@@ -63,6 +71,7 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
           platforms: selectedPlatforms,
           topic,
           tone,
+          wordCount: parseInt(wordCount, 10),
         },
       });
 
@@ -193,21 +202,38 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
             />
           </div>
 
-          {/* Tone */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Tone</label>
-            <Select value={tone} onValueChange={setTone}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TONES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Tone + Word Count */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tone</label>
+              <Select value={tone} onValueChange={setTone}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TONES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Length</label>
+              <Select value={wordCount} onValueChange={setWordCount}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORD_COUNTS.map((w) => (
+                    <SelectItem key={w.value} value={w.value}>
+                      {w.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Generate Button */}

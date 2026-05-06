@@ -14,7 +14,7 @@ serve(async (req) => {
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
-    const { clientAccountId, platforms, topic, tone } = await req.json();
+    const { clientAccountId, platforms, topic, tone, wordCount } = await req.json();
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
     if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
@@ -47,10 +47,13 @@ serve(async (req) => {
     const style = platformStyles[platform] || platformStyles.linkedin;
     const brandTone = tone || "professional";
 
+    const targetWords = typeof wordCount === "number" && wordCount > 0 ? wordCount : 100;
+
     const prompt = `Create a compelling social media post for ${clientName}${industry ? ` (${industry} industry)` : ""} for ${platform}.
 
 Style: ${style}
 Brand tone: ${brandTone}
+Target length: approximately ${targetWords} words (excluding hashtags)
 ${websiteSummary ? `\nBusiness context: ${websiteSummary}` : ""}
 ${topic ? `\nTopic/Theme: ${topic}` : ""}
 
@@ -59,6 +62,7 @@ The post should:
 - Match the brand's ${brandTone} tone of voice
 - Include a clear call-to-action
 - Match the platform's best practices
+- Be approximately ${targetWords} words long
 - Be ready to post as-is
 
 Return ONLY the post content. No quotes, no explanations.`;
