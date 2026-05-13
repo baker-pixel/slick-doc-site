@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,17 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { 
-  Search, 
-  RefreshCw, 
-  AlertTriangle, 
-  CheckCircle, 
-  Lightbulb, 
-  FileText, 
+import {
+  Search,
+  AlertTriangle,
+  CheckCircle,
+  Lightbulb,
+  FileText,
   Link2,
   Image,
   Type,
@@ -30,10 +29,17 @@ import {
   Sparkles,
   Copy,
   TrendingUp,
-  Smartphone
+  Smartphone,
+  Globe,
+  Play,
+  BarChart3
 } from "lucide-react";
 import { format } from "date-fns";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
+import { ScoreHeader } from "@/components/admin/shared/ScoreHeader";
+import { SeverityIssueList } from "@/components/admin/shared/SeverityIssueList";
+import { InsightColumns } from "@/components/admin/shared/InsightColumns";
+import { ActionPriorityList } from "@/components/admin/shared/ActionPriorityList";
 
 interface SeoAnalysis {
   id: string;
@@ -71,6 +77,41 @@ interface Client {
   business_name: string;
 }
 
+// ── Site-audit types ─────────────────────────────────────────────────────────
+
+interface WorkflowTask {
+  id: string;
+  client_id: string;
+  status: string;
+  progress_message: string | null;
+  pages_crawled: number | null;
+  result: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface FullAuditResult {
+  seo_score: number;
+  score_breakdown?: {
+    crawlability?: number;
+    on_page?: number;
+    content_quality?: number;
+    technical_performance?: number;
+    site_architecture?: number;
+  };
+  pages_crawled: number;
+  errors: { issue: string; affected_pages: string[]; impact: string }[];
+  warnings: { issue: string; affected_pages: string[]; impact: string }[];
+  notices: { issue: string; affected_pages: string[]; impact: string }[];
+  working_well: string[];
+  quick_wins: { action: string; effort: string; impact: string }[];
+  recommended_keywords: string[];
+  keyword_cannibalisation_risks: string[];
+  local_seo_gaps: string[];
+  executive_summary: string;
+  action_priority_list: { priority: number; action: string; category: string; estimated_effort: string }[];
+  crawl_data?: Record<string, unknown>;
+}
+
 export default function SeoAnalysisDashboard() {
   const [analyses, setAnalyses] = useState<SeoAnalysis[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -82,15 +123,91 @@ export default function SeoAnalysisDashboard() {
   const [selectedAnalysis, setSelectedAnalysis] = useState<SeoAnalysis | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  // ── Full-site audit state ────────────────────────────────────────────────
+  const [auditScope, setAuditScope]         = useState<"page" | "site">("page");
+  const [isRunningAudit, setIsRunningAudit] = useState(false);
+  const [currentTask, setCurrentTask]       = useState<WorkflowTask | null>(null);
+  const [auditResult, setAuditResult]       = useState<FullAuditResult | null>(null);
+  const [auditHistory, setAuditHistory]     = useState<WorkflowTask[]>([]);
+  const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  useEffect(() => {
-    if (selectedClient) {
-      fetchAnalyses();
+  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { if (selectedClient) { fetchAnalyses(); fetchAuditHistory(); } }, [selectedClient]);
+  useEffect(() => () => { realtimeRef.current?.unsubscribe(); }, []);
+
+  const fetchAuditHistory = async () => {
+    if (!selectedClient) return;
+    const { data } = await supabase
+      .from("workflow_tasks")
+      .select("id, client_id, status, progress_message, pages_crawled, result, created_at")
+      .eq("client_id", selectedClient)
+      .eq("task_type", "seo")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    setAuditHistory((data ?? []) as WorkflowTask[]);
+    // If there's a recently completed full audit, show it
+    const latest = (data ?? []).find((t: WorkflowTask) => t.status === "completed" && (t.result as any)?.score_breakdown);
+    if (latest?.result) setAuditResult(latest.result as FullAuditResult);
+  };
+
+  const subscribeToTask = (taskId: string) => {
+    realtimeRef.current?.unsubscribe();
+    const channel = supabase
+      .channel(`wf_task_${taskId}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "workflow_tasks",
+        filter: `id=eq.${taskId}`,
+      }, (payload) => {
+        const updated = payload.new as WorkflowTask;
+        setCurrentTask(updated);
+        if (updated.status === "completed") {
+          setIsRunningAudit(false);
+          setAuditResult((updated.result as FullAuditResult) ?? null);
+          channel.unsubscribe();
+          fetchAuditHistory();
+          toast.success(`Full-site audit complete — ${updated.pages_crawled ?? 0} pages crawled`);
+        }
+        if (updated.status === "failed") {
+          setIsRunningAudit(false);
+          channel.unsubscribe();
+          toast.error("Audit failed — check error log");
+        }
+      })
+      .subscribe();
+    realtimeRef.current = channel;
+  };
+
+  const startFullSiteAudit = async () => {
+    if (!selectedClient) { toast.error("Select a client first"); return; }
+    setIsRunningAudit(true);
+    setAuditResult(null);
+    setCurrentTask(null);
+    try {
+      // Create workflow task
+      const { data: task, error: te } = await supabase
+        .from("workflow_tasks")
+        .insert({
+          client_id: selectedClient,
+          task_type: "seo",
+          status: "pending",
+          audit_scope: "full",
+          payload: { audit_scope: "full", analysis_type: "full_site_audit" },
+        })
+        .select()
+        .single();
+      if (te || !task) throw new Error("Failed to create audit task");
+      setCurrentTask(task as WorkflowTask);
+      subscribeToTask(task.id);
+      // Invoke edge function
+      const { error: fe } = await supabase.functions.invoke("run-seo-agent", {
+        body: { task_id: task.id },
+      });
+      if (fe) throw fe;
+    } catch (e) {
+      setIsRunningAudit(false);
+      toast.error(`Audit failed to start: ${e instanceof Error ? e.message : "Unknown error"}`);
     }
-  }, [selectedClient]);
+  };
 
   const fetchClients = async () => {
     const { data, error } = await supabase
@@ -209,6 +326,19 @@ export default function SeoAnalysisDashboard() {
     );
   }
 
+  // ── Progress step labels ────────────────────────────────────────────────
+  const PROGRESS_STEPS = [
+    "Fetching robots.txt...",
+    "Discovering pages via sitemap...",
+    "Building crawl queue...",
+    "Crawling page",
+    "Fetching PageSpeed scores...",
+    "Analysing signals...",
+    "Generating AI report...",
+  ];
+  const progressStep = PROGRESS_STEPS.findIndex(s => currentTask?.progress_message?.startsWith(s));
+  const progressPct  = Math.round(((progressStep + 1) / PROGRESS_STEPS.length) * 100);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -216,9 +346,9 @@ export default function SeoAnalysisDashboard() {
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Search className="h-6 w-6 text-primary" />
-            Real-Time SEO Dashboard
+            SEO Dashboard
           </h2>
-          <p className="text-muted-foreground">Analyze pages, find issues, get AI-powered fixes</p>
+          <p className="text-muted-foreground">Analyze pages, run full-site audits, get AI-powered fixes</p>
         </div>
         <Select value={selectedClient} onValueChange={setSelectedClient}>
           <SelectTrigger className="w-64">
@@ -233,6 +363,179 @@ export default function SeoAnalysisDashboard() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* ── Audit scope tabs ─────────────────────────────────────────────── */}
+      <Tabs value={auditScope} onValueChange={v => setAuditScope(v as "page" | "site")}>
+        <TabsList className="w-full max-w-sm">
+          <TabsTrigger value="page" className="flex items-center gap-2 flex-1">
+            <Search className="h-4 w-4" /> Single Page
+          </TabsTrigger>
+          <TabsTrigger value="site" className="flex items-center gap-2 flex-1">
+            <Globe className="h-4 w-4" /> Full Site Audit
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── Full-site audit tab ─────────────────────────────────────────── */}
+        <TabsContent value="site" className="space-y-4 mt-4">
+          {/* Trigger card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Full-Site SEO Audit
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Crawls up to 25 pages via sitemap, extracts on-page signals, checks PageSpeed, and generates a comprehensive Semrush-style audit report.
+              </p>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={startFullSiteAudit}
+                  disabled={isRunningAudit || !selectedClient}
+                  className="gap-2"
+                >
+                  {isRunningAudit ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Running audit...</>
+                  ) : (
+                    <><Play className="h-4 w-4" /> Start Full Site Audit</>
+                  )}
+                </Button>
+                {currentTask && (
+                  <span className="text-xs text-muted-foreground">
+                    Task: <code className="font-mono">{currentTask.id.slice(0, 8)}</code>
+                  </span>
+                )}
+              </div>
+
+              {/* Live progress */}
+              {isRunningAudit && currentTask && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{currentTask.progress_message ?? "Starting…"}</span>
+                    <span>{currentTask.pages_crawled ?? 0} pages crawled</span>
+                  </div>
+                  <Progress value={progressPct} className="h-2" />
+                  <div className="flex gap-1 flex-wrap">
+                    {PROGRESS_STEPS.map((step, i) => (
+                      <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors ${
+                        i < progressStep ? "bg-primary" :
+                        i === progressStep ? "bg-primary/60 animate-pulse" : "bg-muted"
+                      }`} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Audit results */}
+          {auditResult && (
+            <div className="space-y-4">
+              {/* Score header */}
+              <Card>
+                <CardContent className="pt-6">
+                  <ScoreHeader
+                    score={auditResult.seo_score}
+                    label="Overall SEO Health"
+                    subtitle={`${auditResult.pages_crawled} pages crawled`}
+                    breakdown={auditResult.score_breakdown}
+                  />
+                  {auditResult.executive_summary && (
+                    <p className="mt-4 text-sm text-muted-foreground leading-relaxed border-t pt-4">
+                      {auditResult.executive_summary}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Issues */}
+              <Card>
+                <CardHeader><CardTitle className="text-base flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-500" />Issues Found</CardTitle></CardHeader>
+                <CardContent>
+                  <SeverityIssueList
+                    errors={auditResult.errors ?? []}
+                    warnings={auditResult.warnings ?? []}
+                    notices={auditResult.notices ?? []}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Insights */}
+              <Card>
+                <CardHeader><CardTitle className="text-base">Insights</CardTitle></CardHeader>
+                <CardContent>
+                  <InsightColumns
+                    workingWell={auditResult.working_well ?? []}
+                    quickWins={auditResult.quick_wins ?? []}
+                    recommendations={auditResult.keyword_cannibalisation_risks?.length
+                      ? auditResult.keyword_cannibalisation_risks
+                      : auditResult.local_seo_gaps}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Keywords */}
+              {auditResult.recommended_keywords?.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-base flex items-center gap-2"><Target className="h-4 w-4" />Recommended Keywords</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {auditResult.recommended_keywords.map((kw, i) => (
+                        <Badge key={i} variant="outline" className="text-sm">{kw}</Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Action plan */}
+              <Card>
+                <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" />Action Plan</CardTitle></CardHeader>
+                <CardContent>
+                  <ActionPriorityList actions={auditResult.action_priority_list ?? []} />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Audit history */}
+          {auditHistory.length > 0 && !auditResult && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Previous Audits</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {auditHistory.map(t => (
+                    <div key={t.id} className="flex items-center justify-between p-2 rounded border text-sm">
+                      <div>
+                        <span className="font-mono text-xs text-muted-foreground">{t.id.slice(0, 8)}</span>
+                        <span className="ml-2 text-muted-foreground">{format(new Date(t.created_at), "MMM d, h:mm a")}</span>
+                        {t.pages_crawled ? <span className="ml-2 text-xs">· {t.pages_crawled} pages</span> : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {t.result && (t.result as FullAuditResult).score_breakdown && (
+                          <Badge variant="outline">{(t.result as FullAuditResult).seo_score}/100</Badge>
+                        )}
+                        <Badge variant={t.status === "completed" ? "outline" : "destructive"} className={t.status === "completed" ? "border-green-300 text-green-700" : ""}>
+                          {t.status}
+                        </Badge>
+                        {t.status === "completed" && t.result && (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs"
+                            onClick={() => setAuditResult(t.result as FullAuditResult)}>
+                            View
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Single page analysis tab (original content) ─────────────────── */}
+        <TabsContent value="page" className="space-y-4 mt-4">
 
       {/* New Analysis Card */}
       <Card>
@@ -838,6 +1141,8 @@ export default function SeoAnalysisDashboard() {
           )}
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
