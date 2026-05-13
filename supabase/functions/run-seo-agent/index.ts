@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getClientBrandKit } from "../_shared/brandKit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -525,7 +526,11 @@ function aggregateSiteSignals(
 
 // ── Phase 4: AI Analysis ─────────────────────────────────────────────────────
 
-function buildAIPrompt(data: SiteAuditData, client: Record<string, unknown>): string {
+function buildAIPrompt(
+  data: SiteAuditData,
+  client: Record<string, unknown>,
+  brandVoiceContext?: string
+): string {
   const cp   = (client.context_profile as Record<string, unknown> | null) ?? {};
   const biz  = client.business_name ?? "Unknown";
   const ind  = (cp.services as string[] | undefined)?.join(", ") ?? client.industry ?? "General";
@@ -549,6 +554,7 @@ BUSINESS CONTEXT:
 - Industry/Services: ${ind}
 - Location: ${loc}
 - Target Audience: ${aud}
+${brandVoiceContext ? `\nBRAND VOICE (align keyword recommendations with actual brand language):\n${brandVoiceContext}\n` : ""}
 
 SITE CRAWL SUMMARY:
 - Pages crawled: ${data.pages.length} | Failed: ${data.pagesFailed.length}
@@ -665,7 +671,7 @@ async function runFullSiteAudit(
   task: Record<string, unknown>,
   client: Record<string, unknown>,
   taskId: string,
-) {
+): Promise<Record<string, unknown>> {
   const auditStart = Date.now();
   const siteUrl    = (client.website_url as string).replace(/\/$/, "");
 
@@ -735,7 +741,20 @@ async function runFullSiteAudit(
 
   // Step 7: AI
   await updateProgress(sb, taskId, "Generating AI report...", pages.length);
-  const prompt   = buildAIPrompt(siteData, client);
+
+  let brandVoiceCtx: string | undefined;
+  try {
+    const kit = await getClientBrandKit(sb, (task as any).client_id as string, true);
+    const parts: string[] = [];
+    if (kit.voice.tone_descriptors.length > 0) parts.push(`Tone: ${kit.voice.tone_descriptors.join(", ")}`);
+    if (kit.voice.audience_language.length > 0) parts.push(`Audience language: ${kit.voice.audience_language.join(", ")}`);
+    if (kit.voice.messaging_pillars.length > 0) parts.push(`Messaging pillars: ${kit.voice.messaging_pillars.join(" | ")}`);
+    if (parts.length > 0) brandVoiceCtx = parts.join("\n");
+  } catch {
+    // non-fatal
+  }
+
+  const prompt   = buildAIPrompt(siteData, client, brandVoiceCtx);
   const aiResult = await callGroqAI(prompt);
 
   const finalResult = {
@@ -780,6 +799,8 @@ async function runFullSiteAudit(
       score: finalResult.seo_score,
     });
   } catch { /* non-fatal */ }
+
+  return finalResult;
 }
 
 // ── Legacy Simple Audit ───────────────────────────────────────────────────────
@@ -936,11 +957,29 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    taskId = body.task_id;
-    if (!taskId) return new Response(JSON.stringify({ error: "task_id required" }), { status: 400, headers: corsHeaders });
+    let task: Record<string, unknown>;
 
-    const { data: task, error: te } = await sb.from("workflow_tasks").select("*").eq("id", taskId).single();
-    if (te || !task) return new Response(JSON.stringify({ error: "Task not found" }), { status: 404, headers: corsHeaders });
+    if (body.task_id) {
+      // Legacy: task was pre-created by caller
+      taskId = body.task_id;
+      const { data, error: te } = await sb.from("workflow_tasks").select("*").eq("id", taskId).single();
+      if (te || !data) return new Response(JSON.stringify({ error: "Task not found" }), { status: 404, headers: corsHeaders });
+      task = data as Record<string, unknown>;
+    } else if (body.client_id) {
+      // New: frontend passes client_id directly — create task with service_role (bypasses RLS)
+      const { data, error: te } = await sb.from("workflow_tasks").insert({
+        client_id: body.client_id,
+        task_type: "seo",
+        status: "running",
+        audit_scope: "full",
+        payload: { audit_scope: "full", analysis_type: "full_site_audit" },
+      }).select().single();
+      if (te || !data) throw new Error(`Failed to create task: ${te?.message}`);
+      task = data as Record<string, unknown>;
+      taskId = data.id as string;
+    } else {
+      return new Response(JSON.stringify({ error: "client_id or task_id required" }), { status: 400, headers: corsHeaders });
+    }
 
     const { data: client, error: ce } = await sb.from("client_accounts")
       .select("business_name, industry, website_url, website_summary, context_profile")
@@ -950,21 +989,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Client not found" }), { status: 404, headers: corsHeaders });
     }
 
-    const isFullAudit = task.payload?.audit_scope === "full"
-      || task.payload?.analysis_type === "full_site_audit"
+    const isFullAudit = (task.payload as any)?.audit_scope === "full"
+      || (task.payload as any)?.analysis_type === "full_site_audit"
       || task.audit_scope === "full";
 
-    console.log(`Task ${taskId}: ${isFullAudit ? "FULL SITE AUDIT" : "legacy simple audit"} for ${client.business_name}`);
+    console.log(`Task ${taskId}: ${isFullAudit ? "FULL SITE AUDIT" : "legacy simple audit"} for ${(client as any).business_name}`);
 
     if (isFullAudit) {
-      await runFullSiteAudit(sb, task, client, taskId);
+      const result = await runFullSiteAudit(sb, task, client, taskId);
+      return new Response(JSON.stringify({ success: true, task_id: taskId, result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     } else {
       await runLegacyAudit(sb, task, client, taskId);
+      return new Response(JSON.stringify({ success: true, task_id: taskId }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-
-    return new Response(JSON.stringify({ success: true, task_id: taskId }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (e) {
     console.error("run-seo-agent error:", e);
     const msg = e instanceof Error ? e.message : "Unknown error";

@@ -70,36 +70,109 @@ serve(async (req) => {
         })
         .eq("id", approval_id);
 
-      // 2. Bridge: Insert into content_calendar with client_approved = true
-      // Guard against duplicates — check if this approval already has a calendar entry
-      const { data: existing } = await supabase
-        .from("content_calendar")
-        .select("id")
-        .eq("content_id", approval.id)
-        .maybeSingle();
+      // 2. Bridge: promote content into content_calendar with client_approved = true.
+      // content_calendar.content_id is a FK to generated_content(id), not content_approvals.
+      const generatedContentId: string | null = approval.content_id || null;
+      const scheduledFor = approval.scheduled_for || new Date().toISOString();
 
-      if (!existing) {
-        const scheduledFor = approval.scheduled_for || new Date().toISOString();
-        const { error: calInsertError } = await supabase
+      // When the draft came from fill-scheduled-content there is an original placeholder
+      // slot in content_calendar. Prefer updating that slot over inserting a new row so
+      // we don't end up with two calendar entries for the same piece of content.
+      let slotUpdated = false;
+
+      if (generatedContentId) {
+        // Fetch the generated_content row to retrieve the original slot id from metadata.
+        // Single PK lookup — maybeSingle() is safe here (no duplicate risk on id).
+        const { data: genRecord } = await supabase
+          .from("generated_content")
+          .select("metadata")
+          .eq("id", generatedContentId)
+          .maybeSingle();
+
+        const genMeta = (genRecord?.metadata) as Record<string, unknown> | null;
+        const slotId = genMeta?.content_calendar_slot_id as string | undefined;
+
+        if (slotId) {
+          // Fetch existing slot metadata first so we can merge rather than overwrite.
+          // Filter by status=draft at fetch time — same guard as the update below.
+          const { data: existingSlot } = await supabase
+            .from("content_calendar")
+            .select("metadata")
+            .eq("id", slotId)
+            .eq("status", "draft")
+            .maybeSingle(); // safe: PK + status filter = at most one row
+
+          const existingMeta = (existingSlot?.metadata as Record<string, unknown>) || {};
+
+          // Return the updated row so we can confirm at least one row matched.
+          // Supabase returns no error when 0 rows match a filtered update,
+          // so we check the returned array length instead.
+          const { data: updatedRows, error: slotUpdateErr } = await supabase
+            .from("content_calendar")
+            .update({
+              content: approval.full_content || approval.content_preview || "",
+              title: approval.title || "",
+              status: "scheduled",
+              client_approved: true,
+              content_id: generatedContentId,
+              metadata: {
+                ...existingMeta,
+                source: "content_approvals",
+                content_approval_id: approval_id,
+                generated_content_id: generatedContentId,
+              },
+            })
+            .eq("id", slotId)
+            .eq("status", "draft") // only update if still a draft — prevents double-fire
+            .select("id");
+
+          if (slotUpdateErr) {
+            console.error("Failed to update original calendar slot:", slotUpdateErr);
+          } else if (updatedRows && updatedRows.length > 0) {
+            slotUpdated = true;
+            console.log(`Updated original slot ${slotId} to scheduled`);
+          } else {
+            console.log(`Slot ${slotId} not found or already past draft — falling back to insert path`);
+          }
+        }
+      }
+
+      // No original slot to update — guard against duplicates then insert a new row.
+      if (!slotUpdated) {
+        // Use limit(1) + array check instead of maybeSingle() to be safe against existing duplicates
+        const { data: existingRows } = await supabase
           .from("content_calendar")
-          .insert({
-            client_account_id: clientId,
-            content_id: approval.id,
-            content_type: approval.content_type,
-            platform: approval.platform || null,
-            content: approval.full_content || approval.content_preview || "",
-            title: approval.title || "",
-            status: "scheduled",
-            client_approved: true,
-            scheduled_for: scheduledFor,
-            metadata: {
-              source: "content_approvals",
-              content_approval_id: approval_id,
-            },
-          });
+          .select("id")
+          .or(
+            generatedContentId
+              ? `content_id.eq.${generatedContentId},metadata->>content_approval_id.eq.${approval_id}`
+              : `metadata->>content_approval_id.eq.${approval_id}`
+          )
+          .neq("status", "draft")
+          .limit(1);
 
-        if (calInsertError) {
-          console.error("Failed to insert content_calendar row:", calInsertError);
+        if (!existingRows || existingRows.length === 0) {
+          const { error: calInsertError } = await supabase
+            .from("content_calendar")
+            .insert({
+              client_account_id: clientId,
+              content_id: generatedContentId,
+              content_type: approval.content_type,
+              platform: approval.platform || null,
+              content: approval.full_content || approval.content_preview || "",
+              title: approval.title || "",
+              status: "scheduled",
+              client_approved: true,
+              scheduled_for: scheduledFor,
+              metadata: {
+                source: "content_approvals",
+                content_approval_id: approval_id,
+              },
+            });
+
+          if (calInsertError) {
+            console.error("Failed to insert content_calendar row:", calInsertError);
+          }
         }
       }
 

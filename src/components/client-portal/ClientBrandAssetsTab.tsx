@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Loader2, Download, Image, Type, Palette, FileText, Copy, Check,
-  Upload, Plus, Trash2, CheckCircle2, X, Info, MessageSquare,
+  Upload, Plus, Trash2, CheckCircle2, X, Info, MessageSquare, BookOpen, Volume2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -24,11 +25,34 @@ interface BrandAsset {
   file_url: string | null;
   metadata: Record<string, any>;
   is_primary: boolean;
+  confirmed: boolean;
   created_at: string;
+  signedUrl?: string;
 }
 
 interface ClientBrandAssetsTabProps {
   clientAccountId: string;
+}
+
+function brandKitCompleteness(assets: BrandAsset[]): { score: number; breakdown: Record<string, boolean> } {
+  const confirmed = assets.filter((a) => a.confirmed);
+  const hasLogo = confirmed.some((a) => a.asset_type === "logo" || a.asset_type === "icon");
+  const hasColors = confirmed.filter((a) => a.asset_type === "color").length >= 3;
+  const hasFont = confirmed.some((a) => a.asset_type === "font");
+  const hasVoice = confirmed.some((a) => a.asset_type === "brand_voice");
+  const hasValueProp = confirmed.some(
+    (a) => a.asset_type === "brand_voice" && a.metadata?.sub_type === "value_proposition"
+  );
+
+  const breakdown = { hasLogo, hasColors, hasFont, hasVoice, hasValueProp };
+  const score =
+    (hasLogo ? 20 : 0) +
+    (hasColors ? 20 : 0) +
+    (hasFont ? 15 : 0) +
+    (hasVoice ? 30 : 0) +
+    (hasValueProp ? 15 : 0);
+
+  return { score, breakdown };
 }
 
 export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAssetsTabProps) {
@@ -48,6 +72,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [generatingGuidelines, setGeneratingGuidelines] = useState(false);
 
   useEffect(() => {
     fetchAssets();
@@ -62,7 +87,25 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
         .order("is_primary", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setAssets((data || []) as BrandAsset[]);
+
+      const rows = (data || []) as BrandAsset[];
+
+      // Generate signed URLs for file assets
+      const withUrls = await Promise.all(
+        rows.map(async (asset) => {
+          if (!asset.file_path) return asset;
+          try {
+            const { data: urlData } = await supabase.storage
+              .from("brand-assets")
+              .createSignedUrl(asset.file_path, 3600);
+            return { ...asset, signedUrl: urlData?.signedUrl };
+          } catch {
+            return asset;
+          }
+        })
+      );
+
+      setAssets(withUrls);
     } catch (error) {
       console.error("Error fetching brand assets:", error);
     } finally {
@@ -77,6 +120,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       const { error } = await supabase
         .from("brand_assets")
         .update({
+          confirmed: true,
           metadata: {
             ...asset?.metadata,
             confirmation_status: "confirmed",
@@ -86,7 +130,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
         .eq("id", assetId);
       if (error) throw error;
 
-      // Mark client_upload workflow step complete so the next step unlocks
       try {
         const { data: wf } = await supabase
           .from("client_workflows")
@@ -154,12 +197,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
   };
 
   const getFileUrl = (asset: BrandAsset) => {
-    if (asset.file_url) return asset.file_url;
-    if (asset.file_path) {
-      const { data } = supabase.storage.from("brand-assets").getPublicUrl(asset.file_path);
-      return data.publicUrl;
-    }
-    return null;
+    return asset.signedUrl || asset.file_url || null;
   };
 
   const handleUpload = async () => {
@@ -214,7 +252,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
           .eq("status", "active")
           .maybeSingle();
         if (wf) {
-          // Fetch step first to get step_number for advance-workflow
           const { data: uploadStep } = await supabase
             .from("workflow_steps")
             .select("id, step_number, status")
@@ -228,7 +265,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
               .update({ status: "completed", completed_at: new Date().toISOString() })
               .eq("id", uploadStep.id);
 
-            // Unlock the next step in the chain
             supabase.functions
               .invoke("advance-workflow", {
                 body: {
@@ -292,6 +328,25 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
     }
   };
 
+  const handleGenerateGuidelines = async () => {
+    setGeneratingGuidelines(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-brand-guidelines", {
+        body: { client_id: clientAccountId },
+      });
+      if (error) throw new Error(error.message || "Generation failed");
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: "Brand guidelines generated!",
+        description: "Available in your deliverables.",
+      });
+    } catch (err: any) {
+      toast({ title: "Could not generate guidelines", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingGuidelines(false);
+    }
+  };
+
   const resetUploadForm = () => {
     setUploadForm({ name: "", asset_type: "logo", description: "", colorValue: "" });
     setSelectedFile(null);
@@ -313,18 +368,27 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
     );
   }
 
-  const confirmedAssets = assets.filter((a) => a.metadata?.confirmation_status !== "pending_client");
-  const pendingAssets = assets.filter((a) => a.metadata?.confirmation_status === "pending_client");
+  const confirmedAssets = assets.filter((a) => a.confirmed);
+  const pendingAssets = assets.filter((a) => !a.confirmed);
 
   const logos = confirmedAssets.filter((a) => a.asset_type === "logo" || a.asset_type === "icon");
   const colorAssets = confirmedAssets.filter((a) => a.asset_type === "color");
   const fontAssets = confirmedAssets.filter((a) => a.asset_type === "font");
-  const voiceAssets = confirmedAssets.filter((a) => ["headline", "description"].includes(a.asset_type));
+  const voiceAssets = confirmedAssets.filter((a) => a.asset_type === "brand_voice");
+  const legacyVoiceAssets = confirmedAssets.filter((a) => ["headline", "description"].includes(a.asset_type));
   const otherAssets = confirmedAssets.filter(
-    (a) => !["logo", "icon", "color", "font", "headline", "description"].includes(a.asset_type)
+    (a) => !["logo", "icon", "color", "font", "brand_voice", "headline", "description"].includes(a.asset_type)
   );
-
   const langAsset = confirmedAssets.find((a) => a.asset_type === "language");
+
+  const { score: completeness } = brandKitCompleteness(assets);
+  const canGenerateGuidelines = completeness >= 70;
+
+  const renderVoiceValue = (asset: BrandAsset) => {
+    const v = asset.metadata?.value;
+    if (Array.isArray(v)) return (v as string[]).join(", ");
+    return typeof v === "string" ? v : asset.name;
+  };
 
   return (
     <div className="space-y-6">
@@ -340,7 +404,58 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
         </Button>
       </div>
 
-      {/* Pending confirmation — clean neutral design */}
+      {/* Brand Kit Completeness */}
+      {assets.length > 0 && (
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">Brand Kit Completeness</p>
+              <span className="text-sm font-semibold text-primary">{completeness}%</span>
+            </div>
+            <Progress value={completeness} className="h-2 mb-3" />
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "Logo", done: confirmedAssets.some((a) => a.asset_type === "logo" || a.asset_type === "icon") },
+                { label: "3+ Colors", done: confirmedAssets.filter((a) => a.asset_type === "color").length >= 3 },
+                { label: "Font", done: confirmedAssets.some((a) => a.asset_type === "font") },
+                { label: "Brand Voice", done: confirmedAssets.some((a) => a.asset_type === "brand_voice") },
+                { label: "Value Proposition", done: confirmedAssets.some((a) => a.asset_type === "brand_voice" && a.metadata?.sub_type === "value_proposition") },
+              ].map(({ label, done }) => (
+                <span
+                  key={label}
+                  className={`text-xs px-2 py-1 rounded-full border flex items-center gap-1 ${
+                    done
+                      ? "border-green-400 bg-green-50 text-green-700"
+                      : "border-muted-foreground/30 text-muted-foreground"
+                  }`}
+                >
+                  {done ? <Check className="h-3 w-3" /> : <span className="h-3 w-3 inline-block" />}
+                  {label}
+                </span>
+              ))}
+            </div>
+            {canGenerateGuidelines && (
+              <div className="mt-3 pt-3 border-t">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGenerateGuidelines}
+                  disabled={generatingGuidelines}
+                >
+                  {generatingGuidelines ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <BookOpen className="h-4 w-4 mr-2" />
+                  )}
+                  Generate Brand Guidelines
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending confirmation */}
       {pendingAssets.length > 0 && (
         <div className="rounded-xl border bg-card p-4 space-y-3">
           <div className="flex items-center gap-2.5">
@@ -352,7 +467,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                 We detected {pendingAssets.length} brand asset{pendingAssets.length !== 1 ? "s" : ""} from your website
               </p>
               <p className="text-xs text-muted-foreground">
-                Please confirm these are yours so we can use them in your marketing.
+                Confirm these are yours so we can use them in your marketing.
               </p>
             </div>
           </div>
@@ -362,6 +477,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
               const url = getFileUrl(asset);
               const colorVal = asset.metadata?.hex || asset.metadata?.value;
               const isWorking = confirmingId === asset.id || rejectingId === asset.id;
+              const isBrandVoice = asset.asset_type === "brand_voice";
 
               return (
                 <div
@@ -374,6 +490,10 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                   ) : asset.asset_type === "font" ? (
                     <div className="h-9 w-9 rounded-md bg-background border flex-shrink-0 flex items-center justify-center">
                       <Type className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  ) : isBrandVoice ? (
+                    <div className="h-9 w-9 rounded-md bg-background border flex-shrink-0 flex items-center justify-center">
+                      <Volume2 className="h-4 w-4 text-muted-foreground" />
                     </div>
                   ) : ["headline", "description"].includes(asset.asset_type) ? (
                     <div className="h-9 w-9 rounded-md bg-background border flex-shrink-0 flex items-center justify-center">
@@ -397,13 +517,18 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{asset.name}</p>
+                    {isBrandVoice && asset.metadata?.value && (
+                      <p className="text-xs text-muted-foreground line-clamp-1">{renderVoiceValue(asset)}</p>
+                    )}
                     {["headline", "description"].includes(asset.asset_type) && asset.metadata?.value && (
                       <p className="text-xs text-muted-foreground line-clamp-1">{asset.metadata.value}</p>
                     )}
                     {asset.asset_type === "font" && (
                       <p className="text-xs text-muted-foreground font-mono">{asset.metadata?.value || asset.name}</p>
                     )}
-                    <Badge variant="outline" className="text-xs capitalize mt-0.5">{asset.asset_type}</Badge>
+                    <Badge variant="outline" className="text-xs capitalize mt-0.5">
+                      {isBrandVoice ? (asset.metadata?.sub_type?.replace(/_/g, " ") || "brand voice") : asset.asset_type}
+                    </Badge>
                   </div>
 
                   {/* Actions */}
@@ -463,7 +588,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
         </Card>
       )}
 
-      {/* Brand DNA grid — confirmed assets only */}
+      {/* Confirmed assets grid */}
       {confirmedAssets.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Logo & Icons */}
@@ -496,9 +621,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                                 <Download className="h-3 w-3" />
                               </Button>
                             )}
-                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => handleDelete(asset.id, asset.file_path)}>
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
                           </div>
                         </div>
                       </div>
@@ -543,14 +665,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                               <Copy className="h-3.5 w-3.5" />
                             )}
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(asset.id, asset.file_path)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
                         </div>
                       </div>
                     );
@@ -574,13 +688,8 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                   {fontAssets.map((asset) => {
                     const fontFamily = asset.metadata?.value || asset.name;
                     return (
-                      <div key={asset.id} className="rounded-lg border bg-muted/30 p-4 group">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{asset.name}</p>
-                          <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive" onClick={() => handleDelete(asset.id, asset.file_path)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                      <div key={asset.id} className="rounded-lg border bg-muted/30 p-4">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{asset.name}</p>
                         <p className="text-2xl leading-tight" style={{ fontFamily: `"${fontFamily}", sans-serif` }}>
                           Aa Bb Cc
                         </p>
@@ -593,29 +702,45 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
             </Card>
           )}
 
-          {/* Brand Voice */}
+          {/* Brand Voice (AI-extracted) */}
           {voiceAssets.length > 0 && (
-            <Card>
+            <Card className={voiceAssets.length > 2 ? "lg:col-span-2" : ""}>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-primary" />
+                  <Volume2 className="h-4 w-4 text-primary" />
                   Brand Voice
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className={voiceAssets.length > 2 ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
                   {voiceAssets.map((asset) => (
-                    <div key={asset.id} className="rounded-lg border bg-muted/30 p-3 group relative">
+                    <div key={asset.id} className="rounded-lg border bg-muted/30 p-3">
+                      <Badge variant="outline" className="text-xs capitalize mb-2">
+                        {asset.metadata?.sub_type?.replace(/_/g, " ") || "brand voice"}
+                      </Badge>
+                      <p className="text-sm leading-relaxed">{renderVoiceValue(asset)}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Legacy voice assets (headline, description) */}
+          {legacyVoiceAssets.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  Brand Copy
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {legacyVoiceAssets.map((asset) => (
+                    <div key={asset.id} className="rounded-lg border bg-muted/30 p-3">
                       <Badge variant="outline" className="text-xs capitalize mb-2">{asset.asset_type}</Badge>
                       <p className="text-sm leading-relaxed">{asset.metadata?.value || asset.name}</p>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(asset.id, asset.file_path)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
                     </div>
                   ))}
                 </div>
@@ -631,9 +756,6 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                 <p className="font-medium text-sm">{langAsset.name}</p>
               </div>
               <Badge variant="secondary" className="font-mono">{langAsset.metadata?.value || langAsset.name}</Badge>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(langAsset.id, langAsset.file_path)}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
             </div>
           )}
 
@@ -659,17 +781,12 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                           <p className="text-sm font-medium truncate">{asset.name}</p>
                           {asset.description && <p className="text-xs text-muted-foreground truncate">{asset.description}</p>}
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                          {url && (
-                            <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => handleDownload(asset)}>
-                              <Download className="h-3 w-3 mr-1" />
-                              Download
-                            </Button>
-                          )}
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(asset.id, asset.file_path)}>
-                            <Trash2 className="h-3.5 w-3.5" />
+                        {url && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs px-2 opacity-0 group-hover:opacity-100" onClick={() => handleDownload(asset)}>
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
                           </Button>
-                        </div>
+                        )}
                       </div>
                     );
                   })}

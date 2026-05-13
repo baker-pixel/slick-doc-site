@@ -107,7 +107,7 @@ interface NavItem {
 // AGENTS group
 const agentItems: NavItem[] = [
   { id: "seo-dashboard", label: "SEO", icon: Search },
-  { id: "deliverables", label: "Content", icon: FileText },
+  { id: "content-review", label: "Content", icon: FileText },
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "emails", label: "Email", icon: Mail },
   { id: "reports-review", label: "Reports", icon: BarChart3 },
@@ -120,6 +120,7 @@ const operationsItems: NavItem[] = [
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
   { id: "approvals", label: "Approvals", icon: FileCheck },
+  { id: "deliverables", label: "Deliverables", icon: FolderOpen },
   { id: "contacts", label: "Leads", icon: Contact },
   { id: "settings", label: "Settings", icon: Settings },
 ];

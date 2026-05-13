@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,6 +81,22 @@ serve(async (req) => {
     const goalStr = Array.isArray(ctx?.primary_goals) && (ctx!.primary_goals as string[]).length > 0 ? `Primary goal: ${(ctx!.primary_goals as string[])[0]}.` : '';
     const audienceStr = ctx?.target_audience ? `Target audience: ${ctx.target_audience}.` : '';
 
+    // Fetch brand kit (confirmed assets only, best-effort)
+    let brandKitBlock = "";
+    let brandKitWarning = "";
+    try {
+      const kit = await getClientBrandKit(supabase, task.client_id, true);
+      const hasVoice = kit.voice.tone_descriptors.length > 0 || kit.voice.value_proposition || kit.voice.messaging_pillars.length > 0;
+      if (hasVoice) {
+        brandKitBlock = "\n\n" + brandKitToPromptBlock(kit);
+      } else {
+        brandKitWarning = "Brand kit not yet confirmed — content generated without brand context. Run Brand Asset extraction first.";
+        console.warn(`[run-content-agent] No confirmed brand kit for client ${task.client_id}`);
+      }
+    } catch (e) {
+      console.warn("[run-content-agent] Brand kit fetch failed (non-fatal):", e);
+    }
+
     const prompt = `You are a marketing expert for ${client.business_name || "a business"}.
 Business type: ${servicesStr}
 ${client.website_summary ? `Website summary: ${client.website_summary}` : ''}
@@ -87,6 +104,7 @@ ${diffsStr}
 ${goalStr}
 ${audienceStr}
 Tone: ${tone}
+${brandKitBlock}
 
 Write a ${contentType}.
 Topic: ${topic}
@@ -137,6 +155,8 @@ Keep it under 150 words. Make it engaging and ready to post.`;
     const generatedContent =
       aiData.choices?.[0]?.message?.content || "No content generated";
 
+    const generatedAt = new Date().toISOString();
+
     // Save result and mark completed
     await supabase
       .from("workflow_tasks")
@@ -146,44 +166,60 @@ Keep it under 150 words. Make it engaging and ready to post.`;
           content: generatedContent,
           content_type: contentType,
           topic: topic,
-          generated_at: new Date().toISOString(),
+          generated_at: generatedAt,
+          ...(brandKitWarning ? { brand_kit_warning: brandKitWarning } : {}),
         },
       })
       .eq("id", taskId);
 
-    // Bridge: insert into content_approvals for client review
+    const contentTitle = `${contentType}: ${topic}`;
     const platform = payload.platform || null;
-    const mediaUrls = payload.media_urls || [];
-    const scheduledFor = payload.scheduled_for
-      ? new Date(payload.scheduled_for).toISOString()
-      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // default 24hrs from now
+    const mediaUrls = Array.isArray(payload.media_urls) ? payload.media_urls : [];
 
-    const { error: approvalInsertError } = await supabase
-      .from("content_approvals")
+    // Store the generated asset first so approvals/calendar can reference one canonical content record.
+    const { data: generatedRecord, error: generatedInsertError } = await supabase
+      .from("generated_content")
       .insert({
-        client_account_id: task.client_id,
+        client_id: task.client_id,
         content_type: contentType,
-        platform: platform,
-        scheduled_for: scheduledFor,
-        title: `${contentType}: ${topic}`,
-        content_preview: generatedContent.substring(0, 300),
-        full_content: generatedContent,
-        status: "pending",
-        publish_status: "pending",
-        submitted_at: new Date().toISOString(),
-      });
+        title: contentTitle,
+        content: generatedContent,
+        metadata: {
+          source: "run-content-agent",
+          task_id: taskId,
+          topic,
+          platform,
+          media_urls: mediaUrls,
+        },
+      })
+      .select("id")
+      .single();
 
-    if (approvalInsertError) {
-      console.error("Failed to insert content_approvals row:", approvalInsertError);
+    if (generatedInsertError) {
+      console.error("Failed to insert generated_content row:", generatedInsertError);
       await supabase.from("automation_alerts").insert({
         alert_type: "data_error",
         severity: "warning",
-        title: "content_approvals insert failed in run-content-agent",
-        message: approvalInsertError.message,
+        title: "generated_content insert failed in run-content-agent",
+        message: generatedInsertError.message,
         source: "run-content-agent",
-        metadata: { task_id: taskId, client_id: task.client_id, timestamp: new Date().toISOString() },
+        metadata: { task_id: taskId, client_id: task.client_id, timestamp: generatedAt },
       }).catch(() => {});
     }
+
+    // Notify admin that content needs review before client sees it.
+    await supabase.from("activity_feed").insert({
+      client_account_id: task.client_id,
+      activity_type: "content_draft_ready",
+      title: `Content draft ready for admin review: ${contentTitle}`,
+      description: `${contentType} has been generated and is awaiting admin review.`,
+      icon: "file-text",
+      metadata: {
+        task_id: taskId,
+        content_id: generatedRecord?.id || null,
+        platform,
+      },
+    }).catch(() => {});
 
     return new Response(
       JSON.stringify({
@@ -191,6 +227,7 @@ Keep it under 150 words. Make it engaging and ready to post.`;
         task_id: taskId,
         status: "completed",
         result: generatedContent,
+        content_id: generatedRecord?.id || null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

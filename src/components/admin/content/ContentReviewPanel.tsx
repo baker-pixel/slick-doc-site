@@ -7,9 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Plus } from "lucide-react";
+import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 
 interface GeneratedContent {
@@ -47,7 +46,6 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
   const [editedTitle, setEditedTitle] = useState("");
   const [previewContent, setPreviewContent] = useState<GeneratedContent | null>(null);
   const [publishingContent, setPublishingContent] = useState<GeneratedContent | null>(null);
-  const [sendToClient, setSendToClient] = useState(true);
   const [isPublishing, setIsPublishing] = useState(false);
   
   // Content generation state
@@ -96,10 +94,12 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "pending_admin_review":
+        return <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">Needs Review</Badge>;
       case "draft":
         return <Badge variant="secondary">Draft</Badge>;
       case "approved":
-        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Approved</Badge>;
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Approved Internally</Badge>;
       case "published":
         return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Published</Badge>;
       case "rejected":
@@ -170,7 +170,6 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
 
   const handlePublishClick = (content: GeneratedContent) => {
     setPublishingContent(content);
-    setSendToClient(true);
   };
 
   const handlePublish = async () => {
@@ -179,49 +178,74 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
     setIsPublishing(true);
 
     try {
-      // Update status to published
-      const { error: updateError } = await supabase
-        .from("generated_content")
-        .update({ status: "published", updated_at: new Date().toISOString() })
-        .eq("id", publishingContent.id);
+      // Dedup: don't create a second pending/approved approval for the same content.
+      // Use limit(1) + array check — maybeSingle() throws if historical duplicates exist.
+      const { data: existingRows } = await supabase
+        .from("content_approvals")
+        .select("id, status")
+        .eq("content_id", publishingContent.id)
+        .in("status", ["pending", "approved"])
+        .limit(1);
 
-      if (updateError) throw updateError;
+      if (existingRows && existingRows.length > 0) {
+        toast({
+          title: "Already in client queue",
+          description: `This content is already in the client's approval queue (${existingRows[0].status}).`,
+        });
+        setPublishingContent(null);
+        return;
+      }
 
-      // Optionally send to client
-      if (sendToClient && publishingContent.client_accounts?.email) {
-        const { error: emailError } = await supabase.functions.invoke("send-content-to-client", {
-          body: {
-            contentId: publishingContent.id,
-            clientEmail: publishingContent.client_accounts.email,
-            clientName: publishingContent.client_accounts.first_name || publishingContent.client_accounts.business_name,
-            businessName: publishingContent.client_accounts.business_name,
-            contentTitle: publishingContent.title || "New Content",
-            contentType: formatContentType(publishingContent.content_type),
-            content: publishingContent.content,
-          },
+      // Preserve scheduling metadata from the cron pipeline when available
+      const meta = publishingContent.metadata || {};
+      const platform = (meta.platform as string) || null;
+      const scheduledFor = (meta.scheduled_for as string)
+        || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      // Insert into content_approvals FIRST — if this fails we don't touch generated_content
+      const { error: approvalError } = await supabase
+        .from("content_approvals")
+        .insert({
+          client_account_id: publishingContent.client_id,
+          content_id: publishingContent.id,
+          content_type: publishingContent.content_type,
+          title: publishingContent.title || "Untitled",
+          content_preview: publishingContent.content.substring(0, 300),
+          full_content: publishingContent.content,
+          status: "pending",
+          publish_status: "pending",
+          platform,
+          scheduled_for: scheduledFor,
+          submitted_at: new Date().toISOString(),
         });
 
-        if (emailError) {
-          console.error("Email error:", emailError);
-          toast({ 
-            title: "Published", 
-            description: "Content published but failed to send email to client",
-          });
-        } else {
-          toast({ 
-            title: "Published & Sent", 
-            description: "Content has been published and sent to the client" 
-          });
-        }
+      if (approvalError) throw approvalError;
+
+      // Insert succeeded — now mark internal draft as approved
+      const { error: updateError } = await supabase
+        .from("generated_content")
+        .update({ status: "approved", updated_at: new Date().toISOString() })
+        .eq("id", publishingContent.id);
+
+      if (updateError) {
+        console.error("content_approvals inserted but generated_content status update failed:", updateError);
+        toast({
+          title: "Partial failure — action needed",
+          description: "Content was added to client queue, but internal status could not be updated. Refresh and manually mark it approved.",
+          variant: "destructive",
+        });
       } else {
-        toast({ title: "Published", description: "Content has been published" });
+        toast({
+          title: "Sent for client approval",
+          description: "Content is now in the client's approval queue.",
+        });
       }
 
       setPublishingContent(null);
       fetchData();
     } catch (error: any) {
       console.error("Publish error:", error);
-      toast({ title: "Error", description: "Failed to publish content", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to send content for approval", variant: "destructive" });
     } finally {
       setIsPublishing(false);
     }
@@ -326,8 +350,9 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="pending_admin_review">Needs Review</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="approved">Approved Internally</SelectItem>
             <SelectItem value="published">Published</SelectItem>
             <SelectItem value="rejected">Rejected</SelectItem>
           </SelectContent>
@@ -381,7 +406,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                     <Edit className="w-3 h-3 mr-1" />
                     Edit
                   </Button>
-                  {content.status === "draft" && (
+                  {(content.status === "draft" || content.status === "pending_admin_review") && (
                     <>
                       <Button
                         size="sm"
@@ -402,14 +427,14 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                       </Button>
                     </>
                   )}
-                  {(content.status === "approved" || content.status === "draft") && (
+                  {(content.status === "approved" || content.status === "draft" || content.status === "pending_admin_review") && (
                     <Button
                       size="sm"
                       variant="default"
                       onClick={() => handlePublishClick(content)}
                     >
                       <Send className="w-3 h-3 mr-1" />
-                      Publish
+                      Send to Client
                     </Button>
                   )}
                 </div>
@@ -453,7 +478,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
             </div>
           )}
           <DialogFooter className="mt-4 flex-wrap gap-2">
-            {previewContent?.status === "draft" && (
+            {previewContent && (previewContent.status === "draft" || previewContent.status === "pending_admin_review") && (
               <>
                 <Button
                   variant="default"
@@ -478,7 +503,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                 </Button>
               </>
             )}
-            {previewContent && (previewContent.status === "approved" || previewContent.status === "draft") && (
+            {previewContent && (previewContent.status === "approved" || previewContent.status === "draft" || previewContent.status === "pending_admin_review") && (
               <Button
                 variant="default"
                 onClick={() => {
@@ -487,7 +512,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                 }}
               >
                 <Send className="w-4 h-4 mr-2" />
-                Publish
+                Send to Client
               </Button>
             )}
             <Button variant="outline" onClick={() => setPreviewContent(null)}>
@@ -501,9 +526,9 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
       <Dialog open={!!publishingContent} onOpenChange={() => setPublishingContent(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Publish Content</DialogTitle>
+            <DialogTitle>Send for Client Approval</DialogTitle>
             <DialogDescription>
-              Mark this content as published and optionally send it to the client.
+              Approve this content internally and add it to the client's approval queue.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -513,31 +538,9 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                 {formatContentType(publishingContent?.content_type || "")} for {publishingContent?.client_accounts?.business_name}
               </p>
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="sendToClient"
-                checked={sendToClient}
-                onCheckedChange={(checked) => setSendToClient(checked === true)}
-              />
-              <label
-                htmlFor="sendToClient"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Send content to client via email
-              </label>
-            </div>
-            
-            {sendToClient && publishingContent?.client_accounts?.email && (
-              <p className="text-sm text-muted-foreground pl-6">
-                Will be sent to: {publishingContent.client_accounts.email}
-              </p>
-            )}
-            {sendToClient && !publishingContent?.client_accounts?.email && (
-              <p className="text-sm text-destructive pl-6">
-                No email address found for this client
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground">
+              The content will be marked as internally approved and placed in the client's Approvals tab for their sign-off before publishing.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPublishingContent(null)} disabled={isPublishing}>
@@ -547,12 +550,12 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
               {isPublishing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Publishing...
+                  Sending...
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />
-                  {sendToClient ? "Publish & Send" : "Publish"}
+                  Approve &amp; Send to Client
                 </>
               )}
             </Button>

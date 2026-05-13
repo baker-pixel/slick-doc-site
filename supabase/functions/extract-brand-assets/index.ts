@@ -50,10 +50,19 @@ function isGenericFont(name: string): boolean {
   return GENERIC_FONTS.has(name.toLowerCase().trim());
 }
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 8000);
+}
+
 function parseHtml(html: string, baseUrl: string): Candidate[] {
   const candidates: Candidate[] = [];
 
-  // 1. Favicon
   const faviconMatch =
     html.match(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["']/i) ||
     html.match(/<link[^>]+href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["']/i);
@@ -62,7 +71,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     if (url) candidates.push({ type: "favicon", url, name: "Favicon", confidence: 90 });
   }
 
-  // 2. Apple touch icon
   const touchMatch =
     html.match(/<link[^>]+rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i) ||
     html.match(/<link[^>]+href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
@@ -71,7 +79,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     if (url) candidates.push({ type: "logo", url, name: "App Icon", confidence: 85 });
   }
 
-  // 3. OG image
   const ogMatch =
     html.match(/<meta[^>]+property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
     html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
@@ -80,7 +87,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     if (url) candidates.push({ type: "og_image", url, name: "Social Share Image", confidence: 80 });
   }
 
-  // 4. Logo images from img tags
   const imgRegex = /<img[^>]+>/gi;
   let logoCount = 0;
   for (const m of html.matchAll(imgRegex)) {
@@ -96,27 +102,24 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     logoCount++;
   }
 
-  // 5. Theme color
   const themeM =
     html.match(/<meta[^>]+name=["']theme-color["'][^>]*content=["']([^"']+)["']/i) ||
     html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*name=["']theme-color["']/i);
   if (themeM) {
     const v = themeM[1].trim();
     if (/^#[0-9a-fA-F]{3,8}$/.test(v))
-      candidates.push({ type: "color", value: v, name: "Brand Color", confidence: 90 });
+      candidates.push({ type: "color", value: v, name: v.toUpperCase(), confidence: 90 });
   }
 
-  // 6. msapplication tile color
   const tileM = html.match(
     /<meta[^>]+name=["']msapplication-TileColor["'][^>]*content=["']([^"']+)["']/i
   );
   if (tileM) {
     const v = tileM[1].trim();
     if (/^#[0-9a-fA-F]{3,8}$/.test(v))
-      candidates.push({ type: "color", value: v, name: "Tile Color", confidence: 70 });
+      candidates.push({ type: "color", value: v, name: v.toUpperCase(), confidence: 70 });
   }
 
-  // 7. CSS :root color variables
   const rootM = html.match(/:root\s*\{([^}]{0,3000})\}/);
   if (rootM) {
     let colorVarCount = 0;
@@ -125,22 +128,12 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
       const varName = vm[1];
       const hex = vm[2];
       if (/color|brand|primary|secondary|accent/i.test(varName)) {
-        const readableName = varName
-          .replace(/^color-?|^brand-?/i, "")
-          .replace(/-/g, " ")
-          .trim() || varName;
-        candidates.push({
-          type: "color",
-          value: hex,
-          name: readableName.charAt(0).toUpperCase() + readableName.slice(1),
-          confidence: 80,
-        });
+        candidates.push({ type: "color", value: hex, name: hex.toUpperCase(), confidence: 80 });
         colorVarCount++;
       }
     }
   }
 
-  // 8. Google Fonts
   for (const m of html.matchAll(
     /<link[^>]+href=["']([^"']*fonts\.googleapis\.com[^"']*)["']/gi
   )) {
@@ -154,7 +147,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     }
   }
 
-  // 9. CSS font-family from <style> blocks
   const seenFonts = new Set<string>();
   for (const sm of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
     const css = sm[1];
@@ -174,7 +166,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     if (seenFonts.size >= 5) break;
   }
 
-  // 10. H1 headline
   const h1M = html.match(/<h1[^>]*>\s*([^<]{5,120})\s*<\/h1>/i);
   if (h1M) {
     const text = h1M[1].replace(/\s+/g, " ").trim();
@@ -182,7 +173,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
       candidates.push({ type: "headline", value: text, name: "Brand Headline", confidence: 85 });
   }
 
-  // 11. Meta description as brand tagline
   const metaDescM =
     html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']{10,300})["']/i) ||
     html.match(/<meta[^>]+content=["']([^"']{10,300})["'][^>]*name=["']description["']/i);
@@ -191,7 +181,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     candidates.push({ type: "description", value: text, name: "Brand Description", confidence: 80 });
   }
 
-  // 12. Language from <html lang>
   const langM = html.match(/<html[^>]+lang=["']([a-zA-Z-]{2,10})["']/i);
   if (langM) {
     const code = langM[1].trim();
@@ -206,7 +195,6 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     candidates.push({ type: "language", value: code, name: langName, confidence: 95 });
   }
 
-  // Deduplicate by type+url/value key
   const seen = new Set<string>();
   return candidates.filter((c) => {
     const key = `${c.type}:${c.url || c.value || ""}`;
@@ -255,18 +243,135 @@ async function fetchAndStore(
   }
 }
 
+interface BrandVoiceAsset {
+  sub_type: string;
+  value: string | string[];
+  name: string;
+}
+
+async function extractBrandVoice(
+  html: string,
+  contextProfile: Record<string, unknown> | null
+): Promise<BrandVoiceAsset[]> {
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  if (!GROQ_API_KEY) return [];
+
+  const pageText = stripHtml(html);
+  const cp = contextProfile || {};
+
+  const prompt = `Analyse this website content and extract brand voice signals. Return ONLY valid JSON, no markdown.
+
+PAGE TEXT (truncated):
+${pageText}
+
+BUSINESS CONTEXT:
+${cp.target_audience ? `Target audience: ${cp.target_audience}` : ""}
+${Array.isArray(cp.differentiators) ? `Differentiators: ${(cp.differentiators as string[]).join(", ")}` : ""}
+${Array.isArray(cp.services) ? `Services: ${(cp.services as string[]).join(", ")}` : ""}
+${cp.industry ? `Industry: ${cp.industry}` : ""}
+
+Return this exact JSON structure (arrays of strings, all lowercase, no nulls):
+{
+  "tone_descriptors": ["3 to 5 adjectives describing brand voice"],
+  "tagline": "hero section tagline or H1 if short and punchy, else empty string",
+  "value_proposition": "core benefit statement in one sentence",
+  "messaging_pillars": ["3 recurring themes the brand consistently communicates"],
+  "audience_language": ["3 to 5 phrases target audience uses to describe their problems"],
+  "what_we_never_say": ["3 to 5 words or phrases that conflict with this brand's tone"],
+  "cta_style": "description of how CTAs are written e.g. action-oriented: Book a Call, Get Started"
+}`;
+
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 600,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: "You are a brand strategist. Return only valid JSON. No markdown, no code fences." },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    const raw = data.choices?.[0]?.message?.content ?? "";
+    const cleaned = raw.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    const results: BrandVoiceAsset[] = [];
+    const list = (k: string, v: unknown) => Array.isArray(v) ? (v as string[]) : (typeof v === "string" && v ? [v] : []);
+
+    if (list("tone_descriptors", parsed.tone_descriptors).length > 0)
+      results.push({ sub_type: "tone_descriptors", value: list("tone_descriptors", parsed.tone_descriptors), name: "Tone Descriptors" });
+    if (typeof parsed.tagline === "string" && parsed.tagline)
+      results.push({ sub_type: "tagline", value: parsed.tagline, name: "Tagline" });
+    if (typeof parsed.value_proposition === "string" && parsed.value_proposition)
+      results.push({ sub_type: "value_proposition", value: parsed.value_proposition, name: "Value Proposition" });
+    if (list("messaging_pillars", parsed.messaging_pillars).length > 0)
+      results.push({ sub_type: "messaging_pillars", value: list("messaging_pillars", parsed.messaging_pillars), name: "Messaging Pillars" });
+    if (list("audience_language", parsed.audience_language).length > 0)
+      results.push({ sub_type: "audience_language", value: list("audience_language", parsed.audience_language), name: "Audience Language" });
+    if (list("what_we_never_say", parsed.what_we_never_say).length > 0)
+      results.push({ sub_type: "what_we_never_say", value: list("what_we_never_say", parsed.what_we_never_say), name: "What We Never Say" });
+    if (typeof parsed.cta_style === "string" && parsed.cta_style)
+      results.push({ sub_type: "cta_style", value: parsed.cta_style, name: "CTA Style" });
+
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Service role client for writes
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
   try {
+    // Auth: verify JWT and check caller is admin or the linked client
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+    const { data: { user }, error: authErr } = await userClient.auth.getUser();
+    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
+
+    const { data: roleRow } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    const isAdmin = !!roleRow;
+
     const { client_account_id, website_url } = await req.json();
     if (!client_account_id || !website_url)
       return json({ error: "client_account_id and website_url are required" }, 400);
+
+    if (!isAdmin) {
+      const { data: portalUser } = await supabase
+        .from("client_portal_users")
+        .select("client_account_id")
+        .eq("user_id", user.id)
+        .eq("client_account_id", client_account_id)
+        .maybeSingle();
+      if (!portalUser) return json({ error: "Forbidden" }, 403);
+    }
 
     let targetUrl = website_url.trim();
     if (!targetUrl.startsWith("http")) targetUrl = "https://" + targetUrl;
@@ -287,25 +392,63 @@ serve(async (req) => {
       return json({ error: `Could not reach website: ${e?.message}` }, 422);
     }
 
-    const candidates = parseHtml(html, targetUrl);
-    if (candidates.length === 0)
-      return json({ assets: [], message: "No brand signals found on this website" });
+    // Fetch context_profile for brand voice extraction
+    const { data: clientRow } = await supabase
+      .from("client_accounts")
+      .select("context_profile")
+      .eq("id", client_account_id)
+      .single();
+    const contextProfile = (clientRow?.context_profile as Record<string, unknown> | null) ?? null;
 
-    const TEXT_ONLY_TYPES: CandidateType[] = ["font", "headline", "language", "description", "color"];
+    const candidates = parseHtml(html, targetUrl);
     const created: { id: string; name: string; asset_type: string; preview_url?: string }[] = [];
 
+    const TEXT_ONLY_TYPES: CandidateType[] = ["font", "headline", "language", "description", "color"];
+
     for (const candidate of candidates) {
-      // Text/value-only assets (no file download)
       if (TEXT_ONLY_TYPES.includes(candidate.type)) {
         const category =
           candidate.type === "font" ? "fonts" :
           candidate.type === "color" ? "colors" : "guidelines";
 
+        const normalizedName = (candidate.value || candidate.name).trim();
+
+        // Dedup: upsert by (client_account_id, asset_type, name) for color/font/language
+        const isDeduped = ["color", "font", "language"].includes(candidate.type);
+
+        if (isDeduped) {
+          const { data: existing } = await supabase
+            .from("brand_assets")
+            .select("id, name, asset_type")
+            .eq("client_account_id", client_account_id)
+            .eq("asset_type", candidate.type)
+            .ilike("name", normalizedName)
+            .maybeSingle();
+
+          if (existing) {
+            // Update source/timestamp, keep existing confirmation status
+            await supabase
+              .from("brand_assets")
+              .update({
+                metadata: {
+                  value: candidate.value,
+                  hex: candidate.type === "color" ? candidate.value : undefined,
+                  scraped_from: targetUrl,
+                  confidence: candidate.confidence,
+                  last_scraped_at: new Date().toISOString(),
+                },
+              })
+              .eq("id", existing.id);
+            created.push({ ...existing, preview_url: candidate.type === "color" ? candidate.value : undefined });
+            continue;
+          }
+        }
+
         const { data, error } = await supabase
           .from("brand_assets")
           .insert({
             client_account_id,
-            name: candidate.name,
+            name: normalizedName,
             asset_type: candidate.type,
             category,
             description: `Auto-detected from ${targetUrl}`,
@@ -329,7 +472,7 @@ serve(async (req) => {
         continue;
       }
 
-      // Image assets — download and store
+      // Image assets
       const assetType = candidate.type === "favicon" ? "icon" : "logo";
       const stored = await fetchAndStore(supabase, candidate.url!, client_account_id, candidate.name);
       if (!stored) continue;
@@ -355,11 +498,65 @@ serve(async (req) => {
         .single();
 
       if (!error && data) {
-        const { data: urlData } = supabase.storage
+        const { data: urlData } = await supabase.storage
           .from("brand-assets")
-          .getPublicUrl(stored.filePath);
-        created.push({ ...data, preview_url: urlData.publicUrl });
+          .createSignedUrl(stored.filePath, 3600);
+        created.push({ ...data, preview_url: urlData?.signedUrl });
       }
+    }
+
+    // Brand voice extraction (non-blocking — best effort)
+    try {
+      const voiceAssets = await extractBrandVoice(html, contextProfile);
+
+      for (const va of voiceAssets) {
+        // Dedup by sub_type
+        const { data: existing } = await supabase
+          .from("brand_assets")
+          .select("id")
+          .eq("client_account_id", client_account_id)
+          .eq("asset_type", "brand_voice")
+          .eq("metadata->>sub_type", va.sub_type)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from("brand_assets")
+            .update({
+              metadata: {
+                sub_type: va.sub_type,
+                value: va.value,
+                scraped_from: targetUrl,
+                last_scraped_at: new Date().toISOString(),
+              },
+            })
+            .eq("id", existing.id);
+        } else {
+          const { data: inserted } = await supabase
+            .from("brand_assets")
+            .insert({
+              client_account_id,
+              name: va.name,
+              asset_type: "brand_voice",
+              category: "guidelines",
+              description: `AI-extracted from ${targetUrl}`,
+              metadata: {
+                sub_type: va.sub_type,
+                value: va.value,
+                confirmation_status: "pending_client",
+                scraped_from: targetUrl,
+              },
+            })
+            .select("id, name, asset_type")
+            .single();
+
+          if (inserted) {
+            created.push({ ...inserted });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Brand voice extraction failed (non-fatal):", e);
     }
 
     return json({

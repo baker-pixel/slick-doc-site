@@ -313,7 +313,7 @@ export function OrangeDoorDashboard({
 
       if (agentError) throw agentError;
 
-      toast({ title: "Content generated!", description: "The deliverable is now available in the client portal." });
+      toast({ title: "Content generated!", description: "It is now waiting in the client's Content Approvals tab." });
       setGenerateOpen(false);
       fetchDashboardData();
     } catch (error) {

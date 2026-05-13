@@ -108,6 +108,8 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
   const content = await callAI(prompt, systemPrompt);
   const dbContentType = contentTypeMap[contentType] || 'other';
   
+  // Save as pending_admin_review — admin must review before client sees it.
+  // Do NOT create content_approvals here; that is the admin's job via ContentReviewPanel.
   const { data, error } = await supabase
     .from('generated_content')
     .insert({
@@ -115,11 +117,12 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
       content_type: dbContentType,
       title,
       content,
-      status: 'draft',
+      status: 'pending_admin_review',
       metadata: {
         generated_at: new Date().toISOString(),
         original_type: contentType,
         model: "llama-3.3-70b-versatile",
+        source: "run-ai-batch",
       },
     })
     .select()
@@ -129,17 +132,6 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
     console.error(`Error saving ${contentType}:`, error);
     return { success: false, error: error.message };
   }
-
-  // Create content approval record
-  await supabase.from('content_approvals').insert({
-    client_account_id: client.id,
-    content_id: data.id,
-    content_type: contentType,
-    title,
-    content_preview: content.substring(0, 500),
-    full_content: content,
-    status: 'pending',
-  });
 
   return { success: true, contentId: data.id };
 }
@@ -297,7 +289,10 @@ serve(async (req) => {
       errors: [] as string[],
     };
 
-    // Define what each batch type does
+    // Define what each batch type does.
+    // generateContent is disabled here — content drafts are owned by the
+    // fill-scheduled-content cron which feeds the admin review pipeline.
+    // Enabling it here would create a duplicate, unreviewed content path.
     const batchActions = {
       daily: {
         processAutomatedTasks: true,
@@ -306,12 +301,12 @@ serve(async (req) => {
       },
       weekly: {
         processAutomatedTasks: true,
-        generateContent: true,
+        generateContent: false,
         runReports: false,
       },
       monthly: {
         processAutomatedTasks: true,
-        generateContent: true,
+        generateContent: false,
         runReports: true,
       },
     };

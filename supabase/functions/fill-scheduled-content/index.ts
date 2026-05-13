@@ -133,50 +133,74 @@ serve(async (req) => {
         const recentTopics = recentByClient[slot.client_account_id] || [];
         const generatedContent = await generateContent(slot, client, recentTopics, GROQ_API_KEY);
 
+        // Update the calendar slot with the generated draft text so it's previewable,
+        // but leave status="draft" and client_approved=false — the slot is NOT schedulable
+        // until admin reviews, client approves, and handle-approval creates the scheduled row.
         const { error: updateErr } = await supabase
           .from("content_calendar")
           .update({
             content: generatedContent,
-            status: "scheduled",
-            client_approved: true,
             metadata: {
               ...((slot.metadata as object) || {}),
-              ai_generated: true,
+              ai_draft_generated: true,
               generated_at: new Date().toISOString(),
               context_used: !!(client.context_profile),
             },
           })
           .eq("id", slot.id);
 
-        if (updateErr) throw new Error(`Failed to update slot: ${updateErr.message}`);
+        if (updateErr) throw new Error(`Failed to update slot draft text: ${updateErr.message}`);
 
-        const { error: approvalErr } = await supabase.from("content_approvals").insert({
-          client_account_id: slot.client_account_id,
-          content_type: mapApprovalContentType(slot.content_type),
-          platform: slot.platform,
-          title: slot.title,
-          content_preview: generatedContent.substring(0, 500),
-          full_content: generatedContent,
-          status: "approved",
-          approved_at: new Date().toISOString(),
-          publish_status: "queued",
-          scheduled_for: slot.scheduled_for,
-          metadata: { content_calendar_id: slot.id, auto_approved: true },
-        });
+        // Save the draft to generated_content for admin review.
+        // Include full traceability metadata so the admin panel can link back to the slot.
+        const { data: draftRecord, error: draftErr } = await supabase
+          .from("generated_content")
+          .insert({
+            client_id: slot.client_account_id,
+            content_type: slot.content_type,
+            title: slot.title,
+            content: generatedContent,
+            status: "pending_admin_review",
+            metadata: {
+              source: "fill-scheduled-content",
+              content_calendar_slot_id: slot.id,
+              platform: slot.platform,
+              scheduled_for: slot.scheduled_for,
+              context_used: !!(client.context_profile),
+              generated_at: new Date().toISOString(),
+            },
+          })
+          .select("id")
+          .single();
 
-        if (approvalErr) {
-          console.error(`content_approvals insert failed for slot ${slot.id}:`, approvalErr.message);
+        if (draftErr) {
+          console.error(`generated_content insert failed for slot ${slot.id}:`, draftErr.message);
           await supabase.from("automation_alerts").insert({
             alert_type: "data_error",
             severity: "warning",
-            title: "content_approvals insert failed in fill-scheduled-content",
-            message: approvalErr.message,
+            title: "generated_content insert failed in fill-scheduled-content",
+            message: draftErr.message,
             source: "fill-scheduled-content",
             metadata: { slot_id: slot.id, client_id: slot.client_account_id, timestamp: new Date().toISOString() },
           }).catch(() => {});
         }
 
-        console.log(`Filled ${slot.id} (${slot.platform}/${slot.content_type}) context=${!!(client.context_profile)}`);
+        // Notify admins that a draft is ready for review.
+        await supabase.from("activity_feed").insert({
+          client_account_id: slot.client_account_id,
+          activity_type: "content_draft_ready",
+          title: `Draft ready for admin review: ${slot.title}`,
+          description: `${slot.content_type} generated for ${slot.platform} — needs admin review before going to client.`,
+          icon: "file-text",
+          metadata: {
+            content_calendar_slot_id: slot.id,
+            generated_content_id: draftRecord?.id || null,
+            platform: slot.platform,
+            scheduled_for: slot.scheduled_for,
+          },
+        }).catch(() => {});
+
+        console.log(`Draft saved for slot ${slot.id} (${slot.platform}/${slot.content_type}) — awaiting admin review`);
         results.push({ id: slot.id, success: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -522,12 +546,3 @@ Be specific. "Same-Day HVAC Repair" beats "Quality Service". Use real differenti
   }
 }
 
-function mapApprovalContentType(ct: string): string {
-  const map: Record<string, string> = {
-    social_post: "social_post",
-    blog_post: "blog_post",
-    email_copy: "email",
-    ad_copy: "ad_copy",
-  };
-  return map[ct] ?? ct;
-}

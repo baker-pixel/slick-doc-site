@@ -8,11 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Plus, Image, Type, Palette, FileText, Trash2, Globe, Building2, CheckCircle, Sparkles, AlertCircle, MessageSquare } from "lucide-react";
+import {
+  Loader2, Plus, Image, Type, Palette, FileText, Trash2, Globe,
+  Building2, CheckCircle, Sparkles, AlertCircle, MessageSquare,
+  RefreshCw, Clock, BarChart2, Eye, Volume2, BookOpen,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { formatDistanceToNow } from "date-fns";
 
 interface BrandAsset {
   id: string;
@@ -25,8 +31,11 @@ interface BrandAsset {
   file_url: string | null;
   metadata: Record<string, any>;
   is_primary: boolean;
+  confirmed: boolean;
   created_at: string;
+  updated_at: string;
   client_accounts?: { business_name: string };
+  signedUrl?: string;
 }
 
 interface ClientAccount {
@@ -41,6 +50,7 @@ const ASSET_TYPES = [
   { value: "font", label: "Font", icon: Type },
   { value: "guideline", label: "Guideline", icon: FileText },
   { value: "icon", label: "Icon", icon: Image },
+  { value: "brand_voice", label: "Brand Voice", icon: Volume2 },
   { value: "template", label: "Template", icon: FileText },
   { value: "other", label: "Other", icon: FileText },
 ];
@@ -52,14 +62,35 @@ interface ExtractedAsset {
   preview_url?: string;
 }
 
-function AssetStatusBadge({ status }: { status?: string }) {
-  if (status === "pending_client") {
-    return <Badge variant="outline" className="border-amber-400 text-amber-700 text-xs">Awaiting client</Badge>;
-  }
-  if (status === "confirmed") {
+function AssetStatusBadge({ asset }: { asset: BrandAsset }) {
+  if (asset.confirmed) {
     return <Badge variant="outline" className="border-green-500 text-green-700 text-xs">Confirmed</Badge>;
   }
+  if (asset.metadata?.confirmation_status === "pending_client") {
+    return <Badge variant="outline" className="border-amber-400 text-amber-700 text-xs">Awaiting client</Badge>;
+  }
   return null;
+}
+
+function completenessScore(assets: BrandAsset[]): { score: number; counts: Record<string, number> } {
+  const confirmed = assets.filter((a) => a.confirmed);
+  const hasLogo = confirmed.some((a) => a.asset_type === "logo" || a.asset_type === "icon") ? 20 : 0;
+  const colors = confirmed.filter((a) => a.asset_type === "color").length;
+  const hasColors = colors >= 3 ? 20 : 0;
+  const hasFont = confirmed.some((a) => a.asset_type === "font") ? 15 : 0;
+  const hasVoice = confirmed.some((a) => a.asset_type === "brand_voice") ? 30 : 0;
+  const hasValueProp = confirmed.some((a) => a.asset_type === "brand_voice" && a.metadata?.sub_type === "value_proposition") ? 15 : 0;
+
+  const counts: Record<string, number> = {
+    logo: confirmed.filter((a) => a.asset_type === "logo" || a.asset_type === "icon").length,
+    color: confirmed.filter((a) => a.asset_type === "color").length,
+    font: confirmed.filter((a) => a.asset_type === "font").length,
+    brand_voice: confirmed.filter((a) => a.asset_type === "brand_voice").length,
+    pending: assets.filter((a) => !a.confirmed).length,
+    total: assets.length,
+  };
+
+  return { score: hasLogo + hasColors + hasFont + hasVoice + hasValueProp, counts };
 }
 
 function ColorSwatch({ asset, onDelete }: { asset: BrandAsset; onDelete: () => void }) {
@@ -70,7 +101,7 @@ function ColorSwatch({ asset, onDelete }: { asset: BrandAsset; onDelete: () => v
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{asset.name}</p>
         <p className="text-xs text-muted-foreground font-mono">{hex.toUpperCase()}</p>
-        <AssetStatusBadge status={asset.metadata?.confirmation_status} />
+        <AssetStatusBadge asset={asset} />
       </div>
       <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0" onClick={onDelete}>
         <Trash2 className="h-3.5 w-3.5" />
@@ -92,7 +123,7 @@ function ImageAsset({ asset, url, onDelete }: { asset: BrandAsset; url: string |
       <div className="px-3 py-2 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-medium truncate">{asset.name}</p>
-          <AssetStatusBadge status={asset.metadata?.confirmation_status} />
+          <AssetStatusBadge asset={asset} />
         </div>
         <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-6 w-6 shrink-0" onClick={onDelete}>
           <Trash2 className="h-3 w-3" />
@@ -111,9 +142,12 @@ function OtherAsset({ asset, onDelete }: { asset: BrandAsset; onDelete: () => vo
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{asset.name}</p>
+        {asset.asset_type === "brand_voice" && asset.metadata?.sub_type && (
+          <p className="text-xs text-muted-foreground capitalize">{asset.metadata.sub_type.replace(/_/g, " ")}</p>
+        )}
         <div className="flex items-center gap-1 flex-wrap mt-0.5">
           <Badge variant="outline" className="text-xs">{ASSET_TYPES.find((t) => t.value === asset.asset_type)?.label}</Badge>
-          <AssetStatusBadge status={asset.metadata?.confirmation_status} />
+          <AssetStatusBadge asset={asset} />
         </div>
       </div>
       <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0" onClick={onDelete}>
@@ -138,6 +172,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [filterClient, setFilterClient] = useState<string>(clientId || "all");
+  const [kitPreviewOpen, setKitPreviewOpen] = useState(false);
 
   const [extractDialogOpen, setExtractDialogOpen] = useState(false);
   const [extractClientId, setExtractClientId] = useState(clientId || "");
@@ -170,11 +205,27 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
       ]);
 
       if (assetsRes.data && (assetsRes.data as any)?.data) {
-        setAssets((assetsRes.data as any).data);
+        const rows = (assetsRes.data as any).data as BrandAsset[];
+
+        // Generate signed URLs for file assets
+        const withUrls = await Promise.all(
+          rows.map(async (asset) => {
+            if (!asset.file_path) return asset;
+            try {
+              const { data: urlData } = await supabase.storage
+                .from("brand-assets")
+                .createSignedUrl(asset.file_path, 3600);
+              return { ...asset, signedUrl: urlData?.signedUrl };
+            } catch {
+              return asset;
+            }
+          })
+        );
+
+        setAssets(withUrls);
       }
       if (clientsRes.data) {
         setClients(clientsRes.data);
-        // Auto-fill website URL for single-client mode
         if (clientId) {
           const found = clientsRes.data.find((c) => c.id === clientId);
           if (found?.website_url) setExtractUrl(found.website_url);
@@ -261,12 +312,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
   };
 
   const getFileUrl = (asset: BrandAsset) => {
-    if (asset.file_url) return asset.file_url;
-    if (asset.file_path) {
-      const { data } = supabase.storage.from("brand-assets").getPublicUrl(asset.file_path);
-      return data.publicUrl;
-    }
-    return null;
+    return asset.signedUrl || asset.file_url || null;
   };
 
   const handleExtract = async () => {
@@ -314,19 +360,24 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
     ? assets.filter((a) => a.client_account_id === clientId)
     : filterClient === "all" ? assets : assets.filter((a) => a.client_account_id === filterClient);
 
-  const pendingCount = filteredAssets.filter((a) => a.metadata?.confirmation_status === "pending_client").length;
+  const pendingCount = filteredAssets.filter((a) => !a.confirmed).length;
 
-  // Brand DNA sections (only used in single-client mode)
   const logos = filteredAssets.filter((a) => a.asset_type === "logo");
   const colors = filteredAssets.filter((a) => a.asset_type === "color");
   const icons = filteredAssets.filter((a) => a.asset_type === "icon");
   const fonts = filteredAssets.filter((a) => a.asset_type === "font");
-  const brandVoice = filteredAssets.filter((a) => ["headline", "description"].includes(a.asset_type));
+  const brandVoice = filteredAssets.filter((a) => a.asset_type === "brand_voice");
+  const legacyVoice = filteredAssets.filter((a) => ["headline", "description"].includes(a.asset_type));
   const other = filteredAssets.filter((a) =>
-    !["logo", "color", "icon", "font", "headline", "description"].includes(a.asset_type)
+    !["logo", "color", "icon", "font", "brand_voice", "headline", "description"].includes(a.asset_type)
   );
 
   const currentClient = clients.find((c) => c.id === clientId);
+  const { score: kitScore, counts } = completenessScore(filteredAssets);
+
+  const lastExtracted = filteredAssets
+    .filter((a) => a.metadata?.scraped_from)
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0];
 
   if (loading) {
     return (
@@ -336,7 +387,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
     );
   }
 
-  // ─── Extract dialog (shared) ───────────────────────────────────────────────
+  // ─── Extract dialog ────────────────────────────────────────────────────────
   const extractDialog = (
     <Dialog open={extractDialogOpen} onOpenChange={(o) => { if (!o) handleCloseExtractDialog(); else setExtractDialogOpen(true); }}>
       <DialogContent className="sm:max-w-[540px]">
@@ -346,7 +397,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
             Extract Brand Assets from Website
           </DialogTitle>
           <DialogDescription>
-            We'll scan the client's website and auto-detect logos, colors, and icons. The client confirms each asset in their portal.
+            Scans the client's website for logos, colors, fonts, and brand voice signals. Client confirms each asset in their portal. Safe to re-run — duplicates are deduped automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -356,11 +407,14 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
               <label className="text-sm font-medium">Client</label>
               <Select
                 value={extractClientId}
-                onValueChange={(v) => { setExtractClientId(v); setExtractedAssets([]); setExtractUrl(""); }}
+                onValueChange={(v) => {
+                  setExtractClientId(v);
+                  setExtractedAssets([]);
+                  const found = clients.find((c) => c.id === v);
+                  setExtractUrl(found?.website_url || "");
+                }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                 <SelectContent>
                   {clients.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
@@ -388,7 +442,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
           {extracting && (
             <div className="flex items-center gap-3 text-sm text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Scanning website for brand assets…
+              Scanning website and extracting brand signals…
             </div>
           )}
 
@@ -396,13 +450,17 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
             <div className="space-y-3">
               <p className="text-sm font-medium text-green-700 flex items-center gap-2">
                 <CheckCircle className="h-4 w-4" />
-                {extractedAssets.length} asset{extractedAssets.length !== 1 ? "s" : ""} extracted — saved as pending client confirmation
+                {extractedAssets.length} asset{extractedAssets.length !== 1 ? "s" : ""} extracted — awaiting client confirmation
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {extractedAssets.map((a) => (
                   <div key={a.id} className="border rounded-lg p-3 flex items-center gap-3">
                     {a.asset_type === "color" ? (
                       <div className="h-10 w-10 rounded flex-shrink-0 border" style={{ backgroundColor: a.preview_url }} />
+                    ) : a.asset_type === "brand_voice" ? (
+                      <div className="h-10 w-10 rounded bg-muted flex-shrink-0 flex items-center justify-center">
+                        <Volume2 className="h-5 w-5 text-muted-foreground" />
+                      </div>
                     ) : a.preview_url ? (
                       <div className="h-10 w-10 rounded bg-muted flex-shrink-0 flex items-center justify-center overflow-hidden">
                         <img src={a.preview_url} alt={a.name} className="max-h-full max-w-full object-contain" />
@@ -420,7 +478,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                These assets appear in the client portal under Brand Assets, marked "Awaiting Confirmation".
+                Assets appear in the client portal under Brand Assets, marked "Awaiting Confirmation".
               </p>
             </div>
           )}
@@ -435,7 +493,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
     </Dialog>
   );
 
-  // ─── Add Asset dialog (shared) ─────────────────────────────────────────────
+  // ─── Add Asset dialog ──────────────────────────────────────────────────────
   const addDialog = (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogTrigger asChild>
@@ -457,9 +515,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
                 value={formData.client_account_id}
                 onValueChange={(value) => setFormData({ ...formData, client_account_id: value })}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                 <SelectContent>
                   {clients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>{client.business_name}</SelectItem>
@@ -576,11 +632,64 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
           </div>
           <div className="flex gap-2">
             {addDialog}
+            <Button variant="outline" onClick={openExtractDialog}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Re-extract
+            </Button>
             <Button onClick={openExtractDialog}>
               <Globe className="h-4 w-4 mr-2" />
               Extract from Website
             </Button>
           </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <BarChart2 className="h-4 w-4" />
+                <span className="text-xs">Kit Score</span>
+              </div>
+              <p className="text-2xl font-bold">{kitScore}%</p>
+              <Progress value={kitScore} className="h-1.5 mt-1" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <CheckCircle className="h-4 w-4" />
+                <span className="text-xs">Confirmed</span>
+              </div>
+              <p className="text-2xl font-bold">{filteredAssets.filter((a) => a.confirmed).length}</p>
+              <p className="text-xs text-muted-foreground">{counts.pending} pending</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Palette className="h-4 w-4" />
+                <span className="text-xs">Colors</span>
+              </div>
+              <p className="text-2xl font-bold">{counts.color}</p>
+              <p className="text-xs text-muted-foreground">{counts.font} font{counts.font !== 1 ? "s" : ""}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Clock className="h-4 w-4" />
+                <span className="text-xs">Last extracted</span>
+              </div>
+              {lastExtracted ? (
+                <p className="text-sm font-medium">
+                  {formatDistanceToNow(new Date(lastExtracted.updated_at), { addSuffix: true })}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Never</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {pendingCount > 0 && (
@@ -605,137 +714,214 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Logo */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Image className="h-4 w-4 text-primary" />
-                  Logo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {logos.length === 0 ? (
-                  <EmptySection label="logos" />
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {logos.map((a) => (
-                      <ImageAsset key={a.id} asset={a} url={getFileUrl(a)} onDelete={() => handleDelete(a.id, a.file_path)} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          <>
+            {/* Brand Kit Preview */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Asset Library</h3>
+              <Button size="sm" variant="outline" onClick={() => setKitPreviewOpen(true)}>
+                <Eye className="h-4 w-4 mr-2" />
+                Kit Preview
+              </Button>
+            </div>
 
-            {/* Colors */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Palette className="h-4 w-4 text-primary" />
-                  Colors
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {colors.length === 0 ? (
-                  <EmptySection label="colors" />
-                ) : (
-                  <div className="space-y-2">
-                    {colors.map((a) => (
-                      <ColorSwatch key={a.id} asset={a} onDelete={() => handleDelete(a.id, a.file_path)} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Icons / Favicons */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Image className="h-4 w-4 text-primary" />
-                  Icons & Favicons
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {icons.length === 0 ? (
-                  <EmptySection label="icons" />
-                ) : (
-                  <div className="grid grid-cols-3 gap-3">
-                    {icons.map((a) => (
-                      <ImageAsset key={a.id} asset={a} url={getFileUrl(a)} onDelete={() => handleDelete(a.id, a.file_path)} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Typography */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Type className="h-4 w-4 text-primary" />
-                  Typography
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {fonts.length === 0 ? (
-                  <EmptySection label="fonts" />
-                ) : (
-                  <div className="space-y-2">
-                    {fonts.map((a) => (
-                      <div key={a.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card group">
-                        <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Type className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate" style={{ fontFamily: `"${a.metadata?.value || a.name}", sans-serif` }}>{a.name}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{a.metadata?.value || a.name}</p>
-                          <AssetStatusBadge status={a.metadata?.confirmation_status} />
-                        </div>
-                        <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0" onClick={() => handleDelete(a.id, a.file_path)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Brand Voice */}
-            {(brandVoice.length > 0 || other.length > 0) && (
-              <Card className="lg:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Logo */}
+              <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                    Brand Voice & Details
+                    <Image className="h-4 w-4 text-primary" />
+                    Logo
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {brandVoice.map((a) => (
-                      <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card group">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="text-xs capitalize">{a.asset_type}</Badge>
-                            <AssetStatusBadge status={a.metadata?.confirmation_status} />
-                          </div>
-                          <p className="text-sm text-foreground leading-relaxed">{a.metadata?.value || a.name}</p>
-                        </div>
-                        <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0 mt-0.5" onClick={() => handleDelete(a.id, a.file_path)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                    {other.map((a) => (
-                      <OtherAsset key={a.id} asset={a} onDelete={() => handleDelete(a.id, a.file_path)} />
-                    ))}
-                  </div>
+                  {logos.length === 0 ? <EmptySection label="logos" /> : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {logos.map((a) => (
+                        <ImageAsset key={a.id} asset={a} url={getFileUrl(a)} onDelete={() => handleDelete(a.id, a.file_path)} />
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            )}
-          </div>
+
+              {/* Colors */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-primary" />
+                    Colors
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {colors.length === 0 ? <EmptySection label="colors" /> : (
+                    <div className="space-y-2">
+                      {colors.map((a) => (
+                        <ColorSwatch key={a.id} asset={a} onDelete={() => handleDelete(a.id, a.file_path)} />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Icons */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Image className="h-4 w-4 text-primary" />
+                    Icons & Favicons
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {icons.length === 0 ? <EmptySection label="icons" /> : (
+                    <div className="grid grid-cols-3 gap-3">
+                      {icons.map((a) => (
+                        <ImageAsset key={a.id} asset={a} url={getFileUrl(a)} onDelete={() => handleDelete(a.id, a.file_path)} />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Typography */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Type className="h-4 w-4 text-primary" />
+                    Typography
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {fonts.length === 0 ? <EmptySection label="fonts" /> : (
+                    <div className="space-y-2">
+                      {fonts.map((a) => (
+                        <div key={a.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card group">
+                          <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Type className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" style={{ fontFamily: `"${a.metadata?.value || a.name}", sans-serif` }}>{a.name}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{a.metadata?.value || a.name}</p>
+                            <AssetStatusBadge asset={a} />
+                          </div>
+                          <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0" onClick={() => handleDelete(a.id, a.file_path)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Brand Voice */}
+              {(brandVoice.length > 0 || legacyVoice.length > 0 || other.length > 0) && (
+                <Card className="lg:col-span-2">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Volume2 className="h-4 w-4 text-primary" />
+                      Brand Voice & Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={brandVoice.length > 2 ? "grid grid-cols-2 gap-3" : "space-y-3"}>
+                      {brandVoice.map((a) => {
+                        const v = a.metadata?.value;
+                        const display = Array.isArray(v) ? (v as string[]).join(", ") : (typeof v === "string" ? v : a.name);
+                        return (
+                          <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card group">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {a.metadata?.sub_type?.replace(/_/g, " ") || "brand voice"}
+                                </Badge>
+                                <AssetStatusBadge asset={a} />
+                              </div>
+                              <p className="text-sm text-foreground leading-relaxed">{display}</p>
+                            </div>
+                            <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0 mt-0.5" onClick={() => handleDelete(a.id, a.file_path)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                      {legacyVoice.map((a) => (
+                        <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg border bg-card group">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant="outline" className="text-xs capitalize">{a.asset_type}</Badge>
+                              <AssetStatusBadge asset={a} />
+                            </div>
+                            <p className="text-sm text-foreground leading-relaxed">{a.metadata?.value || a.name}</p>
+                          </div>
+                          <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive h-7 w-7 shrink-0 mt-0.5" onClick={() => handleDelete(a.id, a.file_path)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                      {other.map((a) => (
+                        <OtherAsset key={a.id} asset={a} onDelete={() => handleDelete(a.id, a.file_path)} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </>
         )}
+
+        {/* Brand Kit Preview Dialog */}
+        <Dialog open={kitPreviewOpen} onOpenChange={setKitPreviewOpen}>
+          <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-primary" />
+                Brand Kit Preview
+              </DialogTitle>
+              <DialogDescription>
+                What the AI agents see for {currentClient?.business_name || "this client"}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2 text-sm">
+              <div>
+                <p className="font-medium mb-2 text-xs uppercase tracking-wide text-muted-foreground">Visual</p>
+                <div className="flex gap-2 flex-wrap">
+                  {colors.filter((a) => a.confirmed).map((a) => (
+                    <div key={a.id} className="flex items-center gap-1.5 rounded-md border px-2 py-1">
+                      <div className="h-4 w-4 rounded border flex-shrink-0" style={{ backgroundColor: a.metadata?.hex || a.name }} />
+                      <span className="text-xs font-mono">{(a.metadata?.hex || a.name).toUpperCase()}</span>
+                    </div>
+                  ))}
+                  {fonts.filter((a) => a.confirmed).map((a) => (
+                    <Badge key={a.id} variant="outline" className="text-xs">{a.metadata?.value || a.name}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="font-medium mb-2 text-xs uppercase tracking-wide text-muted-foreground">Voice</p>
+                <div className="space-y-2">
+                  {brandVoice.filter((a) => a.confirmed).map((a) => {
+                    const v = a.metadata?.value;
+                    const display = Array.isArray(v) ? (v as string[]).join(", ") : (typeof v === "string" ? v : a.name);
+                    return (
+                      <div key={a.id} className="flex gap-2">
+                        <Badge variant="secondary" className="text-xs shrink-0 capitalize">
+                          {a.metadata?.sub_type?.replace(/_/g, " ") || "voice"}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">{display}</p>
+                      </div>
+                    );
+                  })}
+                  {brandVoice.filter((a) => a.confirmed).length === 0 && (
+                    <p className="text-xs text-muted-foreground italic">No confirmed brand voice assets yet. Run extraction first.</p>
+                  )}
+                </div>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">Kit completeness: <strong>{kitScore}%</strong></p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -803,7 +989,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium truncate">{asset.name}</p>
                         {asset.is_primary && <Badge variant="secondary" className="shrink-0">Primary</Badge>}
-                        <AssetStatusBadge status={asset.metadata?.confirmation_status} />
+                        <AssetStatusBadge asset={asset} />
                       </div>
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                         <Building2 className="h-3 w-3" />
