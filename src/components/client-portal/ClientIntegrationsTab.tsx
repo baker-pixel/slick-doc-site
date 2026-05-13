@@ -228,6 +228,45 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       next.delete("connected");
       next.delete("success");
       setSearchParams(next, { replace: true });
+
+      // Complete the client_oauth workflow step now that a real account is connected
+      (async () => {
+        try {
+          const { data: wf } = await supabase
+            .from("client_workflows")
+            .select("id")
+            .eq("client_id", clientAccountId)
+            .eq("status", "active")
+            .maybeSingle();
+          if (!wf) return;
+
+          const { data: oauthStep } = await supabase
+            .from("workflow_steps")
+            .select("id, step_number, status")
+            .eq("workflow_id", wf.id)
+            .eq("task_type", "client_oauth")
+            .maybeSingle();
+
+          if (oauthStep && oauthStep.status !== "completed") {
+            await supabase
+              .from("workflow_steps")
+              .update({ status: "completed", completed_at: new Date().toISOString() })
+              .eq("id", oauthStep.id);
+
+            supabase.functions
+              .invoke("advance-workflow", {
+                body: {
+                  workflow_id: wf.id,
+                  completed_step_number: oauthStep.step_number,
+                  client_id: clientAccountId,
+                },
+              })
+              .catch((e) => console.error("advance-workflow after OAuth:", e));
+          }
+        } catch (e) {
+          console.error("Failed to complete OAuth workflow step:", e);
+        }
+      })();
     }
 
     if (errorMsg) {

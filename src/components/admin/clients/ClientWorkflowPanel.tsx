@@ -400,6 +400,12 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
     refreshTasks();
   };
 
+  // Maps admin-side client_onboarding field → the workflow_step task_type it corresponds to
+  const ONBOARDING_TO_WORKFLOW_STEP: Record<string, string> = {
+    intake_form_completed_at: "client_form",
+    kickoff_scheduled_at: "client_calendar",
+  };
+
   const handleCompleteOnboardingStep = async (step: string) => {
     if (!onboarding) return;
     setIsActionLoading(true);
@@ -412,6 +418,44 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
       if (error) throw error;
 
       setOnboarding(prev => prev ? { ...prev, [step]: new Date().toISOString() } : null);
+
+      // Sync to workflow_steps if this step corresponds to a client-facing workflow step
+      const taskType = ONBOARDING_TO_WORKFLOW_STEP[step];
+      if (taskType && selectedClientId) {
+        const { data: wf } = await supabase
+          .from("client_workflows")
+          .select("id")
+          .eq("client_id", selectedClientId)
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (wf) {
+          const { data: wfStep } = await supabase
+            .from("workflow_steps")
+            .select("id, step_number, status")
+            .eq("workflow_id", wf.id)
+            .eq("task_type", taskType)
+            .maybeSingle();
+
+          if (wfStep && wfStep.status !== "completed") {
+            await supabase
+              .from("workflow_steps")
+              .update({ status: "completed", completed_at: new Date().toISOString() })
+              .eq("id", wfStep.id);
+
+            supabase.functions
+              .invoke("advance-workflow", {
+                body: {
+                  workflow_id: wf.id,
+                  completed_step_number: wfStep.step_number,
+                  client_id: selectedClientId,
+                },
+              })
+              .catch((e) => console.error("advance-workflow failed from admin:", e));
+          }
+        }
+      }
+
       toast({ title: "Step completed!" });
     } catch (error) {
       console.error("Error updating onboarding:", error);

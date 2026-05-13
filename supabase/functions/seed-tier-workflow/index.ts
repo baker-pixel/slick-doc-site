@@ -7,6 +7,12 @@ const corsHeaders = {
 };
 
 // 5 client-facing onboarding gates — prepended to ALL tiers
+// Order rationale:
+//   1. Confirm info first (we need this before anything)
+//   2. Schedule kickoff immediately — creates commitment while client is engaged
+//   3. Upload brand assets — they have time before the call
+//   4. Connect social accounts — after kickoff call, trust is established
+//   5. Approve first content — after kickoff, strategy is aligned
 const ONBOARDING_STEPS = [
   {
     step_number: 1,
@@ -20,31 +26,31 @@ const ONBOARDING_STEPS = [
   },
   {
     step_number: 2,
+    step_name: "Schedule Kickoff Call",
+    task_type: "client_calendar",
+    depends_on: 1,
+    payload: {
+      calendar_url: "https://calendly.com/baker-orangedoor",
+    },
+  },
+  {
+    step_number: 3,
     step_name: "Upload Brand Assets",
     task_type: "client_upload",
-    depends_on: 1,
+    depends_on: 2,
     payload: {
       required: ["logo_primary"],
       optional: ["logo_dark", "brand_colors", "font_guidelines"],
     },
   },
   {
-    step_number: 3,
+    step_number: 4,
     step_name: "Connect Social Accounts",
     task_type: "client_oauth",
-    depends_on: 2,
+    depends_on: 3,
     payload: {
       platforms: ["linkedin", "facebook", "instagram", "twitter"],
       minimum_required: 1,
-    },
-  },
-  {
-    step_number: 4,
-    step_name: "Schedule Kickoff Call",
-    task_type: "client_calendar",
-    depends_on: 3,
-    payload: {
-      calendar_url: "https://calendly.com/baker-orangedoor",
     },
   },
   {
@@ -64,7 +70,7 @@ const FOUNDATION_STEPS = [
   { step_number: 2, step_name: "Run basic SEO audit", task_type: "seo_audit", depends_on: 1 },
   { step_number: 3, step_name: "Generate marketing gap report", task_type: "gap_report", depends_on: 2 },
   { step_number: 4, step_name: "Create Google Business Profile post", task_type: "content", depends_on: 3, payload: { content_type: "gbp_post" } },
-  { step_number: 5, step_name: "Publish GBP post", task_type: "n8n_post_social", depends_on: 4 },
+  { step_number: 5, step_name: "Publish GBP post", task_type: "n8n_post_social", depends_on: 4, payload: { content_type: "gbp_post" } },
   { step_number: 6, step_name: "Write blog article", task_type: "content", depends_on: 3, payload: { content_type: "blog" } },
   { step_number: 7, step_name: "Publish blog article", task_type: "n8n_post_blog", depends_on: 6 },
   { step_number: 8, step_name: "Generate quarterly SEO report", task_type: "report", depends_on: 7 },
@@ -151,10 +157,10 @@ serve(async (req) => {
       });
     }
 
-    // Get client tier
+    // Get client tier + website_url for brand extraction
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("tier")
+      .select("tier, website_url")
       .eq("id", client_id)
       .single();
 
@@ -180,7 +186,19 @@ serve(async (req) => {
       );
     }
 
+    // Read Calendly URL from admin_settings (falls back to hardcoded default)
+    const { data: calendlySetting } = await supabase
+      .from("admin_settings")
+      .select("value")
+      .eq("key", "calendly_url")
+      .maybeSingle();
+    const calendlyUrl = calendlySetting?.value || "https://calendly.com/baker-orangedoor";
+
     const steps = getStepsForTier(client.tier);
+
+    // Inject the live Calendly URL into the kickoff step payload
+    const calendarStep = steps.find((s: any) => s.task_type === "client_calendar");
+    if (calendarStep) calendarStep.payload = { ...calendarStep.payload, calendar_url: calendlyUrl };
 
     // Create workflow
     const { data: workflow, error: wfError } = await supabase
@@ -222,7 +240,7 @@ serve(async (req) => {
       task_type: s.task_type,
       depends_on: s.depends_on,
       payload: s.payload || null,
-      status: s.status || "pending",
+      status: s.status || "locked",
       workflow_id: workflow.id,
       client_id,
       estimated_completion: estimatedDates[i],
@@ -231,11 +249,59 @@ serve(async (req) => {
     const { error: stepsError } = await supabase.from("workflow_steps").insert(rows);
     if (stepsError) throw new Error(`Failed to seed steps: ${stepsError.message}`);
 
-    // Do NOT auto-start step 1 for onboarding — it's a client_form, not automation
-    // Step 1 is already "pending" and available for the client to fill out
+    // Seed client_onboarding record so admin panels show this client immediately
+    const { error: onboardingErr } = await supabase
+      .from("client_onboarding")
+      .insert({ client_account_id: client_id, current_step: 1 });
+    // 23505 = unique violation (already exists) — safe to ignore
+    if (onboardingErr && onboardingErr.code !== "23505") {
+      console.error("Failed to seed client_onboarding:", onboardingErr.message);
+    }
+
+    // Fire project generation + brand extraction in background (non-blocking)
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const bgHeaders = {
+      "Authorization": `Bearer ${supabaseAnonKey}`,
+      "Content-Type": "application/json",
+    };
+
+    const bgTasks: Record<string, string> = {};
+
+    fetch(`${supabaseUrl}/functions/v1/generate-client-projects`, {
+      method: "POST",
+      headers: bgHeaders,
+      body: JSON.stringify({ clientAccountId: client_id, returnOnly: false }),
+    })
+      .then((r) => { bgTasks.projects = r.ok ? "queued" : `http_${r.status}`; })
+      .catch((e) => {
+        bgTasks.projects = "failed";
+        console.error("Background project generation failed:", e);
+      });
+
+    if (client.website_url) {
+      fetch(`${supabaseUrl}/functions/v1/extract-brand-assets`, {
+        method: "POST",
+        headers: bgHeaders,
+        body: JSON.stringify({ client_account_id: client_id, website_url: client.website_url }),
+      })
+        .then((r) => { bgTasks.brand_assets = r.ok ? "queued" : `http_${r.status}`; })
+        .catch((e) => {
+          bgTasks.brand_assets = "failed";
+          console.error("Background brand extraction failed:", e);
+        });
+    } else {
+      bgTasks.brand_assets = "skipped_no_url";
+    }
 
     return new Response(
-      JSON.stringify({ success: true, workflow_id: workflow.id, tier: client.tier, total_steps: steps.length }),
+      JSON.stringify({
+        success: true,
+        workflow_id: workflow.id,
+        tier: client.tier,
+        total_steps: steps.length,
+        background_tasks: bgTasks,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

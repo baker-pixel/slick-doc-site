@@ -113,6 +113,13 @@ export default function ClientPortal() {
   // Portal preferences hook
   const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(user?.id);
   const [activeTab, setActiveTab] = useState<PortalTab>(preferences.default_landing_page || "activity");
+  // When navigating to social from the onboarding activity tab, open to Connected Accounts
+  const [socialInitialTab, setSocialInitialTab] = useState<"composer" | "feed" | "accounts">("accounts");
+
+  const handleTabChange = (tab: PortalTab) => {
+    if (tab === "social") setSocialInitialTab(isOnboardingComplete ? "composer" : "accounts");
+    setActiveTab(tab);
+  };
 
   // Check if onboarding steps 1-5 are all completed
   const { data: isOnboardingComplete = false } = useQuery({
@@ -328,7 +335,7 @@ export default function ClientPortal() {
 
     switch (activeTab) {
       case "activity":
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
       case "projects":
@@ -350,7 +357,7 @@ export default function ClientPortal() {
       case "access":
         return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
       case "social":
-        return <SocialMediaTab clientAccountId={portalUser.client_account_id} />;
+        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />;
       case "calendar":
         return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} clientEmail={clientAccount?.email} />;
       case "team":
@@ -374,7 +381,7 @@ export default function ClientPortal() {
       case "learning":
         return <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />;
       default:
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => setActiveTab(tab as PortalTab)} />;
+        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
     }
   };
 
@@ -425,7 +432,7 @@ export default function ClientPortal() {
       <OnboardingTour
         active={showTour}
         onClose={handleCloseTour}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         currentTab={activeTab}
       />
 
@@ -433,7 +440,7 @@ export default function ClientPortal() {
       <div className="min-h-screen flex w-full bg-gradient-to-br from-muted/20 via-background to-muted/30">
         <ClientPortalSidebar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           clientName={clientName}
           businessName={clientAccount?.business_name}
           onSignOut={handleSignOut}

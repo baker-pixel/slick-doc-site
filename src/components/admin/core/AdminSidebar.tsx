@@ -15,6 +15,7 @@ import {
   Home,
   Contact,
   Layers,
+  Palette,
 } from "lucide-react";
 import {
   Sidebar,
@@ -117,6 +118,7 @@ const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
   { id: "client-projects", label: "Projects", icon: Layers },
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
+  { id: "brand-assets", label: "Brand Assets", icon: Palette },
   { id: "approvals", label: "Approvals", icon: FileCheck },
   { id: "contacts", label: "Leads", icon: Contact },
   { id: "settings", label: "Settings", icon: Settings },

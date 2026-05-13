@@ -280,6 +280,15 @@ function normalizeJobType(raw: unknown): AutomationType {
     internal_linking: "run_seo_audit",
     local_seo: "run_seo_audit",
     citation_building: "run_seo_audit",
+
+    // Workflow step task_type aliases (from seed-tier-workflow FOUNDATION_STEPS / GROWTH_EXTRA / TRANSFORMATION_EXTRA)
+    website_analysis: "run_page_speed_test",
+    gap_report: "run_keyword_gap_analysis",
+    content: "content_generation",
+    email_template: "email_sequence",
+    ad_copy: "content_generation",
+    social_content: "content_generation",
+    analytics: "create_analytics_dashboard",
   };
 
   const resolved: AutomationType = aliasMap[normalized] ?? (normalized as AutomationType);

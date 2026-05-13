@@ -182,12 +182,12 @@ export default function ClientPortalAuth() {
       .eq("token", token)
       .is("accepted_at", null)
       .gt("expires_at", new Date().toISOString())
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
-      const reason = error?.code === "PGRST116"
-        ? "This invitation has already been used or has expired. Please ask your admin to send a new one."
-        : "This invitation link is invalid, already accepted, or has expired. Please contact your account manager for a new invite.";
+      const reason = error
+        ? "This invitation link is invalid or there was a problem loading it. Please contact your account manager for a new invite."
+        : "This invitation has already been used or has expired. Please ask your admin to send a new one.";
       toast({
         title: "Invitation Not Found",
         description: reason,

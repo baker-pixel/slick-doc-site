@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -662,7 +663,7 @@ export function EmailTemplatesPanel() {
                 </div>
                 <div
                   dangerouslySetInnerHTML={{
-                    __html: (editingTemplate.html_content || "").replace(/\{\{(\w+)\}\}/g, (_, key) => {
+                    __html: sanitizeHtml((editingTemplate.html_content || "").replace(/\{\{(\w+)\}\}/g, (_, key) => {
                       const sampleData: Record<string, string> = {
                         firstName: "John",
                         lastName: "Doe",
@@ -671,7 +672,7 @@ export function EmailTemplatesPanel() {
                         resumeToken: "sample-token-123",
                       };
                       return sampleData[key] || `{{${key}}}`;
-                    })
+                    }))
                   }}
                 />
               </div>
@@ -706,7 +707,7 @@ export function EmailTemplatesPanel() {
                 })}
               </p>
             </div>
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewHtml) }} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>

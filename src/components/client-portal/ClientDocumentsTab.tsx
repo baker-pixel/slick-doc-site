@@ -61,7 +61,6 @@ export default function ClientDocumentsTab({ clientAccountId }: ClientDocumentsT
           filter: `client_account_id=eq.${clientAccountId}`,
         },
         () => {
-          console.log('Documents updated, refreshing...');
           fetchDocuments();
         }
       )

@@ -35,7 +35,11 @@ serve(async (req) => {
       (client.context_profile as Record<string, string> | null)?.website_summary || "";
 
     // Use first platform for style; fall back to linkedin
-    const platform = (Array.isArray(platforms) ? platforms[0] : platforms) || "linkedin";
+    const VALID_PLATFORMS = ["facebook", "instagram", "linkedin", "twitter"];
+    const rawPlatform = (Array.isArray(platforms) ? platforms[0] : platforms) || "linkedin";
+    const platform = VALID_PLATFORMS.includes(String(rawPlatform).toLowerCase())
+      ? String(rawPlatform).toLowerCase()
+      : "linkedin";
 
     const platformStyles: Record<string, string> = {
       facebook: "casual, friendly, community-focused with emojis. 150-250 characters.",
@@ -44,10 +48,13 @@ serve(async (req) => {
       twitter: "concise, punchy, trending. Max 280 characters with 2-3 hashtags.",
     };
 
-    const style = platformStyles[platform] || platformStyles.linkedin;
-    const brandTone = tone || "professional";
+    const style = platformStyles[platform];
+    const brandTone = tone ? String(tone).slice(0, 50) : "professional";
 
-    const targetWords = typeof wordCount === "number" && wordCount > 0 ? wordCount : 100;
+    // Cap word count — min 20, max 300
+    const targetWords = typeof wordCount === "number" && wordCount > 0
+      ? Math.min(Math.max(wordCount, 20), 300)
+      : 100;
 
     const prompt = `Create a compelling social media post for ${clientName}${industry ? ` (${industry} industry)` : ""} for ${platform}.
 
@@ -78,7 +85,13 @@ Return ONLY the post content. No quotes, no explanations.`;
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            role: "system",
+            content: "You are a professional social media copywriter. Write platform-native content that feels authentic and drives engagement. Return ONLY the post text — no commentary, no quotes around the post.",
+          },
+          { role: "user", content: prompt },
+        ],
       }),
     });
 
@@ -103,10 +116,10 @@ Return ONLY the post content. No quotes, no explanations.`;
     const aiData = await response.json();
     const rawContent = aiData.choices?.[0]?.message?.content?.trim() || "";
 
-    // Extract hashtags from content, strip them from the body
+    // Extract hashtags from content, strip them from the body, deduplicate
     const hashtagMatches = rawContent.match(/#\w+/g) || [];
-    const hashtags = hashtagMatches.map((h: string) => h.slice(1));
-    const content = rawContent.replace(/#\w+/g, "").trim();
+    const hashtags = [...new Set(hashtagMatches.map((h: string) => h.slice(1).toLowerCase()))];
+    const content = rawContent.replace(/#\w+/g, "").replace(/\s{2,}/g, " ").trim();
 
     console.log("Generated content length:", content.length, "hashtags:", hashtags.length);
 

@@ -204,6 +204,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
         }
       } catch (err) {
         console.error("Workflow seed error:", err);
+        toast.warning("Client created but workflow seeding failed. Start it manually from Workflows.");
       }
 
       // Auto-run all FULL tasks for the new client
@@ -220,6 +221,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
         }
       } catch (err) {
         console.error("Auto-run error:", err);
+        toast.warning("Client created but auto-run failed. Check Automation → Client Tasks.");
       }
 
       // Scan website to populate context_profile

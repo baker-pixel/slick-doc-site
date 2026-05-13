@@ -56,7 +56,6 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
           filter: `client_account_id=eq.${clientAccountId}`,
         },
         () => {
-          console.log('Invoices updated, refreshing...');
           fetchInvoices();
         }
       )

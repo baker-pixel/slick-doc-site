@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
@@ -68,6 +69,7 @@ function getTierColor(tier: string) {
 }
 
 const QuickAnalysis = () => {
+  const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [url, setUrl] = useState("");
   const [validatedUrl, setValidatedUrl] = useState("");
@@ -203,9 +205,9 @@ const QuickAnalysis = () => {
         .eq("id", prospectId);
     }
     if (action === "call") {
-      window.location.href = "/schedule";
+      navigate("/schedule");
     } else {
-      window.location.href = "/pricing";
+      navigate("/pricing");
     }
   };
 

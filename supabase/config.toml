@@ -1,5 +1,8 @@
 project_id = "axbeaqpjyzzmbvyaofbn"
 
+[functions.extract-brand-assets]
+verify_jwt = false
+
 [functions.publish-scheduled-content]
 verify_jwt = false
 

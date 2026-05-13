@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,28 +9,38 @@ import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ChatWidget } from "@/components/ChatWidget";
 import { VoiceNavigation } from "@/components/VoiceNavigation";
-import Index from "./pages/Index";
-import GapAnalysis from "./pages/GapAnalysis";
-import QuickAssessment from "./pages/QuickAssessment";
-import QuickAnalysis from "./pages/QuickAnalysis";
-import AboutUs from "./pages/AboutUs";
-import ScheduleCall from "./pages/ScheduleCall";
-import Admin from "./pages/Admin";
-import System from "./pages/System";
-import Report from "./pages/Report";
-import Pricing from "./pages/Pricing";
-import TierFoundation from "./pages/TierFoundation";
-import TierGrowth from "./pages/TierGrowth";
-import TierTransformation from "./pages/TierTransformation";
-import NotFound from "./pages/NotFound";
-import ARBusinessCard from "./pages/ARBusinessCard";
-import ARPresentation from "./pages/ARPresentation";
-import Dashboard from "./pages/Dashboard";
-import EmailPreferences from "./pages/EmailPreferences";
-import ClientPortal from "./pages/ClientPortal";
-import ClientPortalAuth from "./pages/ClientPortalAuth";
-import Portfolio from "./pages/Portfolio";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
+import { Loader2 } from "lucide-react";
+
+const Index = lazy(() => import("./pages/Index"));
+const GapAnalysis = lazy(() => import("./pages/GapAnalysis"));
+const QuickAssessment = lazy(() => import("./pages/QuickAssessment"));
+const QuickAnalysis = lazy(() => import("./pages/QuickAnalysis"));
+const AboutUs = lazy(() => import("./pages/AboutUs"));
+const ScheduleCall = lazy(() => import("./pages/ScheduleCall"));
+const Admin = lazy(() => import("./pages/Admin"));
+const System = lazy(() => import("./pages/System"));
+const Report = lazy(() => import("./pages/Report"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const TierFoundation = lazy(() => import("./pages/TierFoundation"));
+const TierGrowth = lazy(() => import("./pages/TierGrowth"));
+const TierTransformation = lazy(() => import("./pages/TierTransformation"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const ARBusinessCard = lazy(() => import("./pages/ARBusinessCard"));
+const ARPresentation = lazy(() => import("./pages/ARPresentation"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const EmailPreferences = lazy(() => import("./pages/EmailPreferences"));
+const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const ClientPortalAuth = lazy(() => import("./pages/ClientPortalAuth"));
+const Portfolio = lazy(() => import("./pages/Portfolio"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient();
 
@@ -37,6 +48,7 @@ function AnimatedRoutes() {
   const location = useLocation();
   
   return (
+    <Suspense fallback={<PageLoader />}>
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<PageTransition><Index /></PageTransition>} />
@@ -64,6 +76,7 @@ function AnimatedRoutes() {
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
       </Routes>
     </AnimatePresence>
+    </Suspense>
   );
 }
 

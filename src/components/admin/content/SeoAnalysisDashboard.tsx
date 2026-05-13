@@ -59,6 +59,7 @@ interface SeoAnalysis {
   internal_links: number | null;
   external_links: number | null;
   mobile_friendly: boolean | null;
+  load_time_ms: number | null;
   analyzed_at: string;
 }
 
@@ -150,7 +151,11 @@ export default function SeoAnalysisDashboard() {
 
       if (error) throw error;
 
-      toast.success("SEO analysis complete!");
+      const meta = data?.meta;
+      const detail = meta
+        ? ` • JS rendered: ${meta.renderedWithJs ? "yes" : "no"} • PageSpeed: ${meta.pageSpeedAvailable ? `mobile ${meta.mobileScore}/100` : "unavailable"}`
+        : "";
+      toast.success(`SEO analysis complete!${detail}`);
       setNewUrl("");
       setTargetKeywords("");
       fetchAnalyses();
@@ -343,8 +348,8 @@ export default function SeoAnalysisDashboard() {
                       </div>
                     </div>
 
-                    {/* Issues Count */}
-                    <div className="flex items-center gap-2">
+                    {/* Issues Count + badges */}
+                    <div className="flex items-center gap-2 flex-wrap">
                       {(analysis.technical_issues?.length || 0) > 0 && (
                         <Badge variant="destructive" className="flex items-center gap-1">
                           <AlertTriangle className="h-3 w-3" />
@@ -355,6 +360,12 @@ export default function SeoAnalysisDashboard() {
                         <Badge variant="outline" className="text-green-600 border-green-300">
                           <Smartphone className="h-3 w-3 mr-1" />
                           Mobile OK
+                        </Badge>
+                      )}
+                      {analysis.load_time_ms !== null && (
+                        <Badge variant="outline" className="text-blue-600 border-blue-300">
+                          <Gauge className="h-3 w-3 mr-1" />
+                          {(analysis.load_time_ms / 1000).toFixed(1)}s TTI
                         </Badge>
                       )}
                     </div>
@@ -382,8 +393,9 @@ export default function SeoAnalysisDashboard() {
 
           {selectedAnalysis && (
             <Tabs defaultValue="overview" className="mt-4">
-              <TabsList className="grid grid-cols-5 w-full">
+              <TabsList className="grid grid-cols-6 w-full">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="pagespeed">PageSpeed</TabsTrigger>
                 <TabsTrigger value="technical">Technical</TabsTrigger>
                 <TabsTrigger value="content">Content</TabsTrigger>
                 <TabsTrigger value="keywords">Keywords</TabsTrigger>
@@ -455,6 +467,88 @@ export default function SeoAnalysisDashboard() {
                       </div>
                     </CardContent>
                   </Card>
+                </TabsContent>
+
+                <TabsContent value="pagespeed" className="space-y-4">
+                  {selectedAnalysis.load_time_ms !== null ? (
+                    <>
+                      {/* Core Web Vitals pulled from technical_issues that came from PageSpeed */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Gauge className="h-5 w-5 text-primary" />
+                            Core Web Vitals
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="border rounded-lg p-4">
+                              <div className="text-xs text-muted-foreground mb-1">Time to Interactive (TTI)</div>
+                              <div className={`text-2xl font-bold ${selectedAnalysis.load_time_ms < 3800 ? "text-green-600" : selectedAnalysis.load_time_ms < 7300 ? "text-yellow-600" : "text-red-600"}`}>
+                                {(selectedAnalysis.load_time_ms / 1000).toFixed(2)}s
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">Target: &lt;3.8s</div>
+                            </div>
+                            <div className="border rounded-lg p-4">
+                              <div className="text-xs text-muted-foreground mb-1">Mobile Friendly</div>
+                              <div className={`text-2xl font-bold ${selectedAnalysis.mobile_friendly ? "text-green-600" : "text-red-600"}`}>
+                                {selectedAnalysis.mobile_friendly ? "Yes" : "No"}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">Based on PageSpeed mobile score</div>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-4">
+                            Full LCP, CLS, FCP, and TBT values are surfaced as issues in the Technical tab below.
+                          </p>
+                        </CardContent>
+                      </Card>
+
+                      {/* PageSpeed issues from technical_issues */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">PageSpeed Issues</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {(() => {
+                            const psIssues = asArray(selectedAnalysis.technical_issues).filter(
+                              (i: any) =>
+                                i.issue?.toLowerCase().includes("lcp") ||
+                                i.issue?.toLowerCase().includes("cls") ||
+                                i.issue?.toLowerCase().includes("blocking") ||
+                                i.issue?.toLowerCase().includes("performance") ||
+                                i.issue?.toLowerCase().includes("mobile performance")
+                            );
+                            return psIssues.length > 0 ? (
+                              <div className="space-y-3">
+                                {psIssues.map((issue: any, i: number) => (
+                                  <div key={i} className="flex items-start gap-3 border rounded-lg p-3">
+                                    {getSeverityBadge(issue.severity)}
+                                    <div>
+                                      <p className="font-medium text-sm">{issue.issue}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">{issue.fix}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-green-600">
+                                <CheckCircle className="h-5 w-5" />
+                                No PageSpeed issues detected!
+                              </div>
+                            );
+                          })()}
+                        </CardContent>
+                      </Card>
+                    </>
+                  ) : (
+                    <Card>
+                      <CardContent className="py-12 text-center text-muted-foreground">
+                        <Gauge className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                        <p className="font-medium">PageSpeed data not available</p>
+                        <p className="text-sm mt-1">Re-run the analysis to fetch Core Web Vitals from Google PageSpeed Insights.</p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="technical" className="space-y-4">

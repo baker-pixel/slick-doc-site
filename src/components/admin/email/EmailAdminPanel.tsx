@@ -20,6 +20,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
 import { EmailDeliverabilityDashboard } from "./EmailDeliverabilityDashboard";
 import { EmailListCleaningPanel } from "./EmailListCleaningPanel";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 // Timezone options
 const TIMEZONES = [
@@ -1040,7 +1041,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
                                       <p className="text-sm text-muted-foreground mb-2">Content</p>
                                       <div
                                         className="border rounded-lg p-4 bg-background"
-                                        dangerouslySetInnerHTML={{ __html: item.html_content }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.html_content) }}
                                       />
                                     </div>
                                     {item.error_message && (

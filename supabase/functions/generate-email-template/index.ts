@@ -100,7 +100,21 @@ const handler = async (req: Request): Promise<Response> => {
 
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { templateType, industry, tone, purpose, clientName, customInstructions }: GenerateRequest = await req.json();
+    const raw: GenerateRequest = await req.json();
+
+    // Sanitize inputs — truncate to safe lengths, strip prompt injection attempts
+    const templateType = String(raw.templateType || "followup").slice(0, 50);
+    const industry = raw.industry ? String(raw.industry).slice(0, 100) : undefined;
+    const tone = raw.tone ? String(raw.tone).slice(0, 80) : undefined;
+    const purpose = raw.purpose ? String(raw.purpose).slice(0, 300) : undefined;
+    const clientName = raw.clientName ? String(raw.clientName).slice(0, 100) : undefined;
+    // Strip common injection markers then truncate to 500 chars
+    const customInstructions = raw.customInstructions
+      ? String(raw.customInstructions)
+          .replace(/ignore\s+(previous|above|all)\s+instructions?/gi, "")
+          .replace(/system\s*prompt/gi, "")
+          .slice(0, 500)
+      : undefined;
 
     const templateInfo = TEMPLATE_TYPES[templateType] || TEMPLATE_TYPES.followup;
     const actualPurpose = purpose || templateInfo.defaultPurpose;

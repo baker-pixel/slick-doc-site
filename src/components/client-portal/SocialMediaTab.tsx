@@ -7,10 +7,11 @@ import { SocialPostComposer } from "./social/SocialPostComposer";
 
 interface SocialMediaTabProps {
   clientAccountId: string;
+  initialTab?: "composer" | "feed" | "accounts";
 }
 
-export function SocialMediaTab({ clientAccountId }: SocialMediaTabProps) {
-  const [subTab, setSubTab] = useState("composer");
+export function SocialMediaTab({ clientAccountId, initialTab = "accounts" }: SocialMediaTabProps) {
+  const [subTab, setSubTab] = useState(initialTab);
 
   return (
     <div className="space-y-6">

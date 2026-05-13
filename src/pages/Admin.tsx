@@ -499,6 +499,7 @@ const AdminInner = () => {
     business_name: string;
     industry?: string | null;
     overall_score?: number | null;
+    website_url?: string | null;
   }) => {
     setInvitingEmail(lead.email);
     try {
@@ -524,6 +525,7 @@ const AdminInner = () => {
             first_name: lead.first_name || null,
             last_name: lead.last_name || null,
             industry: lead.industry || 'General',
+            website_url: lead.website_url || null,
             status: 'active',
             tier,
             plan_tier: tier,
@@ -533,7 +535,7 @@ const AdminInner = () => {
         if (createErr) throw createErr;
         clientId = newClient.id;
 
-        // Seed workflow
+        // Seed workflow + client_onboarding + kick off project generation
         try {
           await supabase.functions.invoke("seed-tier-workflow", {
             body: { client_id: clientId, tier },
@@ -541,6 +543,14 @@ const AdminInner = () => {
         } catch (wfErr) {
           console.error("Failed to seed workflow:", wfErr);
         }
+
+        // Fallback: generate projects from browser in case edge-to-edge call failed
+        supabase.functions.invoke("generate-client-projects", {
+          body: { clientAccountId: clientId, returnOnly: false },
+        }).catch((err: unknown) => console.error("Auto project generation failed:", err));
+
+        // Brand extraction is handled inside seed-tier-workflow (background fetch)
+        // — no separate call here to avoid duplicate assets
       }
 
       // 3. Create invitation via admin API
@@ -680,6 +690,7 @@ const AdminInner = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="current-password"
                 />
                 <Button type="submit" className="w-full">
                   Access Dashboard
@@ -834,6 +845,7 @@ const AdminInner = () => {
                           first_name: contact.first_name,
                           last_name: contact.last_name,
                           business_name: contact.business_name,
+                          website_url: contact.website_url,
                         })}
                       >
                         <UserPlus className="w-4 h-4 mr-1" />
@@ -1018,6 +1030,7 @@ const AdminInner = () => {
                           business_name: gap.business_name,
                           industry: gap.industry,
                           overall_score: gap.overall_score,
+                          website_url: gap.website_url,
                         })}
                       >
                         <UserPlus className="w-4 h-4 mr-1" />
@@ -1284,10 +1297,7 @@ const AdminInner = () => {
           adminPassword={storedPassword} 
           onNavigateToSection={(section, context) => {
             setActiveSection(section);
-            // Could store context for pre-selecting client in target section
-            if (context?.clientId) {
-              console.log("Navigating to section with client context:", context);
-            }
+            // context.clientId available for pre-selecting client in future
           }}
         />;
       case "smart-task-queue":

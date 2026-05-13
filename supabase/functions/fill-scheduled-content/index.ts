@@ -150,7 +150,7 @@ serve(async (req) => {
 
         if (updateErr) throw new Error(`Failed to update slot: ${updateErr.message}`);
 
-        await supabase.from("content_approvals").insert({
+        const { error: approvalErr } = await supabase.from("content_approvals").insert({
           client_account_id: slot.client_account_id,
           content_type: mapApprovalContentType(slot.content_type),
           platform: slot.platform,
@@ -163,6 +163,18 @@ serve(async (req) => {
           scheduled_for: slot.scheduled_for,
           metadata: { content_calendar_id: slot.id, auto_approved: true },
         });
+
+        if (approvalErr) {
+          console.error(`content_approvals insert failed for slot ${slot.id}:`, approvalErr.message);
+          await supabase.from("automation_alerts").insert({
+            alert_type: "data_error",
+            severity: "warning",
+            title: "content_approvals insert failed in fill-scheduled-content",
+            message: approvalErr.message,
+            source: "fill-scheduled-content",
+            metadata: { slot_id: slot.id, client_id: slot.client_account_id, timestamp: new Date().toISOString() },
+          }).catch(() => {});
+        }
 
         console.log(`Filled ${slot.id} (${slot.platform}/${slot.content_type}) context=${!!(client.context_profile)}`);
         results.push({ id: slot.id, success: true });

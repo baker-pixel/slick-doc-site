@@ -149,7 +149,13 @@ Return only the JSON. No extra text, no markdown, no code blocks.`;
         model: "llama-3.3-70b-versatile",
         max_tokens: 1000,
         temperature: 0,
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            role: "system",
+            content: "You are a senior SEO analyst. Analyse the provided signals and return a precise, evidence-based SEO audit as valid JSON only. No markdown, no extra text.",
+          },
+          { role: "user", content: prompt },
+        ],
       }),
     });
 

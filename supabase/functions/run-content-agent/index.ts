@@ -109,7 +109,13 @@ Keep it under 150 words. Make it engaging and ready to post.`;
           model: "llama-3.3-70b-versatile",
           max_tokens: 800,
           temperature: 0.7,
-          messages: [{ role: "user", content: prompt }],
+          messages: [
+            {
+              role: "system",
+              content: "You are a professional marketing copywriter. Write concise, engaging content ready to publish. Return only the content — no intro, no commentary, no quotes.",
+            },
+            { role: "user", content: prompt },
+          ],
         }),
       }
     );
@@ -169,6 +175,14 @@ Keep it under 150 words. Make it engaging and ready to post.`;
 
     if (approvalInsertError) {
       console.error("Failed to insert content_approvals row:", approvalInsertError);
+      await supabase.from("automation_alerts").insert({
+        alert_type: "data_error",
+        severity: "warning",
+        title: "content_approvals insert failed in run-content-agent",
+        message: approvalInsertError.message,
+        source: "run-content-agent",
+        metadata: { task_id: taskId, client_id: task.client_id, timestamp: new Date().toISOString() },
+      }).catch(() => {});
     }
 
     return new Response(

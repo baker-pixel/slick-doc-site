@@ -30,18 +30,32 @@ serve(async (req) => {
       );
     }
 
+    // Guard: cap input size so we never forward huge payloads to the AI
+    const MAX_INPUT_CHARS = 3000;
+    const safeContent = String(originalContent).slice(0, MAX_INPUT_CHARS);
+
+    // Validate segment — fall back gracefully but log unknown values
+    const knownSegment = Object.prototype.hasOwnProperty.call(SEGMENT_DESCRIPTIONS, segment);
+    if (!knownSegment) {
+      console.warn(`Unknown segment "${segment}" — falling back to original content`);
+      return new Response(
+        JSON.stringify({ success: true, personalizedContent: safeContent }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    const segmentDesc = SEGMENT_DESCRIPTIONS[segment] || segment;
-    const componentDesc = componentType || "content";
+    const segmentDesc = SEGMENT_DESCRIPTIONS[segment];
+    const componentDesc = componentType ? String(componentType).slice(0, 50) : "content";
 
     const prompt = `You are personalizing website content for a specific audience segment.
 
 Original ${componentDesc}:
-"${originalContent}"
+"${safeContent}"
 
 Target segment: ${segmentDesc}
 

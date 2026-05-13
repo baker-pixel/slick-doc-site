@@ -36,7 +36,11 @@ export function QuickClientSwitcher({ open, onOpenChange, onSelectClient }: Quic
   useEffect(() => {
     const stored = localStorage.getItem("recentClients");
     if (stored) {
-      setRecentClients(JSON.parse(stored));
+      try {
+        setRecentClients(JSON.parse(stored));
+      } catch {
+        localStorage.removeItem("recentClients");
+      }
     }
   }, []);
 

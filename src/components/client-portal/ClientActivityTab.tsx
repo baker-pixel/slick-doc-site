@@ -134,6 +134,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [workflowCreatedAt, setWorkflowCreatedAt] = useState<string | null>(null);
   const [completingStep, setCompletingStep] = useState<string | null>(null);
+  const [calendarOpenedSteps, setCalendarOpenedSteps] = useState<Set<string>>(new Set());
   const [showBusinessForm, setShowBusinessForm] = useState(false);
   const [pendingFormStepId, setPendingFormStepId] = useState<string | null>(null);
   const [submittingBizForm, setSubmittingBizForm] = useState(false);
@@ -327,7 +328,15 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   const wfAllDone = wfTotal > 0 && wfCompleted === wfTotal;
   const finalEstimate = workflowSteps.length > 0 ? workflowSteps[workflowSteps.length - 1]?.estimated_completion : null;
 
-  // Complete a client-driven step
+  // Client-facing onboarding steps only (used for progress bar before automation kicks in)
+  const clientSteps = useMemo(() => workflowSteps.filter((s) => s.task_type.startsWith("client_")), [workflowSteps]);
+  const clientStepsDone = useMemo(() => clientSteps.filter((s) => s.status === "completed").length, [clientSteps]);
+  const clientStepsTotal = clientSteps.length;
+  const onboardingComplete = clientStepsTotal > 0 && clientStepsDone === clientStepsTotal;
+  // Show onboarding progress until all 5 client gates are done, then show full workflow progress
+  const displayProgress = onboardingComplete ? wfProgress : (clientStepsTotal > 0 ? Math.round((clientStepsDone / clientStepsTotal) * 100) : 0);
+
+  // Complete a client-driven step and auto-advance dependent steps
   const handleCompleteStep = useCallback(async (stepId: string) => {
     setCompletingStep(stepId);
     try {
@@ -337,6 +346,21 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         .eq("id", stepId);
 
       if (error) throw error;
+
+      // Unlock any steps that were waiting on this one
+      const completedStepObj = workflowSteps.find((s) => s.id === stepId);
+      if (completedStepObj && workflowId) {
+        supabase.functions
+          .invoke("advance-workflow", {
+            body: {
+              workflow_id: workflowId,
+              completed_step_number: completedStepObj.step_number,
+              client_id: clientAccountId,
+            },
+          })
+          .catch((e) => console.error("advance-workflow failed:", e));
+      }
+
       toast({ title: "Step completed!" });
       queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
       queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
@@ -345,7 +369,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     } finally {
       setCompletingStep(null);
     }
-  }, [clientAccountId, queryClient]);
+  }, [clientAccountId, queryClient, workflowSteps, workflowId]);
 
   const handleBizFormSubmit = useCallback(async () => {
     if (!pendingFormStepId) return;
@@ -402,18 +426,19 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         if (onTabChange) onTabChange("brand");
         break;
       case "client_oauth":
+        // Navigate to social tab — completion happens when user actually connects an account
         if (onTabChange) onTabChange("social");
-        handleCompleteStep(step.id);
         break;
       case "client_calendar": {
         const url = step.payload?.calendar_url || "https://calendly.com/baker-orangedoor";
         window.open(url, "_blank");
-        handleCompleteStep(step.id);
+        // Don't auto-complete — show a confirm button so we know they actually booked
+        setCalendarOpenedSteps((prev) => new Set([...prev, step.id]));
         break;
       }
       case "client_approval":
+        // Navigate to approvals tab — completion happens when user approves content
         if (onTabChange) onTabChange("approvals");
-        handleCompleteStep(step.id);
         break;
       default:
         break;
@@ -717,13 +742,17 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold tracking-tight">
               {currentStep
-                ? `Step ${currentStep.step_number} of ${wfTotal} — ${currentStep.step_name}`
+                ? currentStep.task_type.startsWith("client_")
+                  ? `${currentStep.step_name} — Step ${clientStepsDone + 1} of ${clientStepsTotal}`
+                  : onboardingComplete
+                    ? `Your team is working on: ${currentStep.step_name}`
+                    : currentStep.step_name
                 : wfAllDone
                   ? "All steps complete! 🎉"
                   : `Your marketing project — ${wfProgress}% complete`}
             </h2>
           </div>
-          <Progress value={wfProgress} className="h-3" />
+          <Progress value={displayProgress} className="h-3" />
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             {workflowCreatedAt && (
               <span className="flex items-center gap-1">
@@ -731,7 +760,10 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
                 Started {format(new Date(workflowCreatedAt), "MMM d, yyyy")}
               </span>
             )}
-            {finalEstimate && (
+            {!onboardingComplete && clientStepsTotal > 0 && (
+              <span>· {clientStepsDone} of {clientStepsTotal} onboarding steps complete</span>
+            )}
+            {onboardingComplete && finalEstimate && (
               <span>· Estimated completion {format(new Date(finalEstimate + "T00:00:00"), "MMM d, yyyy")}</span>
             )}
           </div>
@@ -797,19 +829,45 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
 
                   {/* CTA button for client steps that are current/available */}
                   {isClientStep && cta && (state === "current" || state === "available") && (
-                    <Button
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => handleStepAction(step)}
-                      disabled={isCompleting}
-                    >
-                      {isCompleting ? (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      ) : (
-                        <cta.icon className="h-4 w-4 mr-1" />
-                      )}
-                      {cta.label}
-                    </Button>
+                    step.task_type === "client_calendar" && calendarOpenedSteps.has(step.id) ? (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        <Button
+                          size="sm"
+                          onClick={() => handleCompleteStep(step.id)}
+                          disabled={isCompleting}
+                          className="gap-1.5"
+                        >
+                          {isCompleting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                          I've booked my call
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-muted-foreground gap-1"
+                          onClick={() => handleStepAction(step)}
+                        >
+                          Open Calendly again
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => handleStepAction(step)}
+                        disabled={isCompleting}
+                      >
+                        {isCompleting ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <cta.icon className="h-4 w-4 mr-1" />
+                        )}
+                        {cta.label}
+                      </Button>
+                    )
                   )}
                 </div>
 

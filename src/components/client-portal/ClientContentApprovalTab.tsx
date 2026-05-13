@@ -13,6 +13,7 @@ import {
   ClipboardList, Sparkles, Target, Hash, Link, AtSign, Type, AlignLeft
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { format } from "date-fns";
 
 interface ContentApproval {
@@ -167,7 +168,7 @@ function ContentRenderer({ content, contentType }: { content: string | null; con
       return (
         <div 
           className="prose prose-sm max-w-none text-foreground"
-          dangerouslySetInnerHTML={{ __html: parsed }} 
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(parsed) }}
         />
       );
     }
@@ -239,7 +240,7 @@ function EmailContentView({ data }: { data: any }) {
           <div className="prose prose-sm max-w-none text-foreground">
             {typeof (data.body || data.content || data.html) === 'string' && 
              (data.body || data.content || data.html).includes('<') ? (
-              <div dangerouslySetInnerHTML={{ __html: data.body || data.content || data.html }} />
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.body || data.content || data.html) }} />
             ) : (
               <p className="whitespace-pre-wrap">{data.body || data.content || data.html}</p>
             )}
@@ -334,7 +335,7 @@ function BlogPostContentView({ data }: { data: any }) {
           <div className="prose prose-sm max-w-none text-foreground">
             {typeof (data.article || data.body || data.content) === 'string' &&
              (data.article || data.body || data.content).includes('<') ? (
-              <div dangerouslySetInnerHTML={{ __html: data.article || data.body || data.content }} />
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.article || data.body || data.content) }} />
             ) : (
               <p className="whitespace-pre-wrap">{data.article || data.body || data.content}</p>
             )}
@@ -484,7 +485,6 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
           filter: `client_account_id=eq.${clientAccountId}`,
         },
         () => {
-          console.log('Content approvals updated, refreshing...');
           fetchApprovals();
         }
       )
@@ -543,6 +543,45 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
 
       setSelectedApproval(null);
       setFeedback("");
+
+      // Complete the client_approval workflow step — first real approval unlocks automation
+      (async () => {
+        try {
+          const { data: wf } = await supabase
+            .from("client_workflows")
+            .select("id")
+            .eq("client_id", clientAccountId)
+            .eq("status", "active")
+            .maybeSingle();
+          if (!wf) return;
+
+          const { data: approvalStep } = await supabase
+            .from("workflow_steps")
+            .select("id, step_number, status")
+            .eq("workflow_id", wf.id)
+            .eq("task_type", "client_approval")
+            .maybeSingle();
+
+          if (approvalStep && approvalStep.status !== "completed") {
+            await supabase
+              .from("workflow_steps")
+              .update({ status: "completed", completed_at: new Date().toISOString() })
+              .eq("id", approvalStep.id);
+
+            supabase.functions
+              .invoke("advance-workflow", {
+                body: {
+                  workflow_id: wf.id,
+                  completed_step_number: approvalStep.step_number,
+                  client_id: clientAccountId,
+                },
+              })
+              .catch((e) => console.error("advance-workflow after approval:", e));
+          }
+        } catch (e) {
+          console.error("Failed to complete approval workflow step:", e);
+        }
+      })();
     } catch (error) {
       console.error("Error approving content:", error);
       toast({

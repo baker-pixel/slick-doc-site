@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -363,7 +364,7 @@ export function ClientLearningHubTab({ clientAccountId }: ClientLearningHubTabPr
                 prose-strong:text-foreground prose-strong:font-semibold
                 prose-ul:my-4 prose-ol:my-4
                 prose-a:text-primary prose-a:no-underline hover:prose-a:underline"
-              dangerouslySetInnerHTML={{ __html: selectedContent.content_body }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedContent.content_body) }}
             />
           )}
 

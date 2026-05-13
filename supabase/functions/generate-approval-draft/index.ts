@@ -1,0 +1,151 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  try {
+    const { client_id, workflow_id, step_id } = await req.json();
+    if (!client_id) return json({ error: "client_id required" }, 400);
+
+    // Skip if a pending_review approval already exists for this client
+    const { data: existing } = await supabase
+      .from("content_approvals")
+      .select("id")
+      .eq("client_account_id", client_id)
+      .eq("status", "pending_review")
+      .maybeSingle();
+
+    if (existing) {
+      console.log(`Approval draft already exists for client ${client_id}, skipping`);
+      return json({ success: true, skipped: true });
+    }
+
+    // Fetch client data
+    const { data: client, error: clientErr } = await supabase
+      .from("client_accounts")
+      .select("business_name, industry, tone, website_summary, website_url, context_profile")
+      .eq("id", client_id)
+      .single();
+
+    if (clientErr || !client) return json({ error: "Client not found" }, 404);
+
+    // Fetch confirmed brand assets for context
+    const { data: brandAssets } = await supabase
+      .from("brand_assets")
+      .select("asset_type, name, metadata")
+      .eq("client_account_id", client_id)
+      .neq("metadata->>confirmation_status", "pending_client");
+
+    const headline = brandAssets?.find((a) => a.asset_type === "headline")?.metadata?.value || "";
+    const description = brandAssets?.find((a) => a.asset_type === "description")?.metadata?.value || "";
+    const brandColors = brandAssets
+      ?.filter((a) => a.asset_type === "color")
+      .map((a) => a.metadata?.hex || a.metadata?.value)
+      .filter(Boolean)
+      .join(", ");
+
+    // Build prompt context
+    const businessContext = [
+      `Business: ${client.business_name}`,
+      client.industry ? `Industry: ${client.industry}` : null,
+      client.tone ? `Brand tone: ${client.tone}` : null,
+      client.website_summary ? `About: ${client.website_summary}` : null,
+      headline ? `Brand headline: "${headline}"` : null,
+      description ? `Brand description: "${description}"` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const groqKey = Deno.env.get("GROQ_API_KEY");
+    let postContent = "";
+    let postPreview = "";
+
+    if (groqKey) {
+      const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 400,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.",
+            },
+            {
+              role: "user",
+              content: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
+            },
+          ],
+        }),
+      });
+
+      if (groqResp.ok) {
+        const groqData = await groqResp.json();
+        postContent = groqData.choices?.[0]?.message?.content?.trim() || "";
+        postPreview = postContent.split("\n")[0].substring(0, 200);
+      }
+    }
+
+    // Fallback if Groq unavailable or key missing
+    if (!postContent) {
+      postContent = `Excited to share what we've been building at ${client.business_name}! We help ${client.industry || "businesses"} achieve their goals through innovative solutions and dedicated service.\n\nReady to see the difference? Let's connect.\n\n#Marketing #Business #Growth`;
+      postPreview = `Excited to share what we've been building at ${client.business_name}!`;
+    }
+
+    // Insert into content_approvals for client to review
+    const { error: insertErr } = await supabase.from("content_approvals").insert({
+      client_account_id: client_id,
+      title: `Introductory LinkedIn Post — ${client.business_name}`,
+      content_type: "linkedin_post",
+      content_preview: postPreview,
+      full_content: postContent,
+      status: "pending_review",
+      submitted_at: new Date().toISOString(),
+      publish_status: "draft",
+    });
+
+    if (insertErr) {
+      console.error("Failed to insert content_approvals:", insertErr.message);
+      return json({ error: insertErr.message }, 500);
+    }
+
+    // Log to automation_alerts so admin can see this was generated
+    await supabase.from("automation_alerts").insert({
+      alert_type: "info",
+      severity: "info",
+      title: "First content draft generated",
+      message: `Auto-generated LinkedIn post draft for ${client.business_name} is awaiting client approval.`,
+      source: "generate-approval-draft",
+      source_id: client_id,
+      metadata: { client_id, workflow_id, step_id },
+    }).catch(() => {});
+
+    return json({ success: true });
+  } catch (err: any) {
+    console.error("generate-approval-draft error:", err);
+    return json({ error: err?.message || "Internal error" }, 500);
+  }
+});

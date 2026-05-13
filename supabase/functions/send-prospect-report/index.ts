@@ -9,7 +9,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+// Initialised inside handler so a missing key throws a clear error at call time, not module load
+let resend: Resend;
 
 // --- Brand palette ---
 const ORANGE = rgb(0.91, 0.322, 0.141);
@@ -398,6 +399,10 @@ serve(async (req) => {
   );
 
   try {
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendKey) throw new Error("RESEND_API_KEY is not configured");
+    resend = new Resend(resendKey);
+
     const { prospectId } = await req.json();
     if (!prospectId) throw new Error("prospectId is required");
 
