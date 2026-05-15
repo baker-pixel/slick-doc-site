@@ -13,7 +13,6 @@ const config: Config = {
   ],
   ALLOWED_ATTR: ["href", "src", "alt", "title", "class", "target", "rel", "style"],
   ALLOW_DATA_ATTR: false,
-  FORBID_SCRIPTS: true,
 };
 
 export function sanitizeHtml(dirty: string | null | undefined): string {
