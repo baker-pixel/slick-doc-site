@@ -134,10 +134,10 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
         website_url: data.website_url || "",
         website_summary: data.website_summary || "",
         tone: data.tone || "professional",
-        context_profile: (data.context_profile as ContextProfile) || null,
+        context_profile: (data.context_profile as unknown as ContextProfile) || null,
       });
 
-      const cp = data.context_profile as ContextProfile | null;
+      const cp = data.context_profile as unknown as ContextProfile | null;
       setServices(cp?.services || []);
       setDifferentiators(cp?.differentiators || []);
       setTargetAudience(cp?.target_audience || "");
@@ -171,7 +171,7 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
         business_summary: businessSummary,
       };
 
-      const { error } = await supabase.rpc("client_update_company_context", {
+      const { error } = await (supabase.rpc as any)("client_update_company_context", {
         p_client_account_id: clientAccountId,
         p_industry:          ctx.industry,
         p_website_url:       ctx.website_url,
