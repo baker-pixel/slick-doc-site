@@ -1,6 +1,6 @@
-import DOMPurify from "dompurify";
+import DOMPurify, { type Config } from "dompurify";
 
-const config: DOMPurify.Config = {
+const config: Config = {
   ALLOWED_TAGS: [
     "p", "br", "strong", "em", "b", "i", "u", "s",
     "h1", "h2", "h3", "h4", "h5", "h6",
@@ -18,5 +18,5 @@ const config: DOMPurify.Config = {
 
 export function sanitizeHtml(dirty: string | null | undefined): string {
   if (!dirty) return "";
-  return DOMPurify.sanitize(dirty, config);
+  return DOMPurify.sanitize(dirty, config) as unknown as string;
 }
