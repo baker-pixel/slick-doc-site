@@ -180,7 +180,7 @@ export function ProjectSetupWizard({
 
     setLoading(true);
     try {
-      const { error } = await supabase.rpc("create_project_with_milestones", {
+      const { error } = await (supabase.rpc as any)("create_project_with_milestones", {
         p_client_account_id: client.id,
         p_name: projectName.trim(),
         p_description: projectDescription.trim() || null,

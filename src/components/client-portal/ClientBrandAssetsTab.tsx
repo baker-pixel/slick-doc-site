@@ -88,7 +88,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const rows = (data || []) as BrandAsset[];
+      const rows = (data || []) as unknown as BrandAsset[];
 
       // Generate signed URLs for file assets
       const withUrls = await Promise.all(
