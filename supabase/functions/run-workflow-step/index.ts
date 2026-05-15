@@ -213,9 +213,21 @@ serve(async (req) => {
           }
           break;
         }
-        case "content":
-          result = await callFn("run-content-agent", { client_id: effectiveClientId, ...p });
+        case "content": {
+          // run-content-agent requires a workflow_task row to write results to
+          const { data: contentTask } = await supabase
+            .from("workflow_tasks")
+            .insert({ client_id: effectiveClientId, task_type: "content", status: "pending", payload: p || {} })
+            .select()
+            .single();
+          if (contentTask) {
+            await supabase.from("workflow_steps").update({ task_id: contentTask.id }).eq("id", step.id);
+            result = await callFn("run-content-agent", { task_id: contentTask.id });
+          } else {
+            result = { error: "Failed to create workflow_task for content agent" };
+          }
           break;
+        }
         case "social_content":
           result = await callFn("generate-social-content", { client_id: effectiveClientId, ...p });
           break;
