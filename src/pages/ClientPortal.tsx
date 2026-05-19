@@ -187,9 +187,14 @@ export default function ClientPortal() {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        navigate("/portal/auth");
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         setTimeout(() => {
           fetchPortalUser(session.user.id);

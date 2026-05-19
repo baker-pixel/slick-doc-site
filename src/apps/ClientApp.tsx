@@ -30,8 +30,9 @@ export function ClientApp() {
             <Routes>
               <Route path="/portal" element={<ClientPortal />} />
               <Route path="/portal/auth" element={<ClientPortalAuth />} />
-              <Route path="/" element={<Navigate to="/portal" replace />} />
-              <Route path="*" element={<Navigate to="/portal" replace />} />
+              {/* Root serves ClientPortalAuth so Supabase hash tokens (recovery, invite) aren't stripped by Navigate */}
+              <Route path="/" element={<ClientPortalAuth />} />
+              <Route path="*" element={<Navigate to="/portal/auth" replace />} />
             </Routes>
           </Suspense>
         </BrowserRouter>
