@@ -20,6 +20,8 @@ export default function ClientPortalAuth() {
   const [existingUserMode, setExistingUserMode] = useState(false);
   const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
   const [confirmEmailSent, setConfirmEmailSent] = useState(false);
   const [invitation, setInvitation] = useState<{
     id: string;
@@ -35,6 +37,10 @@ export default function ClientPortalAuth() {
   useEffect(() => {
     // Listen for SIGNED_IN — finalizes portal setup after email confirmation
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setIsPasswordRecovery(true);
+        return;
+      }
       if (event === "SIGNED_IN" && session?.user) {
         // If handleAcceptInvite is actively running, let it handle finalization
         if (processingInviteRef.current) return;
@@ -232,6 +238,25 @@ export default function ClientPortalAuth() {
         description: error.message || "An error occurred",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Password updated!", description: "You're now signed in." });
+      setIsPasswordRecovery(false);
+      navigate("/portal");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -547,6 +572,47 @@ export default function ClientPortalAuth() {
             <p className="text-sm text-muted-foreground text-center">
               Once confirmed, you'll be signed in automatically and your portal access will be activated.
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold">Set New Password</CardTitle>
+            <CardDescription>Enter your new password below</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSetNewPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="new-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                    minLength={8}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">At least 8 characters</p>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>Update Password <ArrowRight className="ml-2 h-4 w-4" /></>
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
