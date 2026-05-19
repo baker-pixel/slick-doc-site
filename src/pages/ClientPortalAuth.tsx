@@ -37,6 +37,21 @@ export default function ClientPortalAuth() {
   const isPasswordRecoveryRef = useRef(false);
 
   useEffect(() => {
+    // Handle Supabase error hash (e.g. expired OTP)
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const hashError = hash.get("error_code");
+    if (hashError === "otp_expired") {
+      toast({
+        title: "Link Expired",
+        description: "This reset link has expired. Please request a new one.",
+        variant: "destructive",
+      });
+      setForgotPasswordMode(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     // Listen for SIGNED_IN — finalizes portal setup after email confirmation
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
