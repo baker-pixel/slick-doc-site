@@ -33,17 +33,20 @@ export default function ClientPortalAuth() {
 
   // Prevents onAuthStateChange from double-finalizing when handleAcceptInvite is mid-flight
   const processingInviteRef = useRef(false);
+  // Ref so SIGNED_IN handler can synchronously check recovery mode before redirecting
+  const isPasswordRecoveryRef = useRef(false);
 
   useEffect(() => {
     // Listen for SIGNED_IN — finalizes portal setup after email confirmation
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
+        isPasswordRecoveryRef.current = true;
         setIsPasswordRecovery(true);
         return;
       }
       if (event === "SIGNED_IN" && session?.user) {
-        // If handleAcceptInvite is actively running, let it handle finalization
-        if (processingInviteRef.current) return;
+        // Block redirect if we're in password recovery or invite flow
+        if (processingInviteRef.current || isPasswordRecoveryRef.current) return;
 
         const pendingRaw = sessionStorage.getItem("pending_invitation");
         if (pendingRaw) {
@@ -81,7 +84,7 @@ export default function ClientPortalAuth() {
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+      if (session && !isPasswordRecoveryRef.current) {
         checkClientPortalAccess(session.user.id);
       }
     });
@@ -253,6 +256,7 @@ export default function ClientPortalAuth() {
         return;
       }
       toast({ title: "Password updated!", description: "You're now signed in." });
+      isPasswordRecoveryRef.current = false;
       setIsPasswordRecovery(false);
       navigate("/portal");
     } catch (err: any) {
