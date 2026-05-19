@@ -11,7 +11,7 @@ interface SocialMediaTabProps {
 }
 
 export function SocialMediaTab({ clientAccountId, initialTab = "accounts" }: SocialMediaTabProps) {
-  const [subTab, setSubTab] = useState(initialTab);
+  const [subTab, setSubTab] = useState<string>(initialTab);
 
   return (
     <div className="space-y-6">
