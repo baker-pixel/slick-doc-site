@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -322,6 +323,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
           firstName: newInvite.first_name,
           businessName: selectedClientForInvite.business_name,
           token: invitation.token,
+          portalOrigin: getClientPortalOrigin(),
         },
       });
 
@@ -363,6 +365,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
           firstName: refreshed.first_name,
           businessName: getClientName(refreshed.client_account_id),
           token: refreshed.token,
+          portalOrigin: getClientPortalOrigin(),
         },
       });
 
@@ -382,7 +385,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   };
 
   const copyInviteLink = (token: string) => {
-    const link = `${window.location.origin}/portal/auth?invite=${token}`;
+    const link = `${getClientPortalOrigin()}/portal/auth?invite=${token}`;
     navigator.clipboard.writeText(link);
     toast.success("Invite link copied to clipboard");
   };

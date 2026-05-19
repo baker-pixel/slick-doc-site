@@ -14,6 +14,7 @@ interface InviteRequest {
   firstName?: string;
   businessName: string;
   token: string;
+  portalOrigin?: string;
 }
 
 serve(async (req) => {
@@ -24,7 +25,7 @@ serve(async (req) => {
 
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { invitationId, email, firstName, businessName, token }: InviteRequest = await req.json();
+    const { invitationId, email, firstName, businessName, token, portalOrigin }: InviteRequest = await req.json();
 
     console.log(`Sending client portal invitation to ${email} for ${businessName}`);
 
@@ -36,8 +37,11 @@ serve(async (req) => {
       );
     }
 
-    // Get the origin from the request or use a default
-    const origin = req.headers.get("origin") || "https://orangedoormarketing.com";
+    // Prefer explicit portalOrigin; fall back to env var; fall back to request origin
+    const origin = portalOrigin
+      || Deno.env.get("CLIENT_PORTAL_URL")
+      || req.headers.get("origin")
+      || "https://client.orangedoormarketing.com";
     const inviteLink = `${origin}/portal/auth?invite=${token}`;
 
     const greeting = firstName ? `Hi ${firstName}` : "Hi there";

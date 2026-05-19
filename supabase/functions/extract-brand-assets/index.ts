@@ -339,38 +339,47 @@ serve(async (req) => {
   );
 
   try {
-    // Auth: verify JWT and check caller is admin or the linked client
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    const body = await req.json();
+    const { client_account_id, website_url, password } = body;
 
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
-
-    const { data: roleRow } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-    const isAdmin = !!roleRow;
-
-    const { client_account_id, website_url } = await req.json();
     if (!client_account_id || !website_url)
       return json({ error: "client_account_id and website_url are required" }, 400);
 
-    if (!isAdmin) {
-      const { data: portalUser } = await supabase
-        .from("client_portal_users")
-        .select("client_account_id")
+    // Auth: accept admin password in body OR validate client JWT
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    let isAdmin = false;
+
+    if (password && adminPassword && password === adminPassword) {
+      isAdmin = true;
+    } else {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) return json({ error: "Unauthorized" }, 401);
+
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user }, error: authErr } = await userClient.auth.getUser();
+      if (authErr || !user) return json({ error: "Unauthorized" }, 401);
+
+      const { data: roleRow } = await supabase
+        .from("user_roles")
+        .select("role")
         .eq("user_id", user.id)
-        .eq("client_account_id", client_account_id)
+        .eq("role", "admin")
         .maybeSingle();
-      if (!portalUser) return json({ error: "Forbidden" }, 403);
+      isAdmin = !!roleRow;
+
+      if (!isAdmin) {
+        const { data: portalUser } = await supabase
+          .from("client_portal_users")
+          .select("client_account_id")
+          .eq("user_id", user.id)
+          .eq("client_account_id", client_account_id)
+          .maybeSingle();
+        if (!portalUser) return json({ error: "Forbidden" }, 403);
+      }
     }
 
     let targetUrl = website_url.trim();

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -267,6 +268,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
           firstName: selectedLead.first_name,
           businessName: selectedLead.business_name,
           inviteToken,
+          portalOrigin: getClientPortalOrigin(),
         },
       });
 

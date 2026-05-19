@@ -324,7 +324,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
     setExtractedAssets([]);
     try {
       const { data, error } = await supabase.functions.invoke("extract-brand-assets", {
-        body: { client_account_id: extractClientId, website_url: extractUrl.trim() },
+        body: { client_account_id: extractClientId, website_url: extractUrl.trim(), password: adminPassword },
       });
       if (error) throw new Error(error.message || "Extraction failed");
       if (data?.error) throw new Error(data.error);

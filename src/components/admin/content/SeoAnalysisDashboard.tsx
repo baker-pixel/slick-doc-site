@@ -32,7 +32,9 @@ import {
   Smartphone,
   Globe,
   Play,
-  BarChart3
+  BarChart3,
+  Wand2,
+  Plug
 } from "lucide-react";
 import { format } from "date-fns";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
@@ -40,6 +42,8 @@ import { ScoreHeader } from "@/components/admin/shared/ScoreHeader";
 import { SeverityIssueList } from "@/components/admin/shared/SeverityIssueList";
 import { InsightColumns } from "@/components/admin/shared/InsightColumns";
 import { ActionPriorityList } from "@/components/admin/shared/ActionPriorityList";
+import { WordPressConnectPanel } from "@/components/admin/content/WordPressConnectPanel";
+import { SeoFixQueuePanel } from "@/components/admin/content/SeoFixQueuePanel";
 
 interface SeoAnalysis {
   id: string;
@@ -124,7 +128,7 @@ export default function SeoAnalysisDashboard() {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   // ── Full-site audit state ────────────────────────────────────────────────
-  const [auditScope, setAuditScope]         = useState<"page" | "site">("page");
+  const [auditScope, setAuditScope]         = useState<"page" | "site" | "wordpress" | "fix-queue">("page");
   const [isRunningAudit, setIsRunningAudit] = useState(false);
   const [auditResult, setAuditResult]       = useState<FullAuditResult | null>(null);
   const [auditProgressStep, setAuditProgressStep] = useState(0);
@@ -320,13 +324,19 @@ export default function SeoAnalysisDashboard() {
       </div>
 
       {/* ── Audit scope tabs ─────────────────────────────────────────────── */}
-      <Tabs value={auditScope} onValueChange={v => setAuditScope(v as "page" | "site")}>
-        <TabsList className="w-full max-w-sm">
+      <Tabs value={auditScope} onValueChange={v => setAuditScope(v as "page" | "site" | "wordpress" | "fix-queue")}>
+        <TabsList className="w-full max-w-2xl">
           <TabsTrigger value="page" className="flex items-center gap-2 flex-1">
             <Search className="h-4 w-4" /> Single Page
           </TabsTrigger>
           <TabsTrigger value="site" className="flex items-center gap-2 flex-1">
             <Globe className="h-4 w-4" /> Full Site Audit
+          </TabsTrigger>
+          <TabsTrigger value="fix-queue" className="flex items-center gap-2 flex-1">
+            <Wand2 className="h-4 w-4" /> Fix Queue
+          </TabsTrigger>
+          <TabsTrigger value="wordpress" className="flex items-center gap-2 flex-1">
+            <Plug className="h-4 w-4" /> WP Connect
           </TabsTrigger>
         </TabsList>
 
@@ -1058,6 +1068,27 @@ export default function SeoAnalysisDashboard() {
           )}
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        {/* ── Fix Queue tab ───────────────────────────────────────────────── */}
+        <TabsContent value="fix-queue" className="space-y-4 mt-4">
+          <SeoFixQueuePanel clientId={selectedClient || undefined} />
+        </TabsContent>
+
+        {/* ── WordPress Connect tab ────────────────────────────────────────── */}
+        <TabsContent value="wordpress" className="space-y-4 mt-4">
+          {selectedClient ? (
+            <WordPressConnectPanel
+              clientId={selectedClient}
+              clientName={clients.find(c => c.id === selectedClient)?.business_name}
+            />
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Select a client above to configure their WordPress connection.
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
