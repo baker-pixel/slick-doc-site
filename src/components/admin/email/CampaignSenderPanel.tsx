@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +78,7 @@ interface ClientAccount {
 const AUTO_FILL_VARIABLES: Record<string, string> = {
   schedulingLink: "https://calendly.com/orangedoormarketing/discovery",
   unsubscribeLink: "{{unsubscribeLink}}", // Will be replaced by tracking system
-  dashboardLink: "https://orangedoormarketing.com/portal",
+  dashboardLink: `${getClientPortalOrigin()}/portal`,
   websiteUrl: "https://orangedoormarketing.com",
 };
 

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, LockKeyhole } from "lucide-react";
+import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 
 export function ClientLoginCTA() {
   return (
@@ -32,7 +33,7 @@ export function ClientLoginCTA() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/portal/auth" className="w-full sm:w-auto">
+              <a href={`${getClientPortalOrigin()}/portal/auth`} className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   className="w-full sm:w-auto bg-primary hover:bg-orange-dark text-primary-foreground text-base px-8 py-6"
@@ -40,7 +41,7 @@ export function ClientLoginCTA() {
                   Sign In
                   <ArrowRight className="ml-2" size={18} />
                 </Button>
-              </Link>
+              </a>
               <Link to="/pricing" className="w-full sm:w-auto">
                 <Button
                   size="lg"

@@ -4,6 +4,7 @@ import { Menu, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import logo from "@/assets/logo-transparent.png";
+import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 
 const navLinks = [
   { href: "/about", label: "About", isRoute: true },
@@ -17,6 +18,7 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const isHomePage = location.pathname === "/";
+  const portalAuthUrl = `${getClientPortalOrigin()}/portal/auth`;
 
   const handleNavClick = (href: string) => {
     if (!isHomePage && href.startsWith("#")) {
@@ -59,13 +61,13 @@ export function Header() {
                 </a>
               )
             )}
-            <Link
-              to="/portal/auth"
+            <a
+              href={portalAuthUrl}
               className="text-muted-foreground hover:text-foreground transition-colors font-medium inline-flex items-center gap-1.5"
             >
               <LogIn size={16} />
               Sign In
-            </Link>
+            </a>
             <Link to="/pricing">
               <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                 Sign Up
@@ -119,13 +121,13 @@ export function Header() {
                     </a>
                   )
                 )}
-                <Link
-                  to="/portal/auth"
+                <a
+                  href={portalAuthUrl}
                   className="text-muted-foreground hover:text-foreground transition-colors font-medium py-2"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Sign In
-                </Link>
+                </a>
                 <Link to="/pricing" onClick={() => setIsMenuOpen(false)}>
                   <Button variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                     Sign Up

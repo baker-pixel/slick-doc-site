@@ -267,7 +267,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
           email: selectedLead.email,
           firstName: selectedLead.first_name,
           businessName: selectedLead.business_name,
-          inviteToken,
+          token: inviteToken,
           portalOrigin: getClientPortalOrigin(),
         },
       });

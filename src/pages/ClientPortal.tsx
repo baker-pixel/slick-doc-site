@@ -192,6 +192,9 @@ export default function ClientPortal() {
         return;
       }
 
+      // Only fetch portal data on events that change auth identity
+      if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -199,18 +202,6 @@ export default function ClientPortal() {
         setTimeout(() => {
           fetchPortalUser(session.user.id);
         }, 0);
-      } else {
-        setLoading(false);
-        setShouldRedirect(true);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchPortalUser(session.user.id);
       } else {
         setLoading(false);
         setShouldRedirect(true);
@@ -303,7 +294,7 @@ export default function ClientPortal() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    navigate("/portal/auth");
+    // onAuthStateChange SIGNED_OUT fires → setShouldRedirect(true) → navigate("/portal/auth")
   };
 
   const clientName = portalUser 

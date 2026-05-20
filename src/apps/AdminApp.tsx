@@ -4,7 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AdminAuthProvider } from "@/contexts/AdminAuthContext";
 import { Loader2 } from "lucide-react";
 
 const Admin = lazy(() => import("@/pages/Admin"));
@@ -25,17 +24,15 @@ export function AdminApp() {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <AdminAuthProvider>
-          <BrowserRouter>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/" element={<Navigate to="/admin" replace />} />
-                <Route path="*" element={<Navigate to="/admin" replace />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </AdminAuthProvider>
+        <BrowserRouter>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/" element={<Navigate to="/admin" replace />} />
+              <Route path="*" element={<Navigate to="/admin" replace />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );

@@ -182,7 +182,7 @@ export function EmailTemplatesPanel() {
   <p>Your email content goes here.</p>
   <p>You can use variables like {{businessName}} to personalize.</p>
   <p style="margin: 30px 0;">
-    <a href="https://orangedoormarketing.com" 
+    <a href="{{websiteUrl}}"
        style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
       Call to Action
     </a>
