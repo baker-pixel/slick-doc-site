@@ -3,11 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   CheckCircle2, XCircle, Loader2, Plug, Download, RefreshCw,
-  AlertTriangle, Clock, ExternalLink,
+  AlertTriangle, Clock,
 } from "lucide-react";
 
 interface ConnectedSite {
@@ -27,16 +26,12 @@ interface Props {
   onSiteConnected?: (siteId: string) => void;
 }
 
-const PLUGIN_DOWNLOAD_URL = "/downloads/orange-door.php";
-
-const APP_ORIGIN = (import.meta.env.VITE_APP_URL as string | undefined)?.replace(/\/+$/, "") ?? window.location.origin;
-const PLUGIN_ZIP_URL = `${APP_ORIGIN}/downloads/orange-door.zip`;
+const PLUGIN_DOWNLOAD_URL = "/downloads/orange-door.zip";
 
 export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: Props) {
   const [site, setSite] = useState<ConnectedSite | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [wpAdminUrl, setWpAdminUrl] = useState("");
   const notifiedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -95,25 +90,6 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     }
   }
 
-  function handleOneClickInstall() {
-    let base = wpAdminUrl.trim().replace(/\/+$/, "");
-    if (!base) {
-      toast.error("Enter your WordPress admin URL first");
-      return;
-    }
-    if (!/^https?:\/\//i.test(base)) {
-      base = "https://" + base;
-    }
-    // Trigger ZIP download
-    const a = document.createElement("a");
-    a.href = PLUGIN_ZIP_URL;
-    a.download = "orange-door.zip";
-    a.click();
-    // Open WP plugin upload page (no nonce needed — standard admin page)
-    window.open(`${base}/plugin-install.php?tab=upload`, "_blank", "noopener,noreferrer");
-    toast.info("ZIP downloading — upload it on the WordPress page that just opened");
-  }
-
   if (loading) {
     return (
       <Card>
@@ -165,7 +141,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
               </p>
               <a
                 href={PLUGIN_DOWNLOAD_URL}
-                download="orange-door.php"
+                download="orange-door.zip"
                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
               >
                 <Download className="h-3 w-3" />
@@ -254,36 +230,36 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
       <CardContent className="space-y-4">
         {!site ? (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Enter your WordPress admin URL</p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="https://yoursite.com/wp-admin"
-                  value={wpAdminUrl}
-                  onChange={(e) => setWpAdminUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleOneClickInstall()}
-                  className="font-mono text-sm"
-                />
-                <Button onClick={handleOneClickInstall} className="gap-2 shrink-0">
-                  <ExternalLink className="h-4 w-4" />
-                  Connect
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Downloads the plugin ZIP and opens your WordPress upload screen. Upload the ZIP, then activate.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">or install manually</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-
-            <a href={PLUGIN_DOWNLOAD_URL} download="orange-door.php" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <Download className="h-3 w-3" />
-              Download orange-door.php and upload via Plugins → Add New
-            </a>
+            <ol className="space-y-3">
+              <li className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold mt-0.5">1</span>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">Download the plugin</p>
+                  <a href={PLUGIN_DOWNLOAD_URL} download="orange-door.zip">
+                    <Button size="sm" className="gap-2">
+                      <Download className="h-3.5 w-3.5" />
+                      Download orange-door.zip
+                    </Button>
+                  </a>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold mt-0.5">2</span>
+                <div>
+                  <p className="text-sm font-medium">Install in WordPress</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    WordPress Admin → <strong>Plugins → Add New Plugin → Upload Plugin</strong> → choose <code className="bg-muted px-1 rounded">orange-door.zip</code> → Install Now → Activate
+                  </p>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-semibold mt-0.5">3</span>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">This page connects automatically</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">No API key needed — plugin registers itself on activation.</p>
+                </div>
+              </li>
+            </ol>
           </div>
         ) : (
           <div className="space-y-3">
