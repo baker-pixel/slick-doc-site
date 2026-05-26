@@ -18,6 +18,8 @@ import {
   Globe, Wand2, Target, ShieldCheck, Info, BookOpen, Zap,
   MessageSquare, Plug,
 } from "lucide-react";
+import { ConnectSitePanel } from "@/components/admin/content/ConnectSitePanel";
+import { SeoScoreCard } from "@/components/admin/shared/SeoScoreCard";
 
 interface Props {
   clientAccountId: string;
@@ -584,6 +586,18 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
         </div>
+
+        {/* ── WordPress Connect Prompt ─────────────────────── */}
+        {wpSite === null && (
+          <ConnectSitePanel
+            clientId={clientAccountId}
+            mode="client"
+            onSiteConnected={() => loadWpData()}
+          />
+        )}
+
+        {/* ── WordPress Scan Score (plugin data) ───────────── */}
+        {wpSite?.id && <SeoScoreCard siteId={wpSite.id} />}
 
         {/* ── Score Card ────────────────────────────────────── */}
         {loadingAudit ? (

@@ -15,46 +15,89 @@ function basicAuthHeader(user: string, pass: string) {
   return "Basic " + btoa(`${user}:${pass}`);
 }
 
+// Maps old ai_fixes type names → plugin field names
+const TYPE_TO_FIELD: Record<string, string> = {
+  wp_meta_title:       "meta_title",
+  wp_meta_description: "meta_desc",
+  wp_focus_keyword:    "focus_keyword",
+  wp_image_alt:        "alt_text",
+  wp_canonical:        "canonical",
+  wp_slug:             "slug",
+  wp_title:            "title",
+};
+
 // ── Plugin-based apply (preferred) ───────────────────────────────────────────
 
 async function applyViaPlugin(
   wpBase: string,
-  apiKey: string,
+  token: string,
   fixType: string,
   payload: Record<string, unknown>,
-  fixId: string,
 ): Promise<{ before: Record<string, unknown>; after: Record<string, unknown> }> {
-  const res = await fetch(`${wpBase}/wp-json/orangedoor/v1/apply-fixes`, {
+  const field = TYPE_TO_FIELD[fixType] ?? fixType.replace("wp_", "");
+  const value = String(payload.value ?? "");
+  const postUrl = String(payload.post_url ?? "");
+  const imageSrc = String(payload.image_src ?? "");
+
+  // Resolve post_id from URL using WP REST API (no auth needed for public slug lookup)
+  let postId: number | null = null;
+  let mediaId: number | null = null;
+
+  if (field === "alt_text" && imageSrc) {
+    // For alt text, use image src to find media item via unauthenticated WP REST search
+    const fname = imageSrc.split("/").pop() ?? "";
+    const mRes = await fetch(`${wpBase}/wp-json/wp/v2/media?search=${encodeURIComponent(fname)}`, {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (mRes.ok) {
+      const mData = await mRes.json();
+      if (Array.isArray(mData) && mData.length > 0) mediaId = mData[0].id;
+    }
+  } else if (postUrl) {
+    const slug = postUrl.replace(/\/+$/, "").split("/").pop() ?? "";
+    for (const pt of ["pages", "posts"]) {
+      const pRes = await fetch(`${wpBase}/wp-json/wp/v2/${pt}?slug=${encodeURIComponent(slug)}`, {
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        if (Array.isArray(pData) && pData.length > 0) { postId = pData[0].id; break; }
+      }
+    }
+  }
+
+  if (!postId && !mediaId) {
+    throw new Error(`Could not resolve post/media ID from URL: ${postUrl || imageSrc}`);
+  }
+
+  const fixPayload: Record<string, unknown> = { field, value };
+  if (mediaId) { fixPayload.media_id = mediaId; }
+  else if (postId) { fixPayload.post_id = postId; }
+
+  const res = await fetch(`${wpBase}/wp-json/orangedoor/v1/apply`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-OD-API-Key": apiKey,
+      "X-OD-Token": token,
     },
-    body: JSON.stringify({
-      fixes: [{
-        fix_id: fixId,
-        type: fixType,
-        value: String(payload.value ?? ""),
-        post_url: String(payload.post_url ?? wpBase),
-        image_src: String(payload.image_src ?? ""),
-      }],
-    }),
+    body: JSON.stringify({ fixes: [fixPayload] }),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`Plugin returned ${res.status}: ${txt.slice(0, 200)}`);
+    throw new Error(`Plugin /apply returned ${res.status}: ${txt.slice(0, 200)}`);
   }
 
   const data = await res.json();
-  const result = data?.results?.[0];
-  if (!result?.success) {
-    throw new Error(result?.error ?? "Plugin reported failure");
+  const failed = data?.failed ?? [];
+  if (failed.length > 0) {
+    throw new Error(`Plugin reported failure: ${failed[0]?.error ?? "unknown"}`);
   }
 
   return {
-    before: result.before !== undefined ? { value: result.before } : {},
-    after: { value: String(payload.value ?? "") },
+    before: {},
+    after: { value },
   };
 }
 
@@ -197,8 +240,8 @@ serve(async (req) => {
     let snapshots: { before: Record<string, unknown>; after: Record<string, unknown> };
 
     if (creds.wordpress_plugin_api_key) {
-      // Preferred: OrangeDoor plugin installed
-      snapshots = await applyViaPlugin(wpBase, creds.wordpress_plugin_api_key, fixType, payload, fixId);
+      // Preferred: OrangeDoor plugin installed — use the /apply endpoint with correct token
+      snapshots = await applyViaPlugin(wpBase, creds.wordpress_plugin_api_key, fixType, payload);
     } else if (creds.wordpress_username && creds.wordpress_app_password) {
       // Fallback: Basic Auth
       snapshots = await applyViaBasicAuth(wpBase, creds.wordpress_username, creds.wordpress_app_password, fixType, payload);

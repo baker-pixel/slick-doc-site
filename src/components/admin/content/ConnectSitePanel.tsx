@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   CheckCircle2, XCircle, Loader2, Plug, Download, RefreshCw,
-  AlertTriangle, Copy, Clock,
+  AlertTriangle, Clock, ExternalLink,
 } from "lucide-react";
 
 interface ConnectedSite {
@@ -22,31 +23,24 @@ interface ConnectedSite {
 
 interface Props {
   clientId: string;
-  /**
-   * admin — operational view: status, scan trigger, copy setup link. No install wizard.
-   * client — onboarding wizard with 3-second polling until connected.
-   */
   mode?: "admin" | "client";
   onSiteConnected?: (siteId: string) => void;
 }
 
 const PLUGIN_DOWNLOAD_URL = "/downloads/orange-door.php";
 
-const SETUP_INSTRUCTIONS = `Install the Orange Door SEO plugin on your WordPress site:
-
-1. Download orange-door.php from your Orange Door dashboard
-2. In WordPress Admin go to Plugins → Add New → Upload Plugin
-3. Upload orange-door.php and click Activate
-4. The plugin connects automatically — no API key needed`;
+const APP_ORIGIN = (import.meta.env.VITE_APP_URL as string | undefined)?.replace(/\/+$/, "") ?? window.location.origin;
+const PLUGIN_ZIP_URL = `${APP_ORIGIN}/downloads/orange-door.zip`;
 
 export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: Props) {
   const [site, setSite] = useState<ConnectedSite | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [wpAdminUrl, setWpAdminUrl] = useState("");
   const notifiedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function fetchSite() {
+  const fetchSite = useCallback(async () => {
     const { data } = await supabase
       .from("connected_sites")
       .select("*")
@@ -62,7 +56,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
       onSiteConnected?.(fetched.id);
     }
     return fetched;
-  }
+  }, [clientId, onSiteConnected]);
 
   useEffect(() => {
     notifiedRef.current = false;
@@ -80,7 +74,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     }
 
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [clientId, mode]);
+  }, [clientId, mode, fetchSite]);
 
   async function triggerScan() {
     if (!site) return;
@@ -101,9 +95,22 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     }
   }
 
-  function copySetupInstructions() {
-    navigator.clipboard.writeText(SETUP_INSTRUCTIONS);
-    toast.success("Setup instructions copied to clipboard");
+  function handleOneClickInstall() {
+    let base = wpAdminUrl.trim().replace(/\/+$/, "");
+    if (!base) {
+      toast.error("Enter your WordPress admin URL first");
+      return;
+    }
+    if (!/^https?:\/\//i.test(base)) {
+      base = "https://" + base;
+    }
+    if (APP_ORIGIN.includes("localhost")) {
+      toast.error("Plugin ZIP must be hosted publicly. Set VITE_APP_URL in .env or use manual download below.");
+      return;
+    }
+    const installUrl = `${base}/update.php?action=install-plugin&plugin-zip=${encodeURIComponent(PLUGIN_ZIP_URL)}`;
+    window.open(installUrl, "_blank", "noopener,noreferrer");
+    toast.info("Opened WordPress install screen — install then activate the plugin");
   }
 
   if (loading) {
@@ -155,15 +162,6 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
               <p className="text-sm text-muted-foreground">
                 Plugin not yet installed on client's WordPress site.
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                onClick={copySetupInstructions}
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy setup instructions for client
-              </Button>
               <a
                 href={PLUGIN_DOWNLOAD_URL}
                 download="orange-door.php"
@@ -254,25 +252,38 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
 
       <CardContent className="space-y-4">
         {!site ? (
-          <>
-            <div className="rounded-md bg-muted/50 p-4 space-y-3">
-              <p className="text-sm font-medium">Three steps to connect:</p>
-              <ol className="list-decimal list-inside space-y-1.5 text-sm text-muted-foreground">
-                <li>Download the plugin below</li>
-                <li>
-                  In WordPress: Plugins → Add New → Upload Plugin → activate{" "}
-                  <code className="text-xs bg-muted px-1 rounded">orangedoor.php</code>
-                </li>
-                <li>This page updates automatically once connected — no API key needed</li>
-              </ol>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Enter your WordPress admin URL</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://yoursite.com/wp-admin"
+                  value={wpAdminUrl}
+                  onChange={(e) => setWpAdminUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleOneClickInstall()}
+                  className="font-mono text-sm"
+                />
+                <Button onClick={handleOneClickInstall} className="gap-2 shrink-0">
+                  <ExternalLink className="h-4 w-4" />
+                  Connect
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Opens WordPress install screen — one click Install, one click Activate. Done.
+              </p>
             </div>
-            <a href={PLUGIN_DOWNLOAD_URL} download="orange-door.php">
-              <Button className="gap-2">
-                <Download className="h-4 w-4" />
-                Download Plugin
-              </Button>
+
+            <div className="flex items-center gap-2">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground">or install manually</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <a href={PLUGIN_DOWNLOAD_URL} download="orange-door.php" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <Download className="h-3 w-3" />
+              Download orange-door.php and upload via Plugins → Add New
             </a>
-          </>
+          </div>
         ) : (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">

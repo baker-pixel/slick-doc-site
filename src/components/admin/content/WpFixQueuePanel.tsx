@@ -4,10 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
-  Wand2, CheckCircle2, XCircle, Loader2, AlertTriangle,
+  Wand2, CheckCircle2, Loader2, AlertTriangle,
   RefreshCw, Globe, ChevronDown, ChevronUp,
 } from "lucide-react";
 
@@ -138,7 +137,7 @@ export function WpFixQueuePanel({ siteId }: Props) {
   function togglePage(key: string) {
     setExpanded(prev => {
       const n = new Set(prev);
-      n.has(key) ? n.delete(key) : n.add(key);
+      if (n.has(key)) { n.delete(key); } else { n.add(key); }
       return n;
     });
   }
