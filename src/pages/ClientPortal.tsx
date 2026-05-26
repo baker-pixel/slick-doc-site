@@ -32,6 +32,7 @@ import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningH
 import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { SocialMediaTab } from "@/components/client-portal/SocialMediaTab";
 import { ClientCalendarTab } from "@/components/client-portal/ClientCalendarTab";
+import { ClientSeoTab } from "@/components/client-portal/ClientSeoTab";
 import { TierGate } from "@/components/client-portal/TierGate";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
@@ -360,6 +361,8 @@ export default function ClientPortal() {
         return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
       case "analytics":
         return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
+      case "seo":
+        return <ClientSeoTab clientAccountId={portalUser.client_account_id} />;
       case "invoices":
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
       case "help":

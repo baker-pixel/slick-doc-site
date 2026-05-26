@@ -16,6 +16,7 @@ import {
   Contact,
   Layers,
   Palette,
+  Plug,
 } from "lucide-react";
 import {
   Sidebar,
@@ -50,6 +51,7 @@ export type AdminSection =
   | "social-posts"
   | "sales-proposals"
   | "seo-dashboard"
+  | "wordpress-seo"
   | "automation"
   | "sops"
   | "onboarding"
@@ -106,8 +108,9 @@ interface NavItem {
 
 // AGENTS group
 const agentItems: NavItem[] = [
-  { id: "seo-dashboard", label: "SEO", icon: Search },
-  { id: "content-review", label: "Content", icon: FileText },
+  { id: "seo-dashboard",  label: "SEO",       icon: Search },
+  { id: "wordpress-seo", label: "WP Plugin",  icon: Plug },
+  { id: "content-review", label: "Content",  icon: FileText },
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "emails", label: "Email", icon: Mail },
   { id: "reports-review", label: "Reports", icon: BarChart3 },

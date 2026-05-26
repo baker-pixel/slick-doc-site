@@ -20,6 +20,7 @@ import {
   GraduationCap,
   Send,
   Share2,
+  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,6 +54,7 @@ export type PortalTab =
   | "social"
   | "team"
   | "analytics"
+  | "seo"
   | "invoices"
   | "help"
   | "settings"
@@ -101,6 +103,7 @@ const myPortalItems: NavItemDef[] = [
 const brandToolsItems: NavItemDef[] = [
   { id: "brand", label: "Brand Assets", icon: Palette },
   { id: "social", label: "Social Media", icon: Share2 },
+  { id: "seo", label: "SEO Health", icon: Search },
   { id: "learning", label: "Learning Hub", icon: GraduationCap },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
 ];

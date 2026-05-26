@@ -59,6 +59,7 @@ import { ClientTasksPanel } from "@/components/admin/clients/ClientTasksPanel";
 import { OnboardingAutomationPanel } from "@/components/admin/clients/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/misc/IntegrationConfigPanel";
 import SeoAnalysisDashboard from "@/components/admin/content/SeoAnalysisDashboard";
+import { WordPressSeoPanel } from "@/components/admin/content/WordPressSeoPanel";
 import { MarketingOSDashboard } from "@/components/admin/misc/MarketingOSDashboard";
 import { GoogleReviewEngine } from "@/components/admin/content/GoogleReviewEngine";
 import ClientWinNotifications from "@/components/admin/clients/ClientWinNotifications";
@@ -673,8 +674,7 @@ const AdminInner = () => {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
-        <main className="pt-20 min-h-[80vh] flex items-center justify-center">
+        <main className="min-h-screen flex items-center justify-center">
           <Card className="w-full max-w-md mx-4">
             <CardHeader className="text-center">
               <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -1379,6 +1379,8 @@ const AdminInner = () => {
         return <ClientTasksPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
       case "seo-dashboard":
         return <SeoAnalysisDashboard />;
+      case "wordpress-seo":
+        return <WordPressSeoPanel clientId={selectedClient?.id ?? ""} clientName={selectedClient?.business_name} />;
       case "onboarding":
         return <OnboardingAutomationPanel adminPassword={storedPassword} />;
       case "integrations":
@@ -1440,6 +1442,7 @@ const AdminInner = () => {
       "social-posts": "Social Media Posts",
       "sales-proposals": "AI Sales Proposals",
       "seo-dashboard": "SEO",
+      "wordpress-seo": "WordPress Plugin",
       automation: "Automation",
       sops: "SOPs",
       onboarding: "Client Onboarding",
