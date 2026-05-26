@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   CheckCircle2, XCircle, Loader2, Plug, Download, RefreshCw,
-  AlertTriangle, Clock,
+  AlertTriangle, Clock, ExternalLink,
 } from "lucide-react";
 
 interface ConnectedSite {
@@ -32,6 +33,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
   const [site, setSite] = useState<ConnectedSite | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [wpAdminUrl, setWpAdminUrl] = useState("");
   const notifiedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -88,6 +90,27 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     } finally {
       setScanning(false);
     }
+  }
+
+  function handleConnect() {
+    let base = wpAdminUrl.trim().replace(/\/+$/, "");
+    if (!base) {
+      toast.error("Enter your WordPress admin URL first");
+      return;
+    }
+    if (!/^https?:\/\//i.test(base)) base = "https://" + base;
+
+    // Auto-download ZIP
+    const a = document.createElement("a");
+    a.href = PLUGIN_DOWNLOAD_URL;
+    a.download = "orange-door.zip";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Open WP plugin upload page — no nonce required, just needs admin login
+    window.open(`${base}/plugin-install.php?tab=upload`, "_blank", "noopener,noreferrer");
+    toast.info("ZIP downloading — upload it on the WordPress page that just opened, then activate");
   }
 
   if (loading) {
@@ -230,36 +253,35 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
       <CardContent className="space-y-4">
         {!site ? (
           <div className="space-y-4">
-            <ol className="space-y-3">
-              <li className="flex gap-3">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold mt-0.5">1</span>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium">Download the plugin</p>
-                  <a href={PLUGIN_DOWNLOAD_URL} download="orange-door.zip">
-                    <Button size="sm" className="gap-2">
-                      <Download className="h-3.5 w-3.5" />
-                      Download orange-door.zip
-                    </Button>
-                  </a>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold mt-0.5">2</span>
-                <div>
-                  <p className="text-sm font-medium">Install in WordPress</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    WordPress Admin → <strong>Plugins → Add New Plugin → Upload Plugin</strong> → choose <code className="bg-muted px-1 rounded">orange-door.zip</code> → Install Now → Activate
-                  </p>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-semibold mt-0.5">3</span>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">This page connects automatically</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">No API key needed — plugin registers itself on activation.</p>
-                </div>
-              </li>
-            </ol>
+            {/* Step 1 — URL + Connect */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Enter your WordPress admin URL</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://yoursite.com/wp-admin"
+                  value={wpAdminUrl}
+                  onChange={(e) => setWpAdminUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                  className="font-mono text-sm"
+                />
+                <Button onClick={handleConnect} className="gap-2 shrink-0">
+                  <ExternalLink className="h-4 w-4" />
+                  Connect
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Make sure you're logged into WordPress admin first. Clicking Connect downloads the plugin ZIP and opens the WordPress upload screen.
+              </p>
+            </div>
+
+            {/* Step 2 — what to do on WP side */}
+            <div className="rounded-md bg-muted/50 p-3 space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">On the WordPress page that opens</p>
+              <p className="text-sm text-muted-foreground">
+                Upload the ZIP → <strong>Install Now</strong> → <strong>Activate Plugin</strong>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">This page updates automatically once connected — no API key needed.</p>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
