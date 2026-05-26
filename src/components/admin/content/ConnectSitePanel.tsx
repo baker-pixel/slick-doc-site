@@ -104,13 +104,14 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     if (!/^https?:\/\//i.test(base)) {
       base = "https://" + base;
     }
-    if (APP_ORIGIN.includes("localhost")) {
-      toast.error("Plugin ZIP must be hosted publicly. Set VITE_APP_URL in .env or use manual download below.");
-      return;
-    }
-    const installUrl = `${base}/update.php?action=install-plugin&plugin-zip=${encodeURIComponent(PLUGIN_ZIP_URL)}`;
-    window.open(installUrl, "_blank", "noopener,noreferrer");
-    toast.info("Opened WordPress install screen — install then activate the plugin");
+    // Trigger ZIP download
+    const a = document.createElement("a");
+    a.href = PLUGIN_ZIP_URL;
+    a.download = "orange-door.zip";
+    a.click();
+    // Open WP plugin upload page (no nonce needed — standard admin page)
+    window.open(`${base}/plugin-install.php?tab=upload`, "_blank", "noopener,noreferrer");
+    toast.info("ZIP downloading — upload it on the WordPress page that just opened");
   }
 
   if (loading) {
@@ -269,7 +270,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Opens WordPress install screen — one click Install, one click Activate. Done.
+                Downloads the plugin ZIP and opens your WordPress upload screen. Upload the ZIP, then activate.
               </p>
             </div>
 

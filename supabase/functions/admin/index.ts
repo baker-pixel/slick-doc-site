@@ -902,6 +902,7 @@ Deno.serve(async (req) => {
             file_url,
             metadata: metadata || {},
             is_primary: is_primary || false,
+            confirmed: true,
           })
           .select()
           .single();
@@ -911,6 +912,40 @@ Deno.serve(async (req) => {
         console.log(`Created brand asset for client ${client_account_id}`);
         return new Response(
           JSON.stringify({ data: newAsset }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "confirm_brand_asset": {
+        if (!id) {
+          return new Response(
+            JSON.stringify({ error: "Asset ID is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: assetToConfirm } = await supabase
+          .from("brand_assets")
+          .select("metadata")
+          .eq("id", id)
+          .single();
+
+        const { error: confirmError } = await supabase
+          .from("brand_assets")
+          .update({
+            confirmed: true,
+            metadata: {
+              ...(assetToConfirm?.metadata || {}),
+              confirmation_status: "confirmed",
+              confirmed_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", id);
+
+        if (confirmError) throw confirmError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

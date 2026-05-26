@@ -833,16 +833,20 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
 
             {uploadForm.asset_type === "color" ? (
               <div className="space-y-2">
-                <Label>Color (Hex) *</Label>
+                <Label>Color *</Label>
                 <div className="flex gap-2">
+                  <Input
+                    type="color"
+                    value={uploadForm.colorValue || "#000000"}
+                    onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
+                    className="w-14 h-10 p-1 cursor-pointer"
+                  />
                   <Input
                     value={uploadForm.colorValue}
                     onChange={(e) => setUploadForm({ ...uploadForm, colorValue: e.target.value })}
                     placeholder="#FF5500"
+                    className="flex-1"
                   />
-                  {uploadForm.colorValue && (
-                    <div className="h-10 w-10 rounded border flex-shrink-0" style={{ backgroundColor: uploadForm.colorValue }} />
-                  )}
                 </div>
               </div>
             ) : (

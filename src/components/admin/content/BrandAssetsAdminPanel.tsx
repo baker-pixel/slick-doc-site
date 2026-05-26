@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Loader2, Plus, Image, Type, Palette, FileText, Trash2, Globe,
   Building2, CheckCircle, Sparkles, AlertCircle, MessageSquare,
-  RefreshCw, Clock, BarChart2, Eye, Volume2, BookOpen,
+  RefreshCw, Clock, BarChart2, Eye, Volume2, BookOpen, CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -94,7 +94,7 @@ function completenessScore(assets: BrandAsset[]): { score: number; counts: Recor
 }
 
 function ColorSwatch({ asset, onDelete }: { asset: BrandAsset; onDelete: () => void }) {
-  const hex = asset.metadata?.hex || "#cccccc";
+  const hex = asset.metadata?.hex || asset.metadata?.value || "#cccccc";
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border bg-card group">
       <div className="h-12 w-12 rounded-md border flex-shrink-0" style={{ backgroundColor: hex }} />
@@ -174,6 +174,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
   const [filterClient, setFilterClient] = useState<string>(clientId || "all");
   const [kitPreviewOpen, setKitPreviewOpen] = useState(false);
 
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [extractDialogOpen, setExtractDialogOpen] = useState(false);
   const [extractClientId, setExtractClientId] = useState(clientId || "");
   const [extractUrl, setExtractUrl] = useState("");
@@ -274,7 +275,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
           name: formData.name.trim(),
           description: formData.description.trim() || null,
           asset_type: formData.asset_type,
-          category: formData.asset_type === "logo" ? "logos" :
+          category: (formData.asset_type === "logo" || formData.asset_type === "icon") ? "logos" :
                    formData.asset_type === "color" ? "colors" :
                    formData.asset_type === "font" ? "fonts" : "guidelines",
           file_path: filePath,
@@ -295,6 +296,20 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
     } finally {
       setSubmitting(false);
       setUploading(false);
+    }
+  };
+
+  const handleConfirmAsset = async (assetId: string) => {
+    setConfirmingId(assetId);
+    try {
+      const { error } = await callAdminApi(adminPassword, { action: "confirm_brand_asset", id: assetId });
+      if (error) throw new Error(error);
+      toast({ title: "Asset confirmed" });
+      fetchData();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to confirm asset", variant: "destructive" });
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -693,9 +708,48 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
         </div>
 
         {pendingCount > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-800 text-sm">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span><strong>{pendingCount}</strong> asset{pendingCount !== 1 ? "s" : ""} awaiting client confirmation in their portal.</span>
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-800 text-sm space-y-3">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span><strong>{pendingCount}</strong> asset{pendingCount !== 1 ? "s" : ""} awaiting confirmation — confirm on behalf of client or let them confirm in their portal.</span>
+            </div>
+            <div className="space-y-1.5">
+              {filteredAssets.filter((a) => !a.confirmed).map((a) => {
+                const colorVal = a.asset_type === "color" ? (a.metadata?.hex || a.metadata?.value) : null;
+                return (
+                  <div key={a.id} className="flex items-center gap-2 bg-white/60 rounded-md px-3 py-2">
+                    {colorVal ? (
+                      <div className="h-6 w-6 rounded border flex-shrink-0" style={{ backgroundColor: colorVal }} />
+                    ) : (
+                      <div className="h-6 w-6 rounded bg-amber-100 border border-amber-300 flex-shrink-0 flex items-center justify-center">
+                        {a.asset_type === "brand_voice" ? <Volume2 className="h-3 w-3" /> :
+                         (a.asset_type === "logo" || a.asset_type === "icon") ? <Image className="h-3 w-3" /> :
+                         a.asset_type === "font" ? <Type className="h-3 w-3" /> :
+                         <FileText className="h-3 w-3" />}
+                      </div>
+                    )}
+                    <span className="flex-1 text-xs font-medium truncate">{a.name}</span>
+                    <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 shrink-0">
+                      {ASSET_TYPES.find((t) => t.value === a.asset_type)?.label || a.asset_type}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs border-green-400 text-green-700 hover:bg-green-50 shrink-0"
+                      disabled={confirmingId === a.id}
+                      onClick={() => handleConfirmAsset(a.id)}
+                    >
+                      {confirmingId === a.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                      )}
+                      Confirm
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -885,12 +939,15 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
               <div>
                 <p className="font-medium mb-2 text-xs uppercase tracking-wide text-muted-foreground">Visual</p>
                 <div className="flex gap-2 flex-wrap">
-                  {colors.filter((a) => a.confirmed).map((a) => (
-                    <div key={a.id} className="flex items-center gap-1.5 rounded-md border px-2 py-1">
-                      <div className="h-4 w-4 rounded border flex-shrink-0" style={{ backgroundColor: a.metadata?.hex || a.name }} />
-                      <span className="text-xs font-mono">{(a.metadata?.hex || a.name).toUpperCase()}</span>
-                    </div>
-                  ))}
+                  {colors.filter((a) => a.confirmed).map((a) => {
+                    const colorVal = a.metadata?.hex || a.metadata?.value || "#cccccc";
+                    return (
+                      <div key={a.id} className="flex items-center gap-1.5 rounded-md border px-2 py-1">
+                        <div className="h-4 w-4 rounded border flex-shrink-0" style={{ backgroundColor: colorVal }} />
+                        <span className="text-xs font-mono">{colorVal.toUpperCase()}</span>
+                      </div>
+                    );
+                  })}
                   {fonts.filter((a) => a.confirmed).map((a) => (
                     <Badge key={a.id} variant="outline" className="text-xs">{a.metadata?.value || a.name}</Badge>
                   ))}
@@ -973,7 +1030,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
             return (
               <Card key={asset.id} className="overflow-hidden">
                 {asset.asset_type === "color" ? (
-                  <div className="h-24 w-full" style={{ backgroundColor: asset.metadata?.hex || "#ccc" }} />
+                  <div className="h-24 w-full" style={{ backgroundColor: asset.metadata?.hex || asset.metadata?.value || "#ccc" }} />
                 ) : asset.asset_type === "logo" && url ? (
                   <div className="h-24 bg-muted/50 flex items-center justify-center p-4">
                     <img src={url} alt={asset.name} className="max-h-full max-w-full object-contain" />
