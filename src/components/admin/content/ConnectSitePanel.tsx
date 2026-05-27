@@ -34,6 +34,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [wpAdminUrl, setWpAdminUrl] = useState("");
+  const [preparing, setPreparing] = useState(false);
   const notifiedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -136,6 +137,25 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     );
   }
 
+  async function handleAdminPrepare() {
+    let base = wpAdminUrl.trim().replace(/\/+$/, "");
+    if (!base) { toast.error("Enter the client's WordPress site URL first"); return; }
+    if (!/^https?:\/\//i.test(base)) base = "https://" + base;
+    const siteUrl = base.replace(/\/wp-admin\/?$/i, "").replace(/\/+$/, "");
+    setPreparing(true);
+    try {
+      await supabase.functions.invoke("prepare-connection", {
+        body: { client_id: clientId, site_url: siteUrl },
+      });
+      toast.success("Site URL saved — now install the plugin on the WordPress site");
+      await fetchSite();
+    } catch {
+      toast.error("Could not save site URL");
+    } finally {
+      setPreparing(false);
+    }
+  }
+
   // ── ADMIN MODE ─────────────────────────────────────────────────────────────
   if (mode === "admin") {
     return (
@@ -170,19 +190,39 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {!site ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Plugin not yet installed on client's WordPress site.
-              </p>
-              <a
-                href={PLUGIN_DOWNLOAD_URL}
-                download="orange-door.zip"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                <Download className="h-3 w-3" />
-                Download plugin
-              </a>
+          {!site || site.status === "pending" ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Client's WordPress site URL</p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://clientsite.com"
+                    value={wpAdminUrl}
+                    onChange={(e) => setWpAdminUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAdminPrepare()}
+                    className="font-mono text-sm"
+                  />
+                  <Button size="sm" onClick={handleAdminPrepare} disabled={preparing} className="shrink-0">
+                    {preparing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save URL"}
+                  </Button>
+                </div>
+                {site?.status === "pending" && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    URL saved — waiting for the plugin to be activated on the WordPress site.
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <a
+                  href={PLUGIN_DOWNLOAD_URL}
+                  download="orange-door.zip"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Download className="h-3 w-3" />
+                  Download plugin ZIP
+                </a>
+                <span className="text-xs text-muted-foreground">→ install &amp; activate on the WordPress site</span>
+              </div>
             </div>
           ) : (
             <>

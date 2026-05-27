@@ -144,6 +144,9 @@ verify_jwt = false
 [functions.trigger-task]
 verify_jwt = false
 
+[functions.prepare-connection]
+verify_jwt = false
+
 [functions.scan-wordpress-site]
 verify_jwt = false
 
