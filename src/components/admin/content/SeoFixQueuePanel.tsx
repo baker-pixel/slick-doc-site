@@ -62,6 +62,11 @@ export function SeoFixQueuePanel({ clientId }: Props) {
   const [loading, setLoading] = useState(true);
   const [filterClient, setFilterClient] = useState<string>(clientId ?? "all");
   const [filterStatus, setFilterStatus] = useState<string>("proposed");
+
+  // Keep filterClient in sync when clientId prop changes (admin switches clients)
+  useEffect(() => {
+    if (clientId) setFilterClient(clientId);
+  }, [clientId]);
   const [applying, setApplying] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());

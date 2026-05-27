@@ -288,11 +288,18 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Plug className="h-4 w-4" />
-            Connect Your WordPress Site
+            {site?.status === "disconnected"
+              ? "Reconnect Your WordPress Site"
+              : "Connect Your WordPress Site"}
           </CardTitle>
           {site?.status === "connected" && (
             <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent">
               <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
+            </Badge>
+          )}
+          {site?.status === "disconnected" && (
+            <Badge variant="outline" className="text-muted-foreground text-xs">
+              Disconnected
             </Badge>
           )}
           {!site && (
@@ -304,22 +311,27 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {!site ? (
+        {(!site || site.status === "disconnected") ? (
           <div className="space-y-4">
+            {site?.status === "disconnected" && (
+              <p className="text-sm text-muted-foreground">
+                Your site was disconnected. Re-enter your WordPress admin URL to reconnect.
+              </p>
+            )}
             {/* Step 1 — URL + Connect */}
             <div className="space-y-2">
               <p className="text-sm font-medium">Enter your WordPress admin URL</p>
               <div className="flex gap-2">
                 <Input
                   placeholder="https://yoursite.com/wp-admin"
-                  value={wpAdminUrl}
+                  value={wpAdminUrl || (site?.status === "disconnected" ? site.site_url : "")}
                   onChange={(e) => setWpAdminUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleConnect()}
                   className="font-mono text-sm"
                 />
                 <Button onClick={handleConnect} className="gap-2 shrink-0">
                   <ExternalLink className="h-4 w-4" />
-                  Connect
+                  {site?.status === "disconnected" ? "Reconnect" : "Connect"}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">

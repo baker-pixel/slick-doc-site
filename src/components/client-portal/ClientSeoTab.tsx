@@ -27,6 +27,14 @@ interface Props {
 
 // ── Plain-English tooltip copy for every score dimension ─────────────────────
 
+const SCORE_MAX: Record<string, number> = {
+  crawlability: 25,
+  on_page: 25,
+  content_quality: 20,
+  technical_performance: 15,
+  site_architecture: 15,
+};
+
 const SCORE_TOOLTIPS: Record<string, { label: string; explain: string }> = {
   crawlability: {
     label: "Crawlability",
@@ -203,34 +211,16 @@ interface IssueRowProps {
   level: "error" | "warning";
 }
 
-function IssueRow({ issue, impact, level }: IssueRowProps) {
-  const [open, setOpen] = useState(false);
+function IssueRow({ issue, level }: IssueRowProps) {
   const plain = toPlainEnglish(issue);
   const icon = level === "error"
     ? <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
     : <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />;
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-start gap-2">
-        {icon}
-        <div className="flex-1">
-          <p className="text-sm">{plain}</p>
-          {impact && (
-            <button
-              className="text-xs text-primary underline-offset-2 hover:underline mt-0.5"
-              onClick={() => setOpen(v => !v)}
-            >
-              {open ? "Show less" : "Why does this matter?"}
-            </button>
-          )}
-        </div>
-      </div>
-      {open && impact && (
-        <p className="text-xs text-muted-foreground ml-6 bg-muted/40 rounded-md p-2 leading-relaxed">
-          {impact}
-        </p>
-      )}
+    <div className="flex items-start gap-2">
+      {icon}
+      <p className="text-sm">{plain}</p>
     </div>
   );
 }
@@ -772,6 +762,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                     {result?.pages_crawled && (
                       <p className="text-xs text-muted-foreground">{result.pages_crawled} pages analysed</p>
                     )}
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">General website audit — separate from WordPress plugin scan</p>
                   </div>
 
                   {result?.score_breakdown && (
@@ -779,6 +770,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                       {Object.entries(result.score_breakdown).map(([key, val]) => {
                         const meta = SCORE_TOOLTIPS[key];
                         if (val === undefined || !meta) return null;
+                        const max = SCORE_MAX[key] ?? 100;
+                        const pct = Math.round((val / max) * 100);
                         return (
                           <div key={key} className="space-y-1">
                             <div className="flex items-center justify-between text-xs gap-1">
@@ -786,9 +779,9 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                                 {meta.label}
                                 <InfoTip text={meta.explain} />
                               </span>
-                              <span className={`font-semibold ${scoreColor(val)}`}>{val}</span>
+                              <span className={`font-semibold ${scoreColor(pct)}`}>{pct}</span>
                             </div>
-                            <Progress value={val} className="h-1.5" />
+                            <Progress value={pct} className="h-1.5" />
                           </div>
                         );
                       })}

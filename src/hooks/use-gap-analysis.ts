@@ -275,12 +275,16 @@ function mapDbToFormData(data: Record<string, unknown>): GapAnalysisData {
 
 interface UseGapAnalysisOptions {
   resumeToken?: string | null;
+  prefillEmail?: string | null;
   totalSteps: number;
 }
 
-export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOptions) {
+export function useGapAnalysis({ resumeToken, prefillEmail, totalSteps }: UseGapAnalysisOptions) {
   const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState<GapAnalysisData>(initialData);
+  const [formData, setFormData] = useState<GapAnalysisData>({
+    ...initialData,
+    email: prefillEmail || "",
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(!!resumeToken);
@@ -459,6 +463,17 @@ export function useGapAnalysis({ resumeToken, totalSteps }: UseGapAnalysisOption
       setSubmissionId(insertedData?.id || null);
       setSubmissionResumeToken(insertedData?.resume_token || null);
       setIsComplete(true);
+
+      // Mark intake complete on client_accounts (no-op if already set or no matching account)
+      try {
+        await supabase
+          .from("client_accounts")
+          .update({ intake_completed_at: new Date().toISOString() })
+          .ilike("email", formData.email)
+          .is("intake_completed_at", null);
+      } catch (err) {
+        console.error("Failed to update client intake_completed_at:", err);
+      }
 
       try {
         const { error: seqError, data: seqData } = await supabase.functions.invoke("queue-sequence-emails", {

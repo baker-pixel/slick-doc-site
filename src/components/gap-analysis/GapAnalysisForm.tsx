@@ -140,9 +140,10 @@ const steps = [
 
 interface GapAnalysisFormProps {
   resumeToken?: string | null;
+  prefillEmail?: string | null;
 }
 
-export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
+export function GapAnalysisForm({ resumeToken, prefillEmail }: GapAnalysisFormProps) {
   const {
     currentStep,
     formData,
@@ -157,7 +158,7 @@ export function GapAnalysisForm({ resumeToken }: GapAnalysisFormProps) {
     prevStep,
     saveProgress,
     handleSubmit,
-  } = useGapAnalysis({ resumeToken, totalSteps: steps.length });
+  } = useGapAnalysis({ resumeToken, prefillEmail, totalSteps: steps.length });
 
   if (isLoading) {
     return (

@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 const GapAnalysis = () => {
   const [searchParams] = useSearchParams();
   const resumeToken = searchParams.get("resume");
+  const prefillEmail = searchParams.get("email");
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,7 +88,7 @@ const GapAnalysis = () => {
         <section className="section-padding pb-24">
           <div className="container-wide mx-auto">
             <div className="bg-card rounded-2xl border border-border p-6 sm:p-10 shadow-lg">
-              <GapAnalysisForm resumeToken={resumeToken} />
+              <GapAnalysisForm resumeToken={resumeToken} prefillEmail={prefillEmail} />
             </div>
           </div>
         </section>
