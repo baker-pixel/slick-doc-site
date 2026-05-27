@@ -207,7 +207,14 @@ serve(async (req) => {
       .select("id")
       .single();
 
-    // 5. Generate AI fixes for pages with issues
+    // 5. Clear existing pending/failed fixes before generating fresh ones
+    await supabase
+      .from("wp_fix_queue")
+      .delete()
+      .eq("site_id", siteId)
+      .in("status", ["pending", "failed"]);
+
+    // 6. Generate AI fixes for pages with issues
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     let fixesGenerated = 0;
 
@@ -294,7 +301,7 @@ serve(async (req) => {
       }
     }
 
-    // 6. Update last_scanned_at
+    // 7. Update last_scanned_at
     await supabase
       .from("connected_sites")
       .update({ last_scanned_at: new Date().toISOString(), status: "connected", updated_at: new Date().toISOString() })

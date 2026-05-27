@@ -444,6 +444,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const [scanning, setScanning] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [showAllFixes, setShowAllFixes] = useState(false);
 
   const loadAudit = useCallback(async () => {
     setLoadingAudit(true);
@@ -563,7 +564,15 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         body: { site_id: wpSite.id },
       });
       if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Scan failed");
-      toast.success(`Scan complete — ${data.fixes_generated ?? 0} improvements found`);
+      const issueCount = data.total_issues ?? 0;
+      const fixCount   = data.fixes_generated ?? 0;
+      toast.success(
+        fixCount > 0
+          ? `Scan complete — ${fixCount} improvement${fixCount !== 1 ? "s" : ""} queued`
+          : issueCount > 0
+            ? `Scan complete — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found, improvements generating`
+            : "Scan complete — no issues found"
+      );
       await loadWpData();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Scan failed");
@@ -894,93 +903,93 @@ export function ClientSeoTab({ clientAccountId }: Props) {
           </div>
         )}
 
-        {/* ── Fix Queue ─────────────────────────────────────── */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Wand2 className="h-4 w-4" />
-              Recommended improvements
-              {!loadingFixes && fixes.length > 0 && (
-                <Badge variant="secondary">{fixes.length}</Badge>
-              )}
-              <InfoTip text="Your team has already worked out exactly what needs to change and how. You can either apply the fix instantly, or follow the step-by-step guide to do it yourself." />
-            </CardTitle>
-          </CardHeader>
+        {/* ── Recommended improvements (ai_fixes + wp_fix_queue merged) ── */}
+        {(() => {
+          const VISIBLE = 8;
+          const totalCount     = fixes.length + wpFixes.length;
+          const visibleFixes   = showAllFixes ? fixes : fixes.slice(0, VISIBLE);
+          const remainingSlots = showAllFixes ? wpFixes.length : Math.max(0, VISIBLE - fixes.length);
+          const visibleWpFixes = wpFixes.slice(0, remainingSlots);
+          const hiddenCount    = totalCount - visibleFixes.length - visibleWpFixes.length;
 
-          <CardContent className="p-0">
-            {loadingFixes ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : fixes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-500" />
-                <p className="text-sm font-medium">All caught up!</p>
-                <p className="text-xs mt-1">No pending improvements right now.</p>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[640px]">
-                {fixes.map(fix => (
-                  <FixCard
-                    key={fix.id}
-                    fix={fix}
-                    applying={applying === fix.id}
-                    rejecting={rejecting === fix.id}
-                    onApply={() => applyFix(fix)}
-                    onReject={() => rejectFix(fix.id)}
-                  />
-                ))}
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── WordPress Plugin Fixes ────────────────────────── */}
-        {wpSite?.id && wpSite.status === "connected" && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Plug className="h-4 w-4" />
-                  WordPress site improvements
-                  {wpFixes.length > 0 && <Badge variant="secondary">{wpFixes.length}</Badge>}
-                  <InfoTip text="Our plugin scanned your WordPress site and found these specific improvements. Each one can be applied automatically in seconds." />
-                </CardTitle>
-                <Button
-                  size="sm" variant="outline"
-                  onClick={triggerScan}
-                  disabled={scanning}
-                  className="gap-1.5"
-                >
-                  {scanning
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</>
-                    : <><RefreshCw className="h-3.5 w-3.5" /> Scan site</>}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {wpFixes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-                  <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-500" />
-                  <p className="text-sm font-medium">No improvements pending</p>
-                  <p className="text-xs mt-1">Click "Scan site" to check for new SEO issues.</p>
+          return (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wand2 className="h-4 w-4" />
+                    Recommended improvements
+                    {totalCount > 0 && <Badge variant="secondary">{totalCount}</Badge>}
+                    <InfoTip text="Improvements your team and our plugin have identified. Apply instantly or follow the step-by-step guide." />
+                  </CardTitle>
+                  {wpSite?.status === "connected" && (
+                    <Button size="sm" variant="outline" onClick={triggerScan} disabled={scanning} className="gap-1.5">
+                      {scanning
+                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</>
+                        : <><RefreshCw className="h-3.5 w-3.5" /> Scan site</>}
+                    </Button>
+                  )}
                 </div>
-              ) : (
-                <ScrollArea className="max-h-[480px]">
-                  {wpFixes.map(fix => (
-                    <WpFixCard
-                      key={fix.id}
-                      fix={fix}
-                      applying={applyingWp === fix.id}
-                      onApply={() => applyWpFix(fix)}
-                      onDismiss={() => dismissWpFix(fix.id)}
-                    />
-                  ))}
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              </CardHeader>
+
+              <CardContent className="p-0">
+                {loadingFixes ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : totalCount === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-500" />
+                    <p className="text-sm font-medium">All caught up!</p>
+                    <p className="text-xs mt-1">No pending improvements right now.</p>
+                  </div>
+                ) : (
+                  <>
+                    {visibleFixes.map(fix => (
+                      <FixCard
+                        key={fix.id}
+                        fix={fix}
+                        applying={applying === fix.id}
+                        rejecting={rejecting === fix.id}
+                        onApply={() => applyFix(fix)}
+                        onReject={() => rejectFix(fix.id)}
+                      />
+                    ))}
+                    {visibleWpFixes.map(fix => (
+                      <WpFixCard
+                        key={fix.id}
+                        fix={fix}
+                        applying={applyingWp === fix.id}
+                        onApply={() => applyWpFix(fix)}
+                        onDismiss={() => dismissWpFix(fix.id)}
+                      />
+                    ))}
+                    {hiddenCount > 0 && (
+                      <div className="px-4 py-3 border-t">
+                        <button
+                          className="text-xs text-primary underline-offset-2 hover:underline"
+                          onClick={() => setShowAllFixes(true)}
+                        >
+                          Show {hiddenCount} more improvement{hiddenCount !== 1 ? "s" : ""}
+                        </button>
+                      </div>
+                    )}
+                    {showAllFixes && totalCount > VISIBLE && (
+                      <div className="px-4 py-3 border-t">
+                        <button
+                          className="text-xs text-primary underline-offset-2 hover:underline"
+                          onClick={() => setShowAllFixes(false)}
+                        >
+                          Show less
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
       </div>
     </TooltipProvider>
   );
