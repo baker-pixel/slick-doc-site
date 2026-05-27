@@ -54,20 +54,24 @@ serve(async (req) => {
         .eq("client_id", clientId);
     }
 
-    // Upsert connected_sites (unique on site_url)
+    // Upsert connected_sites (unique on site_url).
+    // Only set client_id if we resolved one — avoids overwriting the value
+    // that prepare-connection already stored when the credentials lookup misses.
+    const upsertPayload: Record<string, unknown> = {
+      site_url:        normalizedUrl,
+      token,
+      status:          "connected",
+      yoast_active:    yoastActive,
+      rankmath_active: rankmathActive,
+      wp_version:      wp_version ?? null,
+      plugin_version:  "1.0.0",
+      updated_at:      new Date().toISOString(),
+    };
+    if (clientId) upsertPayload.client_id = clientId;
+
     const { data: site, error: siteErr } = await supabase
       .from("connected_sites")
-      .upsert({
-        site_url:        normalizedUrl,
-        token,
-        client_id:       clientId,
-        status:          "connected",
-        yoast_active:    yoastActive,
-        rankmath_active: rankmathActive,
-        wp_version:      wp_version ?? null,
-        plugin_version:  "1.0.0",
-        updated_at:      new Date().toISOString(),
-      }, { onConflict: "site_url" })
+      .upsert(upsertPayload, { onConflict: "site_url" })
       .select("id")
       .single();
 

@@ -29,9 +29,10 @@ serve(async (req) => {
 
     // Store site_url in client_credentials so connect-site can match the client
     // when the plugin activates and POSTs its token
-    await supabase
+    const { error: credErr } = await supabase
       .from("client_credentials")
       .upsert({ client_id, wordpress_url: normalizedUrl }, { onConflict: "client_id" });
+    if (credErr) throw new Error("Failed to store credentials: " + credErr.message);
 
     // Check if the plugin already registered this site (client_id may be null)
     const { data: existing } = await supabase
