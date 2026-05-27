@@ -194,8 +194,6 @@ serve(async (req) => {
     const totalIssues = errors + warnings + notices;
 
     // 4. Store scan_result
-    const seoScore = Math.max(0, Math.min(100, 100 - errors * 8 - warnings * 3 - notices));
-
     const { data: scanRecord } = await supabase
       .from("scan_results")
       .insert({
@@ -205,7 +203,6 @@ serve(async (req) => {
         errors,
         warnings,
         notices,
-        seo_score:    seoScore,
       })
       .select("id")
       .single();

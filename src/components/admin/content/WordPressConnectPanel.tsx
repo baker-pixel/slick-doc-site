@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, XCircle, Plug, ExternalLink, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Plug, ExternalLink, RefreshCw, Eye, EyeOff } from "lucide-react";
 
 interface Props {
   clientId: string;
@@ -32,6 +32,7 @@ export function WordPressConnectPanel({ clientId, clientName }: Props) {
     wordpress_app_password: "",
   });
   const [saving, setSaving] = useState(false);
+  const [showAppPassword, setShowAppPassword] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [statusDetail, setStatusDetail] = useState<string>("");
 
@@ -215,14 +216,23 @@ export function WordPressConnectPanel({ clientId, clientName }: Props) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="wp-pass">Application Password</Label>
-              <Input
-                id="wp-pass"
-                type="password"
-                placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
-                value={creds.wordpress_app_password}
-                onChange={e => setCreds(p => ({ ...p, wordpress_app_password: e.target.value }))}
-                className="font-mono text-sm"
-              />
+              <div className="relative">
+                <Input
+                  id="wp-pass"
+                  type={showAppPassword ? "text" : "password"}
+                  placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
+                  value={creds.wordpress_app_password}
+                  onChange={e => setCreds(p => ({ ...p, wordpress_app_password: e.target.value }))}
+                  className="font-mono text-sm pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAppPassword(v => !v)}
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  {showAppPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Generate at Users → Profile → Application Passwords in WP Admin.
               </p>

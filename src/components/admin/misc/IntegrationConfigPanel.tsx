@@ -11,9 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { 
+import {
   Plus, Edit, Trash2, Loader2, Link2, CheckCircle, XCircle,
-  Database, Mail, BarChart3, Target, MessageSquare, Search
+  Database, Mail, BarChart3, Target, MessageSquare, Search, Eye, EyeOff
 } from "lucide-react";
 
 interface IntegrationConfig {
@@ -44,6 +44,7 @@ export function IntegrationConfigPanel() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingIntegration, setEditingIntegration] = useState<IntegrationConfig | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const [formData, setFormData] = useState({
     integration_type: "gohighlevel",
@@ -245,12 +246,22 @@ export function IntegrationConfigPanel() {
               </div>
               <div className="space-y-2">
                 <Label>API Key {editingIntegration && "(leave blank to keep existing)"}</Label>
-                <Input
-                  type="password"
-                  value={formData.api_key}
-                  onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                  placeholder="Enter API key"
-                />
+                <div className="relative">
+                  <Input
+                    type={showApiKey ? "text" : "password"}
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    placeholder="Enter API key"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(v => !v)}
+                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Settings (JSON)</Label>

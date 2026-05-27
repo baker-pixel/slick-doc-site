@@ -86,6 +86,9 @@ interface WpSite {
   site_url: string;
   status: string;
   last_scanned_at: string | null;
+  plugin_version: string | null;
+  yoast_active: boolean;
+  rankmath_active: boolean;
 }
 
 interface WpFix {
@@ -449,6 +452,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const [wpFixes, setWpFixes] = useState<WpFix[]>([]);
   const [applyingWp, setApplyingWp] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   const loadAudit = useCallback(async () => {
     setLoadingAudit(true);
@@ -479,7 +484,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const loadWpData = useCallback(async () => {
     const { data: site } = await supabase
       .from("connected_sites")
-      .select("id, site_url, status, last_scanned_at")
+      .select("id, site_url, status, last_scanned_at, plugin_version, yoast_active, rankmath_active")
       .eq("client_id", clientAccountId)
       .maybeSingle();
     setWpSite(site as WpSite | null);
@@ -577,6 +582,24 @@ export function ClientSeoTab({ clientAccountId }: Props) {
     }
   }
 
+  async function handleDisconnect() {
+    if (!wpSite?.id) return;
+    setDisconnecting(true);
+    try {
+      const { error } = await supabase.functions.invoke("disconnect-site", {
+        body: { site_id: wpSite.id },
+      });
+      if (error) throw error;
+      toast.success("WordPress site disconnected");
+      setShowDisconnectConfirm(false);
+      await loadWpData();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not disconnect");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
   const result = audit?.results;
   const score = audit?.score ?? result?.seo_score ?? null;
 
@@ -600,12 +623,6 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             <p className="text-muted-foreground text-sm mt-1">
               How visible your website is on Google — and what we can improve
             </p>
-            {wpSite?.status === "connected" && (
-              <span className="inline-flex items-center gap-1 mt-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <Plug className="h-3 w-3" />
-                Monitored via WordPress plugin
-              </span>
-            )}
           </div>
           <Button variant="outline" size="sm"
             onClick={() => { loadAudit(); loadFixes(); loadWpData(); }}>
@@ -613,13 +630,110 @@ export function ClientSeoTab({ clientAccountId }: Props) {
           </Button>
         </div>
 
-        {/* ── WordPress Connect Prompt ─────────────────────── */}
-        {(wpSite === null || wpSite?.status === "pending") && (
+        {/* ── WordPress Plugin Connection Status ───────────── */}
+        {wpSite === undefined ? null : (wpSite === null || wpSite.status === "disconnected") ? (
           <ConnectSitePanel
             clientId={clientAccountId}
             mode="client"
             onSiteConnected={() => loadWpData()}
           />
+        ) : (
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className={`mt-0.5 rounded-full p-1.5 shrink-0 ${
+                    wpSite.status === "connected"   ? "bg-emerald-500/15" :
+                    wpSite.status === "pending"     ? "bg-amber-500/15" :
+                    wpSite.status === "unreachable" ? "bg-destructive/15" :
+                    "bg-muted"
+                  }`}>
+                    <Plug className={`h-4 w-4 ${
+                      wpSite.status === "connected"   ? "text-emerald-600 dark:text-emerald-400" :
+                      wpSite.status === "pending"     ? "text-amber-600 dark:text-amber-400" :
+                      wpSite.status === "unreachable" ? "text-destructive" :
+                      "text-muted-foreground"
+                    }`} />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold">WordPress Plugin</span>
+                      {wpSite.status === "connected" && (
+                        <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent text-xs">
+                          <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
+                        </Badge>
+                      )}
+                      {wpSite.status === "pending" && (
+                        <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-transparent text-xs">
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Waiting for plugin…
+                        </Badge>
+                      )}
+                      {wpSite.status === "unreachable" && (
+                        <Badge variant="destructive" className="text-xs">
+                          <AlertTriangle className="h-3 w-3 mr-1" /> Unreachable
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono">{wpSite.site_url}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                      {wpSite.plugin_version && <span>Plugin v{wpSite.plugin_version}</span>}
+                      {(wpSite.yoast_active || wpSite.rankmath_active) && (
+                        <span>{wpSite.yoast_active ? "Yoast SEO" : "RankMath"} detected</span>
+                      )}
+                      {wpSite.last_scanned_at && (
+                        <span>Last scanned {new Date(wpSite.last_scanned_at).toLocaleDateString()}</span>
+                      )}
+                      {!wpSite.last_scanned_at && wpSite.status === "connected" && (
+                        <span>Not yet scanned</span>
+                      )}
+                    </div>
+                    {wpSite.status === "pending" && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                        Activate the plugin in your WordPress admin to complete the connection.
+                      </p>
+                    )}
+                    {wpSite.status === "unreachable" && (
+                      <p className="text-xs text-destructive mt-1">
+                        Your site isn't responding. Check the plugin is active and your domain is reachable.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Disconnect */}
+                {(wpSite.status === "connected" || wpSite.status === "unreachable") && (
+                  <div className="shrink-0">
+                    {showDisconnectConfirm ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Remove connection?</span>
+                        <Button
+                          size="sm" variant="destructive" className="h-7 text-xs"
+                          onClick={handleDisconnect}
+                          disabled={disconnecting}
+                        >
+                          {disconnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, disconnect"}
+                        </Button>
+                        <Button
+                          size="sm" variant="ghost" className="h-7 text-xs"
+                          onClick={() => setShowDisconnectConfirm(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm" variant="ghost"
+                        className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                        onClick={() => setShowDisconnectConfirm(true)}
+                      >
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Disconnect
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* ── WordPress Scan Score (plugin data) ───────────── */}

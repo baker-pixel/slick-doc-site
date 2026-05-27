@@ -207,23 +207,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
 
       if (assetsRes.data && (assetsRes.data as any)?.data) {
         const rows = (assetsRes.data as any).data as BrandAsset[];
-
-        // Generate signed URLs for file assets
-        const withUrls = await Promise.all(
-          rows.map(async (asset) => {
-            if (!asset.file_path) return asset;
-            try {
-              const { data: urlData } = await supabase.storage
-                .from("brand-assets")
-                .createSignedUrl(asset.file_path, 3600);
-              return { ...asset, signedUrl: urlData?.signedUrl };
-            } catch {
-              return asset;
-            }
-          })
-        );
-
-        setAssets(withUrls);
+        setAssets(rows);
       }
       if (clientsRes.data) {
         setClients(clientsRes.data);

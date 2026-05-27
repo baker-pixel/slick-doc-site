@@ -991,7 +991,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
             if (data?.tasks) {
               setTasks(data.tasks.filter((t: ClientTask) => t.client_account_id === selectedClientId));
             }
-          });
+          }).catch(() => {});
         }}
       />
     </div>

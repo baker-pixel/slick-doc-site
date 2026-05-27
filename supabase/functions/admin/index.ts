@@ -874,8 +874,18 @@ Deno.serve(async (req) => {
 
         if (assetsError) throw assetsError;
 
+        const assetsWithUrls = await Promise.all(
+          (assetsData || []).map(async (asset: Record<string, unknown>) => {
+            if (!asset.file_path) return asset;
+            const { data: urlData } = await supabase.storage
+              .from("brand-assets")
+              .createSignedUrl(asset.file_path as string, 3600);
+            return { ...asset, signedUrl: urlData?.signedUrl ?? null };
+          })
+        );
+
         return new Response(
-          JSON.stringify({ data: assetsData }),
+          JSON.stringify({ data: assetsWithUrls }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

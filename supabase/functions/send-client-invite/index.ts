@@ -79,18 +79,16 @@ serve(async (req) => {
     </ul>
     
     <div style="text-align: center; margin: 35px 0;">
-      <a href="${inviteLink}" 
-         style="background: linear-gradient(135deg, #F97316 0%, #EA580C 100%); 
-                color: white; 
-                padding: 16px 40px; 
-                text-decoration: none; 
-                border-radius: 8px; 
-                font-weight: 600; 
-                font-size: 16px; 
-                display: inline-block;
-                box-shadow: 0 4px 14px rgba(249, 115, 22, 0.4);">
-        Accept Invitation
-      </a>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+        <tr>
+          <td align="center" bgcolor="#F97316" style="border-radius: 8px;">
+            <a href="${inviteLink}"
+               style="display: inline-block; padding: 16px 40px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius: 8px; background-color: #F97316; mso-padding-alt: 16px 40px;">
+              Accept Invitation
+            </a>
+          </td>
+        </tr>
+      </table>
     </div>
     
     <p style="font-size: 14px; color: #666; margin-top: 30px;">
