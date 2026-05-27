@@ -614,7 +614,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         </div>
 
         {/* ── WordPress Connect Prompt ─────────────────────── */}
-        {wpSite === null && (
+        {(wpSite === null || wpSite?.status === "pending") && (
           <ConnectSitePanel
             clientId={clientAccountId}
             mode="client"
@@ -623,7 +623,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         )}
 
         {/* ── WordPress Scan Score (plugin data) ───────────── */}
-        {wpSite?.id && <SeoScoreCard siteId={wpSite.id} />}
+        {wpSite?.id && wpSite.status === "connected" && <SeoScoreCard siteId={wpSite.id} />}
 
         {/* ── Score Card ────────────────────────────────────── */}
         {loadingAudit ? (
@@ -829,7 +829,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         </Card>
 
         {/* ── WordPress Plugin Fixes ────────────────────────── */}
-        {wpSite?.id && (
+        {wpSite?.id && wpSite.status === "connected" && (
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

@@ -73,6 +73,7 @@ const tabTitles: Record<PortalTab, string> = {
   settings: "Settings",
   learning: "Learning Hub",
   calendar: "Content Calendar",
+  seo: "SEO Health",
 };
 
 const tabDescriptions: Record<PortalTab, string> = {
@@ -96,6 +97,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   settings: "Customize your portal experience",
   learning: "Educational resources to grow your marketing knowledge",
   calendar: "View your upcoming content schedule",
+  seo: "Track your site's SEO health and apply AI-generated fixes",
 };
 
 export default function ClientPortal() {

@@ -62,23 +62,9 @@ export function SeoScoreCard({ siteId }: Props) {
     load();
   }, [siteId]);
 
-  if (loading || scans.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-4 w-4" />
-            SEO Score
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            {loading ? "Loading…" : "Run a scan to see your SEO score"}
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Don't render at all until we have real scan data — avoids showing
+  // "Run a scan" alongside the main audit score card
+  if (loading || scans.length === 0) return null;
 
   const firstScan = scans[0];
   const latestScan = scans[scans.length - 1];

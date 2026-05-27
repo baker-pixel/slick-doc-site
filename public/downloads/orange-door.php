@@ -79,7 +79,7 @@ function od_register_routes() {
         'callback'            => 'od_verify',
         'permission_callback' => 'od_verify_token',
         'args'                => [
-            'id' => [ 'validate_callback' => fn($p) => is_numeric($p) ],
+            'id' => [ 'validate_callback' => function( $p ) { return is_numeric( $p ); } ],
         ],
     ]);
 }

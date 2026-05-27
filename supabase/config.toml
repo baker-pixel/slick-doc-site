@@ -143,3 +143,15 @@ verify_jwt = false
 
 [functions.trigger-task]
 verify_jwt = false
+
+[functions.scan-wordpress-site]
+verify_jwt = false
+
+[functions.approve-wp-fix]
+verify_jwt = false
+
+[functions.apply-fix-to-wordpress]
+verify_jwt = false
+
+[functions.advance-workflow]
+verify_jwt = false

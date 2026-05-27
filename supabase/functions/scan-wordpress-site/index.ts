@@ -4,8 +4,9 @@ import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const TIMEOUT_MS    = 10_000;
@@ -146,9 +147,13 @@ serve(async (req) => {
       .single();
     if (siteErr || !site) throw new Error("Site not found");
 
-    const { site_url, token, client_id: clientId } = site as {
-      site_url: string; token: string; client_id: string | null;
+    const { site_url, token, client_id: clientId, status: siteStatus } = site as {
+      site_url: string; token: string; client_id: string | null; status: string;
     };
+
+    if (!token || siteStatus === "pending") {
+      throw new Error("WordPress plugin not yet activated. Install and activate the OrangeDoor plugin on your WordPress site first.");
+    }
 
     // 1. Ping to verify connection
     const pingRes = await fetchWithRetry(
