@@ -176,6 +176,14 @@ serve(async (req) => {
         }
       }
 
+      // Sync status back to generated_content so admin sees client approved
+      if (generatedContentId) {
+        await supabase
+          .from("generated_content")
+          .update({ status: "client_approved", updated_at: new Date().toISOString() })
+          .eq("id", generatedContentId);
+      }
+
       // Log activity
       await supabase.from("activity_feed").insert({
         client_account_id: clientId,
@@ -210,6 +218,15 @@ serve(async (req) => {
         reviewed_at: new Date().toISOString(),
       })
       .eq("id", approval_id);
+
+    // Sync status back to generated_content so admin sees changes were requested
+    const generatedContentIdForChanges: string | null = approval.content_id || null;
+    if (generatedContentIdForChanges) {
+      await supabase
+        .from("generated_content")
+        .update({ status: "changes_requested", updated_at: new Date().toISOString() })
+        .eq("id", generatedContentIdForChanges);
+    }
 
     // 2. Insert automation alert
     await supabase.from("automation_alerts").insert({

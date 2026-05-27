@@ -448,6 +448,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const [wpSite, setWpSite] = useState<WpSite | null | undefined>(undefined);
   const [wpFixes, setWpFixes] = useState<WpFix[]>([]);
   const [applyingWp, setApplyingWp] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const loadAudit = useCallback(async () => {
     setLoadingAudit(true);
@@ -546,9 +547,34 @@ export function ClientSeoTab({ clientAccountId }: Props) {
     }
   }
 
-  function dismissWpFix(id: string) {
-    // Hide locally for this session — fix stays pending and reappears on next load
+  async function dismissWpFix(id: string) {
     setWpFixes(prev => prev.filter(f => f.id !== id));
+    const { error } = await supabase
+      .from("wp_fix_queue")
+      .update({ status: "rejected" })
+      .eq("id", id);
+    if (error) {
+      toast.error("Could not dismiss");
+      await loadWpData();
+    }
+  }
+
+  async function triggerScan() {
+    if (!wpSite?.id) return;
+    setScanning(true);
+    toast.info("Scanning your site — this may take up to 30 seconds…");
+    try {
+      const { data, error } = await supabase.functions.invoke("scan-wordpress-site", {
+        body: { site_id: wpSite.id },
+      });
+      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Scan failed");
+      toast.success(`Scan complete — ${data.fixes_generated ?? 0} improvements found`);
+      await loadWpData();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
   }
 
   const result = audit?.results;
@@ -803,28 +829,48 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         </Card>
 
         {/* ── WordPress Plugin Fixes ────────────────────────── */}
-        {wpFixes.length > 0 && (
+        {wpSite?.id && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Plug className="h-4 w-4" />
-                WordPress site improvements
-                <Badge variant="secondary">{wpFixes.length}</Badge>
-                <InfoTip text="Our plugin scanned your WordPress site and found these specific improvements. Each one can be applied automatically in seconds." />
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Plug className="h-4 w-4" />
+                  WordPress site improvements
+                  {wpFixes.length > 0 && <Badge variant="secondary">{wpFixes.length}</Badge>}
+                  <InfoTip text="Our plugin scanned your WordPress site and found these specific improvements. Each one can be applied automatically in seconds." />
+                </CardTitle>
+                <Button
+                  size="sm" variant="outline"
+                  onClick={triggerScan}
+                  disabled={scanning}
+                  className="gap-1.5"
+                >
+                  {scanning
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</>
+                    : <><RefreshCw className="h-3.5 w-3.5" /> Scan site</>}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="max-h-[480px]">
-                {wpFixes.map(fix => (
-                  <WpFixCard
-                    key={fix.id}
-                    fix={fix}
-                    applying={applyingWp === fix.id}
-                    onApply={() => applyWpFix(fix)}
-                    onDismiss={() => dismissWpFix(fix.id)}
-                  />
-                ))}
-              </ScrollArea>
+              {wpFixes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                  <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-500" />
+                  <p className="text-sm font-medium">No improvements pending</p>
+                  <p className="text-xs mt-1">Click "Scan site" to check for new SEO issues.</p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[480px]">
+                  {wpFixes.map(fix => (
+                    <WpFixCard
+                      key={fix.id}
+                      fix={fix}
+                      applying={applyingWp === fix.id}
+                      onApply={() => applyWpFix(fix)}
+                      onDismiss={() => dismissWpFix(fix.id)}
+                    />
+                  ))}
+                </ScrollArea>
+              )}
             </CardContent>
           </Card>
         )}

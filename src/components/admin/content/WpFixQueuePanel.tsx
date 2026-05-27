@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import {
   Wand2, CheckCircle2, Loader2, AlertTriangle,
-  RefreshCw, Globe, ChevronDown, ChevronUp,
+  RefreshCw, Globe, ChevronDown, ChevronUp, XCircle,
 } from "lucide-react";
 
 interface Fix {
@@ -52,6 +52,7 @@ const STATUS_BADGE: Record<string, string> = {
   approved: "bg-purple-500/15 text-purple-700 dark:text-purple-400",
   applied:  "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
   failed:   "bg-destructive/15 text-destructive",
+  rejected: "bg-muted text-muted-foreground",
 };
 
 function groupByPage(fixes: Fix[]): PageGroup[] {
@@ -70,6 +71,7 @@ export function WpFixQueuePanel({ siteId }: Props) {
   const [fixes, setFixes] = useState<Fix[]>([]);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<Set<string>>(new Set());
+  const [rejecting, setRejecting] = useState<Set<string>>(new Set());
   const [approvingAll, setApprovingAll] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -132,6 +134,22 @@ export function WpFixQueuePanel({ siteId }: Props) {
     }
     setApprovingAll(false);
     toast.success(`Applied ${successCount} of ${pending.length} fixes`);
+  }
+
+  async function rejectFix(id: string) {
+    setRejecting(prev => new Set(prev).add(id));
+    try {
+      const { error } = await supabase
+        .from("wp_fix_queue")
+        .update({ status: "rejected" })
+        .eq("id", id);
+      if (error) throw error;
+      setFixes(prev => prev.map(f => f.id === id ? { ...f, status: "rejected" } : f));
+    } catch {
+      toast.error("Could not dismiss fix");
+    } finally {
+      setRejecting(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }
   }
 
   function togglePage(key: string) {
@@ -241,17 +259,32 @@ export function WpFixQueuePanel({ siteId }: Props) {
 
                               <div className="flex items-center gap-1 shrink-0">
                                 {(fix.status === "pending" || fix.status === "failed") && (
-                                  <Button
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    onClick={() => applyFix(fix)}
-                                    disabled={applying.has(fix.id) || approvingAll}
-                                  >
-                                    {applying.has(fix.id)
-                                      ? <Loader2 className="h-3 w-3 animate-spin" />
-                                      : fix.status === "failed" ? "Retry" : "Apply"
-                                    }
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => applyFix(fix)}
+                                      disabled={applying.has(fix.id) || approvingAll || rejecting.has(fix.id)}
+                                    >
+                                      {applying.has(fix.id)
+                                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                                        : fix.status === "failed" ? "Retry" : "Apply"
+                                      }
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                      onClick={() => rejectFix(fix.id)}
+                                      disabled={rejecting.has(fix.id) || applying.has(fix.id) || approvingAll}
+                                      title="Dismiss"
+                                    >
+                                      {rejecting.has(fix.id)
+                                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                                        : <XCircle className="h-3.5 w-3.5" />
+                                      }
+                                    </Button>
+                                  </>
                                 )}
                                 {fix.status === "applied" && (
                                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />

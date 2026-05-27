@@ -87,6 +87,31 @@ serve(async (req) => {
     fixId = body.fix_id as string;
     if (!fixId) throw new Error("fix_id required");
 
+    // Verify caller owns this fix via RLS (user client can only see their own site's fixes)
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { authorization: authHeader } } },
+    );
+    const { data: ownedFix } = await userClient
+      .from("wp_fix_queue")
+      .select("id")
+      .eq("id", fixId)
+      .maybeSingle();
+    if (!ownedFix) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Fetch fix
     const { data: fix, error: fixErr } = await supabase
       .from("wp_fix_queue")

@@ -92,13 +92,26 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     }
   }
 
-  function handleConnect() {
+  async function handleConnect() {
     let base = wpAdminUrl.trim().replace(/\/+$/, "");
     if (!base) {
       toast.error("Enter your WordPress admin URL first");
       return;
     }
     if (!/^https?:\/\//i.test(base)) base = "https://" + base;
+
+    // Derive root site URL (strip /wp-admin so it matches get_site_url() on the plugin side)
+    const siteUrl = base.replace(/\/wp-admin\/?$/i, "").replace(/\/+$/, "");
+
+    // Register client_id ↔ site_url so connect-site can link them when the plugin activates.
+    // Also patches client_id onto any existing record if the plugin already registered.
+    try {
+      await supabase.functions.invoke("prepare-connection", {
+        body: { client_id: clientId, site_url: siteUrl },
+      });
+    } catch {
+      // Non-fatal — continue with download/redirect
+    }
 
     // Auto-download ZIP
     const a = document.createElement("a");

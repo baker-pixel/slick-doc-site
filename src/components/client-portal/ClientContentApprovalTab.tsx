@@ -34,37 +34,60 @@ interface ClientContentApprovalTabProps {
 }
 
 // Content type configurations with icons, colors, and descriptions
-const contentTypeConfig: Record<string, { 
+const contentTypeConfig: Record<string, {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   color: string;
   bgColor: string;
   description: string;
 }> = {
-  "blog_post": { 
-    icon: FileText, 
-    label: "Blog Post", 
+  "blog_post": {
+    icon: FileText,
+    label: "Blog Post",
     color: "text-blue-600",
     bgColor: "bg-blue-100",
     description: "A blog article written for your website to improve SEO and engage visitors"
   },
-  "social_media": { 
-    icon: Share2, 
-    label: "Social Media Post", 
+  "social_media": {
+    icon: Share2,
+    label: "Social Media Post",
     color: "text-purple-600",
     bgColor: "bg-purple-100",
     description: "Content designed for your social media channels"
   },
-  "email": { 
-    icon: Mail, 
-    label: "Email Campaign", 
+  // DB stores social_post — alias to social_media config
+  "social_post": {
+    icon: Share2,
+    label: "Social Media Post",
+    color: "text-purple-600",
+    bgColor: "bg-purple-100",
+    description: "Content designed for your social media channels"
+  },
+  "email": {
+    icon: Mail,
+    label: "Email Campaign",
     color: "text-green-600",
     bgColor: "bg-green-100",
     description: "Email content for your marketing campaigns or newsletters"
   },
-  "ad_copy": { 
-    icon: Megaphone, 
-    label: "Ad Copy", 
+  // DB stores email_copy and email_sequence — alias both to email config
+  "email_copy": {
+    icon: Mail,
+    label: "Email Campaign",
+    color: "text-green-600",
+    bgColor: "bg-green-100",
+    description: "Email content for your marketing campaigns or newsletters"
+  },
+  "email_sequence": {
+    icon: Mail,
+    label: "Email Sequence",
+    color: "text-green-600",
+    bgColor: "bg-green-100",
+    description: "A series of emails for your marketing campaigns or nurture flows"
+  },
+  "ad_copy": {
+    icon: Megaphone,
+    label: "Ad Copy",
     color: "text-orange-600",
     bgColor: "bg-orange-100",
     description: "Advertising copy for paid campaigns on Google, Facebook, etc."
@@ -184,20 +207,20 @@ function ContentRenderer({ content, contentType }: { content: string | null; con
   const normalizedType = contentType.toLowerCase().replace(/\s+/g, '_');
   
   // Email content
-  if (normalizedType === 'email' || parsed.subject || parsed.body) {
+  if (['email', 'email_copy', 'email_sequence'].includes(normalizedType) || parsed.subject || parsed.body) {
     return <EmailContentView data={parsed} />;
   }
-  
+
   // Social media content
-  if (normalizedType === 'social_media' || parsed.caption || parsed.post || parsed.platform) {
+  if (['social_media', 'social_post'].includes(normalizedType) || parsed.caption || parsed.post || parsed.platform) {
     return <SocialMediaContentView data={parsed} />;
   }
-  
+
   // Blog post content
   if (normalizedType === 'blog_post' || parsed.headline || parsed.article || parsed.body) {
     return <BlogPostContentView data={parsed} />;
   }
-  
+
   // Ad copy content
   if (normalizedType === 'ad_copy' || parsed.headline || parsed.description || parsed.cta) {
     return <AdCopyContentView data={parsed} />;

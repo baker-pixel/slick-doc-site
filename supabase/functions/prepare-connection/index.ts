@@ -25,7 +25,7 @@ serve(async (req) => {
       });
     }
 
-    const normalizedUrl = site_url.trim().replace(/\/+$/, "");
+    const normalizedUrl = site_url.trim().replace(/\/+$/, "").replace(/\/wp-admin\/?$/i, "");
 
     // Store site_url in client_credentials so connect-site can match the client
     // when the plugin activates and POSTs its token
@@ -33,21 +33,27 @@ serve(async (req) => {
       .from("client_credentials")
       .upsert({ client_id, wordpress_url: normalizedUrl }, { onConflict: "client_id" });
 
-    // Pre-create a pending connected_sites record so the dashboard can show
-    // "waiting for plugin" state before the plugin activates
-    const { error: siteErr } = await supabase
+    // Check if the plugin already registered this site (client_id may be null)
+    const { data: existing } = await supabase
       .from("connected_sites")
-      .upsert(
-        {
-          client_id,
-          site_url: normalizedUrl,
-          token: "",          // placeholder — overwritten by connect-site on activation
-          status: "pending",
-        },
-        { onConflict: "site_url" },
-      );
+      .select("id, token, status")
+      .eq("site_url", normalizedUrl)
+      .maybeSingle();
 
-    if (siteErr) throw siteErr;
+    if (existing) {
+      // Plugin already called connect-site — just patch in the client_id
+      const { error: siteErr } = await supabase
+        .from("connected_sites")
+        .update({ client_id, updated_at: new Date().toISOString() })
+        .eq("site_url", normalizedUrl);
+      if (siteErr) throw siteErr;
+    } else {
+      // Plugin hasn't activated yet — pre-create pending record
+      const { error: siteErr } = await supabase
+        .from("connected_sites")
+        .insert({ client_id, site_url: normalizedUrl, token: "", status: "pending" });
+      if (siteErr) throw siteErr;
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles } from "lucide-react";
+import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Share2 } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 
 interface GeneratedContent {
@@ -47,6 +47,8 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
   const [previewContent, setPreviewContent] = useState<GeneratedContent | null>(null);
   const [publishingContent, setPublishingContent] = useState<GeneratedContent | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   
   // Content generation state
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -82,9 +84,12 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
       case "blog_post":
         return <FileText className="w-4 h-4" />;
       case "email_sequence":
+      case "email_copy":
+      case "email":
         return <Mail className="w-4 h-4" />;
       case "social_post":
-        return <MessageSquare className="w-4 h-4" />;
+      case "social_media":
+        return <Share2 className="w-4 h-4" />;
       case "ad_copy":
         return <Megaphone className="w-4 h-4" />;
       default:
@@ -99,7 +104,11 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
       case "draft":
         return <Badge variant="secondary">Draft</Badge>;
       case "approved":
-        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Approved Internally</Badge>;
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Sent to Client</Badge>;
+      case "client_approved":
+        return <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30">Client Approved ✓</Badge>;
+      case "changes_requested":
+        return <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30">Changes Requested</Badge>;
       case "published":
         return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Published</Badge>;
       case "rejected":
@@ -114,30 +123,36 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
   };
 
   const handleApprove = async (content: GeneratedContent) => {
-    const { error } = await supabase
-      .from("generated_content")
-      .update({ status: "approved" })
-      .eq("id", content.id);
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to approve content", variant: "destructive" });
-    } else {
-      toast({ title: "Approved", description: "Content has been approved" });
+    setApprovingId(content.id);
+    try {
+      const { error } = await supabase
+        .from("generated_content")
+        .update({ status: "approved", updated_at: new Date().toISOString() })
+        .eq("id", content.id);
+      if (error) throw error;
+      toast({ title: "Approved", description: "Content approved internally. Use 'Send to Client' to request their sign-off." });
       fetchData();
+    } catch {
+      toast({ title: "Error", description: "Failed to approve content", variant: "destructive" });
+    } finally {
+      setApprovingId(null);
     }
   };
 
   const handleReject = async (content: GeneratedContent) => {
-    const { error } = await supabase
-      .from("generated_content")
-      .update({ status: "rejected" })
-      .eq("id", content.id);
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to reject content", variant: "destructive" });
-    } else {
+    setRejectingId(content.id);
+    try {
+      const { error } = await supabase
+        .from("generated_content")
+        .update({ status: "rejected", updated_at: new Date().toISOString() })
+        .eq("id", content.id);
+      if (error) throw error;
       toast({ title: "Rejected", description: "Content has been rejected" });
       fetchData();
+    } catch {
+      toast({ title: "Error", description: "Failed to reject content", variant: "destructive" });
+    } finally {
+      setRejectingId(null);
     }
   };
 
@@ -150,19 +165,31 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
   const handleSaveEdit = async () => {
     if (!editingContent) return;
 
+    // If content was already sent to client or approved by client, reset to pending review
+    // so it must be re-reviewed before being sent again.
+    const resetStatus = ["approved", "client_approved", "changes_requested"].includes(editingContent.status)
+      ? "pending_admin_review"
+      : undefined;
+
     const { error } = await supabase
       .from("generated_content")
-      .update({ 
-        content: editedContent, 
+      .update({
+        content: editedContent,
         title: editedTitle || null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        ...(resetStatus ? { status: resetStatus } : {}),
       })
       .eq("id", editingContent.id);
 
     if (error) {
       toast({ title: "Error", description: "Failed to save changes", variant: "destructive" });
     } else {
-      toast({ title: "Saved", description: "Content has been updated" });
+      toast({
+        title: "Saved",
+        description: resetStatus
+          ? "Content updated and reset to 'Needs Review' — re-approve before sending to client."
+          : "Content has been updated",
+      });
       setEditingContent(null);
       fetchData();
     }
@@ -352,7 +379,9 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="pending_admin_review">Needs Review</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="approved">Approved Internally</SelectItem>
+            <SelectItem value="approved">Sent to Client</SelectItem>
+            <SelectItem value="client_approved">Client Approved</SelectItem>
+            <SelectItem value="changes_requested">Changes Requested</SelectItem>
             <SelectItem value="published">Published</SelectItem>
             <SelectItem value="rejected">Rejected</SelectItem>
           </SelectContent>
@@ -406,28 +435,38 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                     <Edit className="w-3 h-3 mr-1" />
                     Edit
                   </Button>
-                  {(content.status === "draft" || content.status === "pending_admin_review") && (
+                  {(content.status === "draft" || content.status === "pending_admin_review" || content.status === "changes_requested") && (
                     <>
                       <Button
                         size="sm"
                         variant="default"
                         className="bg-green-600 hover:bg-green-700"
+                        disabled={approvingId === content.id}
                         onClick={() => handleApprove(content)}
                       >
-                        <Check className="w-3 h-3 mr-1" />
+                        {approvingId === content.id ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <Check className="w-3 h-3 mr-1" />
+                        )}
                         Approve
                       </Button>
                       <Button
                         size="sm"
                         variant="destructive"
+                        disabled={rejectingId === content.id}
                         onClick={() => handleReject(content)}
                       >
-                        <X className="w-3 h-3 mr-1" />
+                        {rejectingId === content.id ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <X className="w-3 h-3 mr-1" />
+                        )}
                         Reject
                       </Button>
                     </>
                   )}
-                  {(content.status === "approved" || content.status === "draft" || content.status === "pending_admin_review") && (
+                  {(content.status === "approved" || content.status === "draft" || content.status === "pending_admin_review" || content.status === "changes_requested") && (
                     <Button
                       size="sm"
                       variant="default"
@@ -478,32 +517,42 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
             </div>
           )}
           <DialogFooter className="mt-4 flex-wrap gap-2">
-            {previewContent && (previewContent.status === "draft" || previewContent.status === "pending_admin_review") && (
+            {previewContent && (previewContent.status === "draft" || previewContent.status === "pending_admin_review" || previewContent.status === "changes_requested") && (
               <>
                 <Button
                   variant="default"
                   className="bg-green-600 hover:bg-green-700"
+                  disabled={approvingId === previewContent.id}
                   onClick={() => {
                     handleApprove(previewContent);
                     setPreviewContent(null);
                   }}
                 >
-                  <Check className="w-4 h-4 mr-2" />
+                  {approvingId === previewContent.id ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
                   Approve
                 </Button>
                 <Button
                   variant="destructive"
+                  disabled={rejectingId === previewContent.id}
                   onClick={() => {
                     handleReject(previewContent);
                     setPreviewContent(null);
                   }}
                 >
-                  <X className="w-4 h-4 mr-2" />
+                  {rejectingId === previewContent.id ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <X className="w-4 h-4 mr-2" />
+                  )}
                   Reject
                 </Button>
               </>
             )}
-            {previewContent && (previewContent.status === "approved" || previewContent.status === "draft" || previewContent.status === "pending_admin_review") && (
+            {previewContent && (previewContent.status === "approved" || previewContent.status === "draft" || previewContent.status === "pending_admin_review" || previewContent.status === "changes_requested") && (
               <Button
                 variant="default"
                 onClick={() => {
