@@ -64,6 +64,7 @@ import { MarketingOSDashboard } from "@/components/admin/misc/MarketingOSDashboa
 import { GoogleReviewEngine } from "@/components/admin/content/GoogleReviewEngine";
 import ClientWinNotifications from "@/components/admin/clients/ClientWinNotifications";
 import LeadScoringPanel from "@/components/admin/sales/LeadScoringPanel";
+import ProspectEnginePanel from "@/components/admin/sales/ProspectEnginePanel";
 import AIAdGenerator from "@/components/admin/content/AIAdGenerator";
 import CaseStudyBuilderPanel from "@/components/admin/content/CaseStudyBuilderPanel";
 import ClientHealthDashboard from "@/components/admin/clients/ClientHealthDashboard";
@@ -1407,6 +1408,8 @@ const AdminInner = () => {
         return <GoogleReviewEngine />;
       case "win-notifications":
         return <ClientWinNotifications />;
+      case "prospect-engine":
+        return <ProspectEnginePanel />;
       case "lead-scoring":
         return <LeadScoringPanel />;
       case "ad-generator":
@@ -1485,6 +1488,7 @@ const AdminInner = () => {
       "website-personalization": "Website Personalization",
       "marketing-os": "Marketing OS",
       "quality-assurance": "AI Quality Assurance",
+      "prospect-engine": "Prospect Engine",
       "lead-scoring": "AI Lead Scoring",
       "ad-generator": "AI Ad Generator",
       "workload-balancer": "Workload Balancer",
@@ -1509,6 +1513,7 @@ const AdminInner = () => {
     "clients", "team-directory", "team-performance", "workload-balancer",
     "integrations", "calendar",
     "quick-actions", "activity-feed", "review-workflow", "client-workflow",
+    "prospect-engine",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
     "automation-center", "sop-command-center", "client-health",
     "onboarding", "social-posts", "seo-dashboard", "marketing-os",

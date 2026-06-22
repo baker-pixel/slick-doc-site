@@ -17,6 +17,7 @@ import {
   Layers,
   Palette,
   Plug,
+  Radar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -93,7 +94,8 @@ export type AdminSection =
   | "sequences"
   | "campaigns"
   | "calendar"
-  | "analytics";
+  | "analytics"
+  | "prospect-engine";
 
 interface AdminSidebarProps {
   activeSection: AdminSection;
@@ -116,6 +118,13 @@ const agentItems: NavItem[] = [
   { id: "reports-review", label: "Reports", icon: BarChart3 },
 ];
 
+// GROWTH group
+const growthItems: NavItem[] = [
+  { id: "prospect-engine", label: "Prospect Engine", icon: Radar },
+  { id: "contacts",        label: "Inbound Leads",   icon: Contact },
+  { id: "pipeline",        label: "Pipeline",        icon: BarChart3 },
+];
+
 // OPERATIONS group
 const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
@@ -124,7 +133,6 @@ const operationsItems: NavItem[] = [
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
   { id: "approvals", label: "Approvals", icon: FileCheck },
   { id: "deliverables", label: "Deliverables", icon: FolderOpen },
-  { id: "contacts", label: "Leads", icon: Contact },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -221,6 +229,7 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
           </SidebarGroupContent>
         </SidebarGroup>
         <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
+        <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
       </SidebarContent>
     </Sidebar>
