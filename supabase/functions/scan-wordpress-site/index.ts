@@ -55,17 +55,17 @@ async function generateFixes(
   page: WpPage,
   brandBlock: string,
   industry: string,
-  anthropicKey: string,
+  groqKey: string,
 ): Promise<AiFixResult | null> {
-  const systemPrompt = `You are an SEO expert. Generate optimized fixes for WordPress pages.
-Return ONLY a valid JSON object — no markdown, no explanation.
-
-${brandBlock}`;
-
   const missingAltImages = page.images.filter(i => i.missing_alt);
   const altTextSection = missingAltImages.length > 0
     ? `Images missing alt text (image IDs): ${missingAltImages.map(i => i.id).join(", ")}`
     : "";
+
+  const systemPrompt = `You are an SEO expert. Generate optimized fixes for WordPress pages.
+Return ONLY a valid JSON object — no markdown, no explanation.
+
+${brandBlock}`;
 
   const userPrompt = `Generate SEO fixes for this page.
 
@@ -92,29 +92,30 @@ Return a JSON object with ONLY the fields that need fixing:
 Omit any field that does not need a fix.`;
 
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": `Bearer ${groqKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "llama-3.3-70b-versatile",
         max_tokens: 512,
-        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: userPrompt }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user",   content: userPrompt },
+        ],
       }),
       signal: AbortSignal.timeout(30_000),
     });
 
     if (!resp.ok) {
-      console.error("Anthropic API error:", resp.status, await resp.text());
+      console.error("Groq API error:", resp.status, await resp.text());
       return null;
     }
 
     const data = await resp.json();
-    const raw = data?.content?.[0]?.text ?? "";
+    const raw = data?.choices?.[0]?.message?.content ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     return JSON.parse(jsonMatch[0]) as AiFixResult;
@@ -215,10 +216,10 @@ serve(async (req) => {
       .in("status", ["pending", "failed"]);
 
     // 6. Generate AI fixes for pages with issues
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const groqKey = Deno.env.get("GROQ_API_KEY");
     let fixesGenerated = 0;
 
-    if (anthropicKey && clientId && scanRecord) {
+    if (groqKey && clientId && scanRecord) {
       const brandKit = await getClientBrandKit(supabase, clientId, false);
       const brandBlock = brandKitToPromptBlock(brandKit);
       const industry = brandKit.business.industry ?? "General";
@@ -235,7 +236,7 @@ serve(async (req) => {
         .slice(0, MAX_PAGES_AI);
 
       for (const page of pagesWithIssues) {
-        const fixes = await generateFixes(page, brandBlock, industry, anthropicKey);
+        const fixes = await generateFixes(page, brandBlock, industry, groqKey);
         if (!fixes) continue;
 
         const rows: Record<string, unknown>[] = [];

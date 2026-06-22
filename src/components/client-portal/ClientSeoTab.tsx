@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +15,8 @@ import { toast } from "sonner";
 import {
   Search, CheckCircle2, XCircle, Loader2, AlertTriangle,
   TrendingUp, Lightbulb, ChevronDown, ChevronUp, RefreshCw,
-  Globe, Wand2, Target, ShieldCheck, Info, BookOpen, Zap,
-  MessageSquare, Plug,
+  Globe, Wand2, Target, ShieldCheck, Info, Zap,
+  Plug,
 } from "lucide-react";
 import { ConnectSitePanel } from "@/components/admin/content/ConnectSitePanel";
 import { SeoScoreCard } from "@/components/admin/shared/SeoScoreCard";
@@ -142,24 +142,6 @@ interface Audit {
   results: AuditResult | null;
 }
 
-interface Fix {
-  id: string;
-  issue_title: string;
-  issue_summary: string | null;
-  severity: string;
-  status: string;
-  fix_plan: {
-    explanation?: string;
-    impact?: string;
-    steps?: string[];
-    manual_fallback?: string;
-  };
-  ready_to_apply: { type?: string; payload?: { value?: string; post_url?: string } } | null;
-  apply_target: string | null;
-  error_message: string | null;
-  created_at: string;
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const scoreColor = (s: number) =>
@@ -167,13 +149,6 @@ const scoreColor = (s: number) =>
 
 const scoreRingStroke = (s: number) =>
   s >= 70 ? "stroke-emerald-500" : s >= 50 ? "stroke-amber-400" : "stroke-red-500";
-
-const severityBg: Record<string, string> = {
-  low: "bg-muted text-muted-foreground",
-  medium: "bg-amber-500/10 text-amber-700",
-  high: "bg-orange-500/10 text-orange-700",
-  critical: "bg-red-500/10 text-red-700",
-};
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -295,156 +270,23 @@ function WpFixCard({ fix, applying, onApply, onDismiss }: WpFixCardProps) {
   );
 }
 
-// ── Fix Card ──────────────────────────────────────────────────────────────────
-
-interface FixCardProps {
-  fix: Fix;
-  applying: boolean;
-  rejecting: boolean;
-  onApply: () => void;
-  onReject: () => void;
-}
-
-function FixCard({ fix, applying, rejecting, onApply, onReject }: FixCardProps) {
-  const [showHow, setShowHow] = useState(false);
-  const canAuto = fix.apply_target === "wordpress" && fix.ready_to_apply?.type?.startsWith("wp_");
-
-  const manualSteps = fix.fix_plan.manual_fallback || fix.fix_plan.steps?.join("\n");
-
-  return (
-    <div className="p-4 space-y-3 border-b last:border-0">
-      {/* Title + severity */}
-      <div className="flex items-start gap-2">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <Badge variant="outline" className={`text-xs ${severityBg[fix.severity] ?? ""}`}>
-              {fix.severity === "high" || fix.severity === "critical" ? "Important" :
-               fix.severity === "medium" ? "Recommended" : "Minor"}
-            </Badge>
-          </div>
-          <p className="text-sm font-medium leading-snug">{fix.issue_title}</p>
-        </div>
-      </div>
-
-      {/* Plain-English explanation */}
-      {fix.fix_plan.explanation && (
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {fix.fix_plan.explanation}
-        </p>
-      )}
-
-      {/* Business impact */}
-      {fix.fix_plan.impact && (
-        <div className="flex items-start gap-2 text-sm bg-amber-500/5 border border-amber-500/20 rounded-md p-3">
-          <TrendingUp className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-amber-800 dark:text-amber-300">{fix.fix_plan.impact}</p>
-        </div>
-      )}
-
-      {/* New value preview */}
-      {fix.ready_to_apply?.payload?.value && (
-        <div className="rounded-md bg-muted/50 p-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-            What we'll change it to
-          </p>
-          <p className="text-sm font-mono break-words">{fix.ready_to_apply.payload.value}</p>
-        </div>
-      )}
-
-      {/* "Tell me how" expandable */}
-      {showHow && manualSteps && (
-        <div className="rounded-md bg-muted/40 p-3 space-y-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            How to do it yourself
-          </p>
-          <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
-            {manualSteps}
-          </p>
-        </div>
-      )}
-
-      {fix.error_message && (
-        <div className="flex items-start gap-2 text-destructive text-xs bg-destructive/5 rounded-md p-2">
-          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-          {fix.error_message}
-        </div>
-      )}
-
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 pt-1">
-        {/* Tell me how */}
-        {manualSteps && (
-          <Button
-            size="sm" variant="outline"
-            className="gap-1.5"
-            onClick={() => setShowHow(v => !v)}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            {showHow ? "Hide steps" : "Tell me how to do it"}
-          </Button>
-        )}
-
-        {/* Do it for me */}
-        {canAuto ? (
-          <Button
-            size="sm"
-            className="gap-1.5"
-            onClick={onApply}
-            disabled={applying}
-          >
-            {applying
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <Zap className="h-3.5 w-3.5" />}
-            Do it for me
-          </Button>
-        ) : (
-          <Button
-            size="sm" variant="secondary"
-            className="gap-1.5 cursor-default opacity-70"
-            disabled
-            title="Your team will handle this change"
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Your team handles this
-          </Button>
-        )}
-
-        {/* Dismiss */}
-        <Button
-          size="sm" variant="ghost"
-          className="text-muted-foreground hover:text-destructive gap-1.5 ml-auto"
-          onClick={onReject}
-          disabled={rejecting}
-        >
-          {rejecting
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : <XCircle className="h-3.5 w-3.5" />}
-          Not now
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function ClientSeoTab({ clientAccountId }: Props) {
   const [audit, setAudit] = useState<Audit | null>(null);
-  const [fixes, setFixes] = useState<Fix[]>([]);
   const [loadingAudit, setLoadingAudit] = useState(true);
-  const [loadingFixes, setLoadingFixes] = useState(true);
-  const [applying, setApplying] = useState<string | null>(null);
-  const [rejecting, setRejecting] = useState<string | null>(null);
   const [showAllIssues, setShowAllIssues] = useState(false);
 
   // WordPress plugin state
   const [wpSite, setWpSite] = useState<WpSite | null | undefined>(undefined);
   const [wpFixes, setWpFixes] = useState<WpFix[]>([]);
+  const [loadingWp, setLoadingWp] = useState(true);
   const [applyingWp, setApplyingWp] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [showAllFixes, setShowAllFixes] = useState(false);
+  const autoScanFired = useRef(false);
 
   const loadAudit = useCallback(async () => {
     setLoadingAudit(true);
@@ -459,20 +301,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
     setLoadingAudit(false);
   }, [clientAccountId]);
 
-  const loadFixes = useCallback(async () => {
-    setLoadingFixes(true);
-    const { data } = await supabase
-      .from("ai_fixes")
-      .select("id, issue_title, issue_summary, severity, status, fix_plan, ready_to_apply, apply_target, error_message, created_at")
-      .eq("client_account_id", clientAccountId)
-      .in("status", ["proposed", "approved", "failed"])
-      .order("created_at", { ascending: false })
-      .limit(50);
-    setFixes((data ?? []) as Fix[]);
-    setLoadingFixes(false);
-  }, [clientAccountId]);
-
   const loadWpData = useCallback(async () => {
+    setLoadingWp(true);
     const { data: site } = await supabase
       .from("connected_sites")
       .select("id, site_url, status, last_scanned_at, plugin_version, yoast_active, rankmath_active")
@@ -490,42 +320,25 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         .limit(30);
       setWpFixes((wf ?? []) as WpFix[]);
     }
+    setLoadingWp(false);
   }, [clientAccountId]);
 
-  useEffect(() => { loadAudit(); loadFixes(); loadWpData(); }, [loadAudit, loadFixes, loadWpData]);
+  useEffect(() => { loadAudit(); loadWpData(); }, [loadAudit, loadWpData]);
 
-  async function applyFix(fix: Fix) {
-    setApplying(fix.id);
-    try {
-      const { data, error } = await supabase.functions.invoke("apply-fix-to-wordpress", {
-        body: { fix_id: fix.id },
-      });
-      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Failed");
-      toast.success("Fix applied to your website!");
-      setFixes(prev => prev.filter(f => f.id !== fix.id));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not apply fix");
-    } finally {
-      setApplying(null);
+  // Auto-scan: fires once when site is connected but never scanned yet.
+  // This is the reliable trigger — the connect-site fire-and-forget is best-effort only.
+  useEffect(() => {
+    if (
+      wpSite?.status === "connected" &&
+      !wpSite.last_scanned_at &&
+      !scanning &&
+      !autoScanFired.current
+    ) {
+      autoScanFired.current = true;
+      triggerScan();
     }
-  }
-
-  async function rejectFix(id: string) {
-    setRejecting(id);
-    try {
-      const { error } = await supabase
-        .from("ai_fixes")
-        .update({ status: "rejected" })
-        .eq("id", id);
-      if (error) throw error;
-      setFixes(prev => prev.filter(f => f.id !== id));
-      toast.success("Dismissed");
-    } catch {
-      toast.error("Could not dismiss");
-    } finally {
-      setRejecting(null);
-    }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wpSite?.id, wpSite?.status, wpSite?.last_scanned_at]);
 
   async function applyWpFix(fix: WpFix) {
     setApplyingWp(fix.id);
@@ -624,7 +437,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             </p>
           </div>
           <Button variant="outline" size="sm"
-            onClick={() => { loadAudit(); loadFixes(); loadWpData(); }}>
+            onClick={() => { loadAudit(); loadWpData(); }}>
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
         </div>
@@ -903,14 +716,12 @@ export function ClientSeoTab({ clientAccountId }: Props) {
           </div>
         )}
 
-        {/* ── Recommended improvements (ai_fixes + wp_fix_queue merged) ── */}
-        {(() => {
-          const VISIBLE = 8;
-          const totalCount     = fixes.length + wpFixes.length;
-          const visibleFixes   = showAllFixes ? fixes : fixes.slice(0, VISIBLE);
-          const remainingSlots = showAllFixes ? wpFixes.length : Math.max(0, VISIBLE - fixes.length);
-          const visibleWpFixes = wpFixes.slice(0, remainingSlots);
-          const hiddenCount    = totalCount - visibleFixes.length - visibleWpFixes.length;
+        {/* ── Site Improvements ─────────────────────────────── */}
+        {wpSite?.status === "connected" && (() => {
+          const VISIBLE     = 8;
+          const visible     = showAllFixes ? wpFixes : wpFixes.slice(0, VISIBLE);
+          const hiddenCount = wpFixes.length - visible.length;
+          const initialScan = scanning && wpFixes.length === 0 && !wpSite.last_scanned_at;
 
           return (
             <Card>
@@ -918,26 +729,30 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Wand2 className="h-4 w-4" />
-                    Recommended improvements
-                    {totalCount > 0 && <Badge variant="secondary">{totalCount}</Badge>}
-                    <InfoTip text="Improvements your team and our plugin have identified. Apply instantly or follow the step-by-step guide." />
+                    Site Improvements
+                    {wpFixes.length > 0 && <Badge variant="secondary">{wpFixes.length}</Badge>}
+                    <InfoTip text="Issues found on your WordPress site. Each fix can be applied automatically in one click." />
                   </CardTitle>
-                  {wpSite?.status === "connected" && (
-                    <Button size="sm" variant="outline" onClick={triggerScan} disabled={scanning} className="gap-1.5">
-                      {scanning
-                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</>
-                        : <><RefreshCw className="h-3.5 w-3.5" /> Scan site</>}
-                    </Button>
-                  )}
+                  <Button
+                    size="sm" variant="outline"
+                    onClick={triggerScan} disabled={scanning}
+                    className="gap-1.5"
+                  >
+                    {scanning
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning…</>
+                      : <><RefreshCw className="h-3.5 w-3.5" /> Scan site</>}
+                  </Button>
                 </div>
               </CardHeader>
 
               <CardContent className="p-0">
-                {loadingFixes ? (
-                  <div className="flex items-center justify-center py-10">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                {loadingWp || initialScan ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <p className="text-sm font-medium">Setting up your SEO data…</p>
+                    <p className="text-xs">Scanning your WordPress site for the first time. This takes about 30 seconds.</p>
                   </div>
-                ) : totalCount === 0 ? (
+                ) : wpFixes.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-500" />
                     <p className="text-sm font-medium">All caught up!</p>
@@ -945,17 +760,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                   </div>
                 ) : (
                   <>
-                    {visibleFixes.map(fix => (
-                      <FixCard
-                        key={fix.id}
-                        fix={fix}
-                        applying={applying === fix.id}
-                        rejecting={rejecting === fix.id}
-                        onApply={() => applyFix(fix)}
-                        onReject={() => rejectFix(fix.id)}
-                      />
-                    ))}
-                    {visibleWpFixes.map(fix => (
+                    {visible.map(fix => (
                       <WpFixCard
                         key={fix.id}
                         fix={fix}
@@ -974,7 +779,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                         </button>
                       </div>
                     )}
-                    {showAllFixes && totalCount > VISIBLE && (
+                    {showAllFixes && wpFixes.length > VISIBLE && (
                       <div className="px-4 py-3 border-t">
                         <button
                           className="text-xs text-primary underline-offset-2 hover:underline"
