@@ -8,6 +8,51 @@ const corsHeaders = {
 
 const PFM_API = "https://api.postforme.dev";
 
+// Hard character limits per platform. Twitter is the critical one (280 chars total).
+// Leave a small safety buffer on each.
+const CHAR_LIMITS: Record<string, number> = {
+  twitter: 270,      // 280 hard limit, 10-char buffer
+  instagram: 2200,
+  linkedin: 2900,    // 3000 hard limit, 100-char buffer
+  facebook: 63000,
+  google_business: 1450,
+};
+
+function enforceCharLimit(content: string, platform: string): string {
+  const limit = CHAR_LIMITS[platform];
+  if (!limit || content.length <= limit) return content;
+
+  // Truncate at a word boundary and add ellipsis
+  const truncated = content.slice(0, limit - 3);
+  const lastSpace = truncated.lastIndexOf(" ");
+  return (lastSpace > limit * 0.8 ? truncated.slice(0, lastSpace) : truncated) + "…";
+}
+
+// Retry fetch with exponential backoff; respects PfM's Retry-After header on 429.
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+
+    if (res.status !== 429) return res;
+
+    lastResponse = res;
+    if (attempt === maxRetries) break;
+
+    const retryAfterSec = parseInt(res.headers.get("Retry-After") || "2", 10);
+    const backoffMs = Math.max(retryAfterSec * 1000, 1000 * Math.pow(2, attempt));
+    console.warn(`PfM rate limited (429). Retrying in ${backoffMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+    await new Promise((r) => setTimeout(r, backoffMs));
+  }
+
+  return lastResponse!;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -28,10 +73,7 @@ serve(async (req) => {
   const markFailed = async (id: string, existingMeta: object, errorMsg: string) => {
     await supabase
       .from("content_calendar")
-      .update({
-        status: "failed",
-        metadata: { ...existingMeta, error: errorMsg },
-      })
+      .update({ status: "failed", metadata: { ...existingMeta, error: errorMsg } })
       .eq("id", id);
 
     await supabase.from("automation_alerts").insert({
@@ -65,7 +107,25 @@ serve(async (req) => {
       return json({ error: "Content calendar row not found", success: false }, 404);
     }
 
+    // Guard: skip if already published or being processed (prevents double-publish)
+    if (item.status === "published" || item.status === "processing") {
+      console.log(`Skipping ${contentCalendarId} — status is already "${item.status}"`);
+      return json({ success: true, skipped: true, reason: item.status });
+    }
+
     const existingMeta = (item.metadata as object) || {};
+
+    // Lock the row so concurrent cron runs can't double-publish
+    const { error: lockErr } = await supabase
+      .from("content_calendar")
+      .update({ status: "processing" })
+      .eq("id", contentCalendarId)
+      .eq("status", "scheduled"); // only lock if still scheduled (optimistic lock)
+
+    if (lockErr) {
+      console.error("Failed to acquire processing lock:", lockErr.message);
+      return json({ error: "Failed to acquire lock", success: false }, 409);
+    }
 
     // Look up connected Post for Me account for this client + platform
     const { data: pfmAccount, error: accountErr } = await supabase
@@ -78,19 +138,28 @@ serve(async (req) => {
       .maybeSingle();
 
     if (accountErr || !pfmAccount) {
-      const errMsg = `No Post for Me account connected for platform "${item.platform}". Connect one in Social Media > Accounts.`;
+      const errMsg = `No Post for Me account connected for "${item.platform}". Connect one in Social & Accounts.`;
       console.error(errMsg);
+      await markFailed(contentCalendarId, existingMeta, errMsg);
+      return json({ error: errMsg, success: false }, 422);
+    }
+
+    // Enforce platform character limits before sending to PfM
+    const caption = enforceCharLimit(item.content || "", item.platform);
+
+    if (item.platform === "twitter" && caption.length > 280) {
+      const errMsg = `Tweet content exceeds 280 chars after truncation (${caption.length} chars). Content generation error.`;
       await markFailed(contentCalendarId, existingMeta, errMsg);
       return json({ error: errMsg, success: false }, 422);
     }
 
     // Build the Post for Me post body
     const postBody: Record<string, unknown> = {
-      caption: item.content,
+      caption,
       social_accounts: [pfmAccount.postforme_account_id],
     };
 
-    // Only set scheduled_at if it's in the future
+    // Only schedule if the time is still in the future
     if (item.scheduled_for) {
       const scheduledDate = new Date(item.scheduled_for);
       if (scheduledDate > new Date()) {
@@ -104,24 +173,34 @@ serve(async (req) => {
       postBody.media = [{ url: imageUrl }];
     }
 
-    console.log(`Publishing to PfM: account=${pfmAccount.postforme_account_id} platform=${item.platform} calendarId=${contentCalendarId}`);
+    console.log(
+      `Publishing to PfM: account=${pfmAccount.postforme_account_id} platform=${item.platform} chars=${caption.length} calendarId=${contentCalendarId}`,
+    );
 
-    // Create post via Post for Me
-    const pfmRes = await fetch(`${PFM_API}/v1/social-posts`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${pfmApiKey}`,
-        "Content-Type": "application/json",
+    // Call PfM with retry logic for rate limits
+    const pfmRes = await fetchWithRetry(
+      `${PFM_API}/v1/social-posts`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${pfmApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(postBody),
       },
-      body: JSON.stringify(postBody),
-    });
+      3,
+    );
 
     if (!pfmRes.ok) {
       const text = await pfmRes.text();
-      const errMsg = `Post for Me API error ${pfmRes.status}: ${text}`;
-      console.error(errMsg);
-      await markFailed(contentCalendarId, existingMeta, errMsg);
-      return json({ error: errMsg, success: false }, 502);
+      let friendlyErr = `PfM API error ${pfmRes.status}`;
+      try {
+        const parsed = JSON.parse(text);
+        friendlyErr = parsed.message || parsed.error || friendlyErr;
+      } catch { /* ignore */ }
+      console.error("PfM publish error:", pfmRes.status, text);
+      await markFailed(contentCalendarId, existingMeta, friendlyErr);
+      return json({ error: friendlyErr, success: false }, 502);
     }
 
     const pfmPost = await pfmRes.json();
@@ -133,12 +212,11 @@ serve(async (req) => {
         status: "published",
         published_at: new Date().toISOString(),
         postforme_post_id: pfmPost.id,
-        metadata: { ...existingMeta, pfm_post_id: pfmPost.id },
+        metadata: { ...existingMeta, pfm_post_id: pfmPost.id, chars_sent: caption.length },
       })
       .eq("id", contentCalendarId);
 
-    console.log(`Published via PfM: pfm_post_id=${pfmPost.id}`);
-
+    console.log(`Published via PfM: pfm_post_id=${pfmPost.id} chars=${caption.length}`);
     return json({ success: true, postforme_post_id: pfmPost.id });
   } catch (err: unknown) {
     console.error("postforme-publish-post error:", err);

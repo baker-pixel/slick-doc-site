@@ -450,6 +450,27 @@ Requirements:
         };
       }
 
+      if (platform === "twitter") {
+        return {
+          system,
+          user: `Write a tweet for ${biz}.
+
+HARD LIMIT: 240 characters total including spaces, punctuation, and hashtags. Count carefully.
+
+Pick ONE angle:
+${services.length ? `- A sharp insight about: ${services[0]}` : "- A sharp industry insight"}
+${differentiators.length ? `- What makes ${biz} different: ${differentiators[0]}` : "- A trust signal"}
+- A ${month} tip for ${targetAudience}
+
+Requirements:
+- MUST be ≤240 characters
+- Punchy, no filler words
+- End with 1 relevant hashtag maximum
+- No "I" opener
+- No quotes around the tweet${avoidRepeat}`,
+        };
+      }
+
       // Generic social
       return {
         system,
