@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import {
   Search, CheckCircle2, XCircle, Loader2, AlertTriangle,
-  TrendingUp, Lightbulb, ChevronDown, ChevronUp, RefreshCw,
+  TrendingUp, Lightbulb, RefreshCw,
   Globe, Wand2, Target, ShieldCheck, Info, Zap,
   Plug,
 } from "lucide-react";
@@ -414,6 +414,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
 
   const result = audit?.results;
   const score = audit?.score ?? result?.seo_score ?? null;
+  const wpConnected = wpSite?.status === "connected";
 
   const allIssues = [
     ...(result?.errors ?? []).map(e => ({ ...e, level: "error" as const })),
@@ -551,8 +552,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         {/* ── WordPress Scan Score (plugin data) ───────────── */}
         {wpSite?.id && wpSite.status === "connected" && <SeoScoreCard siteId={wpSite.id} />}
 
-        {/* ── Score Card ────────────────────────────────────── */}
-        {loadingAudit ? (
+        {/* ── Score Card — shown only when no WP plugin connected ── */}
+        {!wpConnected && (loadingAudit ? (
           <Card><CardContent className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </CardContent></Card>
@@ -619,10 +620,10 @@ export function ClientSeoTab({ clientAccountId }: Props) {
               </div>
             </CardContent>
           </Card>
-        )}
+        ))}
 
-        {/* ── Issues (plain English) ────────────────────────── */}
-        {allIssues.length > 0 && (
+        {/* ── Issues (plain English) — shown only when no WP plugin connected ── */}
+        {!wpConnected && allIssues.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
@@ -649,8 +650,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
           </Card>
         )}
 
-        {/* ── What's working + Quick wins ───────────────────── */}
-        {result && (
+        {/* ── What's working + Quick wins — shown only when no WP plugin connected ── */}
+        {!wpConnected && result && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(result.working_well?.length ?? 0) > 0 && (
               <Card>
@@ -721,7 +722,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
           const VISIBLE     = 8;
           const visible     = showAllFixes ? wpFixes : wpFixes.slice(0, VISIBLE);
           const hiddenCount = wpFixes.length - visible.length;
-          const initialScan = scanning && wpFixes.length === 0 && !wpSite.last_scanned_at;
+          const initialScan = scanning && wpFixes.length === 0;
 
           return (
             <Card>

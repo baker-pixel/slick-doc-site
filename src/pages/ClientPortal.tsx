@@ -434,7 +434,6 @@ export default function ClientPortal() {
         active={showTour}
         onClose={handleCloseTour}
         onTabChange={handleTabChange}
-        currentTab={activeTab}
       />
 
       <SidebarProvider>
