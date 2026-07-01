@@ -251,6 +251,18 @@ async function generateContent(
 
   const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, month, season);
 
+  // Short-form platforms need fewer tokens — prevents the model padding to fill context
+  const PLATFORM_MAX_TOKENS: Record<string, number> = {
+    twitter: 120,   // 280 chars ≈ 70 tokens; headroom for retries
+    bluesky: 120,   // 300 chars
+    threads: 180,   // 500 chars
+    instagram: 600,
+    facebook: 600,
+    linkedin: 700,
+    google_business: 500,
+  };
+  const maxTokens = PLATFORM_MAX_TOKENS[slot.platform] ?? 1200;
+
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -259,7 +271,7 @@ async function generateContent(
     },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      max_tokens: 1200,
+      max_tokens: maxTokens,
       temperature: 0.75,
       messages: [
         { role: "system", content: system },
@@ -274,8 +286,27 @@ async function generateContent(
   }
 
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content?.trim();
+  let content = data.choices?.[0]?.message?.content?.trim();
   if (!content) throw new Error("No content returned from AI");
+
+  // Hard-enforce character limits — safety net after generation
+  const CHAR_LIMITS: Record<string, number> = {
+    twitter: 270,
+    bluesky: 290,
+    threads: 490,
+    instagram: 2200,
+    linkedin: 2900,
+    facebook: 63000,
+    google_business: 1450,
+  };
+  const charLimit = CHAR_LIMITS[slot.platform];
+  if (charLimit && content.length > charLimit) {
+    const truncated = content.slice(0, charLimit - 3);
+    const lastSpace = truncated.lastIndexOf(" ");
+    content = (lastSpace > charLimit * 0.8 ? truncated.slice(0, lastSpace) : truncated) + "…";
+    console.warn(`Content for ${slot.platform} truncated from ${data.choices[0].message.content.length} to ${content.length} chars`);
+  }
+
   return content;
 }
 
@@ -468,6 +499,66 @@ Requirements:
 - End with 1 relevant hashtag maximum
 - No "I" opener
 - No quotes around the tweet${avoidRepeat}`,
+        };
+      }
+
+      if (platform === "twitter") {
+        return {
+          system,
+          user: `Write a single tweet for ${biz}.
+
+HARD LIMIT: 240 characters maximum (Twitter caps at 280 — stay under to allow edits).
+Count every character including spaces, punctuation, and hashtags.
+
+Pick ONE angle:
+${services.length ? `- A quick tip about: ${services[0]}` : "- A quick industry tip"}
+${differentiators.length ? `- A bold claim: ${differentiators[0]}` : "- A trust signal"}
+- A ${month} seasonal hook for ${targetAudience}
+- An engaging question that invites replies
+
+Rules:
+- NO hashtags (waste precious chars unless brand-critical)
+- ONE punchy idea only — no multi-part threads
+- End with a CTA only if it fits naturally within the limit
+- Output ONLY the tweet text — nothing else${avoidRepeat}`,
+        };
+      }
+
+      if (platform === "bluesky") {
+        return {
+          system,
+          user: `Write a Bluesky post for ${biz}.
+
+HARD LIMIT: 280 characters maximum.
+
+Pick ONE angle:
+${services.length ? `- A helpful insight about: ${services[0]}` : "- An industry insight"}
+- A relatable moment for ${targetAudience}
+- A ${month} tip or observation
+
+Rules:
+- Conversational, not corporate
+- Optional: 1–2 relevant hashtags if they fit
+- Output ONLY the post text${avoidRepeat}`,
+        };
+      }
+
+      if (platform === "threads") {
+        return {
+          system,
+          user: `Write a Threads post for ${biz}.
+
+HARD LIMIT: 480 characters maximum.
+
+Pick ONE angle:
+${services.length ? `- Behind the scenes of: ${services[0]}` : "- Behind the scenes"}
+- A relatable ${industry} moment
+- A short tip that ${targetAudience} would share
+
+Rules:
+- Casual, genuine, conversational
+- Optional: 1–2 hashtags
+- Output ONLY the post text${avoidRepeat}`,
         };
       }
 

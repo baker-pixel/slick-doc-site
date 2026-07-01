@@ -11,6 +11,8 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -46,17 +48,18 @@ serve(async (req) => {
       }
     }
 
-    // Get all scheduled content that's due AND client-approved
+    // Atomically claim due posts — sets status=processing so concurrent runs skip them
     const now = new Date().toISOString();
     const { data: scheduledContent, error: fetchError } = await supabase
       .from("content_calendar")
-      .select("*")
+      .update({ status: "processing", updated_at: now })
       .eq("status", "scheduled")
       .eq("client_approved", true)
-      .lte("scheduled_for", now);
+      .lte("scheduled_for", now)
+      .select("*");
 
     if (fetchError) {
-      console.error("Error fetching scheduled content:", fetchError);
+      console.error("Error claiming scheduled content:", fetchError);
       throw fetchError;
     }
 
@@ -144,6 +147,8 @@ serve(async (req) => {
               published = true;
               console.log(`Post ${item.id} published via Post for Me, pfm_id=${pfmRes.data?.postforme_post_id}`);
             }
+            // Stay under PfM's 5 req/sec limit
+            await sleep(300);
             break;
           }
 
