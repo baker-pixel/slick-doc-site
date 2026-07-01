@@ -664,7 +664,13 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                       <CardTitle className="text-base">{platform.name}</CardTitle>
                        {connected && !expired && !selectionRequired ? (
                         <div className="mt-1">
-                          <TokenStatus expiresAt={token.expires_at} />
+                          {token ? (
+                            <TokenStatus expiresAt={token.expires_at} />
+                          ) : (
+                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20 gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Connected
+                            </Badge>
+                          )}
                         </div>
                        ) : selectionRequired ? (
                          <Badge variant="outline" className="mt-1 text-xs gap-1">
