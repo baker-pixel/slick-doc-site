@@ -167,14 +167,45 @@ serve(async (req) => {
       }
     }
 
-    // Attach media if present
-    const imageUrl = (item.metadata as { image_url?: string } | null)?.image_url;
+    // Resolve media URL — auto-generate for image-required platforms (Instagram, Threads)
+    let imageUrl = (item.metadata as { image_url?: string } | null)?.image_url ?? null;
+    const IMAGE_REQUIRED_PLATFORMS = ["instagram", "threads"];
+
+    if (!imageUrl && IMAGE_REQUIRED_PLATFORMS.includes(item.platform)) {
+      console.log(`No image for ${item.platform} post ${contentCalendarId} — auto-generating...`);
+
+      // Fetch business name for the image prompt
+      const { data: clientRow } = await supabase
+        .from("client_accounts")
+        .select("business_name")
+        .eq("id", item.client_account_id)
+        .single();
+
+      const imgRes = await supabase.functions.invoke("generate-social-image", {
+        body: {
+          caption: item.content || "",
+          businessName: clientRow?.business_name || "the business",
+          platform: item.platform,
+          contentCalendarId,
+        },
+      });
+
+      if (imgRes.error || imgRes.data?.error) {
+        const errMsg = imgRes.data?.error || imgRes.error?.message || "Image generation failed";
+        console.warn(`Image generation failed for ${contentCalendarId}: ${errMsg}. Publishing without image.`);
+        // Don't hard-fail — attempt to publish without image (PfM may accept it)
+      } else {
+        imageUrl = imgRes.data?.imageUrl ?? null;
+        console.log(`Image generated: ${imageUrl}`);
+      }
+    }
+
     if (imageUrl) {
       postBody.media = [{ url: imageUrl }];
     }
 
     console.log(
-      `Publishing to PfM: account=${pfmAccount.postforme_account_id} platform=${item.platform} chars=${caption.length} calendarId=${contentCalendarId}`,
+      `Publishing to PfM: account=${pfmAccount.postforme_account_id} platform=${item.platform} chars=${caption.length} hasImage=${!!imageUrl} calendarId=${contentCalendarId}`,
     );
 
     // Call PfM with retry logic for rate limits

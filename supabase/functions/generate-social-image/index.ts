@@ -6,69 +6,161 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function generateSingleImage(_apiKey: string, _prompt: string): Promise<string | null> {
-  // Image generation not available — requires dedicated image generation service
-  return null;
-  try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${_apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [{ role: "user", content: _prompt }],
-        modalities: ["image", "text"],
-      }),
-    });
+// Build a concise DALL-E prompt from the post caption and business name.
+// Keeps it under 900 chars (DALL-E 3 limit is 4000 but shorter = more reliable).
+function buildImagePrompt(caption: string, businessName: string, platform: string): string {
+  // Strip hashtags — they add noise to the image prompt
+  const cleanCaption = caption.replace(/#\w+/g, "").replace(/\s{2,}/g, " ").trim();
+  // Take first 200 chars of the caption as context
+  const snippet = cleanCaption.slice(0, 200);
 
-    if (!response.ok) {
-      console.error("Image generation failed:", response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
-  } catch (error) {
-    console.error("Error generating image:", error);
-    return null;
-  }
+  return [
+    `Professional marketing photo for ${businessName}.`,
+    `Context: ${snippet}`,
+    `Style: bright, clean, modern business photography.`,
+    `Platform: ${platform}. Aspect ratio: square (1:1).`,
+    `No text overlays, no logos, no watermarks.`,
+    `High quality, visually appealing, suitable for social media.`,
+  ].join(" ");
 }
 
 serve(async (req) => {
-  const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    return new Response(
-      JSON.stringify({ error: "Image generation is not available. A dedicated image generation service is required." }),
-      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error: unknown) {
-    console.error("Error generating images:", error);
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
 
-    try {
-      await _sb.from('automation_alerts').insert({
-        alert_type: 'function_error',
-        severity: 'error',
-        title: `Error in generate-social-image`,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        source: 'generate-social-image',
-        metadata: {
-          function_name: 'generate-social-image',
-          client_id: null,
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          timestamp: new Date().toISOString(),
-        },
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+
+  if (!openaiKey) {
+    return json({ error: "OPENAI_API_KEY is not configured. Add it via: supabase secrets set OPENAI_API_KEY=sk-..." }, 503);
+  }
+
+  try {
+    const { caption, businessName, platform = "instagram", contentCalendarId } = await req.json();
+
+    if (!caption || !businessName) {
+      return json({ error: "caption and businessName are required" }, 400);
+    }
+
+    const prompt = buildImagePrompt(caption, businessName, platform);
+    console.log(`Generating image for ${businessName} (${platform}): ${prompt.slice(0, 100)}...`);
+
+    const dalleRes = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openaiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt,
+        n: 1,
+        size: "1024x1024",   // square — works for Instagram feed + Stories crop
+        quality: "standard", // "hd" costs 2× — standard is fine for social
+        response_format: "url",
+      }),
+    });
+
+    if (!dalleRes.ok) {
+      const errText = await dalleRes.text();
+      console.error("DALL-E error:", dalleRes.status, errText);
+      let msg = `Image generation failed (${dalleRes.status})`;
+      try { msg = JSON.parse(errText)?.error?.message || msg; } catch { /* ignore */ }
+      return json({ error: msg }, 502);
+    }
+
+    const dalleData = await dalleRes.json();
+    const imageUrl: string = dalleData.data?.[0]?.url;
+
+    if (!imageUrl) {
+      return json({ error: "No image URL returned from DALL-E" }, 500);
+    }
+
+    // Download the image and upload to Supabase Storage so the URL is permanent.
+    // DALL-E URLs expire in ~60 min — storage URL lasts forever.
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) {
+      // Fallback: return the temporary URL; it's still valid for ~60 min which is
+      // enough for PfM to fetch it during publishing.
+      console.warn("Could not download image to storage — returning temporary DALL-E URL");
+      if (contentCalendarId) {
+        await patchCalendarMetadata(supabase, contentCalendarId, imageUrl);
+      }
+      return json({ imageUrl, permanent: false });
+    }
+
+    const imageBytes = await imgRes.arrayBuffer();
+    const fileName = `social/${platform}/${contentCalendarId ?? crypto.randomUUID()}_${Date.now()}.png`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("generated-images")
+      .upload(fileName, imageBytes, {
+        contentType: "image/png",
+        upsert: true,
       });
-    } catch (_alertErr) { console.error('Failed to log alert:', _alertErr); }
-    const errorMessage = error instanceof Error ? error.message : "Failed to generate images";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+
+    if (uploadErr) {
+      console.warn("Storage upload failed:", uploadErr.message, "— returning DALL-E URL");
+      if (contentCalendarId) {
+        await patchCalendarMetadata(supabase, contentCalendarId, imageUrl);
+      }
+      return json({ imageUrl, permanent: false });
+    }
+
+    const { data: publicData } = supabase.storage
+      .from("generated-images")
+      .getPublicUrl(fileName);
+
+    const permanentUrl = publicData.publicUrl;
+
+    // Patch the content_calendar metadata so next publish attempt uses the cached image
+    if (contentCalendarId) {
+      await patchCalendarMetadata(supabase, contentCalendarId, permanentUrl);
+    }
+
+    console.log(`Image generated and stored: ${permanentUrl}`);
+    return json({ imageUrl: permanentUrl, permanent: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error("generate-social-image error:", msg);
+
+    await supabase.from("automation_alerts").insert({
+      alert_type: "function_error",
+      severity: "error",
+      title: "generate-social-image failed",
+      message: msg,
+      source: "generate-social-image",
+      metadata: { timestamp: new Date().toISOString() },
+    }).catch(() => {});
+
+    return json({ error: msg }, 500);
   }
 });
+
+async function patchCalendarMetadata(
+  supabase: ReturnType<typeof createClient>,
+  calendarId: string,
+  imageUrl: string,
+) {
+  const { data: row } = await supabase
+    .from("content_calendar")
+    .select("metadata")
+    .eq("id", calendarId)
+    .single();
+
+  await supabase
+    .from("content_calendar")
+    .update({ metadata: { ...((row?.metadata as object) || {}), image_url: imageUrl } })
+    .eq("id", calendarId);
+}
