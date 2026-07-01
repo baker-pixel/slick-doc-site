@@ -8,6 +8,19 @@ const corsHeaders = {
 
 const PFM_API = "https://api.postforme.dev";
 
+// Quickstart projects must use "organization" for LinkedIn (supports both personal + company pages).
+// Instagram must specify connection_type "instagram" or "facebook" for the login flow.
+function buildPlatformData(platform: string): Record<string, unknown> | undefined {
+  switch (platform) {
+    case "linkedin":
+      return { linkedin: { connection_type: "organization" } };
+    case "instagram":
+      return { instagram: { connection_type: "instagram" } };
+    default:
+      return undefined;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -25,7 +38,6 @@ serve(async (req) => {
     });
 
   try {
-    // Verify caller is authenticated
     const authHeader = req.headers.get("authorization");
     if (!authHeader) return json({ error: "Unauthorized" }, 401);
 
@@ -39,13 +51,12 @@ serve(async (req) => {
       return json({ error: "POSTFORME_API_KEY not configured" }, 500);
     }
 
-    const { clientId, platform, permissions, redirectUrl } = await req.json();
+    const { clientId, platform, permissions } = await req.json();
 
     if (!clientId || !platform) {
       return json({ error: "clientId and platform are required" }, 400);
     }
 
-    // Verify client exists
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
@@ -57,7 +68,8 @@ serve(async (req) => {
       return json({ error: "Client not found" }, 404);
     }
 
-    // Call Post for Me to generate auth URL
+    const platformData = buildPlatformData(platform);
+
     const pfmRes = await fetch(`${PFM_API}/v1/social-accounts/auth-url`, {
       method: "POST",
       headers: {
@@ -68,7 +80,7 @@ serve(async (req) => {
         platform,
         external_id: clientId,
         permissions: permissions ?? ["posts", "feeds"],
-        ...(redirectUrl ? { redirect_url: redirectUrl } : {}),
+        ...(platformData ? { platform_data: platformData } : {}),
       }),
     });
 
@@ -79,12 +91,11 @@ serve(async (req) => {
       try {
         const parsed = JSON.parse(text);
         friendlyError = parsed.message || parsed.error || parsed.detail || friendlyError;
-      } catch { /* ignore parse errors */ }
+      } catch { /* ignore */ }
       return json({ error: friendlyError }, 200);
     }
 
     const pfmData = await pfmRes.json();
-
     return json({ url: pfmData.url, platform: pfmData.platform });
   } catch (err: unknown) {
     console.error("postforme-connect-account error:", err);

@@ -40,29 +40,34 @@ export default function SocialCallback() {
 
     const doSync = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          setStatus("success");
-          setMessage(`${displayName} connected! Return to your portal to see it.`);
-          return;
+        // Prefer the clientId stored before opening OAuth tab (works for admin + client users)
+        const storedClientId = localStorage.getItem("pfm_oauth_client_id");
+        localStorage.removeItem("pfm_oauth_client_id");
+
+        let clientId = storedClientId;
+
+        if (!clientId) {
+          // Fallback: look up via session
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const { data: portalUser } = await supabase
+              .from("client_portal_users")
+              .select("client_account_id")
+              .eq("user_id", session.user.id)
+              .maybeSingle();
+            clientId = portalUser?.client_account_id ?? null;
+          }
         }
 
-        const { data: portalUser } = await supabase
-          .from("client_portal_users")
-          .select("client_account_id")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-
-        if (portalUser?.client_account_id) {
+        if (clientId) {
           await supabase.functions.invoke("postforme-sync-accounts", {
-            body: { clientId: portalUser.client_account_id },
+            body: { clientId },
           });
         }
 
         setStatus("success");
         setMessage(`${displayName} connected successfully!`);
 
-        // Try to close this tab — works when opened via window.open()
         setTimeout(() => {
           window.close();
         }, 2000);

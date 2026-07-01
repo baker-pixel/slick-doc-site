@@ -356,17 +356,17 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
   const handleConnect = async (platform: (typeof PLATFORMS)[number]) => {
     setConnecting(platform.id);
     try {
-      const redirectUrl = `${window.location.origin}/portal/social-callback`;
       const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
         body: {
           clientId: clientAccountId,
           platform: platform.id,
           permissions: ["posts", "feeds"],
-          redirectUrl,
         },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      // Store clientId so the callback tab can sync the right client
+      localStorage.setItem("pfm_oauth_client_id", clientAccountId);
       window.open(data.url, "_blank");
       toast({
         title: `${platform.name} — authorize in the new tab`,
