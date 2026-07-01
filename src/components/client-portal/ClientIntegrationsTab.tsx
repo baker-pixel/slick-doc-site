@@ -71,6 +71,15 @@ interface OAuthToken {
   token_metadata: Record<string, unknown> | null;
 }
 
+interface PfmAccount {
+  id: string;
+  platform: string;
+  postforme_account_id: string;
+  username: string | null;
+  profile_photo_url: string | null;
+  status: string;
+}
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
 const PLATFORMS = [
@@ -182,6 +191,8 @@ function TokenStatus({ expiresAt }: { expiresAt: string | null }) {
 export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTabProps) {
   const [tokens, setTokens] = useState<OAuthToken[]>([]);
   const [oauthConfig, setOauthConfig] = useState<Record<string, { clientId: string; configured: boolean }>>({});
+  const [pfmAccounts, setPfmAccounts] = useState<PfmAccount[]>([]);
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -282,6 +293,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
 
     fetchTokens();
     fetchOauthConfig();
+    fetchPfmAccounts();
   }, []);
 
   const fetchTokens = async () => {
@@ -322,40 +334,71 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     }
   };
 
-  const handleConnect = (platform: (typeof PLATFORMS)[number]) => {
-    const config = oauthConfig[platform.id];
-    if (!config?.configured) {
+  const fetchPfmAccounts = async () => {
+    const { data } = await supabase
+      .from("client_postforme_accounts")
+      .select("id, platform, postforme_account_id, username, profile_photo_url, status")
+      .eq("client_id", clientAccountId)
+      .eq("status", "connected");
+    setPfmAccounts(data as PfmAccount[] || []);
+  };
+
+  const getPfmAccount = (platformId: string) =>
+    pfmAccounts.find((a) => a.platform === platformId) ?? null;
+
+  const handleConnect = async (platform: (typeof PLATFORMS)[number]) => {
+    setConnecting(platform.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
+        body: { clientId: clientAccountId, platform: platform.id, permissions: ["posts", "feeds"] },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      window.open(data.url, "_blank", "width=640,height=720");
       toast({
-        title: "Not configured yet",
-        description: `${platform.name} integration is not configured yet. Please contact your account manager.`,
+        title: `${platform.name} — authorize in the new window`,
+        description: "After connecting, click 'Sync Accounts' to confirm your account is linked.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Connection failed",
+        description: err instanceof Error ? err.message : "Unable to start OAuth flow",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setConnecting(null);
     }
+  };
 
-    setConnecting(platform.id);
-    const redirectUri = `${SUPABASE_URL}/functions/v1/${platform.callbackFn}`;
-    const state = platform.id === "twitter"
-      ? `${clientAccountId}|challenge`
-      : clientAccountId;
-
-    const url = new URL(platform.oauthUrl);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("client_id", config.clientId);
-    url.searchParams.set("redirect_uri", redirectUri);
-    url.searchParams.set("scope", decodeURIComponent(platform.scopes));
-    url.searchParams.set("state", state);
-
-    if (platform.id === "twitter") {
-      url.searchParams.set("code_challenge", "challenge");
-      url.searchParams.set("code_challenge_method", "plain");
+  const handleSyncAccounts = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("postforme-sync-accounts", {
+        body: { clientId: clientAccountId },
+      });
+      if (error) throw error;
+      await fetchPfmAccounts();
+      toast({ title: "Synced", description: `${data?.synced ?? 0} account${data?.synced === 1 ? "" : "s"} updated` });
+    } catch (err: unknown) {
+      toast({ title: "Sync failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSyncing(false);
     }
+  };
 
-    if (platform.id === "linkedin") {
-      url.searchParams.set("prompt", "consent");
+  const handleDisconnectPfm = async (platformId: string) => {
+    const pfmAccount = getPfmAccount(platformId);
+    if (!pfmAccount) return;
+    setDisconnecting(platformId);
+    try {
+      await supabase.from("client_postforme_accounts").delete().eq("id", pfmAccount.id);
+      await fetchPfmAccounts();
+      toast({ title: "Disconnected" });
+    } catch (err: unknown) {
+      toast({ title: "Disconnect failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setDisconnecting(null);
     }
-
-    window.location.href = url.toString();
   };
 
   const handleLinkedInOrganizationSave = async () => {
@@ -465,6 +508,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
   };
 
   const connectedCount = PLATFORMS.filter((p) => {
+    if (getPfmAccount(p.id)) return true;
     const t = getToken(p.id);
     return t && !isExpired(t.expires_at);
   }).length;
@@ -500,10 +544,16 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
             Connect your social media accounts to enable automated posting on your behalf.
           </p>
         </div>
-        <Badge variant="outline" className="self-start sm:self-auto gap-1.5 px-3 py-1.5 text-sm">
-          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-          {connectedCount} / {PLATFORMS.length} connected
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="self-start sm:self-auto gap-1.5 px-3 py-1.5 text-sm">
+            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+            {connectedCount} / {PLATFORMS.length} connected
+          </Badge>
+          <Button variant="outline" size="sm" onClick={handleSyncAccounts} disabled={syncing}>
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", syncing && "animate-spin")} />
+            {syncing ? "Syncing..." : "Sync"}
+          </Button>
+        </div>
       </div>
 
       {/* Security Note */}
@@ -549,13 +599,16 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       {/* Platform Cards */}
       <div className="grid gap-4 sm:grid-cols-2">
         {PLATFORMS.map((platform) => {
+          const pfmAccount = getPfmAccount(platform.id);
           const token = getToken(platform.id);
-          const connected = !!token;
-          const expired = connected && isExpired(token.expires_at);
-          const selectionRequired = token?.token_metadata?.selection_required === true;
+          const connected = !!pfmAccount || (!!token && !isExpired(token.expires_at));
+          const expired = !pfmAccount && !!token && isExpired(token.expires_at);
+          const selectionRequired = !pfmAccount && token?.token_metadata?.selection_required === true;
           const needsAction = !connected || expired;
           const Icon = platform.icon;
-          const pageName = (typeof token?.token_metadata?.page_name === "string" ? token.token_metadata.page_name : token?.page_id) || null;
+          const pageName = pfmAccount?.username
+            || (typeof token?.token_metadata?.page_name === "string" ? token.token_metadata.page_name : token?.page_id)
+            || null;
 
           return (
             <Card
@@ -639,7 +692,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                       variant="ghost"
                       size="sm"
                       className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                      onClick={() => handleDisconnect(platform.id)}
+                      onClick={() => pfmAccount ? handleDisconnectPfm(platform.id) : handleDisconnect(platform.id)}
                       disabled={disconnecting === platform.id}
                     >
                       <Unlink className="h-3.5 w-3.5" />
