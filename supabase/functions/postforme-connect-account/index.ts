@@ -75,7 +75,12 @@ serve(async (req) => {
     if (!pfmRes.ok) {
       const text = await pfmRes.text();
       console.error("PfM auth-url error:", pfmRes.status, text);
-      return json({ error: `Post for Me API error ${pfmRes.status}: ${text}` }, 502);
+      let friendlyError = `Post for Me error (${pfmRes.status})`;
+      try {
+        const parsed = JSON.parse(text);
+        friendlyError = parsed.message || parsed.error || parsed.detail || friendlyError;
+      } catch { /* ignore parse errors */ }
+      return json({ error: friendlyError }, 200);
     }
 
     const pfmData = await pfmRes.json();
