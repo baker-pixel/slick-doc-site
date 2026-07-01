@@ -296,6 +296,13 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     fetchPfmAccounts();
   }, []);
 
+  // Auto-sync when window regains focus (after OAuth tab closes/returns)
+  useEffect(() => {
+    const onFocus = () => fetchPfmAccounts();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [clientAccountId]);
+
   const fetchTokens = async () => {
     try {
       const { data, error } = await supabase
@@ -349,8 +356,14 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
   const handleConnect = async (platform: (typeof PLATFORMS)[number]) => {
     setConnecting(platform.id);
     try {
+      const redirectUrl = `${window.location.origin}/portal/social-callback`;
       const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
-        body: { clientId: clientAccountId, platform: platform.id, permissions: ["posts", "feeds"] },
+        body: {
+          clientId: clientAccountId,
+          platform: platform.id,
+          permissions: ["posts", "feeds"],
+          redirectUrl,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

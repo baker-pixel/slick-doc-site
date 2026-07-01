@@ -31,6 +31,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const EmailPreferences = lazy(() => import("./pages/EmailPreferences"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalAuth = lazy(() => import("./pages/ClientPortalAuth"));
+const SocialCallback = lazy(() => import("./pages/SocialCallback"));
 const Portfolio = lazy(() => import("./pages/Portfolio"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 
@@ -71,6 +72,7 @@ function AnimatedRoutes() {
         <Route path="/email-preferences" element={<PageTransition><EmailPreferences /></PageTransition>} />
         <Route path="/portal" element={<PageTransition><ClientPortal /></PageTransition>} />
         <Route path="/portal/auth" element={<PageTransition><ClientPortalAuth /></PageTransition>} />
+        <Route path="/portal/social-callback" element={<SocialCallback />} />
         <Route path="/privacy-policy" element={<PageTransition><PrivacyPolicy /></PageTransition>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />

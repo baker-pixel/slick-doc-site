@@ -39,7 +39,7 @@ serve(async (req) => {
       return json({ error: "POSTFORME_API_KEY not configured" }, 500);
     }
 
-    const { clientId, platform, permissions } = await req.json();
+    const { clientId, platform, permissions, redirectUrl } = await req.json();
 
     if (!clientId || !platform) {
       return json({ error: "clientId and platform are required" }, 400);
@@ -68,6 +68,7 @@ serve(async (req) => {
         platform,
         external_id: clientId,
         permissions: permissions ?? ["posts", "feeds"],
+        ...(redirectUrl ? { redirect_url: redirectUrl } : {}),
       }),
     });
 
