@@ -8,12 +8,16 @@ const corsHeaders = {
 
 const PFM_API = "https://api.postforme.dev";
 
-// Quickstart projects must use "organization" for LinkedIn (supports both personal + company pages).
-// Instagram must specify connection_type "instagram" or "facebook" for the login flow.
+// LinkedIn: PfM Quickstart requires connection_type.
+//   "organization" = Company Page (requires rw_organization_admin scope — may need PfM approval)
+//   "personal"     = Personal profile (r_liteprofile + w_member_social)
+// We try "organization" first per PfM Quickstart docs; if PfM's LinkedIn app is restricted
+// to personal scope, switch to "personal" here.
+// Instagram must specify connection_type "instagram" to trigger Meta's Instagram login flow.
 function buildPlatformData(platform: string): Record<string, unknown> | undefined {
   switch (platform) {
     case "linkedin":
-      return { linkedin: { connection_type: "organization" } };
+      return { linkedin: { connection_type: "personal" } };
     case "instagram":
       return { instagram: { connection_type: "instagram" } };
     default:

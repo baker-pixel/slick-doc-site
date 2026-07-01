@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Calendar as CalendarIcon, Plus, Clock, Trash2, Edit, Loader2,
   Mail, Linkedin, Facebook, Twitter, FileText, Sparkles, RefreshCw,
-  CheckCircle, AlertCircle, Globe, Instagram
+  CheckCircle, AlertCircle, Globe, Instagram, Zap
 } from "lucide-react";
 import { format, isSameDay, startOfDay } from "date-fns";
 
@@ -65,6 +65,7 @@ export function ContentCalendarPanel() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<ContentApproval[]>([]);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -279,6 +280,28 @@ export function ContentCalendarPanel() {
     }
   };
 
+  const PFM_PLATFORMS = new Set(["twitter", "facebook", "linkedin", "instagram"]);
+
+  const handlePublishNow = async (item: CalendarItem) => {
+    setPublishingId(item.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("postforme-publish-post", {
+        body: { contentCalendarId: item.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: "Published!",
+        description: `"${item.title}" sent to ${item.platform}.`,
+      });
+      fetchData();
+    } catch (err: any) {
+      toast({ title: "Publish failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
   const PLACEHOLDER_TEXT = "[Auto-generated placeholder — content will be created by AI]";
   const isPlaceholder = (item: CalendarItem) => item.content === PLACEHOLDER_TEXT || item.status === "draft";
 
@@ -452,17 +475,31 @@ export function ContentCalendarPanel() {
                         </p>
                       </div>
                       <div className="flex gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        {item.status === "scheduled" && PFM_PLATFORMS.has(item.platform || "") && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            title="Publish now via Post for Me"
+                            disabled={publishingId === item.id}
+                            onClick={() => handlePublishNow(item)}
+                          >
+                            {publishingId === item.id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Zap className="w-4 h-4" />}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8"
                           onClick={() => openEditModal(item)}
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => deleteScheduledItem(item.id)}
                         >
@@ -549,6 +586,20 @@ export function ContentCalendarPanel() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{item.content_type.replace(/_/g, " ")}</Badge>
+                      {PFM_PLATFORMS.has(item.platform || "") && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                          title="Publish now via Post for Me"
+                          disabled={publishingId === item.id}
+                          onClick={() => handlePublishNow(item)}
+                        >
+                          {publishingId === item.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <Zap className="w-4 h-4" />}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -645,7 +696,6 @@ export function ContentCalendarPanel() {
                     <SelectItem value="facebook">Facebook</SelectItem>
                     <SelectItem value="twitter">Twitter/X</SelectItem>
                     <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="google_business">Google Business</SelectItem>
                     <SelectItem value="blog">Blog</SelectItem>
                   </SelectContent>
                 </Select>

@@ -28,6 +28,8 @@ export default function SocialCallback() {
     const isSuccess = searchParams.get("isSuccess") === "true";
     const provider = searchParams.get("provider") || "";
     const error = searchParams.get("error") || "";
+    // accountIds = comma-separated PfM account IDs (spc_xxx) just connected
+    const accountIds = searchParams.get("accountIds") || "";
 
     const displayName = PLATFORM_NAMES[provider.toLowerCase()] || provider || "Account";
     setPlatformName(displayName);
@@ -61,7 +63,12 @@ export default function SocialCallback() {
 
         if (clientId) {
           await supabase.functions.invoke("postforme-sync-accounts", {
-            body: { clientId },
+            // Pass accountIds so sync can fetch those specific accounts from PfM
+            // rather than relying on external_id filter (which PfM may not support)
+            body: {
+              clientId,
+              accountIds: accountIds ? accountIds.split(",").filter(Boolean) : undefined,
+            },
           });
         }
 

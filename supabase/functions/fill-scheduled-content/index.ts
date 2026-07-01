@@ -254,8 +254,6 @@ async function generateContent(
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
     twitter: 120,   // 280 chars ≈ 70 tokens; headroom for retries
-    bluesky: 120,   // 300 chars
-    threads: 180,   // 500 chars
     instagram: 600,
     facebook: 600,
     linkedin: 700,
@@ -292,8 +290,6 @@ async function generateContent(
   // Hard-enforce character limits — safety net after generation
   const CHAR_LIMITS: Record<string, number> = {
     twitter: 270,
-    bluesky: 290,
-    threads: 490,
     instagram: 2200,
     linkedin: 2900,
     facebook: 63000,
@@ -521,44 +517,6 @@ Rules:
 - ONE punchy idea only — no multi-part threads
 - End with a CTA only if it fits naturally within the limit
 - Output ONLY the tweet text — nothing else${avoidRepeat}`,
-        };
-      }
-
-      if (platform === "bluesky") {
-        return {
-          system,
-          user: `Write a Bluesky post for ${biz}.
-
-HARD LIMIT: 280 characters maximum.
-
-Pick ONE angle:
-${services.length ? `- A helpful insight about: ${services[0]}` : "- An industry insight"}
-- A relatable moment for ${targetAudience}
-- A ${month} tip or observation
-
-Rules:
-- Conversational, not corporate
-- Optional: 1–2 relevant hashtags if they fit
-- Output ONLY the post text${avoidRepeat}`,
-        };
-      }
-
-      if (platform === "threads") {
-        return {
-          system,
-          user: `Write a Threads post for ${biz}.
-
-HARD LIMIT: 480 characters maximum.
-
-Pick ONE angle:
-${services.length ? `- Behind the scenes of: ${services[0]}` : "- Behind the scenes"}
-- A relatable ${industry} moment
-- A short tip that ${targetAudience} would share
-
-Rules:
-- Casual, genuine, conversational
-- Optional: 1–2 hashtags
-- Output ONLY the post text${avoidRepeat}`,
         };
       }
 

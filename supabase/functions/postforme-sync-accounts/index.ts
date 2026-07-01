@@ -17,6 +17,52 @@ interface PfmAccount {
   external_id: string | null;
 }
 
+async function pfmGet(path: string, apiKey: string): Promise<Response> {
+  return fetch(`${PFM_API}${path}`, {
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+  });
+}
+
+// Fetch all PfM social accounts (paginated), optionally filtered by external_id
+async function fetchAllAccounts(apiKey: string, externalId?: string): Promise<PfmAccount[]> {
+  const all: PfmAccount[] = [];
+  const limit = 50;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (externalId) params.set("external_id", externalId);
+
+    const res = await pfmGet(`/v1/social-accounts?${params}`, apiKey);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`PfM API error ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const accounts: PfmAccount[] = data.data ?? [];
+    all.push(...accounts);
+
+    hasMore = !!data.meta?.next && accounts.length >= limit;
+    offset += limit;
+  }
+
+  return all;
+}
+
+// Fetch a single account by its PfM spc_xxx ID
+async function fetchAccountById(apiKey: string, accountId: string): Promise<PfmAccount | null> {
+  const res = await pfmGet(`/v1/social-accounts/${accountId}`, apiKey);
+  if (!res.ok) {
+    console.warn(`Could not fetch PfM account ${accountId}: ${res.status}`);
+    return null;
+  }
+  const data = await res.json();
+  // PfM may return { data: {...} } or the object directly
+  return data.data ?? data ?? null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -34,7 +80,6 @@ serve(async (req) => {
     });
 
   try {
-    // Verify caller is authenticated
     const authHeader = req.headers.get("authorization");
     if (!authHeader) return json({ error: "Unauthorized" }, 401);
 
@@ -44,56 +89,48 @@ serve(async (req) => {
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: "Unauthorized" }, 401);
 
-    if (!pfmApiKey) {
-      return json({ error: "POSTFORME_API_KEY not configured" }, 500);
-    }
+    if (!pfmApiKey) return json({ error: "POSTFORME_API_KEY not configured" }, 500);
 
-    const { clientId } = await req.json();
+    const body = await req.json();
+    const clientId: string | undefined = body.clientId;
+    // accountIds = specific PfM spc_xxx IDs from the OAuth callback URL
+    const accountIds: string[] | undefined = body.accountIds;
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch all PfM accounts for this clientId (or all if no clientId)
-    const allAccounts: PfmAccount[] = [];
-    const limit = 50;
-    let offset = 0;
-    let hasMore = true;
+    let resolvedAccounts: PfmAccount[] = [];
 
-    while (hasMore) {
-      const params = new URLSearchParams({
-        limit: String(limit),
-        offset: String(offset),
-      });
-      if (clientId) {
-        params.set("external_id", clientId);
-      }
-
-      const pfmRes = await fetch(`${PFM_API}/v1/social-accounts?${params}`, {
-        headers: {
-          Authorization: `Bearer ${pfmApiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!pfmRes.ok) {
-        const text = await pfmRes.text();
-        return json({ error: `Post for Me API error ${pfmRes.status}: ${text}` }, 502);
-      }
-
-      const pfmData = await pfmRes.json();
-      const accounts: PfmAccount[] = pfmData.data ?? [];
-      allAccounts.push(...accounts);
-
-      hasMore = !!pfmData.meta?.next && accounts.length >= limit;
-      offset += limit;
+    if (accountIds && accountIds.length > 0) {
+      // Fast path: fetch only the accounts that were just connected.
+      // This is reliable regardless of whether PfM supports external_id filtering.
+      console.log(`Fetching ${accountIds.length} specific PfM accounts: ${accountIds.join(", ")}`);
+      const fetched = await Promise.all(accountIds.map((id) => fetchAccountById(pfmApiKey, id)));
+      resolvedAccounts = fetched.filter((a): a is PfmAccount => a !== null);
     }
 
-    if (allAccounts.length === 0) {
+    if (resolvedAccounts.length === 0) {
+      // Fallback 1: filter by external_id (clientId) on PfM's side
+      if (clientId) {
+        console.log(`Fetching PfM accounts with external_id=${clientId}`);
+        resolvedAccounts = await fetchAllAccounts(pfmApiKey, clientId);
+      }
+
+      // Fallback 2: if still nothing, pull ALL accounts and filter in JS by external_id
+      // (handles PfM not supporting the external_id query param)
+      if (resolvedAccounts.length === 0 && clientId) {
+        console.log("external_id filter returned 0 — fetching all accounts and filtering locally");
+        const allAccounts = await fetchAllAccounts(pfmApiKey);
+        resolvedAccounts = allAccounts.filter((a) => a.external_id === clientId);
+        console.log(`Local filter found ${resolvedAccounts.length} accounts for clientId=${clientId}`);
+      }
+    }
+
+    if (resolvedAccounts.length === 0) {
+      console.log("No PfM accounts found for this client");
       return json({ synced: 0, accounts: [] });
     }
 
-    // Determine which client_id to use for each account
-    // If clientId was provided, all accounts belong to that client.
-    // Otherwise, use external_id on each account (which we set = clientId on connect).
-    const upsertRows = allAccounts
+    const upsertRows = resolvedAccounts
       .map((acc) => {
         const resolvedClientId = clientId ?? acc.external_id;
         if (!resolvedClientId) return null;
@@ -103,7 +140,7 @@ serve(async (req) => {
           postforme_account_id: acc.id,
           username: acc.username ?? null,
           profile_photo_url: acc.profile_photo_url ?? null,
-          status: acc.status ?? "connected",
+          status: acc.status === "active" ? "connected" : (acc.status ?? "connected"),
           updated_at: new Date().toISOString(),
         };
       })
@@ -125,8 +162,7 @@ serve(async (req) => {
       return json({ error: upsertErr.message }, 500);
     }
 
-    console.log(`Synced ${upsertRows.length} PfM accounts`);
-
+    console.log(`Synced ${upsertRows.length} PfM accounts for client=${clientId}`);
     return json({ synced: upsertRows.length, accounts: upsertRows });
   } catch (err: unknown) {
     console.error("postforme-sync-accounts error:", err);

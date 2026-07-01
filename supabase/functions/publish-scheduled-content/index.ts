@@ -193,14 +193,13 @@ serve(async (req) => {
           }
 
           case "blog":
-            // Blog posts typically just need to be marked as published
             published = true;
             console.log(`Blog post published: ${item.title}`);
             break;
 
           default:
-            published = true;
-            console.log(`Generic content published: ${item.title}`);
+            errorMessage = `Unknown platform "${item.platform}" — cannot publish.`;
+            console.warn(errorMessage);
         }
 
         if (published) {

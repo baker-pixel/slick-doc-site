@@ -296,9 +296,25 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     fetchPfmAccounts();
   }, []);
 
-  // Auto-sync when window regains focus (after OAuth tab closes/returns)
+  // Auto-sync + refresh when window regains focus (after OAuth tab closes)
   useEffect(() => {
-    const onFocus = () => fetchPfmAccounts();
+    let lastFocusAt = 0;
+    const onFocus = async () => {
+      // Debounce — ignore rapid re-triggers (< 2s apart)
+      const now = Date.now();
+      if (now - lastFocusAt < 2000) return;
+      lastFocusAt = now;
+
+      // Pull fresh data from DB first (fast)
+      await fetchPfmAccounts();
+      // Then do a full PfM sync in the background so newly connected accounts appear
+      try {
+        await supabase.functions.invoke("postforme-sync-accounts", {
+          body: { clientId: clientAccountId },
+        });
+        await fetchPfmAccounts();
+      } catch { /* silent — user can click Sync manually */ }
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [clientAccountId]);

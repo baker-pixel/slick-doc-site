@@ -15,7 +15,6 @@ const CHAR_LIMITS: Record<string, number> = {
   instagram: 2200,
   linkedin: 2900,    // 3000 hard limit, 100-char buffer
   facebook: 63000,
-  google_business: 1450,
 };
 
 function enforceCharLimit(content: string, platform: string): string {
@@ -169,7 +168,7 @@ serve(async (req) => {
 
     // Resolve media URL — auto-generate for image-required platforms (Instagram, Threads)
     let imageUrl = (item.metadata as { image_url?: string } | null)?.image_url ?? null;
-    const IMAGE_REQUIRED_PLATFORMS = ["instagram", "threads"];
+    const IMAGE_REQUIRED_PLATFORMS = ["instagram"];
 
     if (!imageUrl && IMAGE_REQUIRED_PLATFORMS.includes(item.platform)) {
       console.log(`No image for ${item.platform} post ${contentCalendarId} — auto-generating...`);
