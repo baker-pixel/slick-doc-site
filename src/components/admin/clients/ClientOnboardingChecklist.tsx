@@ -304,15 +304,23 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
     if (!selectedClient) return;
     setActionLoading("analytics_setup");
     try {
-      await supabase.from("client_onboarding")
-        .update({ dashboard_created_at: new Date().toISOString() })
-        .eq("client_account_id", selectedClient.id);
-      
+      const resp = await supabase.functions.invoke("admin", {
+        body: {
+          action: "update",
+          password: adminPassword,
+          table: "client_onboarding",
+          id: selectedClient.id,
+          data: { dashboard_created_at: new Date().toISOString() },
+        },
+      });
+      if (resp.error) throw resp.error;
+      if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
+
       toast.success("Dashboard configured!");
       await fetchOnboardingData(selectedClient.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to configure dashboard");
+      toast.error(err?.message ? `Failed to configure dashboard: ${err.message}` : "Failed to configure dashboard");
     } finally {
       setActionLoading(null);
     }

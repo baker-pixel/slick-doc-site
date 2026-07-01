@@ -1,5 +1,11 @@
 project_id = "axbeaqpjyzzmbvyaofbn"
 
+[functions.check-alerts]
+verify_jwt = false
+
+[functions.connect-site]
+verify_jwt = false
+
 [functions.extract-brand-assets]
 verify_jwt = true
 
@@ -157,4 +163,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.advance-workflow]
+verify_jwt = false
+
+[functions.discover-prospects]
 verify_jwt = false

@@ -131,10 +131,25 @@ serve(async (req) => {
           case "twitter":
           case "facebook":
           case "linkedin":
-          case "instagram":
+          case "instagram": {
+            // Publish via Post for Me API
+            console.log(`Publishing ${item.platform} post via Post for Me: ${item.title}`);
+            const pfmRes = await supabase.functions.invoke("postforme-publish-post", {
+              body: { contentCalendarId: item.id },
+            });
+            if (pfmRes.error || !pfmRes.data?.success) {
+              errorMessage = pfmRes.data?.error || pfmRes.error?.message || "Post for Me publish failed";
+              console.error(`PfM publish failed for ${item.id}:`, errorMessage);
+            } else {
+              published = true;
+              console.log(`Post ${item.id} published via Post for Me, pfm_id=${pfmRes.data?.postforme_post_id}`);
+            }
+            break;
+          }
+
           case "google_business": {
-            // Route social posts through trigger-n8n → n8n → n8n-callback
-            console.log(`Routing ${item.platform} post to n8n: ${item.title}`);
+            // Google Business not supported by Post for Me — route through n8n
+            console.log(`Routing google_business post to n8n: ${item.title}`);
             const n8nResponse = await supabase.functions.invoke("trigger-n8n", {
               body: {
                 clientId: item.client_account_id,
@@ -154,7 +169,6 @@ serve(async (req) => {
               errorMessage = `n8n trigger failed: ${n8nResponse.error.message}`;
               console.error(errorMessage);
             } else {
-              // Mark as awaiting_callback — n8n-callback will set it to published
               const { error: awaitError } = await supabase
                 .from("content_calendar")
                 .update({
@@ -164,13 +178,11 @@ serve(async (req) => {
                 .eq("id", item.id);
 
               if (awaitError) {
-                console.error(`Failed to set awaiting_callback for ${item.id}:`, awaitError);
                 results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: awaitError.message });
               } else {
-                console.log(`Social post ${item.id} sent to n8n, awaiting callback`);
                 results.push({ id: item.id, platform: item.platform || "unknown", success: true });
               }
-              continue; // Skip the published/failed blocks below
+              continue;
             }
             break;
           }

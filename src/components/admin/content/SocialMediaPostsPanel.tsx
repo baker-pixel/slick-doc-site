@@ -42,6 +42,8 @@ import {
   Link2,
   CircleDot,
   FlaskConical,
+  Unplug,
+  ExternalLink,
 } from "lucide-react";
 
 interface Client {
@@ -73,6 +75,16 @@ interface OAuthToken {
   token_metadata: Record<string, unknown> | null;
 }
 
+interface PostForMeAccount {
+  id: string;
+  client_id: string;
+  platform: string;
+  postforme_account_id: string;
+  username: string | null;
+  profile_photo_url: string | null;
+  status: string;
+}
+
 interface AutomationAlert {
   id: string;
   title: string;
@@ -87,6 +99,10 @@ const platformIcons: Record<string, React.ReactNode> = {
   instagram: <Instagram className="h-4 w-4" />,
   linkedin: <Linkedin className="h-4 w-4" />,
   twitter: <Twitter className="h-4 w-4" />,
+  tiktok: <CircleDot className="h-4 w-4" />,
+  youtube: <CircleDot className="h-4 w-4" />,
+  bluesky: <CircleDot className="h-4 w-4" />,
+  threads: <CircleDot className="h-4 w-4" />,
 };
 
 const platformColors: Record<string, string> = {
@@ -94,9 +110,24 @@ const platformColors: Record<string, string> = {
   instagram: "bg-gradient-to-r from-purple-500 to-pink-500",
   linkedin: "bg-blue-700",
   twitter: "bg-sky-500",
+  tiktok: "bg-black",
+  youtube: "bg-red-600",
+  bluesky: "bg-blue-400",
+  threads: "bg-gray-800",
 };
 
 const SOCIAL_PLATFORMS = ["facebook", "instagram", "linkedin", "twitter"] as const;
+
+const CONNECT_PLATFORMS = [
+  { id: "facebook", label: "Facebook" },
+  { id: "instagram", label: "Instagram" },
+  { id: "linkedin", label: "LinkedIn" },
+  { id: "twitter", label: "X (Twitter)" },
+  { id: "tiktok", label: "TikTok" },
+  { id: "youtube", label: "YouTube" },
+  { id: "bluesky", label: "Bluesky" },
+  { id: "threads", label: "Threads" },
+] as const;
 
 export default function SocialMediaPostsPanel() {
   const queryClient = useQueryClient();
@@ -119,7 +150,7 @@ export default function SocialMediaPostsPanel() {
     scheduledFor: "",
   });
 
-  // Fetch clients with full business info
+  // Fetch clients
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-for-social"],
     queryFn: async () => {
@@ -135,7 +166,7 @@ export default function SocialMediaPostsPanel() {
 
   const activeClient = clients.find((c) => c.id === selectedClient) || null;
 
-  // Fetch social posts filtered by selected client
+  // Fetch social posts for selected client
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["social-posts", selectedClient],
     queryFn: async () => {
@@ -155,7 +186,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Fetch OAuth tokens for selected client
+  // Fetch legacy OAuth tokens for selected client (kept for backward compat display)
   const { data: oauthTokens = [] } = useQuery({
     queryKey: ["client-oauth-tokens", selectedClient],
     enabled: !!selectedClient,
@@ -168,7 +199,22 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Fetch OAuth config (which platforms have credentials configured)
+  // Fetch Post for Me accounts for selected client
+  const { data: pfmAccounts = [] } = useQuery({
+    queryKey: ["pfm-accounts", selectedClient],
+    enabled: !!selectedClient,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_postforme_accounts")
+        .select("*")
+        .eq("client_id", selectedClient)
+        .eq("status", "connected");
+      if (error) throw error;
+      return data as PostForMeAccount[];
+    },
+  });
+
+  // Fetch OAuth config
   const { data: oauthConfig } = useQuery({
     queryKey: ["oauth-config"],
     queryFn: async () => {
@@ -178,7 +224,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Check n8n webhook status — try a dry-run with no clientId to see if webhook URL is configured
+  // Check n8n webhook status
   const { data: n8nStatus } = useQuery({
     queryKey: ["n8n-webhook-status"],
     queryFn: async () => {
@@ -186,11 +232,9 @@ export default function SocialMediaPostsPanel() {
         const { data, error } = await supabase.functions.invoke("trigger-n8n", {
           body: { clientId: "__health_check__", tasks: [], trigger: "health_check" },
         });
-        // If we get "N8N_WEBHOOK_URL not configured" that means it's not set up
         if (error?.message?.includes("N8N_WEBHOOK_URL") || data?.error?.includes("N8N_WEBHOOK_URL")) {
           return { configured: false };
         }
-        // Any other response means the URL is configured (even if the request itself fails for other reasons)
         return { configured: true };
       } catch {
         return { configured: false };
@@ -199,7 +243,7 @@ export default function SocialMediaPostsPanel() {
     staleTime: 60_000,
   });
 
-  // Fetch recent automation alerts for pipeline debugging
+  // Fetch recent automation alerts
   const { data: recentAlerts = [] } = useQuery({
     queryKey: ["pipeline-alerts"],
     queryFn: async () => {
@@ -218,32 +262,92 @@ export default function SocialMediaPostsPanel() {
         .filter((a) =>
           a.source === "trigger-n8n" ||
           a.source === "publish-scheduled-content" ||
+          a.source === "postforme-publish-post" ||
           a.title?.includes("trigger-n8n") ||
           a.title?.includes("publish-scheduled-content") ||
+          a.title?.includes("Post for Me") ||
           a.message?.includes("n8n") ||
-          a.message?.includes("publish")
+          a.message?.includes("publish") ||
+          a.message?.includes("Post for Me")
         )
         .slice(0, 5);
     },
     staleTime: 30_000,
   });
 
-  // Compute pipeline status
-  const connectedPlatforms = oauthTokens.map((t) => t.platform);
+  // Pipeline status: green if PfM accounts connected, yellow if legacy OAuth only, red if nothing
+  const pfmConnectedPlatforms = pfmAccounts.map((a) => a.platform);
+  const legacyConnectedPlatforms = oauthTokens.map((t) => t.platform);
   const n8nConfigured = n8nStatus?.configured ?? false;
-  const pipelineStatus: "green" | "yellow" | "red" = !n8nConfigured
-    ? "red"
-    : connectedPlatforms.length > 0
-    ? "green"
-    : "yellow";
+  const pipelineStatus: "green" | "yellow" | "red" =
+    pfmConnectedPlatforms.length > 0
+      ? "green"
+      : legacyConnectedPlatforms.length > 0 && n8nConfigured
+      ? "yellow"
+      : "red";
 
   const pipelineStatusConfig = {
-    green: { color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30", label: "Pipeline Ready" },
-    yellow: { color: "text-yellow-600", bg: "bg-yellow-100 dark:bg-yellow-900/30", label: "No OAuth Tokens" },
-    red: { color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30", label: "N8N Not Configured" },
+    green: { color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30", label: "Post for Me Ready" },
+    yellow: { color: "text-yellow-600", bg: "bg-yellow-100 dark:bg-yellow-900/30", label: "Legacy OAuth Only" },
+    red: { color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30", label: "No Accounts Connected" },
   };
 
-  // Create post mutation
+  // Connect Post for Me account
+  const connectAccount = useMutation({
+    mutationFn: async (platform: string) => {
+      if (!selectedClient) throw new Error("Select a client first");
+      const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
+        body: { clientId: selectedClient, platform, permissions: ["posts", "feeds"] },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { url: string; platform: string };
+    },
+    onSuccess: (data) => {
+      window.open(data.url, "_blank");
+      toast({
+        title: `Redirecting to ${data.platform} login`,
+        description: "After connecting, click Sync Accounts to refresh.",
+      });
+    },
+    onError: (err) => toast({ title: "Connect failed", description: err.message, variant: "destructive" }),
+  });
+
+  // Sync Post for Me accounts
+  const syncAccounts = useMutation({
+    mutationFn: async () => {
+      if (!selectedClient) throw new Error("Select a client first");
+      const { data, error } = await supabase.functions.invoke("postforme-sync-accounts", {
+        body: { clientId: selectedClient },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["pfm-accounts"] });
+      toast({ title: "Synced", description: `${data?.synced ?? 0} account(s) synced from Post for Me` });
+    },
+    onError: (err) => toast({ title: "Sync failed", description: err.message, variant: "destructive" }),
+  });
+
+  // Disconnect Post for Me account (remove from our DB only)
+  const disconnectAccount = useMutation({
+    mutationFn: async (pfmAccount: PostForMeAccount) => {
+      const { error } = await supabase
+        .from("client_postforme_accounts")
+        .delete()
+        .eq("id", pfmAccount.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pfm-accounts"] });
+      toast({ title: "Account disconnected" });
+    },
+    onError: (err) => toast({ title: "Disconnect failed", description: err.message, variant: "destructive" }),
+  });
+
+  // Create post
   const createPost = useMutation({
     mutationFn: async (post: typeof newPost & { imageUrl?: string }) => {
       if (!selectedClient) throw new Error("Please select a client first");
@@ -277,7 +381,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Delete post mutation
+  // Delete post
   const deletePost = useMutation({
     mutationFn: async (id: string) => {
       const { data, error } = await supabase.functions.invoke("admin", {
@@ -292,7 +396,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Update post status mutation
+  // Update post status
   const updatePostStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const extraFields: Record<string, unknown> = {};
@@ -305,12 +409,7 @@ export default function SocialMediaPostsPanel() {
       }
 
       const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "update",
-          table: "content_calendar",
-          id,
-          data: extraFields,
-        },
+        body: { action: "update", table: "content_calendar", id, data: extraFields },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -318,7 +417,7 @@ export default function SocialMediaPostsPanel() {
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
       if (status === "approved") {
-        toast({ title: "Post approved and queued", description: "Will publish at scheduled time (cron runs every 15 min)" });
+        toast({ title: "Post approved and queued", description: "Will publish at scheduled time via Post for Me" });
       } else {
         toast({ title: "Post status updated" });
       }
@@ -346,7 +445,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Test n8n pipeline — runs publish-scheduled-content and shows detailed result
+  // Test pipeline
   const testPipeline = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
@@ -367,7 +466,7 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Update post mutation
+  // Update post
   const updatePost = useMutation({
     mutationFn: async ({ id, post, imageUrl }: { id: string; post: typeof newPost; imageUrl?: string }) => {
       const { data, error } = await supabase.functions.invoke("admin", {
@@ -417,9 +516,7 @@ export default function SocialMediaPostsPanel() {
       platform: post.platform,
       scheduledFor: post.scheduled_for ? new Date(post.scheduled_for).toISOString().slice(0, 16) : "",
     });
-    if (imageUrl) {
-      setSelectedImage(imageUrl);
-    }
+    if (imageUrl) setSelectedImage(imageUrl);
     setIsCreateOpen(true);
   };
 
@@ -431,7 +528,6 @@ export default function SocialMediaPostsPanel() {
     }
   };
 
-  // Generate AI content using client's business info
   const generateAIContent = async () => {
     if (!activeClient) {
       toast({ title: "Select a client first", variant: "destructive" });
@@ -449,10 +545,8 @@ export default function SocialMediaPostsPanel() {
           websiteSummary: activeClient.website_summary || "",
         },
       });
-
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-
       setNewPost((prev) => ({ ...prev, content: data.content || "" }));
       toast({ title: "Content generated!" });
     } catch (error: unknown) {
@@ -463,7 +557,6 @@ export default function SocialMediaPostsPanel() {
     }
   };
 
-  // Generate AI images
   const generateAIImages = async () => {
     if (!activeClient) {
       toast({ title: "Select a client first", variant: "destructive" });
@@ -472,21 +565,13 @@ export default function SocialMediaPostsPanel() {
     setIsGeneratingImages(true);
     setGeneratedImages([]);
     setSelectedImage(null);
-
     try {
       const prompt = imagePrompt || `Professional marketing image for ${activeClient.business_name} in the ${activeClient.industry || "marketing"} industry`;
-
       const { data, error } = await supabase.functions.invoke("generate-social-image", {
-        body: {
-          prompt,
-          platform: newPost.platform,
-          count: 4,
-        },
+        body: { prompt, platform: newPost.platform, count: 4 },
       });
-
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-
       if (data?.images?.length > 0) {
         setGeneratedImages(data.images);
         toast({ title: `${data.images.length} images generated! Pick your favorite.` });
@@ -534,17 +619,13 @@ export default function SocialMediaPostsPanel() {
       linkedin: `${supabaseUrl}/functions/v1/linkedin-oauth-callback`,
       twitter: `${supabaseUrl}/functions/v1/twitter-oauth-callback`,
     };
-
     const cfg = oauthConfig?.[platform];
     if (!cfg?.configured) {
       toast({ title: `${platform} OAuth not configured`, description: "Set up app credentials first.", variant: "destructive" });
       return;
     }
-
-    // Build platform-specific auth URLs
     const redirectUri = callbackMap[platform];
     let authUrl = "";
-
     switch (platform) {
       case "facebook":
         authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=pages_manage_posts,pages_read_engagement`;
@@ -559,10 +640,7 @@ export default function SocialMediaPostsPanel() {
         authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=tweet.read+tweet.write+users.read&code_challenge=challenge&code_challenge_method=plain`;
         break;
     }
-
-    if (authUrl) {
-      window.open(authUrl, "_blank", "width=600,height=700");
-    }
+    if (authUrl) window.open(authUrl, "_blank", "width=600,height=700");
   };
 
   const draftPosts = posts.filter((p) => p.status === "draft");
@@ -572,7 +650,6 @@ export default function SocialMediaPostsPanel() {
 
   const PostCard = ({ post }: { post: SocialPost }) => {
     const imageUrl = (post.metadata as { image_url?: string } | null)?.image_url;
-
     return (
       <Card className="hover:shadow-md transition-shadow overflow-hidden">
         {imageUrl && (
@@ -584,8 +661,8 @@ export default function SocialMediaPostsPanel() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <div className={`p-1.5 rounded ${platformColors[post.platform]} text-white`}>
-                  {platformIcons[post.platform]}
+                <div className={`p-1.5 rounded ${platformColors[post.platform] || "bg-gray-500"} text-white`}>
+                  {platformIcons[post.platform] || <CircleDot className="h-4 w-4" />}
                 </div>
                 <span className="font-medium capitalize">{post.platform}</span>
                 <Badge
@@ -637,7 +714,7 @@ export default function SocialMediaPostsPanel() {
               )}
               {post.status === "scheduled" && (
                 <p className="text-xs text-blue-600 flex items-center gap-1">
-                  <Zap className="h-3 w-3" /> Queued — publishes at scheduled time
+                  <Zap className="h-3 w-3" /> Queued — publishes via Post for Me
                 </p>
               )}
             </div>
@@ -650,7 +727,7 @@ export default function SocialMediaPostsPanel() {
                   size="icon"
                   variant="ghost"
                   className="text-green-600 hover:text-green-700"
-                  title="Approve — queues for publishing (cron picks up every 15 min)"
+                  title="Approve — queues for publishing via Post for Me"
                   onClick={() => updatePostStatus.mutate({ id: post.id, status: "approved" })}
                 >
                   <ShieldCheck className="h-4 w-4" />
@@ -658,11 +735,7 @@ export default function SocialMediaPostsPanel() {
               )}
               {post.status !== "published" && (
                 <>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => openEditDialog(post)}
-                  >
+                  <Button size="icon" variant="ghost" onClick={() => openEditDialog(post)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   {(post.status === "approved" || post.status === "scheduled") && (
@@ -700,9 +773,8 @@ export default function SocialMediaPostsPanel() {
         <div className="flex items-center gap-3">
           <div>
             <h2 className="text-2xl font-bold">Social Media Posts</h2>
-            <p className="text-muted-foreground">Create AI-generated content mapped to each client</p>
+            <p className="text-muted-foreground">AI-generated content published via Post for Me</p>
           </div>
-          {/* Pipeline Status Indicator */}
           {selectedClient && (
             <div className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium", pipelineStatusConfig[pipelineStatus].bg, pipelineStatusConfig[pipelineStatus].color)}>
               <CircleDot className="h-3 w-3" />
@@ -716,7 +788,7 @@ export default function SocialMediaPostsPanel() {
             size="sm"
             onClick={() => testPipeline.mutate()}
             disabled={testPipeline.isPending}
-            title="Test the full n8n publishing pipeline"
+            title="Test the publishing pipeline"
           >
             {testPipeline.isPending ? (
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -730,7 +802,7 @@ export default function SocialMediaPostsPanel() {
             size="sm"
             onClick={() => triggerPublishNow.mutate()}
             disabled={triggerPublishNow.isPending}
-            title="Run publish-scheduled-content right now for all due posts"
+            title="Run publish now for all due posts"
           >
             {triggerPublishNow.isPending ? (
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -796,22 +868,12 @@ export default function SocialMediaPostsPanel() {
                       value={newPost.platform}
                       onValueChange={(v) => setNewPost((prev) => ({ ...prev, platform: v }))}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="facebook">
-                          <div className="flex items-center gap-2"><Facebook className="h-4 w-4" /> Facebook</div>
-                        </SelectItem>
-                        <SelectItem value="instagram">
-                          <div className="flex items-center gap-2"><Instagram className="h-4 w-4" /> Instagram</div>
-                        </SelectItem>
-                        <SelectItem value="linkedin">
-                          <div className="flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn</div>
-                        </SelectItem>
-                        <SelectItem value="twitter">
-                          <div className="flex items-center gap-2"><Twitter className="h-4 w-4" /> Twitter/X</div>
-                        </SelectItem>
+                        <SelectItem value="facebook"><div className="flex items-center gap-2"><Facebook className="h-4 w-4" /> Facebook</div></SelectItem>
+                        <SelectItem value="instagram"><div className="flex items-center gap-2"><Instagram className="h-4 w-4" /> Instagram</div></SelectItem>
+                        <SelectItem value="linkedin"><div className="flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn</div></SelectItem>
+                        <SelectItem value="twitter"><div className="flex items-center gap-2"><Twitter className="h-4 w-4" /> Twitter/X</div></SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -851,11 +913,7 @@ export default function SocialMediaPostsPanel() {
                       onClick={generateAIContent}
                       disabled={isGeneratingContent || !selectedClient}
                     >
-                      {isGeneratingContent ? (
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4 mr-2" />
-                      )}
+                      {isGeneratingContent ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
                       Generate Text
                     </Button>
                   </div>
@@ -872,9 +930,7 @@ export default function SocialMediaPostsPanel() {
                     rows={4}
                     className="resize-none"
                   />
-                  <p className="text-xs text-muted-foreground text-right">
-                    {newPost.content.length} characters
-                  </p>
+                  <p className="text-xs text-muted-foreground text-right">{newPost.content.length} characters</p>
                 </div>
 
                 <div className="space-y-3">
@@ -887,21 +943,16 @@ export default function SocialMediaPostsPanel() {
                       onClick={generateAIImages}
                       disabled={isGeneratingImages || !selectedClient}
                     >
-                      {isGeneratingImages ? (
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <ImageIcon className="h-4 w-4 mr-2" />
-                      )}
+                      {isGeneratingImages ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <ImageIcon className="h-4 w-4 mr-2" />}
                       Generate 4 Options
                     </Button>
                   </div>
                   <Input
                     value={imagePrompt}
                     onChange={(e) => setImagePrompt(e.target.value)}
-                    placeholder="Describe the image (optional) - e.g., 'team working together', 'happy customers'"
+                    placeholder="Describe the image (optional)"
                     className="text-sm"
                   />
-
                   {isGeneratingImages && (
                     <div className="grid grid-cols-2 gap-3">
                       {[1, 2, 3, 4].map((i) => (
@@ -911,7 +962,6 @@ export default function SocialMediaPostsPanel() {
                       ))}
                     </div>
                   )}
-
                   {generatedImages.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">Click to select an image:</p>
@@ -922,9 +972,7 @@ export default function SocialMediaPostsPanel() {
                             onClick={() => setSelectedImage(img)}
                             className={cn(
                               "relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all",
-                              selectedImage === img
-                                ? "border-primary ring-2 ring-primary ring-offset-2"
-                                : "border-transparent hover:border-muted-foreground/50"
+                              selectedImage === img ? "border-primary ring-2 ring-primary ring-offset-2" : "border-transparent hover:border-muted-foreground/50"
                             )}
                           >
                             <img src={img} alt={`Option ${index + 1}`} className="w-full h-full object-cover" />
@@ -982,74 +1030,6 @@ export default function SocialMediaPostsPanel() {
         </div>
       </div>
 
-      {/* Connected Platforms + OAuth Connect section */}
-      {selectedClient && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Link2 className="h-4 w-4" />
-                Connected Platforms
-              </h3>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {SOCIAL_PLATFORMS.map((platform) => {
-                const token = oauthTokens.find((t) => t.platform === platform);
-                const isConnected = !!token;
-                const isExpired = token?.expires_at ? new Date(token.expires_at) < new Date() : false;
-                const oauthAvailable = oauthConfig?.[platform]?.configured;
-                const pageName = (token?.token_metadata as { page_name?: string } | null)?.page_name;
-
-                return (
-                  <div
-                    key={platform}
-                    className={cn(
-                      "rounded-lg border p-3 space-y-2",
-                      isConnected && !isExpired ? "border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800" : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded ${platformColors[platform]} text-white`}>
-                        {platformIcons[platform]}
-                      </div>
-                      <span className="font-medium capitalize text-sm">{platform}</span>
-                      {isConnected && !isExpired && <CheckCircle className="h-3.5 w-3.5 text-green-600 ml-auto" />}
-                      {isConnected && isExpired && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 ml-auto" />}
-                    </div>
-                    {isConnected ? (
-                      <div className="text-xs text-muted-foreground space-y-0.5">
-                        {pageName && <p>{pageName}</p>}
-                        {token.expires_at && (
-                          <p className={isExpired ? "text-amber-600 font-medium" : ""}>
-                            {isExpired ? "Expired" : `Expires ${format(new Date(token.expires_at), "MMM d, yyyy")}`}
-                          </p>
-                        )}
-                        {isExpired && (
-                          <Button size="sm" variant="outline" className="w-full mt-1 h-7 text-xs" onClick={() => startOAuthFlow(platform)}>
-                            Reconnect
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full h-7 text-xs"
-                        onClick={() => startOAuthFlow(platform)}
-                        disabled={!oauthAvailable}
-                        title={!oauthAvailable ? "OAuth credentials not configured" : undefined}
-                      >
-                        {oauthAvailable ? "Connect" : "Not Configured"}
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Recent Errors - collapsible */}
       {recentAlerts.length > 0 && (
         <Collapsible open={errorsOpen} onOpenChange={setErrorsOpen}>
@@ -1070,9 +1050,7 @@ export default function SocialMediaPostsPanel() {
                   <span className="text-xs text-muted-foreground">{format(new Date(alert.created_at), "MMM d, h:mm a")}</span>
                 </div>
                 <p className="text-xs text-red-700 dark:text-red-400">{alert.message}</p>
-                {alert.source && (
-                  <Badge variant="outline" className="text-xs">{alert.source}</Badge>
-                )}
+                {alert.source && <Badge variant="outline" className="text-xs">{alert.source}</Badge>}
               </div>
             ))}
           </CollapsibleContent>
@@ -1134,13 +1112,6 @@ export default function SocialMediaPostsPanel() {
                 )}
               </>
             ) : null}
-            <div className="rounded-lg border p-3 text-sm space-y-1">
-              <p className="font-medium">N8N Webhook Status</p>
-              <div className="flex items-center gap-2">
-                <CircleDot className={cn("h-3.5 w-3.5", n8nConfigured ? "text-green-600" : "text-red-600")} />
-                <span>{n8nConfigured ? "N8N_WEBHOOK_URL is configured" : "N8N_WEBHOOK_URL is NOT configured"}</span>
-              </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1151,15 +1122,19 @@ export default function SocialMediaPostsPanel() {
             <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">Select a client to get started</h3>
             <p className="text-muted-foreground">
-              Choose a client from the dropdown above to view and create social media posts
+              Choose a client from the dropdown above to manage their social accounts and posts
             </p>
           </CardContent>
         </Card>
       )}
 
       {selectedClient && (
-        <Tabs defaultValue="all" className="space-y-4">
+        <Tabs defaultValue="accounts" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="accounts">
+              <Link2 className="h-3.5 w-3.5 mr-1.5" />
+              Accounts ({pfmAccounts.length})
+            </TabsTrigger>
             <TabsTrigger value="all">All ({posts.length})</TabsTrigger>
             <TabsTrigger value="draft">Drafts ({draftPosts.length})</TabsTrigger>
             <TabsTrigger value="approved">Approved ({approvedPosts.length})</TabsTrigger>
@@ -1167,6 +1142,171 @@ export default function SocialMediaPostsPanel() {
             <TabsTrigger value="published">Published ({publishedPosts.length})</TabsTrigger>
           </TabsList>
 
+          {/* Accounts Tab — Post for Me */}
+          <TabsContent value="accounts" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">Post for Me Connected Accounts</h3>
+                <p className="text-sm text-muted-foreground">
+                  Connect social accounts once — Post for Me handles OAuth and publishing for all platforms.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncAccounts.mutate()}
+                disabled={syncAccounts.isPending}
+              >
+                {syncAccounts.isPending ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Sync Accounts
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {CONNECT_PLATFORMS.map(({ id: platformId, label }) => {
+                const connected = pfmAccounts.find((a) => a.platform === platformId);
+                const color = platformColors[platformId] || "bg-gray-500";
+                const icon = platformIcons[platformId] || <CircleDot className="h-4 w-4" />;
+
+                return (
+                  <div
+                    key={platformId}
+                    className={cn(
+                      "rounded-lg border p-4 space-y-3 transition-colors",
+                      connected
+                        ? "border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800"
+                        : "border-border bg-card"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded ${color} text-white flex-shrink-0`}>
+                        {icon}
+                      </div>
+                      <span className="font-medium text-sm">{label}</span>
+                      {connected && (
+                        <CheckCircle className="h-3.5 w-3.5 text-green-600 ml-auto flex-shrink-0" />
+                      )}
+                    </div>
+
+                    {connected ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {connected.profile_photo_url && (
+                            <img
+                              src={connected.profile_photo_url}
+                              alt={connected.username || ""}
+                              className="h-6 w-6 rounded-full object-cover"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{connected.username || "Connected"}</p>
+                            <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-100 dark:bg-green-900/30 dark:text-green-400">
+                              Connected
+                            </Badge>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full h-7 text-xs text-muted-foreground hover:text-destructive"
+                          onClick={() => disconnectAccount.mutate(connected)}
+                          disabled={disconnectAccount.isPending}
+                        >
+                          <Unplug className="h-3 w-3 mr-1" />
+                          Disconnect
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-8 text-xs"
+                        onClick={() => connectAccount.mutate(platformId)}
+                        disabled={connectAccount.isPending || !selectedClient}
+                      >
+                        {connectAccount.isPending ? (
+                          <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                        ) : (
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                        )}
+                        Connect
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legacy OAuth section (kept for backward compat) */}
+            {oauthTokens.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground px-2">Legacy OAuth Tokens</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {SOCIAL_PLATFORMS.map((platform) => {
+                    const token = oauthTokens.find((t) => t.platform === platform);
+                    const isConnected = !!token;
+                    const isExpired = token?.expires_at ? new Date(token.expires_at) < new Date() : false;
+                    const oauthAvailable = oauthConfig?.[platform]?.configured;
+                    const pageName = (token?.token_metadata as { page_name?: string } | null)?.page_name;
+                    return (
+                      <div
+                        key={platform}
+                        className={cn(
+                          "rounded-lg border p-3 space-y-2",
+                          isConnected && !isExpired ? "border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800" : "border-border"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded ${platformColors[platform]} text-white`}>
+                            {platformIcons[platform]}
+                          </div>
+                          <span className="font-medium capitalize text-sm">{platform}</span>
+                          {isConnected && !isExpired && <CheckCircle className="h-3.5 w-3.5 text-green-600 ml-auto" />}
+                          {isConnected && isExpired && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 ml-auto" />}
+                        </div>
+                        {isConnected ? (
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            {pageName && <p>{pageName}</p>}
+                            {token.expires_at && (
+                              <p className={isExpired ? "text-amber-600 font-medium" : ""}>
+                                {isExpired ? "Expired" : `Expires ${format(new Date(token.expires_at), "MMM d, yyyy")}`}
+                              </p>
+                            )}
+                            {isExpired && (
+                              <Button size="sm" variant="outline" className="w-full mt-1 h-7 text-xs" onClick={() => startOAuthFlow(platform)}>
+                                Reconnect
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full h-7 text-xs"
+                            onClick={() => startOAuthFlow(platform)}
+                            disabled={!oauthAvailable}
+                            title={!oauthAvailable ? "OAuth credentials not configured" : undefined}
+                          >
+                            {oauthAvailable ? "Connect" : "Not Configured"}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Post tabs */}
           {[
             { value: "all", data: posts },
             { value: "draft", data: draftPosts },

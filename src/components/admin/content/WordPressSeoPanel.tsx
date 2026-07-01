@@ -116,8 +116,8 @@ export function WordPressSeoPanel({ clientId }: Props) {
         </div>
       </div>
 
-      {/* Latest full-site SEO audit */}
-      {loadingAudit ? (
+      {/* Latest full-site SEO audit — shown only when no WP plugin connected */}
+      {!siteId && (loadingAudit ? (
         <div className="flex justify-center py-6">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -239,7 +239,7 @@ export function WordPressSeoPanel({ clientId }: Props) {
             )}
           </CardContent>
         </Card>
-      ) : null}
+      ) : null)}
 
       {/* AI-generated fix recommendations (ai_fixes table) */}
       <SeoFixQueuePanel clientId={clientId} />

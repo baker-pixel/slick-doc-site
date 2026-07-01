@@ -80,10 +80,9 @@ interface OnboardingTourProps {
   active: boolean;
   onClose: () => void;
   onTabChange: (tab: PortalTab) => void;
-  currentTab: PortalTab;
 }
 
-export function OnboardingTour({ active, onClose, onTabChange, currentTab }: OnboardingTourProps) {
+export function OnboardingTour({ active, onClose, onTabChange }: OnboardingTourProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
