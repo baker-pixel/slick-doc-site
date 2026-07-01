@@ -354,10 +354,10 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      window.open(data.url, "_blank", "width=640,height=720");
+      window.open(data.url, "_blank");
       toast({
-        title: `${platform.name} — authorize in the new window`,
-        description: "After connecting, click 'Sync Accounts' to confirm your account is linked.",
+        title: `${platform.name} — authorize in the new tab`,
+        description: "After connecting, come back here and click Sync to confirm your account is linked.",
       });
     } catch (err: unknown) {
       toast({
