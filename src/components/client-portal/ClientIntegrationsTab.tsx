@@ -111,6 +111,7 @@ const PLATFORMS = [
     callbackFn: "facebook-oauth-callback",
     showPage: true,
     tokenLifeDays: 60,
+    note: "Requires a Facebook Business Page. During OAuth, select your Page and grant all permissions.",
   },
   {
     id: "instagram",
