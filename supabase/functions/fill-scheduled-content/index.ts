@@ -253,11 +253,10 @@ async function generateContent(
 
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
-    twitter: 120,   // 280 chars ≈ 70 tokens; headroom for retries
+    twitter: 120,
     instagram: 600,
     facebook: 600,
     linkedin: 700,
-    google_business: 500,
   };
   const maxTokens = PLATFORM_MAX_TOKENS[slot.platform] ?? 1200;
 
@@ -293,7 +292,6 @@ async function generateContent(
     instagram: 2200,
     linkedin: 2900,
     facebook: 63000,
-    google_business: 1450,
   };
   const charLimit = CHAR_LIMITS[slot.platform];
   if (charLimit && content.length > charLimit) {
@@ -393,26 +391,6 @@ RULES:
 
   switch (contentType) {
     case "social_post": {
-      if (platform === "google_business") {
-        return {
-          system,
-          user: `Write a Google Business Profile post for ${biz}.
-
-Pick ONE of these angles (choose what hasn't been covered recently):
-${services.length ? `- Highlight a specific service: ${services.slice(0, 3).join(", ")}` : "- A service highlight"}
-${differentiators.length ? `- Emphasize a differentiator: ${differentiators[0]}` : "- A trust-building fact"}
-- A timely ${month} tip relevant to ${industry} customers
-- A customer outcome or before/after story
-- A seasonal reminder relevant to ${industry}
-
-Requirements:
-- 150–300 words
-- One clear CTA (call, visit, book, get a quote)
-- Specific to ${biz} — mention actual services, not vague industry terms
-- Conversational and trust-building${avoidRepeat}`,
-        };
-      }
-
       if (platform === "linkedin") {
         return {
           system,

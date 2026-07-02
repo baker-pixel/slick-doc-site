@@ -421,7 +421,14 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     if (!pfmAccount) return;
     setDisconnecting(platformId);
     try {
-      await supabase.from("client_postforme_accounts").delete().eq("id", pfmAccount.id);
+      const { error } = await supabase.functions.invoke("postforme-disconnect-account", {
+        body: {
+          clientId: clientAccountId,
+          platform: platformId,
+          pfmAccountId: pfmAccount.postforme_account_id,
+        },
+      });
+      if (error) throw error;
       await fetchPfmAccounts();
       toast({ title: "Disconnected" });
     } catch (err: unknown) {

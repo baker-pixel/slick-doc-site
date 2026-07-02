@@ -14,277 +14,222 @@ const resendApiKey = Deno.env.get("RESEND_API_KEY");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-    // Cleanup: mark posts stuck in processing/awaiting_callback for > 2 hours as failed
+    // ── Cleanup: reset rows stuck in processing/awaiting_callback for > 2 hours ──
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { data: stuckPosts } = await supabase
       .from("content_calendar")
-      .update({
-        status: "failed",
-        metadata: { error: "Publishing timed out — no callback received after 2 hours" },
-      })
+      .update({ status: "scheduled", updated_at: new Date().toISOString() })
       .in("status", ["processing", "awaiting_callback"])
       .lt("updated_at", twoHoursAgo)
-      .select("id");
+      .select("id, platform, title");
 
     if (stuckPosts?.length) {
-      console.log(`Cleaned up ${stuckPosts.length} stuck posts`);
+      console.log(`Reset ${stuckPosts.length} stuck posts back to scheduled for retry`);
       for (const post of stuckPosts) {
         await supabase.from("automation_alerts").insert({
           alert_type: "content_publish_timeout",
           severity: "warning",
-          title: "Publishing Timed Out",
-          message: `Post ${post.id} was stuck for over 2 hours and marked as failed.`,
+          title: "Stuck Post Reset for Retry",
+          message: `Post "${post.title}" (${post.platform}) was stuck processing for 2h — reset to scheduled.`,
           source: "publish-scheduled-content",
           source_id: post.id,
         });
       }
     }
 
-    // Atomically claim due posts — sets status=processing so concurrent runs skip them
+    // ── Read due items — do NOT bulk-claim here. ──
+    // postforme-publish-post owns the atomic claim (scheduled → processing).
+    // If we pre-claim here, the publish function sees "processing" and skips,
+    // which caused every cron post to be fake-published without reaching PfM.
     const now = new Date().toISOString();
     const { data: scheduledContent, error: fetchError } = await supabase
       .from("content_calendar")
-      .update({ status: "processing", updated_at: now })
+      .select("id, platform, title, content, scheduled_for, client_account_id, metadata")
       .eq("status", "scheduled")
       .eq("client_approved", true)
       .lte("scheduled_for", now)
-      .select("*");
+      .order("scheduled_for", { ascending: true });
 
-    if (fetchError) {
-      console.error("Error claiming scheduled content:", fetchError);
-      throw fetchError;
-    }
+    if (fetchError) throw fetchError;
 
-    console.log(`Found ${scheduledContent?.length || 0} items to publish`);
+    console.log(`Found ${scheduledContent?.length || 0} items due for publishing`);
 
-    const results: { id: string; platform: string; success: boolean; error?: string }[] = [];
+    const results: { id: string; platform: string; success: boolean; skipped?: boolean; error?: string }[] = [];
 
     for (const item of scheduledContent || []) {
       try {
-        let published = false;
-        let errorMessage = "";
-
         switch (item.platform) {
+
+          // ── Social platforms — delegate to postforme-publish-post ──
+          case "twitter":
+          case "facebook":
+          case "linkedin":
+          case "instagram": {
+            console.log(`Publishing ${item.platform} post via PfM: ${item.title}`);
+            const pfmRes = await supabase.functions.invoke("postforme-publish-post", {
+              body: { contentCalendarId: item.id },
+            });
+
+            if (pfmRes.error) {
+              const msg = pfmRes.error.message || "Invoke error";
+              console.error(`PfM invoke error for ${item.id}:`, msg);
+              results.push({ id: item.id, platform: item.platform, success: false, error: msg });
+            } else if (pfmRes.data?.skipped) {
+              // Already published by a concurrent run — treat as success
+              console.log(`Post ${item.id} already handled (skipped)`);
+              results.push({ id: item.id, platform: item.platform, success: true, skipped: true });
+            } else if (!pfmRes.data?.success) {
+              const msg = pfmRes.data?.error || "Publish failed";
+              console.error(`PfM publish failed for ${item.id}:`, msg);
+              results.push({ id: item.id, platform: item.platform, success: false, error: msg });
+            } else {
+              results.push({ id: item.id, platform: item.platform, success: true });
+            }
+
+            // Stay under PfM's 5 req/sec rate limit
+            await sleep(300);
+            break;
+          }
+
+          // ── Email — Resend directly (known recipients) or n8n (newsletter) ──
           case "email": {
             const metadata = item.metadata as { recipients?: string[]; subject?: string } | null;
             const recipients = metadata?.recipients || [];
 
             if (recipients.length > 0 && resend) {
-              // Targeted email with known recipients — send via Resend directly
-              const emailResponse = await resend.emails.send({
+              const emailRes = await resend.emails.send({
                 from: "Orange Door Consultants <hello@orangedoormarketing.com>",
                 to: recipients,
                 subject: metadata?.subject || item.title,
                 html: item.content,
               });
-              if (emailResponse.error) {
-                errorMessage = emailResponse.error.message;
-                console.error("Email send error:", errorMessage);
+              if (emailRes.error) {
+                const msg = emailRes.error.message;
+                console.error("Resend error:", msg);
+                await supabase.from("content_calendar")
+                  .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
+                  .eq("id", item.id);
+                results.push({ id: item.id, platform: "email", success: false, error: msg });
               } else {
-                published = true;
-                console.log(`Email sent via Resend for item ${item.id}`);
+                await supabase.from("content_calendar")
+                  .update({ status: "published", published_at: new Date().toISOString() })
+                  .eq("id", item.id);
+                results.push({ id: item.id, platform: "email", success: true });
               }
             } else {
-              // Newsletter content from fill-scheduled-content — route via n8n
-              console.log(`Routing newsletter email to n8n: ${item.title}`);
-              const n8nResponse = await supabase.functions.invoke("trigger-n8n", {
+              // Newsletter — route via n8n
+              const n8nRes = await supabase.functions.invoke("trigger-n8n", {
                 body: {
                   clientId: item.client_account_id,
                   trigger: "publish_email_newsletter",
                   tasks: [],
-                  metadata: {
-                    content_calendar_id: item.id,
-                    platform: "email",
-                    title: item.title,
-                    content: item.content,
-                    scheduled_for: item.scheduled_for,
-                  },
+                  metadata: { content_calendar_id: item.id, platform: "email", title: item.title, content: item.content, scheduled_for: item.scheduled_for },
                 },
               });
-              if (n8nResponse.error) {
-                errorMessage = `n8n email trigger failed: ${n8nResponse.error.message}`;
-                console.error(errorMessage);
-              } else {
-                const { error: awaitError } = await supabase
-                  .from("content_calendar")
-                  .update({
-                    status: "awaiting_callback",
-                    metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() },
-                  })
+              if (n8nRes.error) {
+                const msg = `n8n trigger failed: ${n8nRes.error.message}`;
+                await supabase.from("content_calendar")
+                  .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
                   .eq("id", item.id);
-                if (awaitError) {
-                  results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: awaitError.message });
-                } else {
-                  results.push({ id: item.id, platform: item.platform || "unknown", success: true });
-                }
-                continue;
+                results.push({ id: item.id, platform: "email", success: false, error: msg });
+              } else {
+                await supabase.from("content_calendar")
+                  .update({ status: "awaiting_callback", metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() } })
+                  .eq("id", item.id);
+                results.push({ id: item.id, platform: "email", success: true });
               }
             }
             break;
           }
 
-          case "twitter":
-          case "facebook":
-          case "linkedin":
-          case "instagram": {
-            // Publish via Post for Me API
-            console.log(`Publishing ${item.platform} post via Post for Me: ${item.title}`);
-            const pfmRes = await supabase.functions.invoke("postforme-publish-post", {
-              body: { contentCalendarId: item.id },
-            });
-            if (pfmRes.error || !pfmRes.data?.success) {
-              errorMessage = pfmRes.data?.error || pfmRes.error?.message || "Post for Me publish failed";
-              console.error(`PfM publish failed for ${item.id}:`, errorMessage);
-            } else {
-              published = true;
-              console.log(`Post ${item.id} published via Post for Me, pfm_id=${pfmRes.data?.postforme_post_id}`);
-            }
-            // Stay under PfM's 5 req/sec limit
-            await sleep(300);
-            break;
-          }
-
+          // ── Google Business — route via n8n ──
           case "google_business": {
-            // Google Business not supported by Post for Me — route through n8n
-            console.log(`Routing google_business post to n8n: ${item.title}`);
-            const n8nResponse = await supabase.functions.invoke("trigger-n8n", {
+            const n8nRes = await supabase.functions.invoke("trigger-n8n", {
               body: {
                 clientId: item.client_account_id,
                 trigger: "publish_social",
                 tasks: [],
-                metadata: {
-                  content_calendar_id: item.id,
-                  platform: item.platform,
-                  title: item.title,
-                  content: item.content,
-                  scheduled_for: item.scheduled_for,
-                },
+                metadata: { content_calendar_id: item.id, platform: item.platform, title: item.title, content: item.content, scheduled_for: item.scheduled_for },
               },
             });
-
-            if (n8nResponse.error) {
-              errorMessage = `n8n trigger failed: ${n8nResponse.error.message}`;
-              console.error(errorMessage);
-            } else {
-              const { error: awaitError } = await supabase
-                .from("content_calendar")
-                .update({
-                  status: "awaiting_callback",
-                  metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() },
-                })
+            if (n8nRes.error) {
+              const msg = `n8n trigger failed: ${n8nRes.error.message}`;
+              await supabase.from("content_calendar")
+                .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
                 .eq("id", item.id);
-
-              if (awaitError) {
-                results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: awaitError.message });
-              } else {
-                results.push({ id: item.id, platform: item.platform || "unknown", success: true });
-              }
-              continue;
+              results.push({ id: item.id, platform: item.platform, success: false, error: msg });
+            } else {
+              await supabase.from("content_calendar")
+                .update({ status: "awaiting_callback", metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() } })
+                .eq("id", item.id);
+              results.push({ id: item.id, platform: item.platform, success: true });
             }
             break;
           }
 
+          // ── Blog — mark published (CMS handles actual publishing) ──
           case "blog":
-            published = true;
-            console.log(`Blog post published: ${item.title}`);
+            await supabase.from("content_calendar")
+              .update({ status: "published", published_at: new Date().toISOString() })
+              .eq("id", item.id);
+            results.push({ id: item.id, platform: "blog", success: true });
             break;
 
-          default:
-            errorMessage = `Unknown platform "${item.platform}" — cannot publish.`;
-            console.warn(errorMessage);
-        }
-
-        if (published) {
-          const { error: updateError } = await supabase
-            .from("content_calendar")
-            .update({
-              status: "published",
-              published_at: new Date().toISOString(),
-            })
-            .eq("id", item.id);
-
-          if (updateError) {
-            console.error(`Failed to update status for ${item.id}:`, updateError);
-            results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: updateError.message });
-          } else {
-            results.push({ id: item.id, platform: item.platform || "unknown", success: true });
+          default: {
+            const msg = `Platform "${item.platform}" is not supported for automated publishing.`;
+            console.warn(msg);
+            await supabase.from("content_calendar")
+              .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
+              .eq("id", item.id);
+            await supabase.from("automation_alerts").insert({
+              alert_type: "content_publish_failure",
+              severity: "warning",
+              title: "Unsupported Platform",
+              message: msg,
+              source: "publish-scheduled-content",
+              source_id: item.id,
+            });
+            results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: msg });
           }
-        } else {
-          // Mark as failed
-          const { error: updateError } = await supabase
-            .from("content_calendar")
-            .update({
-              status: "failed",
-              metadata: { ...((item.metadata as object) || {}), error: errorMessage },
-            })
-            .eq("id", item.id);
-
-          // Create automation alert for failure
-          await supabase.from("automation_alerts").insert({
-            alert_type: "content_publish_failure",
-            severity: "error",
-            title: "Content Publish Failed",
-            message: `Failed to publish "${item.title}" to ${item.platform}: ${errorMessage}`,
-            source: "publish-scheduled-content",
-            source_id: item.id,
-            metadata: { platform: item.platform, title: item.title, error: errorMessage },
-          });
-
-          results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: errorMessage });
         }
-      } catch (itemError: any) {
-        console.error(`Error processing item ${item.id}:`, itemError);
-        results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: itemError.message });
+      } catch (itemErr: unknown) {
+        const msg = itemErr instanceof Error ? itemErr.message : "Unknown error";
+        console.error(`Error processing item ${item.id}:`, msg);
+        await supabase.from("content_calendar")
+          .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
+          .eq("id", item.id).neq("status", "published");
+        results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: msg });
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        processed: results.length,
-        successful: results.filter((r) => r.success).length,
-        failed: results.filter((r) => !r.success).length,
-        results,
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
-  } catch (error: any) {
-    console.error("Error in publish-scheduled-content:", error);
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+    console.log(`publish-scheduled-content: ${successful} published, ${failed} failed`);
 
+    return new Response(
+      JSON.stringify({ processed: results.length, successful, failed, results }),
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
+    );
+
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("publish-scheduled-content fatal error:", msg);
     try {
-      const sbErr = createClient(supabaseUrl, supabaseServiceKey);
-      await sbErr.from('automation_alerts').insert({
-        alert_type: 'function_error',
-        severity: 'error',
-        title: `Error in publish-scheduled-content`,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        source: 'publish-scheduled-content',
-        metadata: {
-          function_name: 'publish-scheduled-content',
-          client_id: null,
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          timestamp: new Date().toISOString(),
-        },
+      await createClient(supabaseUrl, supabaseServiceKey).from("automation_alerts").insert({
+        alert_type: "function_error",
+        severity: "error",
+        title: "publish-scheduled-content crashed",
+        message: msg,
+        source: "publish-scheduled-content",
+        metadata: { timestamp: new Date().toISOString() },
       });
-    } catch (_alertErr) {
-      console.error("Failed to log alert:", _alertErr);
-    }
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    } catch { /* ignore */ }
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } });
   }
 });

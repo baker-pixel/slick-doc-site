@@ -17,50 +17,50 @@ type WeeklySlot = {
 };
 
 // ─── Tier-based weekly content schedules ────────────────────────────────────
+// Supported platforms: twitter, facebook, linkedin, instagram, email, blog
+// google_business is NOT included — it is not supported via Post for Me API.
 //
-// Foundation  (~5 pieces/month)
-//   GBP post every Monday
-//   Blog post on the 1st Monday of each month
+// Foundation  (~6 pieces/month)
+//   Facebook: every Wednesday
+//   Blog: 1st Monday
 //
-// Growth  (~20 pieces/month)
-//   GBP: Mon + Thu
+// Growth  (~16 pieces/month)
 //   LinkedIn: Tue + Fri
-//   Email newsletter: Wed
+//   Facebook: Thursday
+//   Email newsletter: Wednesday
 //   Blog: 2nd and 4th Monday
 //
-// Transformation  (~40 pieces/month)
-//   GBP: Mon + Wed + Fri
-//   LinkedIn: Tue + Thu
+// Transformation  (~35 pieces/month)
 //   Facebook: Mon + Thu
+//   LinkedIn: Tue + Thu
 //   Instagram: Wed + Fri
-//   Email: Tue (weekly)
+//   Twitter: Mon + Wed
+//   Email: Tuesday (weekly)
 //   Blog: every Monday
 
 const TIER_SCHEDULE: Record<string, WeeklySlot[]> = {
   foundation: [
-    { dayOfWeek: 1, platform: "google_business", content_type: "social_post",  titlePrefix: "Google Business Profile Post" },
-    { dayOfWeek: 1, platform: "blog",             content_type: "blog_post",    titlePrefix: "Blog Article",                 weekFilter: [1] },
+    { dayOfWeek: 3, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
+    { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",  weekFilter: [1] },
   ],
   growth: [
-    { dayOfWeek: 1, platform: "google_business", content_type: "social_post",  titlePrefix: "Google Business Profile Post" },
-    { dayOfWeek: 2, platform: "linkedin",         content_type: "social_post",  titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 3, platform: "email",            content_type: "email_copy",   titlePrefix: "Email Newsletter" },
-    { dayOfWeek: 4, platform: "google_business", content_type: "social_post",  titlePrefix: "Google Business Profile Post" },
-    { dayOfWeek: 5, platform: "linkedin",         content_type: "social_post",  titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 1, platform: "blog",             content_type: "blog_post",    titlePrefix: "Blog Article",                 weekFilter: [2, 4] },
+    { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
+    { dayOfWeek: 3, platform: "email",     content_type: "email_copy",  titlePrefix: "Email Newsletter" },
+    { dayOfWeek: 4, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
+    { dayOfWeek: 5, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
+    { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",  weekFilter: [2, 4] },
   ],
   transformation: [
-    { dayOfWeek: 1, platform: "google_business", content_type: "social_post",  titlePrefix: "Google Business Profile Post" },
-    { dayOfWeek: 1, platform: "facebook",         content_type: "social_post",  titlePrefix: "Facebook Post" },
-    { dayOfWeek: 1, platform: "blog",             content_type: "blog_post",    titlePrefix: "Blog Article" },
-    { dayOfWeek: 2, platform: "linkedin",         content_type: "social_post",  titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 2, platform: "email",            content_type: "email_copy",   titlePrefix: "Email Newsletter" },
-    { dayOfWeek: 3, platform: "google_business", content_type: "social_post",  titlePrefix: "Google Business Profile Post" },
-    { dayOfWeek: 3, platform: "instagram",        content_type: "social_post",  titlePrefix: "Instagram Post" },
-    { dayOfWeek: 4, platform: "linkedin",         content_type: "social_post",  titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 4, platform: "facebook",         content_type: "social_post",  titlePrefix: "Facebook Post" },
-    { dayOfWeek: 5, platform: "google_business", content_type: "social_post",  titlePrefix: "Google Business Profile Post" },
-    { dayOfWeek: 5, platform: "instagram",        content_type: "social_post",  titlePrefix: "Instagram Post" },
+    { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
+    { dayOfWeek: 1, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post" },
+    { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article" },
+    { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
+    { dayOfWeek: 2, platform: "email",     content_type: "email_copy",  titlePrefix: "Email Newsletter" },
+    { dayOfWeek: 3, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post" },
+    { dayOfWeek: 3, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post" },
+    { dayOfWeek: 4, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
+    { dayOfWeek: 4, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
+    { dayOfWeek: 5, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post" },
   ],
 };
 
