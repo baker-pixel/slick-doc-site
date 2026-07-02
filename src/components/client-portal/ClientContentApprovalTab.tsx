@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -488,11 +489,37 @@ function GenericContentView({ data }: { data: any }) {
 }
 
 export default function ClientContentApprovalTab({ clientAccountId }: ClientContentApprovalTabProps) {
+  const queryClient = useQueryClient();
   const [approvals, setApprovals] = useState<ContentApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApproval, setSelectedApproval] = useState<ContentApproval | null>(null);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Whether the client_approval onboarding step is unlocked but not yet complete
+  // (draft is being generated in the background — show helpful empty state instead of blank)
+  const [approvalStepPending, setApprovalStepPending] = useState(false);
+
+  useEffect(() => {
+    // Check if the client_approval workflow step is pending (onboarding step 5)
+    supabase
+      .from("client_workflows")
+      .select("id")
+      .eq("client_id", clientAccountId)
+      .eq("status", "active")
+      .maybeSingle()
+      .then(({ data: wf }) => {
+        if (!wf) return;
+        supabase
+          .from("workflow_steps")
+          .select("status")
+          .eq("workflow_id", wf.id)
+          .eq("task_type", "client_approval")
+          .maybeSingle()
+          .then(({ data: step }) => {
+            setApprovalStepPending(!!step && step.status !== "completed" && step.status !== "locked");
+          });
+      });
+  }, [clientAccountId]);
 
   useEffect(() => {
     fetchApprovals();
@@ -600,6 +627,9 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                 },
               })
               .catch((e) => console.error("advance-workflow after approval:", e));
+
+            queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
+            queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
           }
         } catch (e) {
           console.error("Failed to complete approval workflow step:", e);
@@ -707,9 +737,19 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
       {approvals.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <FileCheck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium text-foreground">No Content to Review</h3>
-            <p className="text-muted-foreground">Content items will appear here when they need your approval.</p>
+            {approvalStepPending ? (
+              <>
+                <Loader2 className="h-12 w-12 mx-auto text-primary mb-4 animate-spin" />
+                <h3 className="text-lg font-medium text-foreground">Your First Draft is Being Prepared</h3>
+                <p className="text-muted-foreground mt-1">We're generating your introductory content. It will appear here in a moment — refresh if it doesn't show up.</p>
+              </>
+            ) : (
+              <>
+                <FileCheck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium text-foreground">No Content to Review</h3>
+                <p className="text-muted-foreground">Content items will appear here when they need your approval.</p>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (

@@ -20,121 +20,116 @@ interface Prospect {
   status: string;
   drip_step: number;
   created_at: string;
+  approved_at: string | null;
+  client_id: string | null;
+  context_profile?: Record<string, unknown> | null;
+}
+
+interface ClientAccount {
+  id: string;
+  business_name: string;
+  email: string;
+  website_url?: string | null;
+  business_type?: string | null;
+  context_profile?: Record<string, unknown> | null;
+  brand_voice?: Record<string, unknown> | null;
 }
 
 // Days after nurture begins for each drip step
 const DRIP_SCHEDULE: Record<number, number> = {
-  1: 2,  // Day 2
-  2: 4,  // Day 4
-  3: 7,  // Day 7
-  4: 10, // Day 10
+  1: 2,
+  2: 4,
+  3: 7,
+  4: 10,
 };
 
 function getFirstName(name: string): string {
   return name?.split(" ")[0] || "there";
 }
 
-const wrapHtml = (body: string, email: string = '') => `
+const wrapHtml = (body: string, unsubEmail: string = "") => `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
 <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;">
-  <div style="background:#1a1a1a;padding:24px 40px;text-align:center;">
-    <h1 style="color:#E8521A;margin:0;font-size:20px;">Orange Door Consulting</h1>
+  <div style="background:#1a1a1a;padding:24px 40px;">
+    <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2px;">ORANGE DOOR</div>
+    <div style="color:#666;font-size:9px;letter-spacing:1.5px;margin-top:2px;">MANAGED OUTREACH</div>
   </div>
   <div style="padding:30px 40px;font-size:15px;color:#444;line-height:1.7;">
     ${body}
   </div>
   <div style="background:#f5f5f5;padding:16px 40px;text-align:center;font-size:12px;color:#999;">
-    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(email)}" style="color:#999;">Unsubscribe</a>
+    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}" style="color:#999;">Unsubscribe</a>
   </div>
 </div>
 </body></html>`;
 
-function buildEmail(prospect: Prospect, step: number): { subject: string; html: string } | null {
-  const firstName = getFirstName(prospect.name);
-  const weaknesses = prospect.top_weaknesses || [];
-  const topWeakness = weaknesses[0] || "your online visibility";
-  const businessType = prospect.business_type || "local business";
-  const url = prospect.website_url;
+function buildClientCtaButton(client: ClientAccount): string {
+  const url = client.website_url || "https://orangedoormarketing.com/schedule";
+  return `<div style="text-align:center;margin:25px 0;"><a href="${url}" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Get in Touch with ${client.business_name}</a></div>`;
+}
 
-  const callCta = `<div style="text-align:center;margin:25px 0;"><a href="https://orangedoormarketing.com/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Book a Free Call</a></div>`;
-  const signupCta = `<div style="text-align:center;margin:10px 0;"><a href="https://orangedoormarketing.com/pricing" style="color:#E8521A;font-weight:bold;text-decoration:underline;">See Our Plans</a></div>`;
+// Generic fallback — only fires if Groq is down. No placeholders.
+function buildStaticOutreachEmail(
+  prospect: Prospect,
+  client: ClientAccount,
+  step: number,
+): { subject: string; html: string } | null {
+  const firstName = getFirstName(prospect.name);
+  const bizType = prospect.business_type || "your industry";
+  const clientName = client.business_name;
+  const cta = buildClientCtaButton(client);
 
   switch (step) {
     case 1:
       return {
-        subject: `The #1 thing holding ${url} back`,
+        subject: `Quick note from ${clientName}`,
         html: wrapHtml(`
           <p>Hi ${firstName},</p>
-          <p>When we analyzed your website, one thing stood out above everything else: <strong>${topWeakness}</strong>.</p>
-          <p>Here's what that means in plain English — right now, potential customers in your area are searching for exactly what you offer, but they're finding your competitors instead.</p>
-          <p>Every day this isn't fixed, you're losing real customers to businesses that might not even be as good as yours.</p>
-          <p>The good news? This is one of the easiest things to fix, and we do it for you — no technical knowledge needed on your end.</p>
-          ${callCta}
-          <p>Talk soon,<br><strong>The Orange Door Team</strong></p>
+          <p>I came across your business and wanted to reach out — we work with a number of ${bizType} businesses and thought there could be a good fit.</p>
+          <p>We're <strong>${clientName}</strong> and we help businesses like yours grow and operate more efficiently. I'd love to hear a bit about what you're working on and see if we can add any value.</p>
+          <p>No pitch — just a quick conversation.</p>
+          ${cta}
+          <p>Talk soon,<br><strong>${clientName}</strong></p>
         `, prospect.email),
       };
 
     case 2:
       return {
-        subject: "Most local businesses have this exact problem",
+        subject: `Following up — ${clientName}`,
         html: wrapHtml(`
           <p>Hi ${firstName},</p>
-          <p>Here's something we hear from ${businessType} owners all the time:</p>
-          <p style="padding:15px 20px;background:#f9f5f0;border-left:3px solid #E8521A;font-style:italic;">"I know I need to do more marketing, but I just don't have the time or the team to handle it."</p>
-          <p>You're not alone. Most local businesses are run by people who are great at what they do — but marketing is a full-time job on its own.</p>
-          <p>That's exactly why Orange Door exists. We become your entire marketing team:</p>
-          <ul style="padding-left:20px;">
-            <li>We make sure people can find you on Google</li>
-            <li>We create content that brings in new customers</li>
-            <li>We manage your social media so you stay visible</li>
-            <li>We send emails that keep customers coming back</li>
-            <li>We track everything and send you a simple monthly report</li>
-          </ul>
-          <p>You focus on running your business. We handle the rest.</p>
-          ${callCta}
-          <p>Best,<br><strong>The Orange Door Team</strong></p>
+          <p>Just following up on my last note. One thing we hear from a lot of ${bizType} owners is that they know what they need to do to grow — they just don't have the bandwidth to do it all.</p>
+          <p>That's where we come in. <strong>${clientName}</strong> works alongside businesses like yours to take things off your plate and help you move faster. Happy to share some examples of what that looks like in practice.</p>
+          ${cta}
+          <p>Best,<br><strong>${clientName}</strong></p>
         `, prospect.email),
       };
 
     case 3:
       return {
-        subject: "Here's everything we do for you each month",
+        subject: `What working with ${clientName} actually looks like`,
         html: wrapHtml(`
           <p>Hi ${firstName},</p>
-          <p>People always ask us: "What exactly do you do?" Here's the full list:</p>
-          <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Make your website easier to find on Google (SEO)</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Write blog posts and website content that attracts customers</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Create and schedule social media posts</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Set up and manage email campaigns</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Manage your Google Business Profile</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Track your leads and follow up automatically</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Send you a plain-English monthly performance report</td></tr>
-            <tr><td style="padding:8px 0;">✅</td><td style="padding:8px;">Run paid ads if your plan includes them</td></tr>
-          </table>
-          <p><strong>All of this is done for you.</strong> You don't need to learn any tools, write any content, or figure out any tech. We handle everything.</p>
-          ${callCta}
-          ${signupCta}
-          <p>Cheers,<br><strong>The Orange Door Team</strong></p>
+          <p>People always ask us: "What exactly do you do?" — so here's the straightforward answer:</p>
+          <p>We partner with ${bizType} businesses to help them grow. Everything we do is hands-on, results-focused, and tailored to what your business actually needs — not a one-size-fits-all package.</p>
+          <p>If you're curious whether there's a fit, the fastest way to find out is a short call.</p>
+          ${cta}
+          <p>Cheers,<br><strong>${clientName}</strong></p>
         `, prospect.email),
       };
 
     case 4:
       return {
-        subject: `Quick question about ${businessType}`,
+        subject: `Last note — ${clientName}`,
         html: wrapHtml(`
           <p>Hi ${firstName},</p>
-          <p>Just a quick question — is handling your own marketing still working for you?</p>
-          <p>If the honest answer is "not really" or "I don't have time for it," we should talk.</p>
-          <p>No pressure, no long sales pitch. Just a 15-minute call to see if we can help.</p>
-          <div style="text-align:center;margin:25px 0;">
-            <a href="https://orangedoormarketing.com/schedule" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;margin:5px;">Schedule a Call</a>
-            <a href="https://orangedoormarketing.com/pricing" style="display:inline-block;padding:14px 28px;background:#fff;color:#E8521A;text-decoration:none;border-radius:6px;font-weight:bold;border:2px solid #E8521A;margin:5px;">Sign Up Now</a>
-          </div>
-          <p>Either way, I hope the free report was helpful!</p>
-          <p>— The Orange Door Team</p>
+          <p>I'll keep this one short — just wanted to check in before I close the loop.</p>
+          <p>If growing your business is something you're actively thinking about, even a 15-minute call with us tends to be worth it. No obligation, no pressure.</p>
+          ${cta}
+          <p>Either way, best of luck — hope things are going well.</p>
+          <p>— <strong>${clientName}</strong></p>
         `, prospect.email),
       };
 
@@ -143,67 +138,99 @@ function buildEmail(prospect: Prospect, step: number): { subject: string; html: 
   }
 }
 
-async function buildPersonalizedEmail(
-  prospect: Prospect & { context_profile?: Record<string, unknown> },
-  step: number
+async function buildPersonalizedOutreachEmail(
+  prospect: Prospect,
+  client: ClientAccount,
+  step: number,
 ): Promise<{ subject: string; html: string } | null> {
   const ctx = prospect.context_profile;
-  if (!ctx) return null;
+  const clientCtx = client.context_profile;
+  const brandVoice = client.brand_voice;
 
-  const services = Array.isArray(ctx.services) && (ctx.services as string[]).length > 0
-    ? (ctx.services as string[]).join(', ')
-    : prospect.business_type || 'your business';
+  // ── Prospect signals ──────────────────────────────────────────
+  const prospectServices = ctx && Array.isArray(ctx.services) && (ctx.services as string[]).length > 0
+    ? (ctx.services as string[]).join(", ")
+    : prospect.business_type || null;
 
-  const differentiators = Array.isArray(ctx.differentiators) && (ctx.differentiators as string[]).length > 0
-    ? (ctx.differentiators as string[]).join('; ')
+  const prospectAudience = ctx && typeof ctx.target_audience === "string" ? ctx.target_audience : null;
+  const prospectSummary = ctx && typeof ctx.business_summary === "string" ? ctx.business_summary : null;
+
+  const prospectPainPoints = ctx && Array.isArray(ctx.pain_points) && (ctx.pain_points as string[]).length > 0
+    ? (ctx.pain_points as string[]).slice(0, 2).join("; ")
+    : prospect.top_weaknesses?.[0] || null;
+
+  const prospectDiffs = ctx && Array.isArray(ctx.differentiators) && (ctx.differentiators as string[]).length > 0
+    ? (ctx.differentiators as string[]).slice(0, 2).join("; ")
     : null;
 
-  const primaryGoal = Array.isArray(ctx.primary_goals) && (ctx.primary_goals as string[]).length > 0
-    ? (ctx.primary_goals as string[])[0]
+  // ── Client signals ────────────────────────────────────────────
+  const clientServices = clientCtx && Array.isArray(clientCtx.services) && (clientCtx.services as string[]).length > 0
+    ? (clientCtx.services as string[]).join(", ")
+    : client.business_type || null;
+
+  const clientDifferentiators = clientCtx && Array.isArray(clientCtx.differentiators) && (clientCtx.differentiators as string[]).length > 0
+    ? (clientCtx.differentiators as string[]).join("; ")
     : null;
 
-  const painPoint = Array.isArray(ctx.pain_points) && (ctx.pain_points as string[]).length > 0
-    ? (ctx.pain_points as string[])[0]
-    : (prospect.top_weaknesses?.[0] || 'online visibility');
+  const clientSummary = clientCtx && typeof clientCtx.business_summary === "string"
+    ? clientCtx.business_summary
+    : null;
+
+  const clientTone = brandVoice && typeof brandVoice.tone === "string"
+    ? brandVoice.tone
+    : "professional but warm and direct";
+
+  const ctaUrl = client.website_url || "https://orangedoormarketing.com/schedule";
 
   const stepThemes: Record<number, string> = {
-    1: "Lead with their single biggest gap/weakness. Make it feel urgent but solvable. One clear CTA to book a call.",
-    2: "Empathize with the time/resource problem. Show how Orange Door becomes their full marketing team. One clear CTA.",
-    3: "Show the full list of what Orange Door does every month. Emphasize done-for-you. CTA to see plans or book call.",
-    4: "Final follow-up. Low-pressure question about whether DIY marketing is working. Two CTAs: schedule call + see pricing.",
+    1: `Warm intro from the sender. Hook on one specific thing about the prospect's business — their industry, what they likely do for customers, or a common challenge in that space. Goal: start a conversation. One clear CTA. Under 150 words.`,
+    2: `Follow-up. Empathise with a real problem the prospect likely faces in their day-to-day. Show specifically how the sender solves it. Social proof line optional ("businesses like yours..."). One CTA. Under 160 words.`,
+    3: `Show exactly what working with the sender looks like — specific services, what the prospect gets, why it's different. Emphasise done-for-you. End with a single clear CTA. Under 180 words.`,
+    4: `Final low-pressure follow-up. Very short. Ask if it's worth a 15-minute call — no pitch, just a question. One CTA. Under 100 words.`,
   };
 
   const theme = stepThemes[step];
   if (!theme) return null;
 
-  const prompt = `You are writing a nurture email for Orange Door Marketing (East Tennessee SMB consultancy) to send to a prospect.
+  const prospectBlock = [
+    `- First name: ${getFirstName(prospect.name)}`,
+    prospectServices ? `- Their business / services: ${prospectServices}` : `- Business type: ${prospect.business_type || "unknown"}`,
+    prospect.website_url ? `- Website: ${prospect.website_url}` : null,
+    prospectSummary ? `- Business summary: ${prospectSummary}` : null,
+    prospectAudience ? `- Who they serve: ${prospectAudience}` : null,
+    prospectPainPoints ? `- Known pain points / gaps: ${prospectPainPoints}` : null,
+    prospectDiffs ? `- Their differentiators: ${prospectDiffs}` : null,
+  ].filter(Boolean).join("\n");
 
-Prospect context:
-- First name: ${prospect.name?.split(' ')[0] || 'there'}
-- Business type: ${services}
-- Their website: ${prospect.website_url || 'unknown'}
-- Their gap score: ${prospect.gap_score ?? 'unknown'}/100
-- Their biggest gap: ${painPoint}
-${differentiators ? `- Their key differentiator: ${differentiators}` : ''}
-${primaryGoal ? `- Their #1 business goal: ${primaryGoal}` : ''}
-${ctx.success_criteria ? `- What would make marketing worth it for them: ${ctx.success_criteria}` : ''}
-${ctx.fears ? `- Their biggest fear about agencies: ${ctx.fears}` : ''}
+  const clientBlock = [
+    `- Business name: ${client.business_name}`,
+    clientServices ? `- What they offer: ${clientServices}` : null,
+    clientSummary ? `- About them: ${clientSummary}` : null,
+    clientDifferentiators ? `- What sets them apart: ${clientDifferentiators}` : null,
+    `- Tone / voice: ${clientTone}`,
+  ].filter(Boolean).join("\n");
 
-Email theme for step ${step}: ${theme}
+  const prompt = `You are writing a B2B outreach email on behalf of a business called "${client.business_name}".
 
-Orange Door CTAs:
-- Book a call: https://orangedoormarketing.com/schedule
-- See plans: https://orangedoormarketing.com/pricing
+SENDER (writing the email):
+${clientBlock}
 
-Rules:
-- Write ONLY the email body HTML (no <html>, <head>, or <body> tags — just the inner content paragraphs, lists, CTAs)
-- Keep it under 200 words
-- Sound like a helpful human, not a salesperson
-- Reference their specific business type and at least one specific detail from the context above
-- Include exactly one CTA button styled: <a href="URL" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">CTA TEXT</a>
-- End with: <p>— The Orange Door Team</p>
+RECIPIENT (prospect):
+${prospectBlock}
 
-Return JSON: { "subject": "email subject line", "html": "body html" }`;
+EMAIL GOAL FOR STEP ${step}:
+${theme}
+
+CTA button URL: ${ctaUrl}
+
+RULES:
+- Write ONLY the email body HTML — no <html>/<head>/<body> tags, just paragraphs, lists, and one CTA button
+- Use this exact CTA button style: <a href="${ctaUrl}" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">BUTTON TEXT</a>
+- Sound like a thoughtful human, not a template — reference at least one specific thing about the prospect
+- Never use placeholder brackets like [X] or [Y] — if you don't know a detail, write around it naturally
+- End with: <p>— ${client.business_name}</p>
+
+Return ONLY valid JSON on one line: { "subject": "...", "html": "..." }`;
 
   try {
     const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -220,14 +247,12 @@ Return JSON: { "subject": "email subject line", "html": "body html" }`;
     });
 
     if (!aiResponse.ok) {
-      const errBody = await aiResponse.text();
-      console.error(`AI email gen failed: ${aiResponse.status}`, errBody);
+      console.error(`AI email gen failed: ${aiResponse.status}`, await aiResponse.text());
       return null;
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
-
+    const content = aiData.choices?.[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
@@ -236,7 +261,7 @@ Return JSON: { "subject": "email subject line", "html": "body html" }`;
 
     return { subject: parsed.subject, html: parsed.html };
   } catch (err) {
-    console.error("buildPersonalizedEmail error:", err);
+    console.error("buildPersonalizedOutreachEmail error:", err);
     return null;
   }
 }
@@ -248,15 +273,14 @@ serve(async (req) => {
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
   const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-  const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>";
 
   if (!GROQ_API_KEY || !RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: "Email API keys not configured" }), {
+    return new Response(JSON.stringify({ error: "GROQ_API_KEY or RESEND_API_KEY not configured" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -266,13 +290,13 @@ serve(async (req) => {
     let emailsSent = 0;
     let prospectsNurtured = 0;
 
-    // 1. Move pending prospects (48h+ old) to nurture
+    // 1. Move pending prospects (48h+ after approval) to nurture
     const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
     const { data: pendingProspects } = await supabase
       .from("prospects")
       .select("id")
       .eq("status", "pending")
-      .lte("created_at", cutoff);
+      .lte("approved_at", cutoff);
 
     if (pendingProspects && pendingProspects.length > 0) {
       const ids = pendingProspects.map((p: { id: string }) => p.id);
@@ -280,119 +304,148 @@ serve(async (req) => {
         .from("prospects")
         .update({ status: "nurture", drip_step: 0 })
         .in("id", ids)
-        .eq("status", "pending")  // guard: only update if still pending (concurrent-safe)
+        .eq("status", "pending")
         .select("id", { count: "exact", head: true });
       prospectsNurtured = count ?? ids.length;
-      console.log(`Moved ${ids.length} prospects to nurture status`);
+      console.log(`Moved ${ids.length} prospects to nurture`);
     }
 
-    // 2. Process drip emails for nurture prospects
+    // 2. Fetch nurture prospects
     const { data: nurtureProspects } = await supabase
       .from("prospects")
       .select("*")
       .eq("status", "nurture")
       .lt("drip_step", 4);
 
-    // Build a set of client emails to suppress drip sends for onboarded clients
-    const { data: clientRows } = await supabase
+    if (!nurtureProspects || nurtureProspects.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, prospectsNurtured, emailsSent }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 3. Batch-fetch all relevant client accounts
+    const clientIds = [...new Set(
+      (nurtureProspects as Prospect[])
+        .map(p => p.client_id)
+        .filter(Boolean) as string[]
+    )];
+
+    const clientMap = new Map<string, ClientAccount>();
+    if (clientIds.length > 0) {
+      const { data: clientRows } = await supabase
+        .from("client_accounts")
+        .select("id, business_name, email, website_url, business_type, context_profile, brand_voice")
+        .in("id", clientIds)
+        .eq("status", "active");
+      for (const c of (clientRows ?? [])) {
+        clientMap.set(c.id, c as ClientAccount);
+      }
+    }
+
+    // 4. Build suppression set — skip prospects whose email matches an active client
+    const { data: allClientRows } = await supabase
       .from("client_accounts")
       .select("email")
       .eq("status", "active");
     const clientEmailSet = new Set(
-      (clientRows || []).map((c: { email: string }) => c.email.toLowerCase())
+      (allClientRows ?? []).map((c: { email: string }) => c.email.toLowerCase()),
     );
 
-    if (nurtureProspects) {
-      for (const prospect of nurtureProspects as Prospect[]) {
-        // Skip (and auto-convert) if this prospect became a client
-        if (clientEmailSet.has(prospect.email.toLowerCase())) {
-          await supabase
-            .from("prospects")
-            .update({ status: "converted" })
-            .eq("id", prospect.id);
-          console.log(`Prospect ${prospect.email} is now a client — marked converted, skipping drip`);
-          continue;
-        }
-        const nextStep = prospect.drip_step + 1;
-        const daysRequired = DRIP_SCHEDULE[nextStep];
-        if (!daysRequired) continue;
+    // 5. Send drip emails
+    for (const prospect of nurtureProspects as Prospect[]) {
+      if (!prospect.email || !prospect.email.includes("@")) {
+        console.log(`Skipping prospect ${prospect.id} — no valid email`);
+        continue;
+      }
 
-        // Calculate days since created
-        const createdAt = new Date(prospect.created_at);
-        const daysSinceCreated = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (clientEmailSet.has(prospect.email.toLowerCase())) {
+        await supabase.from("prospects").update({ status: "converted" }).eq("id", prospect.id);
+        console.log(`Prospect ${prospect.email} is now a client — marked converted`);
+        continue;
+      }
 
-        // Only send if enough days have passed
-        if (daysSinceCreated < daysRequired) continue;
+      if (!prospect.client_id) {
+        console.warn(`Skipping prospect ${prospect.id} — no client_id assigned`);
+        continue;
+      }
 
-        // Try personalized first, fall back to static template
-        let emailContent = await buildPersonalizedEmail(prospect as any, nextStep);
-        if (!emailContent) {
-          emailContent = buildEmail(prospect as Prospect, nextStep);
-        }
-        if (!emailContent) continue;
+      const client = clientMap.get(prospect.client_id);
+      if (!client) {
+        console.warn(`Skipping prospect ${prospect.id} — client ${prospect.client_id} not found or inactive`);
+        continue;
+      }
 
-        // For personalized emails, wrap in the standard template shell
-        const isPersonalized = !!(prospect as any).context_profile;
-        if (isPersonalized && emailContent.html && !emailContent.html.includes('<!DOCTYPE')) {
-          emailContent = {
+      const nextStep = prospect.drip_step + 1;
+      const daysRequired = DRIP_SCHEDULE[nextStep];
+      if (!daysRequired) continue;
+
+      // Clock starts from when nurture began (approved_at + 48h), not created_at.
+      // This prevents outbound prospects discovered days ago from firing all steps at once.
+      const nurtureStart = prospect.approved_at
+        ? new Date(new Date(prospect.approved_at).getTime() + 48 * 60 * 60 * 1000)
+        : new Date(prospect.created_at);
+      const daysSinceNurture = (now.getTime() - nurtureStart.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceNurture < daysRequired) continue;
+
+      let emailContent = await buildPersonalizedOutreachEmail(prospect, client, nextStep);
+      if (!emailContent) {
+        emailContent = buildStaticOutreachEmail(prospect, client, nextStep);
+      }
+      if (!emailContent) continue;
+
+      if (emailContent.html && !emailContent.html.includes("<!DOCTYPE")) {
+        emailContent = {
+          subject: emailContent.subject,
+          html: wrapHtml(emailContent.html, prospect.email),
+        };
+      }
+
+      try {
+        const fromAddress = `${client.business_name} Team <hello@orangedoormarketing.com>`;
+        const emailRes = await fetch(`${RESEND_API_URL}/emails`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            reply_to: client.email,
+            to: [prospect.email],
             subject: emailContent.subject,
-            html: wrapHtml(emailContent.html, prospect.email),
-          };
-        }
-        try {
-          const emailRes = await fetch(`${RESEND_API_URL}/emails`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${RESEND_API_KEY}`,
-            },
-            body: JSON.stringify({
-              from: EMAIL_FROM,
-              to: [prospect.email],
-              subject: emailContent.subject,
-              html: emailContent.html,
-            }),
-          });
+            html: emailContent.html,
+          }),
+        });
 
-          if (emailRes.ok) {
-            const { count: updated } = await supabase
-              .from("prospects")
-              .update({ drip_step: nextStep })
-              .eq("id", prospect.id)
-              .eq("drip_step", prospect.drip_step)  // optimistic lock: skip if already advanced
-              .select("id", { count: "exact", head: true });
-            if (updated && updated > 0) emailsSent++;
-            console.log(`Drip email ${nextStep} sent to ${prospect.email}`);
-          } else {
-            const errText = await emailRes.text();
-            console.error(`Failed to send drip ${nextStep} to ${prospect.email}:`, errText);
-          }
-        } catch (sendErr) {
-          console.error(`Error sending drip to ${prospect.email}:`, sendErr);
+        if (emailRes.ok) {
+          const { count: updated } = await supabase
+            .from("prospects")
+            .update({ drip_step: nextStep })
+            .eq("id", prospect.id)
+            .eq("drip_step", prospect.drip_step)
+            .select("id", { count: "exact", head: true });
+          if (updated && updated > 0) emailsSent++;
+          console.log(`Drip step ${nextStep} sent to ${prospect.email} from ${fromAddress}`);
+        } else {
+          console.error(`Failed drip ${nextStep} to ${prospect.email}:`, await emailRes.text());
         }
+      } catch (sendErr) {
+        console.error(`Error sending drip to ${prospect.email}:`, sendErr);
       }
     }
-
-    // 3. Mark completed drip sequences (step 4 done, 10+ days old)
-    const { data: completedProspects } = await supabase
-      .from("prospects")
-      .select("id")
-      .eq("status", "nurture")
-      .gte("drip_step", 4);
-
-    // These just stay as nurture with drip_step=4, no further emails
 
     console.log(`Drip run complete: ${prospectsNurtured} nurtured, ${emailsSent} emails sent`);
 
     return new Response(
       JSON.stringify({ success: true, prospectsNurtured, emailsSent }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("run-prospect-drip error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

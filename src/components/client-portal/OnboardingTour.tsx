@@ -28,23 +28,9 @@ const tourSteps: TourStep[] = [
   {
     id: "activity",
     tab: "activity",
-    title: "Activity Feed",
-    description: "This is your home base. See all recent activity on your account at a glance - new messages, completed tasks, and important updates.",
+    title: "Start Here — Your Onboarding",
+    description: "This is where you'll complete your 5 onboarding steps: confirm your business details, book your kickoff call, upload brand assets, connect social accounts, and approve your first content. Each step unlocks the next.",
     icon: Activity,
-  },
-  {
-    id: "notifications",
-    tab: "notifications",
-    title: "Wins & Updates",
-    description: "Celebrate your marketing wins here! We'll notify you when campaigns perform well, milestones are reached, and results come in.",
-    icon: Bell,
-  },
-  {
-    id: "projects",
-    tab: "projects",
-    title: "Your Projects",
-    description: "Track all your active projects, see progress percentages, and monitor upcoming milestones and deadlines.",
-    icon: LayoutDashboard,
   },
   {
     id: "messages",
@@ -57,15 +43,8 @@ const tourSteps: TourStep[] = [
     id: "approvals",
     tab: "approvals",
     title: "Content Approvals",
-    description: "Review and approve marketing content before it goes live. Provide feedback or request revisions with a single click.",
+    description: "Review and approve marketing content before it goes live. Your first draft will appear here after you connect your social accounts.",
     icon: FileCheck,
-  },
-  {
-    id: "analytics",
-    tab: "analytics",
-    title: "Analytics & Results",
-    description: "See how your marketing is performing. Access reports, metrics, and insights that show real business results.",
-    icon: BarChart3,
   },
   {
     id: "help",
@@ -99,6 +78,7 @@ export function OnboardingTour({ active, onClose, onTabChange }: OnboardingTourP
 
   const handleNext = () => {
     if (isLastStep) {
+      onTabChange("activity");
       onClose();
     } else {
       setCurrentStep(currentStep + 1);
@@ -112,6 +92,7 @@ export function OnboardingTour({ active, onClose, onTabChange }: OnboardingTourP
   };
 
   const handleSkip = () => {
+    onTabChange("activity");
     onClose();
   };
 

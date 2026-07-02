@@ -72,15 +72,67 @@ export default function SocialCallback() {
               accountIds: accountIds ? accountIds.split(",").filter(Boolean) : undefined,
             },
           });
+
+          // Complete the client_oauth workflow step so the onboarding gate advances
+          try {
+            const { data: wf } = await supabase
+              .from("client_workflows")
+              .select("id")
+              .eq("client_id", clientId)
+              .eq("status", "active")
+              .maybeSingle();
+
+            if (wf) {
+              const { data: oauthStep } = await supabase
+                .from("workflow_steps")
+                .select("id, step_number, status")
+                .eq("workflow_id", wf.id)
+                .eq("task_type", "client_oauth")
+                .maybeSingle();
+
+              if (oauthStep && oauthStep.status !== "completed") {
+                await supabase
+                  .from("workflow_steps")
+                  .update({ status: "completed", completed_at: new Date().toISOString() })
+                  .eq("id", oauthStep.id);
+
+                supabase.functions
+                  .invoke("advance-workflow", {
+                    body: {
+                      workflow_id: wf.id,
+                      completed_step_number: oauthStep.step_number,
+                      client_id: clientId,
+                    },
+                  })
+                  .catch((e) => console.error("advance-workflow after social connect:", e));
+              }
+            }
+          } catch (e) {
+            console.error("Failed to advance workflow after social connect:", e);
+          }
         }
 
         setStatus("success");
         setMessage(`${displayName} connected successfully!`);
-        setTimeout(() => window.close(), 2000);
+        // Popup: close so main window regains focus and the focus-listener syncs accounts
+        // Tab fallback: navigate back to portal after a short delay
+        setTimeout(() => {
+          if (window.opener) {
+            window.close();
+          } else {
+            navigate("/portal");
+          }
+        }, 1500);
       } catch {
         setStatus("success");
         setMessage(`${displayName} connected! Return to your portal to confirm.`);
-        setTimeout(() => window.close(), 2000);
+        setTimeout(() => {
+          if (window.opener) {
+            window.close();
+          } else {
+            navigate("/portal");
+          }
+        }, 1500);
       }
     };
 
@@ -107,11 +159,18 @@ export default function SocialCallback() {
             <div>
               <p className="text-lg font-semibold">Connected!</p>
               <p className="text-sm text-muted-foreground mt-1">{message}</p>
-              <p className="text-xs text-muted-foreground mt-2">This tab will close automatically…</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                {window.opener ? "This window will close automatically…" : "Returning to your portal…"}
+              </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => navigate("/portal")} className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.opener ? window.close() : navigate("/portal")}
+              className="gap-2"
+            >
               <ExternalLink className="h-3.5 w-3.5" />
-              Return to Portal
+              {window.opener ? "Close Window" : "Return to Portal"}
             </Button>
           </>
         )}
@@ -143,12 +202,8 @@ export default function SocialCallback() {
               )}
             </div>
             <div className="flex flex-col gap-2">
-              <Button onClick={() => window.close()} className="gap-2">
-                Close &amp; Try Again
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate("/portal")} className="gap-2">
-                <ExternalLink className="h-3.5 w-3.5" />
-                Return to Portal
+              <Button onClick={() => window.opener ? window.close() : navigate("/portal")} className="gap-2">
+                {window.opener ? "Close & Try Again" : "Return to Portal"}
               </Button>
             </div>
           </>
@@ -161,9 +216,14 @@ export default function SocialCallback() {
               <p className="text-lg font-semibold">Connection Failed</p>
               <p className="text-sm text-muted-foreground mt-1">{message}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => navigate("/portal")} className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.opener ? window.close() : navigate("/portal")}
+              className="gap-2"
+            >
               <ExternalLink className="h-3.5 w-3.5" />
-              Return to Portal
+              {window.opener ? "Close Window" : "Return to Portal"}
             </Button>
           </>
         )}

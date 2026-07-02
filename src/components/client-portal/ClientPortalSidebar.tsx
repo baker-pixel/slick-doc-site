@@ -21,6 +21,7 @@ import {
   Send,
   Share2,
   Search,
+  Radar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,6 +53,7 @@ export type PortalTab =
   | "brand"
   | "access"
   | "social"
+  | "prospects"
   | "team"
   | "analytics"
   | "seo"
@@ -103,6 +105,7 @@ const myPortalItems: NavItemDef[] = [
 const brandToolsItems: NavItemDef[] = [
   { id: "brand", label: "Brand Assets", icon: Palette },
   { id: "social", label: "Social Media", icon: Share2 },
+  { id: "prospects", label: "Lead Outreach", icon: Radar },
   { id: "seo", label: "SEO Health", icon: Search },
   { id: "learning", label: "Learning Hub", icon: GraduationCap },
   { id: "analytics", label: "Analytics", icon: BarChart3 },

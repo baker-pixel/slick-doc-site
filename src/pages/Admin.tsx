@@ -1537,7 +1537,7 @@ const AdminInner = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+        <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} onLogout={authLogout} />
         
         <SidebarInset>
           <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4">

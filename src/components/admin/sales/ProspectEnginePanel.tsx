@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Search,
   RefreshCw,
   CheckCircle,
@@ -24,6 +30,8 @@ import {
   Globe,
   Phone,
   MapPin,
+  Mail,
+  AlertTriangle,
   ExternalLink,
   Radar,
   ChevronLeft,
@@ -76,6 +84,9 @@ export default function ProspectEnginePanel() {
   const [loading, setLoading] = useState(true);
   const [actionIds, setActionIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Inline email editing for outbound prospects with no email
+  const [emailDrafts, setEmailDrafts] = useState<Record<string, string>>({});
 
   // Discovery form
   const [discClientId, setDiscClientId] = useState("");
@@ -138,6 +149,17 @@ export default function ProspectEnginePanel() {
 
   const updateStatus = async (ids: string[], status: string) => {
     ids.forEach(id => markAction(id, true));
+
+    // Save any drafted emails before approving
+    if (status === "pending") {
+      const emailUpdates = ids
+        .filter(id => emailDrafts[id]?.includes("@"))
+        .map(id =>
+          supabase.from("prospects").update({ email: emailDrafts[id] }).eq("id", id)
+        );
+      if (emailUpdates.length > 0) await Promise.all(emailUpdates);
+    }
+
     const updates: Record<string, unknown> = { status };
     if (status === "pending") {
       updates.approved_at = new Date().toISOString();
@@ -153,6 +175,7 @@ export default function ProspectEnginePanel() {
     } else {
       toast({ title: status === "pending" ? `${ids.length} approved` : `${ids.length} rejected` });
       setSelected(new Set());
+      setEmailDrafts({});
       loadProspects();
     }
   };
@@ -235,106 +258,158 @@ export default function ProspectEnginePanel() {
     }
   };
 
-  const ProspectRow = ({ p, showActions }: { p: Prospect; showActions: boolean }) => (
-    <tr key={p.id} className="border-b hover:bg-muted/40 transition-colors">
-      {showActions && (
-        <td className="p-2 w-8">
-          <Checkbox
-            checked={selected.has(p.id)}
-            onCheckedChange={() => toggleSelect(p.id)}
-          />
-        </td>
-      )}
-      <td className="p-3">
-        <div className="font-medium text-sm">{p.name}</div>
-        {p.business_type && (
-          <div className="text-xs text-muted-foreground mt-0.5">{p.business_type}</div>
-        )}
-      </td>
-      <td className="p-3">
-        {p.website_url ? (
-          <a
-            href={p.website_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
-          >
-            <Globe className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate max-w-[160px]">
-              {p.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-            </span>
-            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-          </a>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="p-3">
-        <div className="flex flex-col gap-0.5">
-          {p.phone && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Phone className="w-3 h-3" />{p.phone}
-            </span>
-          )}
-          {p.city && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="w-3 h-3" />{p.city}
-            </span>
-          )}
-        </div>
-      </td>
-      <td className="p-3">
-        <Badge variant="outline" className={`text-xs ${SOURCE_COLORS[p.source] ?? ""}`}>
-          {p.source}
-        </Badge>
-      </td>
-      <td className="p-3">
-        {p.client_id ? (
-          <span className="text-xs text-muted-foreground">{clientName(p.client_id)}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="p-3">
-        {!showActions && (
-          <Badge variant="outline" className={`text-xs ${STATUS_COLORS[p.status] ?? ""}`}>
-            {p.status}
-          </Badge>
-        )}
+  const ProspectRow = ({ p, showActions }: { p: Prospect; showActions: boolean }) => {
+    const hasEmail = p.email && p.email.includes("@");
+    const draftEmail = emailDrafts[p.id] ?? "";
+    const canApprove = hasEmail || draftEmail.includes("@");
+
+    return (
+      <tr key={p.id} className="border-b hover:bg-muted/40 transition-colors">
         {showActions && (
-          <span className="text-xs text-muted-foreground">
-            {format(new Date(p.created_at), "MMM d")}
-          </span>
+          <td className="p-2 w-8">
+            <Checkbox
+              checked={selected.has(p.id)}
+              onCheckedChange={() => toggleSelect(p.id)}
+            />
+          </td>
         )}
-      </td>
-      {showActions && (
-        <td className="p-3 text-right">
-          <div className="flex items-center gap-1 justify-end">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-green-600 hover:bg-green-50 hover:text-green-700"
-              disabled={actionIds.has(p.id)}
-              onClick={() => updateStatus([p.id], "pending")}
-            >
-              <CheckCircle className="w-4 h-4 mr-1" />
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-red-500 hover:bg-red-50 hover:text-red-600"
-              disabled={actionIds.has(p.id)}
-              onClick={() => updateStatus([p.id], "rejected")}
-            >
-              <XCircle className="w-4 h-4 mr-1" />
-              Reject
-            </Button>
-          </div>
+        <td className="p-3">
+          <div className="font-medium text-sm">{p.name}</div>
+          {p.business_type && (
+            <div className="text-xs text-muted-foreground mt-0.5">{p.business_type}</div>
+          )}
         </td>
-      )}
-    </tr>
-  );
+        <td className="p-3">
+          {p.website_url ? (
+            <a
+              href={p.website_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+            >
+              <Globe className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate max-w-[160px]">
+                {p.website_url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className="p-3">
+          {/* Email — inline input for outbound prospects with no email */}
+          {showActions && !hasEmail ? (
+            <div className="flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+              <Input
+                className="h-6 text-xs w-36 px-1.5"
+                placeholder="email@domain.com"
+                value={draftEmail}
+                onChange={e =>
+                  setEmailDrafts(prev => ({ ...prev, [p.id]: e.target.value }))
+                }
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {hasEmail && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Mail className="w-3 h-3" />{p.email}
+                </span>
+              )}
+              {p.phone && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Phone className="w-3 h-3" />{p.phone}
+                </span>
+              )}
+              {p.city && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="w-3 h-3" />{p.city}
+                </span>
+              )}
+            </div>
+          )}
+          {/* Contact info in all-prospects view */}
+          {!showActions && (
+            <div className="flex flex-col gap-0.5">
+              {p.phone && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Phone className="w-3 h-3" />{p.phone}
+                </span>
+              )}
+              {p.city && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="w-3 h-3" />{p.city}
+                </span>
+              )}
+            </div>
+          )}
+        </td>
+        <td className="p-3">
+          <Badge variant="outline" className={`text-xs ${SOURCE_COLORS[p.source] ?? ""}`}>
+            {p.source}
+          </Badge>
+        </td>
+        <td className="p-3">
+          {p.client_id ? (
+            <span className="text-xs text-muted-foreground">{clientName(p.client_id)}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className="p-3">
+          {!showActions && (
+            <Badge variant="outline" className={`text-xs ${STATUS_COLORS[p.status] ?? ""}`}>
+              {p.status}
+            </Badge>
+          )}
+          {showActions && (
+            <span className="text-xs text-muted-foreground">
+              {format(new Date(p.created_at), "MMM d")}
+            </span>
+          )}
+        </td>
+        {showActions && (
+          <td className="p-3 text-right">
+            <div className="flex items-center gap-1 justify-end">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-green-600 hover:bg-green-50 hover:text-green-700"
+                        disabled={actionIds.has(p.id) || !canApprove}
+                        onClick={() => updateStatus([p.id], "pending")}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Approve
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!canApprove && (
+                    <TooltipContent>Add an email address before approving</TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-red-500 hover:bg-red-50 hover:text-red-600"
+                disabled={actionIds.has(p.id)}
+                onClick={() => updateStatus([p.id], "rejected")}
+              >
+                <XCircle className="w-4 h-4 mr-1" />
+                Reject
+              </Button>
+            </div>
+          </td>
+        )}
+      </tr>
+    );
+  };
 
   const TableHead = ({ showActions }: { showActions: boolean }) => (
     <thead>
@@ -541,16 +616,21 @@ export default function ProspectEnginePanel() {
                   </Button>
                 </div>
               )}
-              {selected.size === 0 && filteredQueue.length > 0 && (
-                <Button
-                  size="sm"
-                  className="gap-1 bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => updateStatus(filteredQueue.map(p => p.id), "pending")}
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Approve All
-                </Button>
-              )}
+              {selected.size === 0 && filteredQueue.length > 0 && (() => {
+                const approvable = filteredQueue.filter(p =>
+                  (p.email && p.email.includes("@")) || (emailDrafts[p.id] ?? "").includes("@")
+                );
+                return approvable.length > 0 ? (
+                  <Button
+                    size="sm"
+                    className="gap-1 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => updateStatus(approvable.map(p => p.id), "pending")}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve All {approvable.length < filteredQueue.length ? `(${approvable.length} with email)` : ""}
+                  </Button>
+                ) : null;
+              })()}
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">

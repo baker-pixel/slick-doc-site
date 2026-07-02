@@ -190,11 +190,14 @@ export default function ClientPortalAuth() {
   const checkClientPortalAccess = async (userId: string) => {
     const { data } = await supabase
       .from("client_portal_users")
-      .select("id")
+      .select("id, client_account_id")
       .eq("user_id", userId)
       .maybeSingle();
 
     if (data) {
+      // Ensure the workflow is seeded — idempotent (409 if already exists)
+      // Guards against network failures on first login that silently skipped seeding
+      seedWorkflowSafe(data.client_account_id);
       navigate("/portal");
     }
   };

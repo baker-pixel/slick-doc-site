@@ -163,6 +163,19 @@ serve(async (req) => {
       metadata: { query, location, found: rawResults.length, inserted: inserted?.length ?? 0 },
     });
 
+    // Fire context enrichment immediately so prospects have context_profile before
+    // the admin reviews them — enables better personalized drip emails later.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    fetch(`${supabaseUrl}/functions/v1/backfill-prospect-context`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceKey}`,
+      },
+      body: "{}",
+    }).catch((e) => console.error("backfill-prospect-context trigger failed:", e));
+
     console.log(`discover-prospects: client=${client_id} found=${rawResults.length} inserted=${inserted?.length ?? 0} skipped=${enriched.length - newProspects.length}`);
 
     return new Response(

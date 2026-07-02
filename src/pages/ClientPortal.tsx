@@ -33,6 +33,7 @@ import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { SocialMediaTab } from "@/components/client-portal/SocialMediaTab";
 import { ClientCalendarTab } from "@/components/client-portal/ClientCalendarTab";
 import { ClientSeoTab } from "@/components/client-portal/ClientSeoTab";
+import ClientProspectsTab from "@/components/client-portal/ClientProspectsTab";
 import { TierGate } from "@/components/client-portal/TierGate";
 import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
@@ -66,6 +67,7 @@ const tabTitles: Record<PortalTab, string> = {
   brand: "Brand Assets",
   access: "Platform Access",
   social: "Social & Accounts",
+  prospects: "Lead Outreach",
   team: "Your Team",
   analytics: "Analytics",
   invoices: "Invoices",
@@ -90,6 +92,7 @@ const tabDescriptions: Record<PortalTab, string> = {
   brand: "Access your brand assets and guidelines",
   access: "Share your platform login credentials securely",
   social: "Create, schedule, and manage social media posts with AI",
+  prospects: "View the outreach pipeline Orange Door is running for your business",
   team: "Meet your dedicated team",
   analytics: "View your performance metrics",
   invoices: "Manage billing and payments",
@@ -357,6 +360,8 @@ export default function ClientPortal() {
         return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
       case "social":
         return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />;
+      case "prospects":
+        return <ClientProspectsTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
         return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} clientEmail={clientAccount?.email} />;
       case "team":
@@ -423,7 +428,7 @@ export default function ClientPortal() {
       {/* Welcome Modal for first-time users */}
       <WelcomeModal
         open={showWelcomeModal}
-        onClose={() => setShowWelcomeModal(false)}
+        onClose={() => { setShowWelcomeModal(false); setActiveTab("activity"); }}
         onStartTour={handleStartTour}
         clientName={clientName}
         businessName={clientAccount?.business_name}

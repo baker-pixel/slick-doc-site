@@ -184,6 +184,46 @@ serve(async (req) => {
           .eq("id", generatedContentId);
       }
 
+      // Advance client_approval workflow step if still pending (handles admin-triggered approvals)
+      try {
+        const { data: wf } = await supabase
+          .from("client_workflows")
+          .select("id")
+          .eq("client_id", clientId)
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (wf) {
+          const { data: approvalStep } = await supabase
+            .from("workflow_steps")
+            .select("id, step_number, status")
+            .eq("workflow_id", wf.id)
+            .eq("task_type", "client_approval")
+            .maybeSingle();
+
+          if (approvalStep && approvalStep.status !== "completed") {
+            await supabase
+              .from("workflow_steps")
+              .update({ status: "completed", completed_at: new Date().toISOString() })
+              .eq("id", approvalStep.id);
+
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            fetch(`${supabaseUrl}/functions/v1/advance-workflow`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                workflow_id: wf.id,
+                completed_step_number: approvalStep.step_number,
+                client_id: clientId,
+              }),
+            }).catch((e) => console.error("advance-workflow after approval:", e));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to advance workflow after approval:", e);
+      }
+
       // Log activity
       await supabase.from("activity_feed").insert({
         client_account_id: clientId,

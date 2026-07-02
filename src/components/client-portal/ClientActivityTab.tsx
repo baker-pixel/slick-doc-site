@@ -193,13 +193,15 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         },
         (payload) => {
           if (payload.eventType === "UPDATE") {
+            const updated = payload.new as WorkflowStep;
             setWorkflowSteps((prev) =>
-              prev.map((s) =>
-                s.id === (payload.new as WorkflowStep).id
-                  ? (payload.new as WorkflowStep)
-                  : s
-              )
+              prev.map((s) => s.id === updated.id ? updated : s)
             );
+            // When a client-facing step completes externally (e.g. SocialCallback popup),
+            // invalidate the portal-level onboarding gate so the sidebar/social tab update
+            if (updated.task_type?.startsWith("client_") && updated.status === "completed") {
+              queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
+            }
           }
         }
       )
@@ -379,6 +381,13 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     }
     setSubmittingBizForm(true);
     try {
+      // Fetch existing context_profile so we can merge, not overwrite
+      const { data: existing } = await supabase
+        .from("client_accounts")
+        .select("context_profile")
+        .eq("id", clientAccountId)
+        .single();
+
       const { error } = await supabase
         .from("client_accounts")
         .update({
@@ -386,6 +395,10 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           website_url: bizForm.website_url || null,
           first_name: bizForm.first_name || null,
           last_name: bizForm.last_name || null,
+          context_profile: {
+            ...((existing?.context_profile as Record<string, unknown>) || {}),
+            ...(bizForm.marketing_goal.trim() ? { marketing_goal: bizForm.marketing_goal } : {}),
+          },
         })
         .eq("id", clientAccountId);
 
@@ -539,10 +552,10 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   if (!hasWorkflow && totalCount === 0) {
     const placeholderSteps = [
       "Confirm Business Information",
+      "Schedule Kickoff Call",
       "Upload Brand Assets",
       "Connect Social Accounts",
-      "Book Your Kickoff Call",
-      "Review Your First Content",
+      "Approve Your First Content Draft",
     ];
     const intakeUrl = clientEmail
       ? `/gap-analysis?email=${encodeURIComponent(clientEmail)}`
@@ -723,7 +736,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         {expiredTokenAlert && (
           <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>LinkedIn Posts Failed — Token Expired</AlertTitle>
+            <AlertTitle>{expiredTokenAlert.platforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")} Posts Failed — Token Expired</AlertTitle>
             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span>
                 Your {expiredTokenAlert.platforms.join(", ")} connection expired. {expiredTokenAlert.failedCount} post{expiredTokenAlert.failedCount > 1 ? "s" : ""} couldn't be published. Reconnect to reschedule them.

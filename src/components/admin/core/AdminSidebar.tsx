@@ -18,6 +18,7 @@ import {
   Palette,
   Plug,
   Radar,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +27,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -100,6 +102,7 @@ export type AdminSection =
 interface AdminSidebarProps {
   activeSection: AdminSection;
   onSectionChange: (section: AdminSection) => void;
+  onLogout: () => void;
 }
 
 interface NavItem {
@@ -201,7 +204,7 @@ function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = 
   );
 }
 
-export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarProps) {
+export function AdminSidebar({ activeSection, onSectionChange, onLogout }: AdminSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -210,7 +213,7 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
           <span className="font-semibold group-data-[collapsible=icon]:hidden">Admin</span>
         </div>
       </SidebarHeader>
-      
+
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
@@ -232,6 +235,21 @@ export function AdminSidebar({ activeSection, onSectionChange }: AdminSidebarPro
         <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
       </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={onLogout}
+              tooltip="Logout"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

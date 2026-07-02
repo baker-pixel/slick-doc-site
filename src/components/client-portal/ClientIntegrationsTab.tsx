@@ -382,13 +382,38 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      // Store clientId so the callback tab can sync the right client
+
+      // Store clientId so the callback popup can sync the right client
       localStorage.setItem("pfm_oauth_client_id", clientAccountId);
-      window.open(data.url, "_blank");
-      toast({
-        title: `${platform.name} — authorize in the new tab`,
-        description: "After connecting, come back here and click Sync to confirm your account is linked.",
-      });
+
+      // Open as a real popup window (not a tab) so window.close() works reliably
+      // and the main window stays on the social tab throughout the OAuth flow
+      const screenLeft = window.screenLeft ?? window.screenX;
+      const screenTop = window.screenTop ?? window.screenY;
+      const popupWidth = 600;
+      const popupHeight = 700;
+      const left = screenLeft + (window.outerWidth - popupWidth) / 2;
+      const top = screenTop + (window.outerHeight - popupHeight) / 2;
+      const popup = window.open(
+        data.url,
+        "pfm_oauth",
+        `width=${popupWidth},height=${popupHeight},left=${left},top=${top},scrollbars=yes,resizable=yes`
+      );
+
+      if (!popup || popup.closed) {
+        // Browser blocked the popup — fall back to new tab with a warning
+        window.open(data.url, "_blank");
+        toast({
+          title: `${platform.name} — complete in the new tab`,
+          description: "Allow popups for this site to improve the connect experience. After connecting, come back here.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: `${platform.name} — authorize in the popup`,
+          description: "Complete the connection in the popup. This page will update automatically when done.",
+        });
+      }
     } catch (err: unknown) {
       toast({
         title: "Connection failed",
