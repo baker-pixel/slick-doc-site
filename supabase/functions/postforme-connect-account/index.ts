@@ -12,16 +12,14 @@ const PFM_API = "https://api.postforme.dev";
 // Map at the API boundary in both directions.
 const TO_PFM_PLATFORM: Record<string, string> = { twitter: "x" };
 
-// LinkedIn: PfM Quickstart requires connection_type.
-//   "organization" = Company Page (requires rw_organization_admin scope — may need PfM approval)
-//   "personal"     = Personal profile (r_liteprofile + w_member_social)
-// We try "organization" first per PfM Quickstart docs; if PfM's LinkedIn app is restricted
-// to personal scope, switch to "personal" here.
+// LinkedIn: PfM docs — "If using our provided credentials always use
+// 'organization'". We use PfM's provided LinkedIn app, so "personal" makes
+// LinkedIn reject the scope set with its generic "Bummer" error page.
 // Instagram must specify connection_type "instagram" to trigger Meta's Instagram login flow.
 function buildPlatformData(platform: string): Record<string, unknown> | undefined {
   switch (platform) {
     case "linkedin":
-      return { linkedin: { connection_type: "personal" } };
+      return { linkedin: { connection_type: "organization" } };
     case "instagram":
       return { instagram: { connection_type: "instagram" } };
     default:
