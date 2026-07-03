@@ -82,6 +82,8 @@ interface PfmAccount {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
+// OAuth is fully handled by Post for Me (postforme-connect-account returns the
+// provider auth URL) — platform entries here are display config only.
 const PLATFORMS = [
   {
     id: "linkedin",
@@ -92,9 +94,6 @@ const PLATFORMS = [
     activeBorder: "border-[#0A66C2]/30",
     gradient: "from-[#0A66C2]/5 to-transparent",
     description: "Post updates, articles, and share content to your LinkedIn profile or company page.",
-    oauthUrl: "https://www.linkedin.com/oauth/v2/authorization",
-    scopes: "w_member_social%20openid%20profile",
-    callbackFn: "linkedin-oauth-callback",
     tokenLifeDays: 60,
   },
   {
@@ -106,10 +105,6 @@ const PLATFORMS = [
     activeBorder: "border-[#1877F2]/30",
     gradient: "from-[#1877F2]/5 to-transparent",
     description: "Publish posts and manage content on your Facebook Page automatically.",
-    oauthUrl: "https://www.facebook.com/v19.0/dialog/oauth",
-    scopes: "pages_manage_posts%20pages_read_engagement",
-    callbackFn: "facebook-oauth-callback",
-    showPage: true,
     tokenLifeDays: 60,
     note: "Requires a Facebook Business Page. During OAuth, select your Page and grant all permissions.",
   },
@@ -122,10 +117,6 @@ const PLATFORMS = [
     activeBorder: "border-[#E4405F]/30",
     gradient: "from-[#E4405F]/5 to-transparent",
     description: "Schedule and publish posts to your Instagram Business account via the Meta API.",
-    oauthUrl: "https://www.facebook.com/v19.0/dialog/oauth",
-    scopes: "instagram_basic%20instagram_content_publish%20pages_manage_posts%20pages_read_engagement",
-    callbackFn: "instagram-oauth-callback",
-    showPage: true,
     tokenLifeDays: 60,
     note: "Requires an Instagram Business account connected to a Facebook Page.",
   },
@@ -138,10 +129,7 @@ const PLATFORMS = [
     activeBorder: "border-border",
     gradient: "from-muted/50 to-transparent",
     description: "Automatically publish tweets and threads to your Twitter / X account.",
-    oauthUrl: "https://twitter.com/i/oauth2/authorize",
-    scopes: "tweet.read%20tweet.write%20users.read%20offline.access",
-    callbackFn: "twitter-oauth-callback",
-    tokenLifeDays: null, // Twitter tokens don't expire
+    tokenLifeDays: null as number | null, // Twitter tokens don't expire
   },
 ];
 
@@ -191,7 +179,6 @@ function TokenStatus({ expiresAt }: { expiresAt: string | null }) {
 
 export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTabProps) {
   const [tokens, setTokens] = useState<OAuthToken[]>([]);
-  const [oauthConfig, setOauthConfig] = useState<Record<string, { clientId: string; configured: boolean }>>({});
   const [pfmAccounts, setPfmAccounts] = useState<PfmAccount[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -293,9 +280,8 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     }
 
     fetchTokens();
-    fetchOauthConfig();
     fetchPfmAccounts();
-  }, []);
+  }, [clientAccountId]);
 
   // Auto-sync + refresh when window regains focus (after OAuth tab closes)
   useEffect(() => {
@@ -344,17 +330,6 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       console.error("Error fetching oauth tokens:", err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchOauthConfig = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke("oauth-config");
-      if (!error && data) {
-        setOauthConfig(data as Record<string, { clientId: string; configured: boolean }>);
-      }
-    } catch (err) {
-      console.error("Error fetching oauth config:", err);
     }
   };
 

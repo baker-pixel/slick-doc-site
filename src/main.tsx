@@ -20,6 +20,9 @@ async function bootstrap() {
     App = MarketingApp;
   }
 
+  // App shell loaded successfully — re-arm the stale-chunk reload guard
+  sessionStorage.removeItem("chunk_reload_attempted");
+
   createRoot(document.getElementById("root")!).render(
     <ErrorBoundary>
       <App />

@@ -11,6 +11,7 @@ const PLATFORM_NAMES: Record<string, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
   twitter: "X (Twitter)",
+  x: "X (Twitter)", // PfM's platform name for Twitter/X
 };
 
 const PAGE_REQUIRED_PLATFORMS = new Set(["facebook", "instagram"]);
@@ -51,65 +52,75 @@ export default function SocialCallback() {
         const storedClientId = localStorage.getItem("pfm_oauth_client_id");
         localStorage.removeItem("pfm_oauth_client_id");
 
-        let clientId = storedClientId;
-
-        if (!clientId) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            const { data: portalUser } = await supabase
-              .from("client_portal_users")
-              .select("client_account_id")
-              .eq("user_id", session.user.id)
-              .maybeSingle();
-            clientId = portalUser?.client_account_id ?? null;
-          }
+        // The live session is the source of truth. The stored key exists for the
+        // popup flow, but on a shared browser it can be stale from an abandoned
+        // OAuth attempt by a different client — never let it override the session.
+        let sessionClientId: string | null = null;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: portalUser } = await supabase
+            .from("client_portal_users")
+            .select("client_account_id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+          sessionClientId = portalUser?.client_account_id ?? null;
         }
 
-        if (clientId) {
-          await supabase.functions.invoke("postforme-sync-accounts", {
-            body: {
-              clientId,
-              accountIds: accountIds ? accountIds.split(",").filter(Boolean) : undefined,
-            },
-          });
+        const clientId = sessionClientId ?? storedClientId;
+        if (sessionClientId && storedClientId && sessionClientId !== storedClientId) {
+          console.warn("Stale pfm_oauth_client_id ignored — using session client");
+        }
 
-          // Complete the client_oauth workflow step so the onboarding gate advances
-          try {
-            const { data: wf } = await supabase
-              .from("client_workflows")
-              .select("id")
-              .eq("client_id", clientId)
-              .eq("status", "active")
+        if (!clientId) {
+          // Connected on PfM's side but we can't attribute it to a client here.
+          setStatus("success");
+          setMessage(`${displayName} authorized. Log in to your portal and press Sync to finish linking it.`);
+          return;
+        }
+
+        await supabase.functions.invoke("postforme-sync-accounts", {
+          body: {
+            clientId,
+            accountIds: accountIds ? accountIds.split(",").filter(Boolean) : undefined,
+          },
+        });
+
+        // Complete the client_oauth workflow step so the onboarding gate advances
+        try {
+          const { data: wf } = await supabase
+            .from("client_workflows")
+            .select("id")
+            .eq("client_id", clientId)
+            .eq("status", "active")
+            .maybeSingle();
+
+          if (wf) {
+            const { data: oauthStep } = await supabase
+              .from("workflow_steps")
+              .select("id, step_number, status")
+              .eq("workflow_id", wf.id)
+              .eq("task_type", "client_oauth")
               .maybeSingle();
 
-            if (wf) {
-              const { data: oauthStep } = await supabase
+            if (oauthStep && oauthStep.status !== "completed") {
+              await supabase
                 .from("workflow_steps")
-                .select("id, step_number, status")
-                .eq("workflow_id", wf.id)
-                .eq("task_type", "client_oauth")
-                .maybeSingle();
+                .update({ status: "completed", completed_at: new Date().toISOString() })
+                .eq("id", oauthStep.id);
 
-              if (oauthStep && oauthStep.status !== "completed") {
-                await supabase
-                  .from("workflow_steps")
-                  .update({ status: "completed", completed_at: new Date().toISOString() })
-                  .eq("id", oauthStep.id);
-
-                supabase.functions
-                  .invoke("advance-workflow", {
-                    body: {
-                      workflow_id: wf.id,
-                      completed_step_number: oauthStep.step_number,
-                      client_id: clientId,
-                    },
-                  })
-                  .catch((e) => console.error("advance-workflow after social connect:", e));
-              }
+              supabase.functions
+                .invoke("advance-workflow", {
+                  body: {
+                    workflow_id: wf.id,
+                    completed_step_number: oauthStep.step_number,
+                    client_id: clientId,
+                  },
+                })
+                .catch((e) => console.error("advance-workflow after social connect:", e));
             }
-          } catch (e) {
-            console.error("Failed to advance workflow after social connect:", e);
           }
+        } catch (e) {
+          console.error("Failed to advance workflow after social connect:", e);
         }
 
         setStatus("success");

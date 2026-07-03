@@ -209,12 +209,42 @@ export default function ClientPortal() {
           fetchPortalUser(session.user.id);
         }, 0);
       } else {
+        // Session ended (expiry, refresh failure, or remote revocation).
+        // Tell the user why they're being bounced instead of failing silently.
+        if (event === "SIGNED_OUT") {
+          toast({
+            title: "Session ended",
+            description: "Please sign in again to continue.",
+          });
+        }
         setLoading(false);
         setShouldRedirect(true);
       }
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Session-expiry guard: when the user returns to the tab after being away
+  // (laptop sleep, long idle), verify the session is still valid. Without this,
+  // actions fail silently against a dead session until the next full reload.
+  useEffect(() => {
+    let lastCheck = 0;
+    const onFocus = async () => {
+      const now = Date.now();
+      if (now - lastCheck < 60_000) return; // at most once a minute
+      lastCheck = now;
+      const { data: { session: current } } = await supabase.auth.getSession();
+      if (!current) {
+        toast({
+          title: "Session expired",
+          description: "You've been signed out — please sign in again.",
+        });
+        setShouldRedirect(true);
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   const fetchPortalUser = async (userId: string) => {
@@ -299,6 +329,9 @@ export default function ClientPortal() {
   };
 
   const handleSignOut = async () => {
+    // Clear any in-flight OAuth attribution so a different client logging in
+    // on this browser can't inherit it
+    localStorage.removeItem("pfm_oauth_client_id");
     await supabase.auth.signOut();
     // onAuthStateChange SIGNED_OUT fires → setShouldRedirect(true) → navigate("/portal/auth")
   };

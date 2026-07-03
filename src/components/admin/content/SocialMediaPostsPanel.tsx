@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   Send,
   CheckCircle,
@@ -131,6 +132,7 @@ const CONNECT_PLATFORMS = [
 
 export default function SocialMediaPostsPanel() {
   const queryClient = useQueryClient();
+  const { adminPassword } = useAdminAuth();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<SocialPost | null>(null);
@@ -230,7 +232,7 @@ export default function SocialMediaPostsPanel() {
     queryFn: async () => {
       try {
         const { data, error } = await supabase.functions.invoke("trigger-n8n", {
-          body: { clientId: "__health_check__", tasks: [], trigger: "health_check" },
+          body: { clientId: "__health_check__", tasks: [], trigger: "health_check", password: adminPassword },
         });
         if (error?.message?.includes("N8N_WEBHOOK_URL") || data?.error?.includes("N8N_WEBHOOK_URL")) {
           return { configured: false };
@@ -297,7 +299,7 @@ export default function SocialMediaPostsPanel() {
     mutationFn: async (platform: string) => {
       if (!selectedClient) throw new Error("Select a client first");
       const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
-        body: { clientId: selectedClient, platform, permissions: ["posts", "feeds"] },
+        body: { clientId: selectedClient, platform, permissions: ["posts", "feeds"], password: adminPassword },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -318,7 +320,7 @@ export default function SocialMediaPostsPanel() {
     mutationFn: async () => {
       if (!selectedClient) throw new Error("Select a client first");
       const { data, error } = await supabase.functions.invoke("postforme-sync-accounts", {
-        body: { clientId: selectedClient },
+        body: { clientId: selectedClient, password: adminPassword },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

@@ -8,6 +8,10 @@ const corsHeaders = {
 
 const PFM_API = "https://api.postforme.dev";
 
+// PfM's platform enum uses "x" for Twitter/X; our app uses "twitter" internally.
+// Map at the API boundary in both directions.
+const TO_PFM_PLATFORM: Record<string, string> = { twitter: "x" };
+
 // LinkedIn: PfM Quickstart requires connection_type.
 //   "organization" = Company Page (requires rw_organization_admin scope — may need PfM approval)
 //   "personal"     = Personal profile (r_liteprofile + w_member_social)
@@ -42,26 +46,45 @@ serve(async (req) => {
     });
 
   try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return json({ error: "Unauthorized" }, 401);
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return json({ error: "Unauthorized" }, 401);
-
     if (!pfmApiKey) {
       return json({ error: "POSTFORME_API_KEY not configured" }, 500);
     }
 
-    const { clientId, platform, permissions } = await req.json();
+    const { clientId, platform, permissions, password } = await req.json();
 
     if (!clientId || !platform) {
       return json({ error: "clientId and platform are required" }, 400);
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Two auth paths: admin panel (ADMIN_PASSWORD) or portal user / admin-role JWT
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    const isAdminCall = !!adminPassword && password === adminPassword;
+
+    if (!isAdminCall) {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) return json({ error: "Unauthorized" }, 401);
+
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return json({ error: "Unauthorized" }, 401);
+
+      // Caller must be a portal user of this client, or an admin
+      const { data: portalUser } = await supabase
+        .from("client_portal_users")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("client_account_id", clientId)
+        .maybeSingle();
+      if (!portalUser) {
+        const { data: isAdmin } = await supabase.rpc("has_role", { _role: "admin", _user_id: user.id });
+        if (isAdmin !== true) return json({ error: "Forbidden" }, 403);
+      }
+    }
+
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
       .select("id, business_name")
@@ -72,6 +95,7 @@ serve(async (req) => {
       return json({ error: "Client not found" }, 404);
     }
 
+    const pfmPlatform = TO_PFM_PLATFORM[platform] ?? platform;
     const platformData = buildPlatformData(platform);
 
     const pfmRes = await fetch(`${PFM_API}/v1/social-accounts/auth-url`, {
@@ -81,7 +105,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        platform,
+        platform: pfmPlatform,
         external_id: clientId,
         permissions: permissions ?? ["posts", "feeds"],
         ...(platformData ? { platform_data: platformData } : {}),

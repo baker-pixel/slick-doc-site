@@ -26,6 +26,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Whitelist of tables the generic list/update/delete actions may touch.
+    // Prevents a leaked ADMIN_PASSWORD from becoming full-database access
+    // (user_roles, admin_settings, client_portal_users, oauth tokens, etc.).
+    const ALLOWED_TABLES = new Set([
+      "contact_submissions", "gap_analysis_submissions", "pdf_leads",
+      "client_accounts", "client_meetings", "client_projects", "client_tasks",
+      "client_onboarding", "content_calendar", "deliverables",
+      "email_cleanup_log", "email_logs", "email_queue", "email_sequences",
+      "pipeline_stages", "project_milestones", "automation_alerts",
+      "workflow_steps", "client_oauth_tokens",
+    ]);
+    if (table && !ALLOWED_TABLES.has(table)) {
+      console.warn(`Admin action blocked: table "${table}" not in whitelist`);
+      return new Response(
+        JSON.stringify({ error: `Table not allowed: ${table}` }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`Admin action: ${action} on table: ${table}`);
 

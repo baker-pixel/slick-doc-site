@@ -42,13 +42,10 @@ serve(async (req: Request) => {
       .limit(50);
 
     if (fetchErr) throw fetchErr;
-    if (!prospects || prospects.length === 0) {
-      return new Response(JSON.stringify({ success: true, processed: 0, fromForm: 0, fromWebsite: 0, skipped: 0, errors: 0, hasMore: false }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
-    for (const prospect of prospects) {
+    // Note: no early return when empty — the Hunter email enrichment pass
+    // below must still run for prospects that have context but no email.
+    for (const prospect of prospects ?? []) {
       try {
         // Path A: has submission_id → extract from gap form
         if (prospect.submission_id) {
@@ -146,6 +143,70 @@ serve(async (req: Request) => {
       }
     }
 
+    // ── Email enrichment via Hunter.io ─────────────────────────
+    // Outbound prospects from Google Maps have no email. When a
+    // HUNTER_API_KEY is configured, look one up from their domain so
+    // the drip can run without manual email entry.
+    let emailsEnriched = 0;
+    const hunterKey = Deno.env.get("HUNTER_API_KEY");
+    if (hunterKey) {
+      const { data: noEmail } = await supabase
+        .from("prospects")
+        .select("id, website_url, client_id")
+        .or("email.is.null,email.eq.")
+        .not("website_url", "is", null)
+        .neq("website_url", "")
+        .in("status", ["discovered", "pending"])
+        .limit(25);
+
+      for (const p of noEmail ?? []) {
+        try {
+          const domain = new URL(
+            p.website_url.startsWith("http") ? p.website_url : `https://${p.website_url}`,
+          ).hostname.replace(/^www\./, "");
+
+          const res = await fetch(
+            `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&limit=5&api_key=${hunterKey}`,
+          );
+          if (!res.ok) {
+            if (res.status === 429) {
+              console.warn("Hunter rate limit hit — stopping enrichment for this run");
+              break;
+            }
+            console.warn(`Hunter lookup failed for ${domain}: ${res.status}`);
+            continue;
+          }
+
+          const data = await res.json();
+          const emails: { value: string; confidence: number }[] = data?.data?.emails ?? [];
+          const best = emails.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0];
+
+          if (best?.value && (best.confidence ?? 0) >= 50) {
+            await supabase
+              .from("prospects")
+              .update({ email: best.value })
+              .eq("id", p.id);
+            emailsEnriched++;
+
+            if (p.client_id) {
+              await supabase.from("client_usage").insert({
+                client_id: p.client_id,
+                event_type: "prospect_research",
+                units: 1,
+                source_fn: "backfill-prospect-context",
+                metadata: { kind: "hunter_email_lookup", domain, confidence: best.confidence },
+              });
+            }
+          }
+
+          await new Promise((r) => setTimeout(r, 600));
+        } catch (e) {
+          console.warn("Hunter enrichment error for prospect", p.id, e);
+        }
+      }
+      console.log(`Hunter enrichment: ${emailsEnriched} emails found`);
+    }
+
     // Alert if errors
     if (errors > 0) {
       await supabase.from("automation_alerts").insert({
@@ -165,7 +226,7 @@ serve(async (req: Request) => {
       .is("context_profile", null);
 
     return new Response(
-      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, hasMore: (count ?? 0) > 0 }),
+      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, emailsEnriched, hasMore: (count ?? 0) > 0 }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

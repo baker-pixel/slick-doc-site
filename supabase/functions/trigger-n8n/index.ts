@@ -29,6 +29,20 @@ serve(async (req) => {
       throw new Error("clientId is required");
     }
 
+    // This function forwards client OAuth tokens to n8n — server/admin only.
+    // Callers: advance-workflow, run-workflow-step, publish/fill-scheduled-content
+    // (service key bearer) and the admin panel (ADMIN_PASSWORD in body).
+    const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    const isAdminCall = !!adminPassword && body.password === adminPassword;
+    if (!isServer && !isAdminCall) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL_PROD");
     if (!N8N_WEBHOOK_URL) {
       console.error("N8N_WEBHOOK_URL_PROD not configured");

@@ -167,3 +167,9 @@ verify_jwt = false
 
 [functions.discover-prospects]
 verify_jwt = false
+
+[functions.postforme-webhook]
+verify_jwt = false
+
+[functions.send-approval-reminders]
+verify_jwt = false

@@ -23,19 +23,37 @@ serve(async (req) => {
     });
 
   try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return json({ error: "Unauthorized" }, 401);
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return json({ error: "Unauthorized" }, 401);
-
-    const { clientId, platform, pfmAccountId } = await req.json();
+    const { clientId, platform, pfmAccountId, password } = await req.json();
     if (!clientId || !platform) return json({ error: "clientId and platform are required" }, 400);
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Two auth paths: admin panel (ADMIN_PASSWORD) or portal user / admin-role JWT
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    const isAdminCall = !!adminPassword && password === adminPassword;
+
+    if (!isAdminCall) {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) return json({ error: "Unauthorized" }, 401);
+
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return json({ error: "Unauthorized" }, 401);
+
+      // Caller must be a portal user of this client, or an admin
+      const { data: portalUser } = await supabase
+        .from("client_portal_users")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("client_account_id", clientId)
+        .maybeSingle();
+      if (!portalUser) {
+        const { data: isAdmin } = await supabase.rpc("has_role", { _role: "admin", _user_id: user.id });
+        if (isAdmin !== true) return json({ error: "Forbidden" }, 403);
+      }
+    }
 
     // If pfmAccountId not provided, look it up from our DB
     let accountId = pfmAccountId;

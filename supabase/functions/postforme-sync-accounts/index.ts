@@ -8,6 +8,9 @@ const corsHeaders = {
 
 const PFM_API = "https://api.postforme.dev";
 
+// PfM's platform enum uses "x" for Twitter/X; our app uses "twitter" internally.
+const FROM_PFM_PLATFORM: Record<string, string> = { x: "twitter" };
+
 interface PfmAccount {
   id: string;
   platform: string;
@@ -80,15 +83,6 @@ serve(async (req) => {
     });
 
   try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader) return json({ error: "Unauthorized" }, 401);
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return json({ error: "Unauthorized" }, 401);
-
     if (!pfmApiKey) return json({ error: "POSTFORME_API_KEY not configured" }, 500);
 
     const body = await req.json();
@@ -97,6 +91,35 @@ serve(async (req) => {
     const accountIds: string[] | undefined = body.accountIds;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Two auth paths: admin panel (ADMIN_PASSWORD) or portal user / admin-role JWT
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    const isAdminCall = !!adminPassword && body.password === adminPassword;
+
+    if (!isAdminCall) {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) return json({ error: "Unauthorized" }, 401);
+
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return json({ error: "Unauthorized" }, 401);
+
+      // Caller must be a portal user of this client, or an admin
+      if (clientId) {
+        const { data: portalUser } = await supabase
+          .from("client_portal_users")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("client_account_id", clientId)
+          .maybeSingle();
+        if (!portalUser) {
+          const { data: isAdmin } = await supabase.rpc("has_role", { _role: "admin", _user_id: user.id });
+          if (isAdmin !== true) return json({ error: "Forbidden" }, 403);
+        }
+      }
+    }
 
     let resolvedAccounts: PfmAccount[] = [];
 
@@ -136,7 +159,7 @@ serve(async (req) => {
         if (!resolvedClientId) return null;
         return {
           client_id: resolvedClientId,
-          platform: acc.platform,
+          platform: FROM_PFM_PLATFORM[acc.platform] ?? acc.platform,
           postforme_account_id: acc.id,
           username: acc.username ?? null,
           profile_photo_url: acc.profile_photo_url ?? null,

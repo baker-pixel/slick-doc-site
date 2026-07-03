@@ -385,6 +385,29 @@ serve(async (req) => {
     let targetUrl = website_url.trim();
     if (!targetUrl.startsWith("http")) targetUrl = "https://" + targetUrl;
 
+    // SSRF guard: only fetch public http(s) hosts — block internal/metadata IPs
+    try {
+      const parsed = new URL(targetUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return json({ error: "Only http(s) URLs are supported" }, 422);
+      }
+      const host = parsed.hostname;
+      const isPrivate =
+        host === "localhost" ||
+        host === "169.254.169.254" ||
+        /^127\./.test(host) ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+        host === "::1" || host === "[::1]" ||
+        host.endsWith(".internal") || host.endsWith(".local");
+      if (isPrivate) {
+        return json({ error: "URL points to a private or internal address" }, 422);
+      }
+    } catch {
+      return json({ error: "Invalid website URL" }, 422);
+    }
+
     let html: string;
     try {
       const controller = new AbortController();

@@ -45,7 +45,7 @@ serve(async (req) => {
     // 1. Fetch all steps for this workflow
     const { data: allSteps, error: stepsErr } = await supabase
       .from("workflow_steps")
-      .select("id, step_number, task_type, status, depends_on")
+      .select("id, step_number, task_type, status, depends_on, payload")
       .eq("workflow_id", workflow_id)
       .order("step_number");
 

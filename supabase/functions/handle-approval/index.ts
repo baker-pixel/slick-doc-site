@@ -18,7 +18,7 @@ serve(async (req) => {
   );
 
   try {
-    const { approval_id, action, feedback } = await req.json();
+    const { approval_id, action, feedback, password } = await req.json();
 
     if (!approval_id || !action) {
       return new Response(
@@ -55,6 +55,46 @@ serve(async (req) => {
         JSON.stringify({ error: "Approval has no associated client account" }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Authorization: server (service key), admin panel (ADMIN_PASSWORD), or a
+    // portal user who owns this approval's client account. Without this check
+    // anyone with the anon key could approve and publish arbitrary content.
+    const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    const isAdminCall = !!adminPassword && password === adminPassword;
+
+    if (!isServer && !isAdminCall) {
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: `Bearer ${bearer}` } } }
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: portalUser } = await supabase
+        .from("client_portal_users")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("client_account_id", clientId)
+        .maybeSingle();
+
+      if (!portalUser) {
+        const { data: isAdmin } = await supabase.rpc("has_role", { _role: "admin", _user_id: user.id });
+        if (isAdmin !== true) {
+          return new Response(
+            JSON.stringify({ error: "Forbidden" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
     }
 
     if (action === "approved") {

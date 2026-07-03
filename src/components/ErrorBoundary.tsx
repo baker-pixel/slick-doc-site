@@ -21,6 +21,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
     console.error("Uncaught error:", error, info.componentStack);
+
+    // Stale-deploy recovery: after a new deploy the old chunk files 404.
+    // Reload once to pick up the fresh index.html; the sessionStorage guard
+    // prevents a reload loop if the error persists.
+    const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError/i.test(
+      error.message
+    );
+    if (isChunkError && !sessionStorage.getItem("chunk_reload_attempted")) {
+      sessionStorage.setItem("chunk_reload_attempted", "1");
+      window.location.reload();
+    }
   }
 
   render() {
