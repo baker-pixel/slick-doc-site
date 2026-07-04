@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson } from "../_shared/ai.ts";
 
 interface FixRequest {
   client_account_id: string;
@@ -88,34 +84,11 @@ Rules:
 
 Return ONLY the JSON. No markdown, no fences, no preamble.`;
 
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY not configured");
-
-    const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 1200,
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const parsed = await callAIJson<Record<string, unknown>>({
+      source: "generate-fix-plan",
+      prompt,
+      maxTokens: 1200,
     });
-
-    if (!aiRes.ok) {
-      if (aiRes.status === 429) throw new Error("Rate limit exceeded — try again shortly");
-      if (aiRes.status === 402) throw new Error("AI credits exhausted — please add credits");
-      throw new Error(`AI gateway error: ${aiRes.status}`);
-    }
-
-    const aiData = await aiRes.json();
-    const raw = aiData.choices?.[0]?.message?.content || "";
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      throw new Error("AI returned invalid JSON for fix plan");
-    }
 
     const fix_plan = {
       explanation: parsed.explanation || "",

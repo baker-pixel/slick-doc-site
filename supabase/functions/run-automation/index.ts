@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI, callAIJson, extractJson } from "../_shared/ai.ts";
 
 type AutomationType =
   | "send_intake_form"
@@ -1505,25 +1502,11 @@ Return a JSON object with this exact structure:
 
 Return only JSON.`;
 
-      const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 1024,
-          messages: [{ role: "user", content: prompt }],
-        }),
+      gapResults = await callAIJson({
+        source: "run-automation:keyword_gap",
+        prompt,
+        maxTokens: 1024,
       });
-
-      if (aiRes.ok) {
-        const aiData = await aiRes.json();
-        const content = aiData.choices?.[0]?.message?.content || "";
-        const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-        gapResults = JSON.parse(cleaned);
-      }
     } catch (e) {
       console.error("AI keyword gap analysis error:", e);
     }
@@ -1903,41 +1886,18 @@ Context: ${JSON.stringify(inputData || {})}`;
       break;
   }
 
-  const GROQ_API_KEY_LOCAL = Deno.env.get("GROQ_API_KEY");
-  if (!GROQ_API_KEY_LOCAL) {
-    throw new Error("GROQ_API_KEY is not configured");
-  }
-
-  const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY_LOCAL}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 2048,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    }),
+  const aiContent = await callAI({
+    source: "run-automation:ai_task",
+    system: systemPrompt,
+    prompt: userPrompt,
+    maxTokens: 2048,
+    jsonMode: true,
   });
-
-  if (!aiResponse.ok) {
-    throw new Error(`AI gateway error: ${aiResponse.status}`);
-  }
-
-  const aiData = await aiResponse.json();
-  const aiContent = aiData.choices?.[0]?.message?.content || "";
 
   let parsedOutput: Record<string, unknown> = {};
   try {
-    const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      parsedOutput = JSON.parse(jsonMatch[0]);
-    }
-  } catch (e) {
+    parsedOutput = extractJson<Record<string, unknown>>(aiContent);
+  } catch (_e) {
     parsedOutput = { raw_content: aiContent };
   }
 
@@ -2416,36 +2376,13 @@ ${renewalEmails.map((email, idx) => `
 
 // ============ NEW FEATURE HANDLERS ============
 
-async function callGroq(prompt: string, systemPrompt: string, maxTokens = 2048): Promise<string> {
-  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: maxTokens,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-
-  if (!res.ok) throw new Error(`Groq API error: ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
+function callGroq(prompt: string, systemPrompt: string, maxTokens = 2048): Promise<string> {
+  return callAI({ source: "run-automation", system: systemPrompt, prompt, maxTokens });
 }
 
 function parseJsonFromAi(content: string): any {
   try {
-    const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    return match ? JSON.parse(match[0]) : null;
+    return extractJson(content);
   } catch {
     return null;
   }

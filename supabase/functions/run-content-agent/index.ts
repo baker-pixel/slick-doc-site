@@ -1,12 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI } from "../_shared/ai.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -110,50 +106,14 @@ Write a ${contentType}.
 Topic: ${topic}
 Keep it under 150 words. Make it engaging and ready to post.`;
 
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      throw new Error("GROQ_API_KEY is not configured");
-    }
-
-    const aiResponse = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 800,
-          temperature: 0.7,
-          messages: [
-            {
-              role: "system",
-              content: "You are a professional marketing copywriter. Write concise, engaging content ready to publish. Return only the content — no intro, no commentary, no quotes.",
-            },
-            { role: "user", content: prompt },
-          ],
-        }),
-      }
-    );
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI gateway error:", aiResponse.status, errText);
-
-      if (aiResponse.status === 429) {
-        throw new Error("Rate limit exceeded. Please try again later.");
-      }
-      if (aiResponse.status === 402) {
-        throw new Error("AI credits exhausted. Please add funds.");
-      }
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
-    }
-
-    const aiData = await aiResponse.json();
-    const generatedContent =
-      aiData.choices?.[0]?.message?.content || "No content generated";
+    const generatedContent = await callAI({
+      source: "run-content-agent",
+      system:
+        "You are a professional marketing copywriter. Write concise, engaging content ready to publish. Return only the content — no intro, no commentary, no quotes.",
+      prompt,
+      maxTokens: 800,
+      temperature: 0.7,
+    });
 
     const generatedAt = new Date().toISOString();
 

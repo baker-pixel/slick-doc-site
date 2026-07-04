@@ -1,11 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI } from "../_shared/ai.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -44,9 +41,6 @@ serve(async (req) => {
       }, 422);
     }
 
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) return json({ error: "GROQ_API_KEY not configured" }, 500);
-
     const prompt = `Generate a professional brand guidelines document in markdown for this client.
 
 ${brandKitToPromptBlock(kit)}
@@ -78,35 +72,13 @@ Who they are, how they describe their problems, what language resonates.
 
 Keep it concise and actionable. Write for a marketing team that has never worked with this client before.`;
 
-    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 2000,
-        temperature: 0.4,
-        messages: [
-          {
-            role: "system",
-            content: "You are a senior brand strategist. Write professional brand guidelines in markdown. Be specific and actionable. Return only the markdown document, no preamble.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
+    const guidelinesMarkdown = await callAI({
+      source: "generate-brand-guidelines",
+      system: "You are a senior brand strategist. Write professional brand guidelines in markdown. Be specific and actionable. Return only the markdown document, no preamble.",
+      prompt,
+      maxTokens: 2000,
+      temperature: 0.4,
     });
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("Groq error:", aiResponse.status, errText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
-    }
-
-    const aiData = await aiResponse.json();
-    const guidelinesMarkdown = aiData.choices?.[0]?.message?.content || "";
-    if (!guidelinesMarkdown) throw new Error("No content generated");
 
     const generatedAt = new Date().toISOString();
     const title = `${kit.business.name} — Brand Guidelines`;

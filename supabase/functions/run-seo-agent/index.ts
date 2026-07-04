@@ -1,12 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson } from "../_shared/ai.ts";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -622,29 +618,22 @@ Return ONLY valid JSON. No markdown. No extra text. Exact structure:
 }`;
 }
 
+// Shape is defined by the JSON contract in the audit prompt; kept loose to
+// match how downstream code consumes it.
+// deno-lint-ignore no-explicit-any
+type AuditResult = any;
+
 async function callGroqAI(prompt: string): Promise<AuditResult | null> {
-  const key = Deno.env.get("GROQ_API_KEY");
-  if (!key) return null;
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 2500,
-      temperature: 0,
-      messages: [
-        { role: "system", content: "You are a senior technical SEO consultant. Return only valid JSON. No markdown, no code fences, no commentary." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  const raw  = data.choices?.[0]?.message?.content ?? "";
   try {
-    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    return JSON.parse(cleaned) as AuditResult;
-  } catch {
+    return await callAIJson<AuditResult>({
+      source: "run-seo-agent:full_audit",
+      system: "You are a senior technical SEO consultant. Return only valid JSON. No markdown, no code fences, no commentary.",
+      prompt,
+      maxTokens: 2500,
+      temperature: 0,
+    });
+  } catch (e) {
+    console.error("[run-seo-agent] AI audit call failed:", e instanceof Error ? e.message : e);
     return null;
   }
 }
@@ -899,37 +888,13 @@ Return ONLY valid JSON:
   "action_summary": string
 }`;
 
-  const key = Deno.env.get("GROQ_API_KEY");
-  if (!key) throw new Error("GROQ_API_KEY not configured");
-
-  const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 1000,
-      temperature: 0,
-      messages: [
-        { role: "system", content: "You are a senior SEO analyst. Return valid JSON only. No markdown, no extra text." },
-        { role: "user", content: prompt },
-      ],
-    }),
+  const parsed = await callAIJson<Record<string, unknown>>({
+    source: "run-seo-agent:quick_audit",
+    system: "You are a senior SEO analyst. Return valid JSON only. No markdown, no extra text.",
+    prompt,
+    maxTokens: 1000,
+    temperature: 0,
   });
-
-  if (!aiRes.ok) {
-    const txt = await aiRes.text();
-    if (aiRes.status === 429) throw new Error("Rate limit exceeded. Try again later.");
-    throw new Error(`Groq API error ${aiRes.status}: ${txt.slice(0, 200)}`);
-  }
-
-  const aiData = await aiRes.json();
-  const raw    = aiData.choices?.[0]?.message?.content ?? "";
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim());
-  } catch {
-    throw new Error("Failed to parse AI response as JSON");
-  }
 
   const result = {
     seo_score:            typeof parsed.seo_score === "number" ? parsed.seo_score : 50,

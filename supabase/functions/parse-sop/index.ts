@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI, extractJson, AIError } from "../_shared/ai.ts";
 
 interface ParseSOPRequest {
   sopId: string;
@@ -44,13 +41,7 @@ serve(async (req) => {
       throw new Error("No content to analyze");
     }
 
-    // Call Lovable AI to parse the SOP
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      throw new Error("GROQ_API_KEY is not configured");
-    }
-
-    const systemPrompt = `You are an expert at analyzing Standard Operating Procedures (SOPs) for marketing agencies. 
+    const systemPrompt = `You are an expert at analyzing Standard Operating Procedures (SOPs) for marketing agencies.
 Parse the following SOP document and extract structured information.
 
 Output a JSON object with:
@@ -72,45 +63,32 @@ Output a JSON object with:
   "frequency": "daily | weekly | monthly | as_needed"
 }`;
 
-    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 2048,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Parse this SOP document:\n\n${contentToAnalyze}` },
-        ],
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
+    let aiContent = "";
+    try {
+      aiContent = await callAI({
+        source: "parse-sop",
+        system: systemPrompt,
+        prompt: `Parse this SOP document:\n\n${contentToAnalyze}`,
+        maxTokens: 2048,
+        jsonMode: true,
+      });
+    } catch (aiErr) {
+      if (aiErr instanceof AIError && aiErr.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      throw aiErr;
     }
 
-    const aiData = await aiResponse.json();
-    const aiContent = aiData.choices?.[0]?.message?.content || "";
-    
     // Parse AI response
     let parsedContent: Record<string, unknown> = {};
     let actionItems: unknown[] = [];
-    
+
     try {
-      const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsedContent = JSON.parse(jsonMatch[0]);
-        actionItems = (parsedContent.action_items as unknown[]) || [];
-      }
+      parsedContent = extractJson<Record<string, unknown>>(aiContent);
+      actionItems = (parsedContent.action_items as unknown[]) || [];
     } catch (e) {
       console.error("Failed to parse AI output:", e);
       parsedContent = { raw_content: aiContent };

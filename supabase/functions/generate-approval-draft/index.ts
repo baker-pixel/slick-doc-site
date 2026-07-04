@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI } from "../_shared/ai.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -74,39 +71,20 @@ serve(async (req) => {
       .filter(Boolean)
       .join("\n");
 
-    const groqKey = Deno.env.get("GROQ_API_KEY");
     let postContent = "";
     let postPreview = "";
 
-    if (groqKey) {
-      const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${groqKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 400,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.",
-            },
-            {
-              role: "user",
-              content: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
-            },
-          ],
-        }),
-      });
-
-      if (groqResp.ok) {
-        const groqData = await groqResp.json();
-        postContent = groqData.choices?.[0]?.message?.content?.trim() || "";
-        postPreview = postContent.split("\n")[0].substring(0, 200);
-      }
+    try {
+      postContent = (await callAI({
+        source: "generate-approval-draft",
+        system:
+          "You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.",
+        prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
+        maxTokens: 400,
+      })).trim();
+      postPreview = postContent.split("\n")[0].substring(0, 200);
+    } catch (e) {
+      console.error("generate-approval-draft AI call failed, using fallback copy:", e instanceof Error ? e.message : e);
     }
 
     // Fallback if Groq unavailable or key missing

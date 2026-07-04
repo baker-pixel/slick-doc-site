@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson } from "../_shared/ai.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -282,28 +279,13 @@ Return this exact JSON structure (arrays of strings, all lowercase, no nulls):
 }`;
 
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 600,
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: "You are a brand strategist. Return only valid JSON. No markdown, no code fences." },
-          { role: "user", content: prompt },
-        ],
-      }),
+    const parsed = await callAIJson<any>({
+      source: "extract-brand-assets",
+      system: "You are a brand strategist. Return only valid JSON. No markdown, no code fences.",
+      prompt,
+      maxTokens: 600,
+      temperature: 0.3,
     });
-
-    if (!res.ok) return [];
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content ?? "";
-    const cleaned = raw.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
 
     const results: BrandVoiceAsset[] = [];
     const list = (k: string, v: unknown) => Array.isArray(v) ? (v as string[]) : (typeof v === "string" && v ? [v] : []);

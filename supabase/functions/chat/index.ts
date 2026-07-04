@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { MODELS } from "../_shared/ai.ts";
 
 const SYSTEM_PROMPT = `You are the Orange Door AI Assistant - a friendly, knowledgeable digital marketing expert for small businesses in East Tennessee.
 
@@ -61,7 +58,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
+        model: MODELS.fast,
         max_tokens: 1024,
         messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
         stream: true,

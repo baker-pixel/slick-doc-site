@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI as sharedCallAI } from "../_shared/ai.ts";
 
 interface BatchConfig {
   batchType: 'daily' | 'weekly' | 'monthly';
@@ -19,36 +16,13 @@ interface ClientData {
   industry?: string;
 }
 
-async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-  if (!GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured");
-  }
-
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 2048,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-    }),
+function callAI(prompt: string, systemPrompt: string): Promise<string> {
+  return sharedCallAI({
+    source: "run-ai-batch",
+    system: systemPrompt,
+    prompt,
+    maxTokens: 2048,
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('AI API error:', response.status, errorText);
-    throw new Error(`AI API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
 }
 
 // Map our content types to DB-allowed values

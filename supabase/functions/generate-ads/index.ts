@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson, AIError } from "../_shared/ai.ts";
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -31,11 +28,6 @@ serve(async (req) => {
       generateImageOnly,
       imagePrompt,
     } = await req.json();
-    
-    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
-    if (!GROQ_API_KEY) {
-      throw new Error('GROQ_API_KEY is not configured');
-    }
 
     // Image-only generation path — not available without dedicated image service
     if (generateImageOnly) {
@@ -196,59 +188,22 @@ Return ONLY valid JSON in this exact format:
 
     console.log("Generating enhanced ads for:", { goal, location, industry, platform, generateVariants, includePredictions, includeBudgetRecs });
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 4096,
-        messages: [
-          { role: "system", content: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only." },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-
-      if (response.status === 429) {
+    let parsedAds;
+    try {
+      parsedAds = await callAIJson({
+        source: "generate-ads",
+        system: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only.",
+        prompt,
+        maxTokens: 4096,
+      });
+    } catch (e) {
+      if (e instanceof AIError && e.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    
-    if (!content) {
-      throw new Error("No content in AI response");
-    }
-
-    // Parse the JSON response
-    let parsedAds;
-    try {
-      // Remove markdown code blocks if present (handle various formats)
-      let cleanContent = content.trim();
-      // Remove opening code fence with optional language identifier
-      cleanContent = cleanContent.replace(/^```(?:json)?\s*/i, '');
-      // Remove closing code fence
-      cleanContent = cleanContent.replace(/\s*```$/i, '');
-      cleanContent = cleanContent.trim();
-      
-      parsedAds = JSON.parse(cleanContent);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", content);
-      console.error("Parse error:", parseError);
-      throw new Error("Failed to parse AI response");
+      throw e;
     }
 
     console.log("Successfully generated enhanced ads");

@@ -142,7 +142,11 @@ export default function ProspectEnginePanel() {
   const markAction = (id: string, add: boolean) => {
     setActionIds(prev => {
       const next = new Set(prev);
-      add ? next.add(id) : next.delete(id);
+      if (add) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
       return next;
     });
   };
@@ -235,7 +239,11 @@ export default function ProspectEnginePanel() {
   const toggleSelect = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };

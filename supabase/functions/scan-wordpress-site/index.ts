@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
+import { callAIJson } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,33 +93,12 @@ Return a JSON object with ONLY the fields that need fixing:
 Omit any field that does not need a fix.`;
 
   try {
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${groqKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 512,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt },
-        ],
-      }),
-      signal: AbortSignal.timeout(30_000),
+    return await callAIJson<AiFixResult>({
+      source: "scan-wordpress-site",
+      system: systemPrompt,
+      prompt: userPrompt,
+      maxTokens: 512,
     });
-
-    if (!resp.ok) {
-      console.error("Groq API error:", resp.status, await resp.text());
-      return null;
-    }
-
-    const data = await resp.json();
-    const raw = data?.choices?.[0]?.message?.content ?? "";
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-    return JSON.parse(jsonMatch[0]) as AiFixResult;
   } catch (e) {
     console.error("generateFixes error:", e);
     return null;

@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson } from "../_shared/ai.ts";
 
 interface AnalysisRequest {
   clientId: string;
@@ -419,38 +416,12 @@ ${analysis.textContent.slice(0, 800)}
 Return only valid JSON, no markdown fences.`;
 
   try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 1024,
-        messages: [
-          { role: "system", content: "You are an SEO expert. Return only valid JSON. No extra text." },
-          { role: "user", content: prompt },
-        ],
-      }),
+    const parsed: any = await callAIJson<any>({
+      source: "analyze-seo",
+      system: "You are an SEO expert. Return only valid JSON. No extra text.",
+      prompt,
+      maxTokens: 1024,
     });
-
-    if (!response.ok) {
-      console.error("AI API error:", response.status);
-      return { suggestions: [], rewrites: [] };
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-
-    let parsed: any;
-    try {
-      const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      parsed = JSON.parse(cleaned);
-    } catch (_e) {
-      console.error("Failed to parse AI SEO suggestions as JSON");
-      return { suggestions: [], rewrites: [] };
-    }
 
     const suggestions = Array.isArray(parsed.suggestions)
       ? parsed.suggestions

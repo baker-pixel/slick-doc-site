@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI } from "../_shared/ai.ts";
 
 interface ContextProfile {
   services?: string[];
@@ -243,7 +240,7 @@ async function generateContent(
   slot: any,
   client: ClientInfo,
   recentTopics: string[],
-  apiKey: string
+  _apiKey: string
 ): Promise<string> {
   const now = new Date();
   const month = MONTHS[now.getMonth()];
@@ -260,31 +257,15 @@ async function generateContent(
   };
   const maxTokens = PLATFORM_MAX_TOKENS[slot.platform] ?? 1200;
 
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: maxTokens,
-      temperature: 0.75,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq API ${res.status}: ${err.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  let content = data.choices?.[0]?.message?.content?.trim();
+  let content = (await callAI({
+    source: "fill-scheduled-content",
+    system,
+    prompt: user,
+    maxTokens,
+    temperature: 0.75,
+  })).trim();
   if (!content) throw new Error("No content returned from AI");
+  const originalLength = content.length;
 
   // Hard-enforce character limits — safety net after generation
   const CHAR_LIMITS: Record<string, number> = {
@@ -298,7 +279,7 @@ async function generateContent(
     const truncated = content.slice(0, charLimit - 3);
     const lastSpace = truncated.lastIndexOf(" ");
     content = (lastSpace > charLimit * 0.8 ? truncated.slice(0, lastSpace) : truncated) + "…";
-    console.warn(`Content for ${slot.platform} truncated from ${data.choices[0].message.content.length} to ${content.length} chars`);
+    console.warn(`Content for ${slot.platform} truncated from ${originalLength} to ${content.length} chars`);
   }
 
   return content;

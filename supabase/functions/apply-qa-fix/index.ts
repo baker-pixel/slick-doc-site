@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI } from "../_shared/ai.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -49,26 +46,12 @@ serve(async (req) => {
       const fixContext = buildFixContext(report, fixType);
 
       try {
-        const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${GROQ_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 512,
-            messages: [
-              { role: "system", content: "You are a web QA specialist. Provide a concise, actionable fix description in 1-3 sentences." },
-              { role: "user", content: fixContext },
-            ],
-          }),
-        });
-
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          fixDescription = aiData.choices?.[0]?.message?.content?.trim() || "";
-        }
+        fixDescription = (await callAI({
+          source: "apply-qa-fix",
+          system: "You are a web QA specialist. Provide a concise, actionable fix description in 1-3 sentences.",
+          prompt: fixContext,
+          maxTokens: 512,
+        })).trim();
       } catch (aiErr) {
         console.error("AI fix generation failed:", aiErr);
       }

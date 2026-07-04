@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend (tsc, eslint, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  edge-functions:
+    name: Edge functions (deno check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type check shared modules (blocking)
+        working-directory: supabase/functions
+        run: deno check _shared/*.ts
+
+      # The legacy functions carry pre-existing type debt (untyped `any`
+      # clients, `.catch()` on query builders). Full check is informational
+      # until that debt is cleared — do NOT let new errors hide in here;
+      # promote to blocking as directories are cleaned up.
+      - name: Type check all functions (informational)
+        working-directory: supabase/functions
+        continue-on-error: true
+        run: |
+          set +e
+          fail=0
+          for dir in */; do
+            [ -f "$dir/index.ts" ] || continue
+            if ! deno check --quiet "$dir/index.ts" > /tmp/check.log 2>&1; then
+              echo "::warning::deno check failed: $dir"
+              tail -5 /tmp/check.log
+              fail=$((fail+1))
+            fi
+          done
+          echo "Functions with type errors: $fail"
+          exit 0

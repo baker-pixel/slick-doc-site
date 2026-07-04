@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAI } from "../_shared/ai.ts";
 
 const SEGMENT_DESCRIPTIONS: Record<string, string> = {
   new_visitor: "a first-time visitor who has never seen this site before",
@@ -44,11 +41,6 @@ serve(async (req) => {
       );
     }
 
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      throw new Error("GROQ_API_KEY is not configured");
-    }
-
     const segmentDesc = SEGMENT_DESCRIPTIONS[segment];
     const componentDesc = componentType ? String(componentType).slice(0, 50) : "content";
 
@@ -63,31 +55,14 @@ Rewrite the ${componentDesc} to resonate specifically with this user segment. Ke
 
 Return ONLY the personalized content text — no explanation, no quotes, no extra formatting.`;
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 512,
-        temperature: 0.7,
-        messages: [
-          { role: "system", content: "You are a conversion copywriter specializing in personalized website content. Return only the rewritten content text with no extra commentary." },
-          { role: "user", content: prompt },
-        ],
-      }),
+    const aiText = await callAI({
+      source: "generate-personalized-content",
+      system: "You are a conversion copywriter specializing in personalized website content. Return only the rewritten content text with no extra commentary.",
+      prompt,
+      maxTokens: 512,
+      temperature: 0.7,
     });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI API error:", response.status, errText);
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const personalizedContent = data.choices?.[0]?.message?.content?.trim() || originalContent;
+    const personalizedContent = aiText.trim() || originalContent;
 
     return new Response(
       JSON.stringify({ success: true, personalizedContent }),

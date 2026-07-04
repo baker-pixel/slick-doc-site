@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson } from "../_shared/ai.ts";
 
 const RESEND_API_URL = "https://api.resend.com";
 
@@ -233,30 +230,11 @@ RULES:
 Return ONLY valid JSON on one line: { "subject": "...", "html": "..." }`;
 
   try {
-    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${Deno.env.get("GROQ_API_KEY") || ""}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 800,
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const parsed = await callAIJson<{ subject?: string; html?: string }>({
+      source: "run-prospect-drip",
+      prompt,
+      maxTokens: 800,
     });
-
-    if (!aiResponse.ok) {
-      console.error(`AI email gen failed: ${aiResponse.status}`, await aiResponse.text());
-      return null;
-    }
-
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const parsed = JSON.parse(jsonMatch[0]);
     if (!parsed.subject || !parsed.html) return null;
 
     return { subject: parsed.subject, html: parsed.html };

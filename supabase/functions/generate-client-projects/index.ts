@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/http.ts";
+import { callAIJson, AIError } from "../_shared/ai.ts";
 
 interface ActionItem {
   action: string;
@@ -31,11 +28,6 @@ serve(async (req) => {
         JSON.stringify({ error: "clientAccountId is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      throw new Error("GROQ_API_KEY is not configured");
     }
 
     // Duplicate guard only when actually saving to DB
@@ -164,60 +156,24 @@ Return ONLY valid JSON with this structure:
   ]
 }`;
 
-    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 2048,
-        messages: [
-          { role: "system", content: "You are a project management AI. Always respond with valid JSON only." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      throw new Error("AI generation failed");
-    }
-
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content;
-    
-    if (!content) {
-      throw new Error("No content from AI");
-    }
-
-    // Parse the JSON from AI response
     let projectsPlan;
     try {
-      // Extract JSON from potential markdown code blocks
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
-      const jsonStr = jsonMatch[1]?.trim() || content.trim();
-      projectsPlan = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError, "Content:", content);
-      throw new Error("Failed to parse AI response");
+      // deno-lint-ignore no-explicit-any
+      projectsPlan = await callAIJson<any>({
+        source: "generate-client-projects",
+        system: "You are a project management AI. Always respond with valid JSON only.",
+        prompt,
+        maxTokens: 2048,
+        temperature: 0.7,
+      });
+    } catch (e) {
+      if (e instanceof AIError && (e.status === 429 || e.status === 402)) {
+        return new Response(
+          JSON.stringify({ error: e.message }),
+          { status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      throw e;
     }
 
     // returnOnly: return AI suggestions to the caller without touching the DB.
