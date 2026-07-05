@@ -173,10 +173,12 @@ serve(async (req) => {
             method: "POST",
             headers: bgHeaders,
             body: JSON.stringify({
-              client_id: resolvedClientId,
+              clientId: resolvedClientId,
               workflow_id,
               step_id: step.id,
+              step_number: step.step_number,
               task_type: step.task_type,
+              trigger: step.task_type,
               payload: step.payload || {},
             }),
           }).catch((e) => console.error(`Failed to trigger n8n step ${step.step_number} (${step.task_type}):`, e));

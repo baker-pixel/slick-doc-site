@@ -21,8 +21,9 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    clientId = body.clientId;
-    const { tasks, trigger, metadata } = body;
+    // advance-workflow (and possibly other callers) send snake_case; accept both.
+    clientId = body.clientId ?? body.client_id;
+    const { tasks, trigger, metadata, workflow_id, step_id, step_number, task_type } = body;
     contentCalendarId = metadata?.content_calendar_id;
 
     if (!clientId) {
@@ -126,8 +127,16 @@ serve(async (req) => {
       n8nPayload = {
         client_id: clientId,
         tasks: tasks || [],
-        trigger: trigger || "run_auto",
+        trigger: trigger || task_type || "run_auto",
         metadata: metadata || {},
+        // Workflow-step identifiers so n8n can echo them back in its callback
+        // and advance-workflow can unlock the next step. Previously dropped
+        // silently — n8n_post_social/n8n_post_blog steps from advance-workflow
+        // had no way to close the loop.
+        ...(workflow_id ? { workflow_id } : {}),
+        ...(step_id ? { step_id } : {}),
+        ...(step_number != null ? { step_number } : {}),
+        ...(task_type ? { task_type } : {}),
         callback_url: callbackUrl,
         callback_api_key: Deno.env.get("SUPABASE_PUBLISHABLE_KEY"),
       };
