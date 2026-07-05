@@ -1,0 +1,210 @@
+import type { ClientData } from "../types.ts";
+import { createDeliverable, formatDate } from "../shared.ts";
+import { callAI, extractJson } from "../../_shared/ai.ts";
+
+export async function generateMonthlyReport(supabase: any, client: ClientData) {
+  const today = new Date();
+  const periodStart = new Date(today);
+  periodStart.setMonth(periodStart.getMonth() - 1);
+
+  return runAiAutomation(supabase, client, "report", {
+    periodStart: periodStart.toISOString().split("T")[0],
+    periodEnd: today.toISOString().split("T")[0],
+  });
+}
+
+export async function runAiAutomation(supabase: any, client: ClientData, jobType: string, inputData?: Record<string, unknown>) {
+  const categoryMap: Record<string, string> = {
+    email_sequence: "email_sequences",
+    content_generation: "content_generation",
+    report: "reporting",
+  };
+
+  const { data: sops } = await supabase
+    .from("sop_documents")
+    .select("*")
+    .eq("tier", client.tier)
+    .eq("category", categoryMap[jobType] || jobType)
+    .eq("is_active", true);
+
+  const sopContent = sops?.map((s: any) => s.parsed_content || s.description).join("\n\n") || "";
+
+  let systemPrompt = "";
+  let userPrompt = "";
+
+  switch (jobType) {
+    case "email_sequence":
+      systemPrompt = `You are an expert email marketing specialist. Create a personalized email sequence.\n\nSOPs:\n${sopContent}\n\nOutput JSON: { "sequence_name": "string", "emails": [{ "subject": "string", "body": "string (HTML)", "send_delay_days": number, "purpose": "string" }] }`;
+      userPrompt = `Create a ${client.tier}-tier email sequence for ${client.business_name}. Additional context: ${JSON.stringify(inputData || {})}`;
+      break;
+    case "content_generation":
+      const industryContext = client.industry ? `The business is in the ${client.industry} industry.` : "";
+      systemPrompt = `You are a digital marketing content expert specializing in creating industry-specific, engaging content. Create content that speaks directly to the target audience and incorporates industry best practices and terminology.\n\n${industryContext}\n\nOutput JSON: { "content_pieces": [{ "type": "blog_post | social_post | ad_copy", "title": "string", "content": "string", "platform": "string", "target_audience": "string", "key_message": "string" }] }`;
+      userPrompt = `Create ${client.tier}-tier content for ${client.business_name}${client.industry ? ` (${client.industry} industry)` : ""}.
+
+Make sure the content:
+- Uses industry-specific language and terminology
+- Addresses common pain points in the ${client.industry || "their"} industry
+- Includes relevant calls-to-action
+- Is optimized for the target platform
+
+Context: ${JSON.stringify(inputData || {})}`;
+      break;
+    case "report":
+      systemPrompt = `You are a marketing analytics expert. Generate an insightful performance report.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
+      userPrompt = `Generate a performance report for ${client.business_name}. Period: ${JSON.stringify(inputData || {})}`;
+      break;
+  }
+
+  const aiContent = await callAI({
+    source: "run-automation:ai_task",
+    system: systemPrompt,
+    prompt: userPrompt,
+    maxTokens: 2048,
+    jsonMode: true,
+  });
+
+  let parsedOutput: Record<string, unknown> = {};
+  try {
+    parsedOutput = extractJson<Record<string, unknown>>(aiContent);
+  } catch (_e) {
+    parsedOutput = { raw_content: aiContent };
+  }
+
+  const reportDate = formatDate();
+
+  // Store results and create deliverables based on type
+  if (jobType === "content_generation" && parsedOutput.content_pieces) {
+    const pieces = parsedOutput.content_pieces as Array<{ type: string; title: string; content: string; platform?: string }>;
+    for (const piece of pieces) {
+      await supabase.from("generated_content").insert({
+        client_id: client.id,
+        content_type: piece.type || "other",
+        title: piece.title,
+        content: piece.content,
+        metadata: { platform: piece.platform },
+      });
+    }
+
+    await createDeliverable(
+      supabase,
+      client.id,
+      `Content Generation - ${reportDate}`,
+      `# Generated Content
+
+## Summary
+
+*Generated on ${reportDate} for ${client.business_name}*
+
+**Pieces Created:** ${pieces.length}
+
+## Content Items
+
+${pieces.map((p, i) => `### ${i + 1}. ${p.title}
+**Type:** ${p.type}
+**Platform:** ${p.platform || 'General'}
+
+${p.content.substring(0, 300)}${p.content.length > 300 ? '...' : ''}`).join('\n\n')}
+
+## Next Steps
+
+- Review each content piece for accuracy
+- Approve or request revisions
+- Schedule for publishing
+
+*All content is ready for your review!*`,
+      "content"
+    );
+  }
+
+  if (jobType === "email_sequence") {
+    const sequenceName = (parsedOutput as any).sequence_name || "Custom Sequence";
+    const emails = (parsedOutput as any).emails || [];
+
+    await createDeliverable(
+      supabase,
+      client.id,
+      `Email Sequence: ${sequenceName} - ${reportDate}`,
+      `# Email Sequence Created
+
+## ${sequenceName}
+
+*Generated on ${reportDate} for ${client.business_name}*
+
+**Total Emails:** ${emails.length}
+
+## Sequence Overview
+
+${emails.map((e: any, i: number) => `### Email ${i + 1}: ${e.subject}
+**Send Delay:** ${e.send_delay_days} days
+**Purpose:** ${e.purpose}
+
+Preview:
+> ${e.body?.replace(/<[^>]*>/g, '').substring(0, 150)}...`).join('\n\n')}
+
+## Next Steps
+
+- Review each email for brand voice
+- Approve or request revisions
+- Once approved, sequence will be activated
+
+*Your email sequence is ready for review!*`,
+      "content"
+    );
+  }
+
+  if (jobType === "report") {
+    const periodStart = (inputData as any)?.periodStart || new Date().toISOString().split("T")[0];
+    const periodEnd = (inputData as any)?.periodEnd || new Date().toISOString().split("T")[0];
+
+    await supabase.from("client_reports").insert({
+      client_id: client.id,
+      report_type: "monthly",
+      report_period_start: periodStart,
+      report_period_end: periodEnd,
+      metrics: parsedOutput.metrics || {},
+      insights: parsedOutput.insights || [],
+      recommendations: parsedOutput.recommendations || [],
+    });
+
+    const insights = (parsedOutput.insights || []) as string[];
+    const recommendations = (parsedOutput.recommendations || []) as Array<{ priority: string; action: string; expected_impact: string }>;
+
+    await createDeliverable(
+      supabase,
+      client.id,
+      `Monthly Performance Report - ${reportDate}`,
+      `# Monthly Performance Report
+
+## Period: ${periodStart} to ${periodEnd}
+
+*Generated on ${reportDate} for ${client.business_name}*
+
+## Executive Summary
+
+${(parsedOutput as any).executive_summary || 'Performance data has been analyzed for this period.'}
+
+## Key Insights
+
+${insights.map((insight: string) => `- ${insight}`).join('\n')}
+
+## Recommendations
+
+${recommendations.map((r: any) => `### ${r.priority?.toUpperCase()} Priority
+**Action:** ${r.action}
+**Expected Impact:** ${r.expected_impact}`).join('\n\n')}
+
+## What's Next
+
+Your marketing team will:
+1. Implement high-priority recommendations
+2. Continue optimizing current campaigns
+3. Provide updates at our next check-in
+
+*Thank you for your partnership!*`,
+      "report"
+    );
+  }
+
+  return { ...parsedOutput, deliverableCreated: true };
+}
