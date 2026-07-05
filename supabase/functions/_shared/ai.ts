@@ -8,9 +8,21 @@ export const MODELS = {
   default: "llama-3.3-70b-versatile",
   /** Cheap/fast model for classification and low-stakes calls. */
   fast: "llama-3.1-8b-instant",
+  /**
+   * Higher-quality writing/reasoning model for client-facing creative work.
+   * Falls back to `default` automatically if ANTHROPIC_API_KEY isn't set —
+   * safe to reference everywhere even before the key is configured.
+   */
+  quality: "claude-sonnet-5",
 } as const;
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_VERSION = "2023-06-01";
+
+function isAnthropicModel(model: string): boolean {
+  return model.startsWith("claude-");
+}
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -37,6 +49,13 @@ export interface AICallOptions {
   source?: string;
   /** Client this call is on behalf of, for cost/quality attribution in agent_runs. */
   clientId?: string;
+  /**
+   * Stable identifier + version for the prompt template used, e.g.
+   * "content-draft.v1". Lets agent_runs correlate a specific prompt
+   * version with output quality / rejection rate over time. Optional —
+   * omit for one-off/ad-hoc calls that don't need tracking.
+   */
+  promptId?: string;
 }
 
 let logClient: ReturnType<typeof serviceClient> | null | undefined;
@@ -55,6 +74,7 @@ function getLogClient() {
 interface RunLogEntry {
   source: string;
   clientId?: string;
+  promptId?: string;
   model: string;
   status: "ok" | "error";
   attemptCount: number;
@@ -74,6 +94,7 @@ function logRun(entry: RunLogEntry): void {
     .insert({
       source: entry.source,
       client_id: entry.clientId ?? null,
+      prompt_id: entry.promptId ?? null,
       model: entry.model,
       status: entry.status,
       attempt_count: entry.attemptCount,
@@ -111,7 +132,37 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function attemptOnce(
+function withJsonHint(messages: ChatMessage[], jsonMode?: boolean): ChatMessage[] {
+  // Groq (and good practice generally) rejects/ignores json mode unless
+  // "json" appears somewhere in the conversation.
+  if (!jsonMode || messages.some((m) => /json/i.test(m.content))) return messages;
+  const finalMessages = [...messages];
+  const last = finalMessages[finalMessages.length - 1];
+  finalMessages[finalMessages.length - 1] = {
+    ...last,
+    content: `${last.content}\n\nRespond with valid JSON only.`,
+  };
+  return finalMessages;
+}
+
+function throwForStatus(res: Response, bodyText: string, source: string): never {
+  const retryAfter = Number(res.headers.get("retry-after")) || null;
+  if (res.status === 429) {
+    const err = new AIError("Rate limit exceeded. Please try again later.", 429, true);
+    (err as AIError & { retryAfter?: number | null }).retryAfter = retryAfter;
+    throw err;
+  }
+  if (res.status === 402) {
+    throw new AIError("AI credits exhausted. Please add funds.", 402, false);
+  }
+  if (res.status >= 500) {
+    throw new AIError(`AI provider error: ${res.status}`, res.status, true);
+  }
+  console.error(`[ai] ${source} non-retryable error ${res.status}: ${bodyText.slice(0, 500)}`);
+  throw new AIError(`AI request rejected: ${res.status}`, res.status, false);
+}
+
+async function attemptGroqOnce(
   model: string,
   messages: ChatMessage[],
   opts: AICallOptions,
@@ -119,16 +170,7 @@ async function attemptOnce(
   const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) throw new AIError("GROQ_API_KEY is not configured", null, false);
 
-  // Groq rejects json_object mode unless "json" appears in the conversation.
-  let finalMessages = messages;
-  if (opts.jsonMode && !messages.some((m) => /json/i.test(m.content))) {
-    finalMessages = [...messages];
-    const last = finalMessages[finalMessages.length - 1];
-    finalMessages[finalMessages.length - 1] = {
-      ...last,
-      content: `${last.content}\n\nRespond with valid JSON only.`,
-    };
-  }
+  const finalMessages = withJsonHint(messages, opts.jsonMode);
 
   let res: Response;
   try {
@@ -152,26 +194,72 @@ async function attemptOnce(
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => "");
-    const retryAfter = Number(res.headers.get("retry-after")) || null;
-    if (res.status === 429) {
-      const err = new AIError("Rate limit exceeded. Please try again later.", 429, true);
-      (err as AIError & { retryAfter?: number | null }).retryAfter = retryAfter;
-      throw err;
-    }
-    if (res.status === 402) {
-      throw new AIError("AI credits exhausted. Please add funds.", 402, false);
-    }
-    if (res.status >= 500) {
-      throw new AIError(`AI provider error: ${res.status}`, res.status, true);
-    }
-    console.error(`[ai] ${opts.source ?? "unknown"} non-retryable error ${res.status}: ${bodyText.slice(0, 500)}`);
-    throw new AIError(`AI request rejected: ${res.status}`, res.status, false);
+    throwForStatus(res, bodyText, opts.source ?? "unknown");
   }
 
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content;
   if (!text) throw new AIError("AI returned empty response", null, true);
   return { text, usage: data.usage ?? null };
+}
+
+async function attemptAnthropicOnce(
+  model: string,
+  messages: ChatMessage[],
+  opts: AICallOptions,
+): Promise<{ text: string; usage: Record<string, number> | null }> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new AIError("ANTHROPIC_API_KEY is not configured", null, false);
+
+  const finalMessages = withJsonHint(messages, opts.jsonMode);
+  const systemMessages = finalMessages.filter((m) => m.role === "system").map((m) => m.content);
+  const conversation = finalMessages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  let res: Response;
+  try {
+    res = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": ANTHROPIC_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: opts.maxTokens ?? 1024,
+        ...(systemMessages.length ? { system: systemMessages.join("\n\n") } : {}),
+        messages: conversation,
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      }),
+    });
+  } catch (e) {
+    throw new AIError(`AI request failed (network): ${e instanceof Error ? e.message : e}`, null, true);
+  }
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => "");
+    throwForStatus(res, bodyText, opts.source ?? "unknown");
+  }
+
+  const data = await res.json();
+  const text = data.content?.[0]?.text;
+  if (!text) throw new AIError("AI returned empty response", null, true);
+  const usage = data.usage
+    ? { prompt_tokens: data.usage.input_tokens, completion_tokens: data.usage.output_tokens }
+    : null;
+  return { text, usage };
+}
+
+function attemptOnce(
+  model: string,
+  messages: ChatMessage[],
+  opts: AICallOptions,
+): Promise<{ text: string; usage: Record<string, number> | null }> {
+  return isAnthropicModel(model)
+    ? attemptAnthropicOnce(model, messages, opts)
+    : attemptGroqOnce(model, messages, opts);
 }
 
 /**
@@ -188,7 +276,10 @@ export async function callAI(opts: AICallOptions): Promise<string> {
   let lastError: unknown = null;
   let totalAttempts = 0;
 
-  for (const model of models) {
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+    const model = models[modelIndex];
+    const isLastModel = modelIndex === models.length - 1;
+
     for (let attempt = 0; attempt <= retries; attempt++) {
       totalAttempts++;
       const started = Date.now();
@@ -205,6 +296,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
         logRun({
           source,
           clientId: opts.clientId,
+          promptId: opts.promptId,
           model,
           status: "ok",
           attemptCount: totalAttempts,
@@ -222,17 +314,25 @@ export async function callAI(opts: AICallOptions): Promise<string> {
           e instanceof Error ? e.message : e,
         );
         if (!retryable) {
-          logRun({
-            source,
-            clientId: opts.clientId,
-            model,
-            status: "error",
-            attemptCount: totalAttempts,
-            fallbackUsed: model !== models[0],
-            latencyMs: Date.now() - callStarted,
-            errorMessage: e instanceof Error ? e.message : String(e),
-          });
-          throw e;
+          // A non-retryable error on this model (bad key, model unavailable,
+          // 4xx) shouldn't abort the whole call if there's another model
+          // left in the chain -- e.g. Claude tiering must cascade to the
+          // Groq fallback when ANTHROPIC_API_KEY isn't configured yet.
+          if (isLastModel) {
+            logRun({
+              source,
+              clientId: opts.clientId,
+              promptId: opts.promptId,
+              model,
+              status: "error",
+              attemptCount: totalAttempts,
+              fallbackUsed: model !== models[0],
+              latencyMs: Date.now() - callStarted,
+              errorMessage: e instanceof Error ? e.message : String(e),
+            });
+            throw e;
+          }
+          break;
         }
         if (attempt < retries) {
           const retryAfter = (e as { retryAfter?: number | null }).retryAfter;
@@ -252,6 +352,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
   logRun({
     source,
     clientId: opts.clientId,
+    promptId: opts.promptId,
     model: models[models.length - 1],
     status: "error",
     attemptCount: totalAttempts,

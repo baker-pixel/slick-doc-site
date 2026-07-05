@@ -2,7 +2,45 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI } from "../_shared/ai.ts";
+import { callAI, callAIJson, MODELS } from "../_shared/ai.ts";
+
+interface QaVerdict {
+  score: number;
+  brand_fit: boolean;
+  issues: string[];
+}
+
+/**
+ * Cheap second-model critique pass before a draft reaches admin review.
+ * Best-effort: a QA failure must never block content from reaching the
+ * admin queue, it only adds context to help them review faster.
+ */
+async function critiqueContent(
+  content: string,
+  contentType: string,
+  tone: string,
+  clientId: string,
+): Promise<QaVerdict | null> {
+  try {
+    return await callAIJson<QaVerdict>({
+      source: "run-content-agent:qa",
+      promptId: "content-qa-critique.v1",
+      model: MODELS.fast,
+      clientId,
+      system:
+        "You are a strict marketing content editor. Score the draft honestly. " +
+        "Return JSON only: { \"score\": 1-10, \"brand_fit\": boolean, \"issues\": string[] }. " +
+        "issues should be empty if there are none — do not invent problems.",
+      prompt: `Content type: ${contentType}\nExpected tone: ${tone}\n\nDraft:\n${content}`,
+      maxTokens: 300,
+      temperature: 0,
+      retries: 0,
+    });
+  } catch (e) {
+    console.warn("[run-content-agent] QA critique failed (non-fatal):", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -125,12 +163,22 @@ Keep it under 150 words. Make it engaging and ready to post.`;
 
     const generatedContent = await callAI({
       source: "run-content-agent",
+      promptId: "content-draft.v1",
+      clientId: task.client_id,
+      // Client-facing creative copy gets the quality-tier model; falls back
+      // to the default Groq model automatically if ANTHROPIC_API_KEY isn't
+      // configured yet, or if Claude errors — zero behavior change until
+      // the key is added.
+      model: MODELS.quality,
+      fallbackModels: [MODELS.default],
       system:
         "You are a professional marketing copywriter. Write concise, engaging content ready to publish. Return only the content — no intro, no commentary, no quotes.",
       prompt,
       maxTokens: 800,
       temperature: 0.7,
     });
+
+    const qa = await critiqueContent(generatedContent, contentType, tone, task.client_id);
 
     const generatedAt = new Date().toISOString();
 
@@ -145,6 +193,7 @@ Keep it under 150 words. Make it engaging and ready to post.`;
           topic: topic,
           generated_at: generatedAt,
           ...(brandKitWarning ? { brand_kit_warning: brandKitWarning } : {}),
+          ...(qa ? { qa } : {}),
         },
       })
       .eq("id", taskId);
@@ -167,6 +216,7 @@ Keep it under 150 words. Make it engaging and ready to post.`;
           topic,
           platform,
           media_urls: mediaUrls,
+          ...(qa ? { qa } : {}),
         },
       })
       .select("id")
@@ -185,16 +235,20 @@ Keep it under 150 words. Make it engaging and ready to post.`;
     }
 
     // Notify admin that content needs review before client sees it.
+    const qaFlag = qa && (qa.score < 6 || !qa.brand_fit || qa.issues.length > 0);
     await supabase.from("activity_feed").insert({
       client_account_id: task.client_id,
       activity_type: "content_draft_ready",
       title: `Content draft ready for admin review: ${contentTitle}`,
-      description: `${contentType} has been generated and is awaiting admin review.`,
-      icon: "file-text",
+      description: qaFlag
+        ? `${contentType} generated — QA flagged issues (score ${qa!.score}/10): ${qa!.issues.join("; ") || "brand tone mismatch"}`
+        : `${contentType} has been generated and is awaiting admin review.`,
+      icon: qaFlag ? "alert-triangle" : "file-text",
       metadata: {
         task_id: taskId,
         content_id: generatedRecord?.id || null,
         platform,
+        ...(qa ? { qa } : {}),
       },
     }).catch(() => {});
 

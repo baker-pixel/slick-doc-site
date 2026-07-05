@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI } from "../_shared/ai.ts";
+import { callAI, MODELS } from "../_shared/ai.ts";
 
 interface ContextProfile {
   services?: string[];
@@ -259,6 +259,12 @@ async function generateContent(
 
   let content = (await callAI({
     source: "fill-scheduled-content",
+    promptId: `scheduled-content.${slot.content_type}.v1`,
+    clientId: client.id,
+    // Client-facing scheduled content gets the quality-tier model, falling
+    // back to the default Groq model automatically if Claude is unavailable.
+    model: MODELS.quality,
+    fallbackModels: [MODELS.default],
     system,
     prompt: user,
     maxTokens,
