@@ -1,6 +1,8 @@
 // Shared LLM client. Single place for model names, retry/backoff,
 // structured-output handling, and usage logging.
 
+import { serviceClient } from "./supabase.ts";
+
 export const MODELS = {
   /** Default reasoning/content model. */
   default: "llama-3.3-70b-versatile",
@@ -33,6 +35,57 @@ export interface AICallOptions {
   retries?: number;
   /** Caller name for usage logs and error messages. */
   source?: string;
+  /** Client this call is on behalf of, for cost/quality attribution in agent_runs. */
+  clientId?: string;
+}
+
+let logClient: ReturnType<typeof serviceClient> | null | undefined;
+
+function getLogClient() {
+  if (logClient === undefined) {
+    try {
+      logClient = serviceClient();
+    } catch {
+      logClient = null;
+    }
+  }
+  return logClient;
+}
+
+interface RunLogEntry {
+  source: string;
+  clientId?: string;
+  model: string;
+  status: "ok" | "error";
+  attemptCount: number;
+  fallbackUsed: boolean;
+  latencyMs: number | null;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  errorMessage?: string;
+}
+
+/** Best-effort observability write. Never throws — logging must not affect the caller. */
+function logRun(entry: RunLogEntry): void {
+  const client = getLogClient();
+  if (!client) return;
+  client
+    .from("agent_runs")
+    .insert({
+      source: entry.source,
+      client_id: entry.clientId ?? null,
+      model: entry.model,
+      status: entry.status,
+      attempt_count: entry.attemptCount,
+      fallback_used: entry.fallbackUsed,
+      latency_ms: entry.latencyMs,
+      prompt_tokens: entry.promptTokens ?? null,
+      completion_tokens: entry.completionTokens ?? null,
+      error_message: entry.errorMessage ?? null,
+    })
+    .then(({ error }: { error: unknown }) => {
+      if (error) console.error("[ai] agent_runs insert failed:", error);
+    });
 }
 
 export class AIError extends Error {
@@ -130,21 +183,36 @@ export async function callAI(opts: AICallOptions): Promise<string> {
   const retries = opts.retries ?? 2;
   const models = [opts.model ?? MODELS.default, ...(opts.fallbackModels ?? [])];
   const source = opts.source ?? "unknown";
+  const callStarted = Date.now();
 
   let lastError: unknown = null;
+  let totalAttempts = 0;
 
   for (const model of models) {
     for (let attempt = 0; attempt <= retries; attempt++) {
+      totalAttempts++;
       const started = Date.now();
       try {
         const { text, usage } = await attemptOnce(model, messages, opts);
+        const fallbackUsed = model !== models[0];
         console.log(
           `[ai] ok source=${source} model=${model} ms=${Date.now() - started}` +
             (usage ? ` prompt_tokens=${usage.prompt_tokens} completion_tokens=${usage.completion_tokens}` : ""),
         );
-        if (model !== models[0]) {
+        if (fallbackUsed) {
           console.warn(`[ai] source=${source} served by fallback model ${model}`);
         }
+        logRun({
+          source,
+          clientId: opts.clientId,
+          model,
+          status: "ok",
+          attemptCount: totalAttempts,
+          fallbackUsed,
+          latencyMs: Date.now() - callStarted,
+          promptTokens: usage?.prompt_tokens,
+          completionTokens: usage?.completion_tokens,
+        });
         return text;
       } catch (e) {
         lastError = e;
@@ -153,7 +221,19 @@ export async function callAI(opts: AICallOptions): Promise<string> {
           `[ai] fail source=${source} model=${model} attempt=${attempt + 1}/${retries + 1} retryable=${retryable}:`,
           e instanceof Error ? e.message : e,
         );
-        if (!retryable) throw e;
+        if (!retryable) {
+          logRun({
+            source,
+            clientId: opts.clientId,
+            model,
+            status: "error",
+            attemptCount: totalAttempts,
+            fallbackUsed: model !== models[0],
+            latencyMs: Date.now() - callStarted,
+            errorMessage: e instanceof Error ? e.message : String(e),
+          });
+          throw e;
+        }
         if (attempt < retries) {
           const retryAfter = (e as { retryAfter?: number | null }).retryAfter;
           const backoffMs = retryAfter
@@ -165,9 +245,22 @@ export async function callAI(opts: AICallOptions): Promise<string> {
     }
   }
 
-  throw lastError instanceof Error
+  const finalError = lastError instanceof Error
     ? lastError
     : new AIError("AI call failed after all retries and fallbacks", null, false);
+
+  logRun({
+    source,
+    clientId: opts.clientId,
+    model: models[models.length - 1],
+    status: "error",
+    attemptCount: totalAttempts,
+    fallbackUsed: models.length > 1,
+    latencyMs: Date.now() - callStarted,
+    errorMessage: finalError.message,
+  });
+
+  throw finalError;
 }
 
 /**

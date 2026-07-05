@@ -30,7 +30,7 @@ serve(async (req) => {
     }
 
     // This function forwards client OAuth tokens to n8n — server/admin only.
-    // Callers: advance-workflow, run-workflow-step, publish/fill-scheduled-content
+    // Callers: advance-workflow, publish/fill-scheduled-content
     // (service key bearer) and the admin panel (ADMIN_PASSWORD in body).
     const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
     const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

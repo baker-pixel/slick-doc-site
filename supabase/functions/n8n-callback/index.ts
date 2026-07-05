@@ -145,11 +145,12 @@ serve(async (req) => {
           }
         }
 
-        const nextStepNumber = step_number + 1;
         const baseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-        fetch(`${baseUrl}/functions/v1/run-workflow-step`, {
+        // Unlock whatever depends on this step via the dependency-graph
+        // orchestrator (the only live workflow engine — see advance-workflow).
+        fetch(`${baseUrl}/functions/v1/advance-workflow`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -158,7 +159,7 @@ serve(async (req) => {
           body: JSON.stringify({
             client_id,
             workflow_id,
-            step_number: nextStepNumber,
+            completed_step_number: step_number,
           }),
         }).catch((err) => console.error("Auto-advance from n8n-callback error:", err));
       }

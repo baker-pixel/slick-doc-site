@@ -41,6 +41,29 @@ serve(async (req) => {
       );
     }
 
+    // Idempotency: fire-and-forget dispatch upstream can retry/duplicate a
+    // call for the same task. Atomically claim it so a duplicate delivery
+    // is a no-op instead of a second AI call + duplicate generated_content row.
+    if (task.status === "completed") {
+      return new Response(
+        JSON.stringify({ success: true, task_id: taskId, status: "completed", result: task.result, skipped: "already completed" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { data: claimed } = await supabase
+      .from("workflow_tasks")
+      .update({ status: "running" })
+      .eq("id", taskId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) {
+      return new Response(
+        JSON.stringify({ skipped: true, reason: `task already ${task.status}`, task_id: taskId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Fetch the client
     const { data: client, error: clientError } = await supabase
       .from("client_accounts")
@@ -58,12 +81,6 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Update status to running
-    await supabase
-      .from("workflow_tasks")
-      .update({ status: "running" })
-      .eq("id", taskId);
 
     // Build the prompt
     const payload = task.payload || {};

@@ -144,9 +144,6 @@ verify_jwt = false
 [functions.n8n-callback]
 verify_jwt = false
 
-[functions.run-workflow-step]
-verify_jwt = false
-
 [functions.trigger-task]
 verify_jwt = false
 

@@ -929,6 +929,26 @@ serve(async (req) => {
       taskId = body.task_id;
       const { data, error: te } = await sb.from("workflow_tasks").select("*").eq("id", taskId).single();
       if (te || !data) return new Response(JSON.stringify({ error: "Task not found" }), { status: 404, headers: corsHeaders });
+
+      // Idempotency: a retried/duplicate invocation for the same task_id
+      // must not re-run the (expensive, multi-page-crawl) audit.
+      if (data.status === "completed") {
+        return new Response(JSON.stringify({ success: true, task_id: taskId, result: data.result, skipped: "already completed" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: claimed } = await sb
+        .from("workflow_tasks")
+        .update({ status: "running" })
+        .eq("id", taskId)
+        .eq("status", "pending")
+        .select("id")
+        .maybeSingle();
+      if (!claimed) {
+        return new Response(JSON.stringify({ skipped: true, reason: `task already ${data.status}`, task_id: taskId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       task = data as Record<string, unknown>;
     } else if (body.client_id) {
       // New: frontend passes client_id directly — create task with service_role (bypasses RLS)

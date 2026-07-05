@@ -328,6 +328,18 @@ serve(async (req) => {
             results.errors.push(`Tasks error for ${client.business_name}: ${tasksError.message}`);
           } else {
             for (const task of pendingTasks || []) {
+              // Idempotency: atomically claim before processing so an
+              // overlapping cron run (or a manual + scheduled run colliding)
+              // can't double-fire the AI call and duplicate content_approvals.
+              const { data: claimed } = await supabase
+                .from('client_tasks')
+                .update({ status: 'in_progress', started_at: new Date().toISOString() })
+                .eq('id', task.id)
+                .eq('status', 'pending')
+                .select('id')
+                .maybeSingle();
+              if (!claimed) continue;
+
               try {
                 const taskResult = await processAutomatedTask(supabase, client, task);
                 if (taskResult.success) {
@@ -336,6 +348,11 @@ serve(async (req) => {
               } catch (taskError) {
                 console.error(`Error processing task ${task.name}:`, taskError);
                 results.errors.push(`Task "${task.name}" error: ${taskError}`);
+                await supabase
+                  .from('client_tasks')
+                  .update({ status: 'failed', notes: String(taskError).slice(0, 500) })
+                  .eq('id', task.id)
+                  .eq('status', 'in_progress');
               }
             }
           }

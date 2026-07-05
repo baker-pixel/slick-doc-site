@@ -163,20 +163,12 @@ export function WorkflowProgressPanel({ clientId, clientName, clientTier, adminP
       if (seedError) throw seedError;
       if (seedData?.error) throw new Error(seedData.error);
 
-      const workflowId = seedData.workflow_id;
-
       toast({
         title: "Workflow started",
         description: `${seedData.total_steps}-step ${seedData.tier} workflow initiated for ${clientName}`,
       });
 
       await fetchWorkflow();
-
-      supabase.functions
-        .invoke("run-workflow-step", {
-          body: { client_id: clientId, workflow_id: workflowId, step_number: 1 },
-        })
-        .catch((err) => console.error("Step 1 trigger error:", err));
     } catch (error) {
       console.error("Start workflow error:", error);
       toast({

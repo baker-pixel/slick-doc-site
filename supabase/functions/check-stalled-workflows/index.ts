@@ -151,7 +151,7 @@ serve(async (req) => {
       .from("client_tasks")
       .select("id, name, client_account_id, updated_at")
       .eq("status", "in_progress")
-      .eq("automation_type", "FULL")
+      .in("automation_type", ["FULL", "AI", "AUTOMATED"])
       .lt("updated_at", clientTaskCutoff);
 
     if (ctErr) throw ctErr;
