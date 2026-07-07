@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 
 interface ClientHelpTabProps {
   onStartTour: () => void;
+  onNavigate?: (tab: string) => void;
 }
 
 const sections = [
@@ -83,7 +84,7 @@ const faqs = [
   },
 ];
 
-export function ClientHelpTab({ onStartTour }: ClientHelpTabProps) {
+export function ClientHelpTab({ onStartTour, onNavigate }: ClientHelpTabProps) {
   return (
     <div className="space-y-8">
       {/* Welcome Header */}
@@ -127,9 +128,12 @@ export function ClientHelpTab({ onStartTour }: ClientHelpTabProps) {
               </CardHeader>
               <CardContent className="space-y-2">
                 {section.items.map((item) => (
-                  <div
+                  <button
                     key={item.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                    type="button"
+                    onClick={() => onNavigate?.(item.id)}
+                    disabled={!onNavigate}
+                    className="flex w-full items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left disabled:cursor-default disabled:hover:bg-transparent"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                       <item.icon className="h-4 w-4 text-primary" />
@@ -138,7 +142,7 @@ export function ClientHelpTab({ onStartTour }: ClientHelpTabProps) {
                       <p className="font-medium text-sm">{item.label}</p>
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </CardContent>
             </Card>
@@ -173,11 +177,20 @@ export function ClientHelpTab({ onStartTour }: ClientHelpTabProps) {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="gap-2 rounded-xl">
+            <Button
+              variant="outline"
+              className="gap-2 rounded-xl"
+              onClick={() => window.open("mailto:hello@orangedoormarketing.com", "_blank")}
+            >
               <Mail className="h-4 w-4" />
               Email Us
             </Button>
-            <Button variant="outline" className="gap-2 rounded-xl">
+            <Button
+              variant="outline"
+              className="gap-2 rounded-xl"
+              onClick={() => onNavigate?.("meetings")}
+              disabled={!onNavigate}
+            >
               <Phone className="h-4 w-4" />
               Schedule Call
             </Button>

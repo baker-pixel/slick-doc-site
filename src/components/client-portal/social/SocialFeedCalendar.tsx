@@ -29,6 +29,38 @@ interface SocialPost {
   created_at: string;
 }
 
+interface ContentCalendarMetadata {
+  ai_generated?: boolean;
+  topic?: string;
+  hashtags?: string[];
+}
+
+interface ContentCalendarRow {
+  id: string;
+  platform: string | null;
+  content: string;
+  status: string;
+  scheduled_for: string;
+  published_at: string | null;
+  metadata: ContentCalendarMetadata | null;
+  created_at: string;
+}
+
+function toSocialPost(row: ContentCalendarRow): SocialPost {
+  return {
+    id: row.id,
+    platform: row.platform || "linkedin",
+    content: row.content,
+    status: row.status,
+    scheduled_at: row.scheduled_for,
+    published_at: row.published_at,
+    ai_generated: !!row.metadata?.ai_generated,
+    topic: row.metadata?.topic || null,
+    hashtags: row.metadata?.hashtags || [],
+    created_at: row.created_at,
+  };
+}
+
 const PLATFORM_META: Record<string, { icon: typeof Linkedin; color: string; name: string }> = {
   linkedin: { icon: Linkedin, color: "text-[#0A66C2]", name: "LinkedIn" },
   facebook: { icon: Facebook, color: "text-[#1877F2]", name: "Facebook" },
@@ -55,15 +87,20 @@ export function SocialFeedCalendar({ clientAccountId }: SocialFeedCalendarProps)
 
   const fetchPosts = async () => {
     try {
+      // Social Composer saves into content_calendar (content_type "social_post")
+      // -- this used to read from social_media_posts, a table nothing ever
+      // wrote to, so this view was permanently empty regardless of what the
+      // client created in the Composer tab.
       const { data, error } = await supabase
-        .from("social_media_posts")
-        .select("*")
+        .from("content_calendar")
+        .select("id, platform, content, status, scheduled_for, published_at, metadata, created_at")
         .eq("client_account_id", clientAccountId)
+        .eq("content_type", "social_post")
         .order("created_at", { ascending: false })
         .limit(100);
 
       if (error) throw error;
-      setPosts((data as SocialPost[]) || []);
+      setPosts(((data as unknown as ContentCalendarRow[]) || []).map(toSocialPost));
     } catch (err) {
       console.error("Error fetching posts:", err);
     } finally {
@@ -73,7 +110,7 @@ export function SocialFeedCalendar({ clientAccountId }: SocialFeedCalendarProps)
 
   const handleDelete = async (postId: string) => {
     try {
-      const { error } = await supabase.from("social_media_posts").delete().eq("id", postId);
+      const { error } = await supabase.from("content_calendar").delete().eq("id", postId);
       if (error) throw error;
       setPosts((prev) => prev.filter((p) => p.id !== postId));
       toast({ title: "Post deleted" });

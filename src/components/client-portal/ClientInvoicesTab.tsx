@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, Receipt, CreditCard, CheckCircle, Clock, AlertCircle, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface LineItem {
   description: string;
@@ -108,13 +110,57 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
     return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>;
   };
 
+  // No payment processor is wired up yet (would need Stripe or similar
+  // configured server-side). Rather than a fake "redirecting to payment"
+  // message that does nothing, this opens a real email to arrange payment.
   const handlePayNow = (invoice: Invoice) => {
-    // This would integrate with Stripe for actual payment
+    const subject = encodeURIComponent(`Payment for Invoice ${invoice.invoice_number}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nI'd like to pay invoice ${invoice.invoice_number} for ${formatCurrency(Number(invoice.amount), invoice.currency)}, due ${format(new Date(invoice.due_date), "MMM d, yyyy")}.\n\nPlease send payment instructions.\n\nThanks!`
+    );
+    window.open(`mailto:hello@orangedoormarketing.com?subject=${subject}&body=${body}`, "_blank");
     toast({
-      title: "Payment Portal",
-      description: "Redirecting to secure payment portal...",
+      title: "Let's get this paid",
+      description: "We've opened an email to our billing team to arrange payment for this invoice.",
     });
-    // In production, redirect to Stripe checkout or payment page
+  };
+
+  const handleDownloadPdf = (invoice: Invoice) => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text(`Invoice ${invoice.invoice_number}`, 14, 20);
+
+    doc.setFontSize(11);
+    let y = 32;
+    doc.text(`Status: ${invoice.status}`, 14, y);
+    y += 7;
+    doc.text(`Amount: ${formatCurrency(Number(invoice.amount), invoice.currency)}`, 14, y);
+    y += 7;
+    doc.text(`Due date: ${format(new Date(invoice.due_date), "MMM d, yyyy")}`, 14, y);
+    if (invoice.paid_at) {
+      y += 7;
+      doc.text(`Paid on: ${format(new Date(invoice.paid_at), "MMM d, yyyy")}`, 14, y);
+    }
+    if (invoice.description) {
+      y += 7;
+      doc.text(`Description: ${invoice.description}`, 14, y);
+    }
+
+    const items = invoice.line_items?.items;
+    if (items && items.length > 0) {
+      autoTable(doc, {
+        startY: y + 8,
+        head: [["Description", "Qty", "Unit Price", "Total"]],
+        body: items.map((item) => [
+          item.description,
+          String(item.quantity),
+          formatCurrency(item.unit_price, invoice.currency),
+          formatCurrency(item.total, invoice.currency),
+        ]),
+      });
+    }
+
+    doc.save(`invoice-${invoice.invoice_number}.pdf`);
   };
 
   if (loading) {
@@ -345,7 +391,7 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
                       Pay Now
                     </Button>
                   )}
-                  <Button variant="outline" className="flex-1">
+                  <Button variant="outline" className="flex-1" onClick={() => handleDownloadPdf(selectedInvoice)}>
                     <Download className="h-4 w-4 mr-2" />
                     Download PDF
                   </Button>

@@ -51,7 +51,6 @@ export type PortalTab =
   | "documents"
   | "agreements"
   | "brand"
-  | "access"
   | "social"
   | "prospects"
   | "team"

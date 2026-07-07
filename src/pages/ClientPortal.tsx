@@ -29,7 +29,6 @@ import ClientNotificationsTab from "@/components/client-portal/ClientNotificatio
 import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
 import { ClientLearningHubTab } from "@/components/client-portal/ClientLearningHubTab";
-import { ClientAccessTab } from "@/components/client-portal/ClientAccessTab";
 import { SocialMediaTab } from "@/components/client-portal/SocialMediaTab";
 import { ClientCalendarTab } from "@/components/client-portal/ClientCalendarTab";
 import { ClientSeoTab } from "@/components/client-portal/ClientSeoTab";
@@ -65,7 +64,6 @@ const tabTitles: Record<PortalTab, string> = {
   documents: "Documents",
   agreements: "Agreements",
   brand: "Brand Assets",
-  access: "Platform Access",
   social: "Social & Accounts",
   prospects: "Lead Outreach",
   team: "Your Team",
@@ -90,7 +88,6 @@ const tabDescriptions: Record<PortalTab, string> = {
   documents: "View and download your documents",
   agreements: "Manage your service agreements",
   brand: "Access your brand assets and guidelines",
-  access: "Share your platform login credentials securely",
   social: "Create, schedule, and manage social media posts with AI",
   prospects: "View the outreach pipeline Orange Door is running for your business",
   team: "Meet your dedicated team",
@@ -386,19 +383,17 @@ export default function ClientPortal() {
       case "documents":
         return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />;
       case "agreements":
-        return <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />;
+        return gate("transformation", "Agreements", "Manage your service agreements online.", <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />);
       case "brand":
-        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
-      case "access":
-        return <ClientAccessTab clientAccountId={portalUser.client_account_id} />;
+        return gate("growth", "Brand Assets", "Store and access your logo, colors, fonts, and brand guidelines.", <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />);
       case "social":
-        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />;
+        return gate("growth", "Social & Accounts", "Create, schedule, and manage social media posts with AI.", <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />);
       case "prospects":
         return <ClientProspectsTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
         return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} clientEmail={clientAccount?.email} />;
       case "team":
-        return <ClientTeamTab clientAccountId={portalUser.client_account_id} />;
+        return gate("transformation", "Your Team", "Meet your dedicated account team.", <ClientTeamTab clientAccountId={portalUser.client_account_id} />);
       case "analytics":
         return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
       case "seo":
@@ -406,7 +401,7 @@ export default function ClientPortal() {
       case "invoices":
         return <ClientInvoicesTab clientAccountId={portalUser.client_account_id} />;
       case "help":
-        return <ClientHelpTab onStartTour={handleStartTour} />;
+        return <ClientHelpTab onStartTour={handleStartTour} onNavigate={(tab) => handleTabChange(tab as PortalTab)} />;
       case "settings":
         return (
           <ClientSettingsTab
@@ -416,9 +411,9 @@ export default function ClientPortal() {
           />
         );
       case "approvals":
-        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />;
+        return gate("growth", "Content Approvals", "Review and approve marketing content before it goes live.", <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />);
       case "learning":
-        return <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />;
+        return gate("growth", "Learning Hub", "Guides and resources to get the most out of your marketing.", <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />);
       default:
         return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
     }

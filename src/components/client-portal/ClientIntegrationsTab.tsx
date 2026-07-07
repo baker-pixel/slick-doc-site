@@ -782,7 +782,11 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       {/* Footer note */}
       <p className="text-xs text-muted-foreground text-center pb-2">
         Questions about connected accounts?{" "}
-        <button className="underline underline-offset-2 hover:text-foreground transition-colors">
+        <button
+          type="button"
+          onClick={() => window.open("mailto:hello@orangedoormarketing.com?subject=Question%20about%20connected%20accounts", "_blank")}
+          className="underline underline-offset-2 hover:text-foreground transition-colors"
+        >
           Contact your account manager.
         </button>
       </p>
