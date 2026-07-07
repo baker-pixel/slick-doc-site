@@ -47,3 +47,48 @@ export function feedbackToPromptBlock(items: ContentFeedbackItem[]): string {
   ];
   return lines.join("\n");
 }
+
+export interface ApprovedContentItem {
+  content_type: string;
+  title: string;
+  content: string;
+}
+
+const APPROVED_STATUSES = ["approved", "client_approved", "published"];
+
+/**
+ * Recent content this client actually approved, so generation has a real
+ * example of what "good" looks like for them, not just a list of what to
+ * avoid. The rejection-feedback loop only captures misses; this is the
+ * other half -- what worked and should be repeated.
+ */
+export async function getRecentApprovedContent(
+  supabase: SupabaseClient,
+  clientId: string,
+  limit = 3,
+): Promise<ApprovedContentItem[]> {
+  const { data, error } = await supabase
+    .from("generated_content")
+    .select("content_type, title, content")
+    .eq("client_id", clientId)
+    .in("status", APPROVED_STATUSES)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data) return [];
+
+  return data.map((row) => ({
+    content_type: row.content_type,
+    title: row.title || "Untitled",
+    content: row.content,
+  }));
+}
+
+export function approvedContentToPromptBlock(items: ApprovedContentItem[]): string {
+  if (items.length === 0) return "";
+  const lines = [
+    "CONTENT THIS CLIENT HAS ALREADY APPROVED (match this voice, tone, and quality bar):",
+    ...items.map((item) => `- [${item.content_type}] "${item.title}":\n${item.content.slice(0, 400)}`),
+  ];
+  return lines.join("\n\n");
+}

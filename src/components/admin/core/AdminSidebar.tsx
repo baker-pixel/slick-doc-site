@@ -17,6 +17,7 @@ import {
   Palette,
   LogOut,
   HelpCircle,
+  Send,
 } from "lucide-react";
 import {
   Sidebar,
@@ -125,6 +126,7 @@ const agentItems: NavItem[] = [
 // GROWTH group
 const growthItems: NavItem[] = [
   { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "prospect-engine", "pipeline", "lead-scoring"] },
+  { id: "sales-proposals", label: "Sales", icon: Send, matchIds: ["case-studies", "before-after"] },
 ];
 
 // OPERATIONS group

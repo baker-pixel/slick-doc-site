@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-import { getRecentContentFeedback, feedbackToPromptBlock } from "../_shared/contentFeedback.ts";
+import { getRecentContentFeedback, feedbackToPromptBlock, getRecentApprovedContent, approvedContentToPromptBlock } from "../_shared/contentFeedback.ts";
 import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
@@ -112,16 +112,25 @@ serve(async (req) => {
       console.warn("[run-content-agent] Brand kit fetch failed (non-fatal):", e);
     }
 
-    // Feedback loop: don't repeat issues admin/client already flagged on
-    // past drafts for this client. Best-effort — an empty result just means
-    // no feedback block gets added.
+    // Feedback loop: don't repeat issues admin/client already flagged
+    // (rejections) AND show real examples of what this client has actually
+    // approved before (positive signal, not just avoidance). Best-effort —
+    // an empty result just means no block gets added.
     let feedbackBlock = "";
+    let approvedBlock = "";
     try {
       const feedback = await getRecentContentFeedback(supabase, task.client_id);
       const block = feedbackToPromptBlock(feedback);
       if (block) feedbackBlock = "\n\n" + block;
     } catch (e) {
       console.warn("[run-content-agent] Feedback lookup failed (non-fatal):", e);
+    }
+    try {
+      const approved = await getRecentApprovedContent(supabase, task.client_id);
+      const block = approvedContentToPromptBlock(approved);
+      if (block) approvedBlock = "\n\n" + block;
+    } catch (e) {
+      console.warn("[run-content-agent] Approved-content lookup failed (non-fatal):", e);
     }
 
     const prompt = `You are a marketing expert for ${client.business_name || "a business"}.
@@ -132,6 +141,7 @@ ${goalStr}
 ${audienceStr}
 Tone: ${tone}
 ${brandKitBlock}
+${approvedBlock}
 ${feedbackBlock}
 
 Write a ${contentType}.

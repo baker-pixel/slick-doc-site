@@ -15,11 +15,39 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
     const { action, password, table, id, data, approval, notification, taskId, updates, deliverableId } = await req.json();
-    
-    // Verify admin password
+
+    // Auth: real per-user login (Supabase Auth JWT + admin role) is checked
+    // first -- supabase-js auto-attaches the session token to every
+    // functions.invoke() call once a user has signed in, so every existing
+    // caller of this function gets real per-user auth for free, with no
+    // changes needed at any call site. The shared ADMIN_PASSWORD remains a
+    // fallback during migration (and is what the ~75 other edge functions
+    // outside this proxy still check directly, unchanged for now).
+    let authorizedUserId: string | null = null;
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const bearerToken = authHeader.replace("Bearer ", "");
+    if (bearerToken && bearerToken !== supabaseServiceKey) {
+      try {
+        const { data: userData, error: userErr } = await supabase.auth.getUser(bearerToken);
+        if (!userErr && userData?.user) {
+          const { data: roleRow } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", userData.user.id)
+            .eq("role", "admin")
+            .maybeSingle();
+          if (roleRow) authorizedUserId = userData.user.id;
+        }
+      } catch (e) {
+        console.error("Admin JWT auth check failed (falling back to password):", e);
+      }
+    }
+
     const adminPassword = Deno.env.get("ADMIN_PASSWORD");
-    if (!password || password !== adminPassword) {
-      console.log("Admin auth failed: invalid password");
+    const passwordValid = !!password && !!adminPassword && password === adminPassword;
+
+    if (!authorizedUserId && !passwordValid) {
+      console.log("Admin auth failed: no valid session or password");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -49,10 +77,17 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "authenticate": {
-        // Password already validated above, just return success
-        console.log("Admin authenticated successfully");
+        console.log(`Admin authenticated successfully via ${authorizedUserId ? "real user session" : "legacy password"}`);
         return new Response(
-          JSON.stringify({ authenticated: true }),
+          // A real, JWT-verified admin gets the shared password back so the
+          // frontend can keep populating it for the other edge functions
+          // that still check it directly (not yet migrated off it). A
+          // legacy-password login already knows the password, so there's
+          // nothing new to reveal.
+          JSON.stringify({
+            authenticated: true,
+            ...(authorizedUserId ? { password: adminPassword } : {}),
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

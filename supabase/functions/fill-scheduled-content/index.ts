@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
-import { feedbackToPromptBlock, type ContentFeedbackItem } from "../_shared/contentFeedback.ts";
+import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
 
 interface ContextProfile {
   services?: string[];
@@ -146,6 +146,29 @@ serve(async (req) => {
       }
     }
 
+    // Other half of the loop: real examples of content this client has
+    // actually approved, so drafts have a positive style/voice/quality
+    // reference, not just a list of past mistakes to avoid.
+    const { data: recentApprovedRows } = await supabase
+      .from("generated_content")
+      .select("client_id, content_type, title, content")
+      .in("client_id", clientIds)
+      .in("status", ["approved", "client_approved", "published"])
+      .order("updated_at", { ascending: false })
+      .limit(clientIds.length * 3);
+
+    const approvedByClient: Record<string, ApprovedContentItem[]> = {};
+    for (const item of recentApprovedRows || []) {
+      if (!approvedByClient[item.client_id]) approvedByClient[item.client_id] = [];
+      if (approvedByClient[item.client_id].length < 3) {
+        approvedByClient[item.client_id].push({
+          content_type: item.content_type,
+          title: item.title || "Untitled",
+          content: item.content,
+        });
+      }
+    }
+
     const results: { id: string; success: boolean; error?: string }[] = [];
 
     for (const slot of slots) {
@@ -155,7 +178,8 @@ serve(async (req) => {
 
         const recentTopics = recentByClient[slot.client_account_id] || [];
         const recentFeedback = feedbackByClient[slot.client_account_id] || [];
-        const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, GROQ_API_KEY);
+        const recentApproved = approvedByClient[slot.client_account_id] || [];
+        const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY);
 
         // Update the calendar slot with the generated draft text so it's previewable,
         // but leave status="draft" and client_approved=false — the slot is NOT schedulable
@@ -268,13 +292,14 @@ async function generateContent(
   client: ClientInfo,
   recentTopics: string[],
   recentFeedback: ContentFeedbackItem[],
+  recentApproved: ApprovedContentItem[],
   _apiKey: string
 ): Promise<string> {
   const now = new Date();
   const month = MONTHS[now.getMonth()];
   const season = SEASONS[now.getMonth()];
 
-  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, recentFeedback, month, season);
+  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, recentFeedback, recentApproved, month, season);
 
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
@@ -377,6 +402,7 @@ function buildPrompt(
   client: ClientInfo,
   recentTopics: string[],
   recentFeedback: ContentFeedbackItem[],
+  recentApproved: ApprovedContentItem[],
   month: string,
   season: string
 ): { system: string; user: string } {
@@ -386,6 +412,7 @@ function buildPrompt(
   const brandVoice = getBrandVoice(client);
   const avoidRepeat = avoidRepetitionInstruction(recentTopics);
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
+  const approvedBlock = approvedContentToPromptBlock(recentApproved);
   const services = client.context_profile?.services || [];
   const differentiators = client.context_profile?.differentiators || [];
   const location = client.context_profile?.location || "";
@@ -404,7 +431,7 @@ RULES:
 - Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
 - Be specific to ${biz}'s actual services and differentiators — never generic filler
 - Every piece must sound like it comes from this specific business, not a template
-- Reference ${month} or ${season} naturally only when it adds genuine value${feedbackBlock ? `\n\n${feedbackBlock}` : ""}`;
+- Reference ${month} or ${season} naturally only when it adds genuine value${approvedBlock ? `\n\n${approvedBlock}` : ""}${feedbackBlock ? `\n\n${feedbackBlock}` : ""}`;
 
   switch (contentType) {
     case "social_post": {
