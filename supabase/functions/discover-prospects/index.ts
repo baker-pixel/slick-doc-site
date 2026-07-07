@@ -7,11 +7,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+import { checkAdminAuth } from "../_shared/auth.ts";
+
 interface DiscoverRequest {
   client_id: string;
   query: string;      // e.g. "HVAC companies"
   location: string;   // e.g. "Toronto, ON"
   max_results?: number; // default 20, max 60
+  password?: string;
 }
 
 interface PlacesResult {
@@ -34,7 +37,15 @@ serve(async (req) => {
 
   try {
     const body: DiscoverRequest = await req.json();
-    const { client_id, query, location, max_results = 20 } = body;
+    const { client_id, query, location, max_results = 20, password } = body;
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!client_id || !query || !location) {
       return new Response(

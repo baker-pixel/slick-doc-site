@@ -195,7 +195,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       // Seed the tier-based workflow for this client
       try {
         const { error: workflowError } = await supabase.functions.invoke("seed-tier-workflow", {
-          body: { client_id: insertedClient.id },
+          body: { client_id: insertedClient.id, password: adminPassword },
         });
         if (workflowError) {
           console.error("Workflow seed error:", workflowError);

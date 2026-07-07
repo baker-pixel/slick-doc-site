@@ -16,6 +16,7 @@ import {
   CheckCircle, AlertCircle, Globe, Instagram, Zap
 } from "lucide-react";
 import { format, isSameDay, startOfDay } from "date-fns";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface CalendarItem {
   id: string;
@@ -53,6 +54,7 @@ interface ContentApproval {
 }
 
 export function ContentCalendarPanel() {
+  const { adminPassword } = useAdminAuth();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [calendarItems, setCalendarItems] = useState<CalendarItem[]>([]);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
@@ -286,7 +288,7 @@ export function ContentCalendarPanel() {
     setPublishingId(item.id);
     try {
       const { data, error } = await supabase.functions.invoke("postforme-publish-post", {
-        body: { contentCalendarId: item.id },
+        body: { contentCalendarId: item.id, password: adminPassword },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

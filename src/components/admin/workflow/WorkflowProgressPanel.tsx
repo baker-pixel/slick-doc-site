@@ -157,7 +157,7 @@ export function WorkflowProgressPanel({ clientId, clientName, clientTier, adminP
     try {
       const { data: seedData, error: seedError } = await supabase.functions.invoke(
         "seed-tier-workflow",
-        { body: { client_id: clientId } }
+        { body: { client_id: clientId, password: adminPassword } }
       );
 
       if (seedError) throw seedError;

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -94,6 +95,13 @@ serve(async (req) => {
     const body = await req.json();
     contentCalendarId = body.contentCalendarId;
     if (!contentCalendarId) return json({ error: "contentCalendarId is required", success: false }, 400);
+
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === supabaseServiceKey;
+    if (!isServer) {
+      const auth = await checkAdminAuth(req, supabase, body.password);
+      if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
+    }
 
     // Read the item
     const { data: item, error: itemErr } = await supabase

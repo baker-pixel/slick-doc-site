@@ -40,6 +40,7 @@ import {
   Clock,
   TrendingUp,
 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ClientOption {
   id: string;
@@ -79,6 +80,7 @@ const SOURCE_COLORS: Record<string, string> = {
 };
 
 export default function ProspectEnginePanel() {
+  const { adminPassword } = useAdminAuth();
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,7 +195,7 @@ export default function ProspectEnginePanel() {
     setDiscResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("discover-prospects", {
-        body: { client_id: discClientId, query: discQuery, location: discLocation, max_results: 20 },
+        body: { client_id: discClientId, query: discQuery, location: discLocation, max_results: 20, password: adminPassword },
       });
       if (error) throw error;
       setDiscResult({ discovered: data.discovered ?? 0, skipped: data.skipped_duplicates ?? 0 });

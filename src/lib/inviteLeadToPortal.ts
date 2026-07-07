@@ -69,7 +69,7 @@ export async function inviteLeadToPortal(
     // 2b. Seed workflow + client_onboarding + kick off project generation
     try {
       await supabase.functions.invoke("seed-tier-workflow", {
-        body: { client_id: clientId, tier },
+        body: { client_id: clientId, tier, password: adminPassword },
       });
     } catch (wfErr) {
       console.error("Failed to seed workflow:", wfErr);
