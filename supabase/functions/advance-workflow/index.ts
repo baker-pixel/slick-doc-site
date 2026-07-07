@@ -137,14 +137,21 @@ serve(async (req) => {
       }
     }
 
-    // 5. Fire background tasks for any steps that just unlocked
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
-    const bgHeaders = {
-      "Authorization": `Bearer ${serviceKey}`,
-      "Content-Type": "application/json",
-    };
+    // 5. Enqueue background jobs for any steps that just unlocked. These used
+    // to be fire-and-forget `fetch(...).catch(console.error)` calls -- a
+    // dropped network call or a transient 5xx silently stalled the workflow
+    // forever with no retry. Enqueueing onto the durable agent_jobs queue
+    // (processed by process-agent-jobs, cron every minute) means a failure
+    // retries automatically and only dead-letters (with an alert) after
+    // repeated failures, and the idempotencyKey means a duplicate enqueue
+    // from a race between concurrent advance-workflow calls is a no-op
+    // instead of double-firing the side effect.
+    const enqueue = (target: string, idempotencyKey: string, body: Record<string, unknown>) =>
+      supabase
+        .rpc("agent_jobs_enqueue", { msg: { target, idempotencyKey, body } })
+        .then(({ error }: { error: unknown }) => {
+          if (error) console.error(`Failed to enqueue ${target} job (${idempotencyKey}):`, error);
+        });
 
     // 5a. Fire generate-approval-draft if a client_approval step just unlocked
     if (resolvedClientId) {
@@ -152,15 +159,11 @@ serve(async (req) => {
         (s) => clientToUnlock.includes(s.id) && s.task_type === "client_approval"
       );
       if (approvalStep) {
-        fetch(`${supabaseUrl}/functions/v1/generate-approval-draft`, {
-          method: "POST",
-          headers: bgHeaders,
-          body: JSON.stringify({
-            client_id: resolvedClientId,
-            workflow_id,
-            step_id: approvalStep.id,
-          }),
-        }).catch((e) => console.error("Failed to generate approval draft:", e));
+        await enqueue("generate-approval-draft", `approval-draft:${approvalStep.id}`, {
+          client_id: resolvedClientId,
+          workflow_id,
+          step_id: approvalStep.id,
+        });
       }
     }
 
@@ -169,34 +172,25 @@ serve(async (req) => {
     if (automationToUnlock.length > 0 && resolvedClientId) {
       for (const step of automationToUnlock) {
         if (N8N_TYPES.has(step.task_type)) {
-          fetch(`${supabaseUrl}/functions/v1/trigger-n8n`, {
-            method: "POST",
-            headers: bgHeaders,
-            body: JSON.stringify({
-              clientId: resolvedClientId,
-              workflow_id,
-              step_id: step.id,
-              step_number: step.step_number,
-              task_type: step.task_type,
-              trigger: step.task_type,
-              payload: step.payload || {},
-            }),
-          }).catch((e) => console.error(`Failed to trigger n8n step ${step.step_number} (${step.task_type}):`, e));
+          await enqueue("trigger-n8n", `n8n-step:${step.id}`, {
+            clientId: resolvedClientId,
+            workflow_id,
+            step_id: step.id,
+            step_number: step.step_number,
+            task_type: step.task_type,
+            trigger: step.task_type,
+            payload: step.payload || {},
+          });
         } else {
-          fetch(`${supabaseUrl}/functions/v1/run-automation`, {
-            method: "POST",
-            headers: bgHeaders,
-            body: JSON.stringify({
-              clientId: resolvedClientId,
-              jobType: step.task_type,
-              workflowId: workflow_id,
-              stepId: step.id,
-              stepNumber: step.step_number,
-              payload: step.payload || {},
-              password: adminPassword,
-              _source: "advance-workflow",
-            }),
-          }).catch((e) => console.error(`Failed to trigger step ${step.step_number} (${step.task_type}):`, e));
+          await enqueue("run-automation", `automation-step:${step.id}`, {
+            clientId: resolvedClientId,
+            jobType: step.task_type,
+            workflowId: workflow_id,
+            stepId: step.id,
+            stepNumber: step.step_number,
+            payload: step.payload || {},
+            _source: "advance-workflow",
+          });
         }
       }
     }
