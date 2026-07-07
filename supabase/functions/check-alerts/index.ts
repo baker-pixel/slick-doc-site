@@ -132,12 +132,13 @@ serve(async (req) => {
       throw new Error(`Resend error ${sendResp.status}: ${errText}`);
     }
 
-    // Mark all as acknowledged
-    const ids = alerts.map(a => a.id);
-    await supabase
-      .from("automation_alerts")
-      .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: "check-alerts-cron" })
-      .in("id", ids);
+    // Do NOT auto-acknowledge here. The email tells the admin to acknowledge
+    // in the admin panel or the alert repeats next check (30 min) -- that
+    // promise only holds if sending the digest doesn't itself mark the alert
+    // resolved. Auto-acknowledging on send meant every alert was silently
+    // marked "acknowledged by check-alerts-cron" the instant the email went
+    // out, whether or not anyone read it or fixed anything, so unresolved
+    // errors could vanish from the radar after exactly one notification.
 
     console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} errors, ${warningCount} warnings)`);
 
