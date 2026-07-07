@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
 import { calculateSystemScorecard, getStatusBadgeColor, type SystemScorecard } from "@/lib/systemScorecard";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface GapAnalysisData {
   id: string;
@@ -143,6 +144,7 @@ const ScoreBar = ({ score, color }: { score: number; color: string }) => (
 );
 
 export function GapAnalysisDetailModal({ data, open, onOpenChange }: Props) {
+  const { adminPassword } = useAdminAuth();
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -154,7 +156,7 @@ export function GapAnalysisDetailModal({ data, open, onOpenChange }: Props) {
     setIsGenerating(true);
     try {
       const { data: result, error } = await supabase.functions.invoke("generate-analysis", {
-        body: { gapAnalysis: data },
+        body: { gapAnalysis: data, password: adminPassword },
       });
 
       const errMsg = handleEdgeError(error, result);

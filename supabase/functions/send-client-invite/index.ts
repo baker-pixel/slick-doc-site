@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -15,6 +16,7 @@ interface InviteRequest {
   businessName: string;
   token: string;
   portalOrigin?: string;
+  password?: string;
 }
 
 serve(async (req) => {
@@ -25,7 +27,15 @@ serve(async (req) => {
 
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { invitationId, email, firstName, businessName, token, portalOrigin }: InviteRequest = await req.json();
+    const { invitationId, email, firstName, businessName, token, portalOrigin, password }: InviteRequest = await req.json();
+
+    const auth = await checkAdminAuth(req, _sb, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     console.log(`Sending client portal invitation to ${email} for ${businessName}`);
 

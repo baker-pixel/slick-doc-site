@@ -13,6 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { 
   FileText, 
   Plus, 
@@ -91,6 +92,7 @@ const industries = [
 ];
 
 export default function SalesProposalPanel() {
+  const { adminPassword } = useAdminAuth();
   const queryClient = useQueryClient();
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -165,7 +167,7 @@ export default function SalesProposalPanel() {
   const sendProposalMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.functions.invoke('send-sales-proposal', {
-        body: { proposalId: id }
+        body: { proposalId: id, password: adminPassword }
       });
       if (error) throw error;
       
@@ -209,7 +211,8 @@ export default function SalesProposalPanel() {
         body: {
           businessName: newProposal.prospect_business,
           industry: newProposal.prospect_industry,
-          prospectName: newProposal.prospect_name
+          prospectName: newProposal.prospect_name,
+          password: adminPassword
         }
       });
       if (error) throw error;

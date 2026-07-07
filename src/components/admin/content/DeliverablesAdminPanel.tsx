@@ -109,6 +109,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
           title,
           description,
           details: { category },
+          password: adminPassword,
         },
       });
       toast({ title: "Notification sent to client" });

@@ -316,6 +316,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
               client_account_id: clientAccountId,
               title: milestoneName,
               details: { project_name: projectName },
+              password: adminPassword,
             },
           }),
         ]);
@@ -399,6 +400,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
             client_account_id: clientAccountId,
             title: 'Project Update',
             description: response.slice(0, 300),
+            password: adminPassword,
           },
         }),
       ]);

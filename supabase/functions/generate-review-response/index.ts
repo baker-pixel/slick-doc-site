@@ -1,12 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { callAI, AIError } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface RequestBody {
   reviewText: string;
   rating: number;
   authorName?: string;
   businessName: string;
+  password?: string;
 }
 
 serve(async (req) => {
@@ -14,7 +17,14 @@ serve(async (req) => {
   if (preflight) return preflight;
 
   try {
-    const { reviewText, rating, authorName, businessName } = (await req.json()) as RequestBody;
+    const { reviewText, rating, authorName, businessName, password } = (await req.json()) as RequestBody;
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) return errorResponse("Unauthorized", 401);
 
     if (!reviewText?.trim()) throw new Error("reviewText is required");
     if (typeof rating !== "number" || rating < 1 || rating > 5) throw new Error("rating must be a number 1-5");

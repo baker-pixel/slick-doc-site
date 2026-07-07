@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,7 +48,10 @@ serve(async (req) => {
   }
 
   try {
-    const { caption, businessName, platform = "instagram", contentCalendarId } = await req.json();
+    const { caption, businessName, platform = "instagram", contentCalendarId, password } = await req.json();
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
     if (!caption || !businessName) {
       return json({ error: "caption and businessName are required" }, 400);

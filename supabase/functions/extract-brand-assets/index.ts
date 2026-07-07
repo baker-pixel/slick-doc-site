@@ -327,11 +327,16 @@ serve(async (req) => {
     if (!client_account_id || !website_url)
       return json({ error: "client_account_id and website_url are required" }, 400);
 
-    // Auth: accept admin password in body OR validate client JWT
+    // Auth: service-role bearer (seed-tier-workflow's background trigger),
+    // admin password in body, or a validated client/admin JWT.
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const adminPassword = Deno.env.get("ADMIN_PASSWORD");
     let isAdmin = false;
 
-    if (password && adminPassword && password === adminPassword) {
+    if (isServer) {
+      isAdmin = true;
+    } else if (password && adminPassword && password === adminPassword) {
       isAdmin = true;
     } else {
       const authHeader = req.headers.get("Authorization");

@@ -260,9 +260,8 @@ serve(async (req) => {
 
     // Fire project generation + brand extraction in background (non-blocking)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const bgHeaders = {
-      "Authorization": `Bearer ${supabaseAnonKey}`,
+      "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
       "Content-Type": "application/json",
     };
 

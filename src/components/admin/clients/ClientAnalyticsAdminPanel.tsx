@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Trash2, Edit, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ClientAccount {
   id: string;
@@ -30,6 +31,7 @@ interface ClientAnalytics {
 }
 
 export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = {}) {
+  const { adminPassword } = useAdminAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingAnalytics, setEditingAnalytics] = useState<ClientAnalytics | null>(null);
   const [formData, setFormData] = useState({
@@ -86,6 +88,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
             leads_generated: metrics.leads_generated,
             conversions: metrics.conversions,
           },
+          password: adminPassword,
         },
       });
       toast.success("Notification sent to client");

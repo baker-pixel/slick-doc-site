@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Star, Sparkles, Copy, QrCode, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ClientAccount {
   id: string;
@@ -20,6 +21,7 @@ interface ClientAccount {
 }
 
 export function GoogleReviewEngine() {
+  const { adminPassword } = useAdminAuth();
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [reviewUrl, setReviewUrl] = useState("");
   const [isSetupOpen, setIsSetupOpen] = useState(false);
@@ -86,6 +88,7 @@ export function GoogleReviewEngine() {
           rating: reviewRating,
           authorName: authorName || undefined,
           businessName: selectedClient.business_name,
+          password: adminPassword,
         },
       });
       if (error) throw error;

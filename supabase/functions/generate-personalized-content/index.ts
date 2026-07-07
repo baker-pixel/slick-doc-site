@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const SEGMENT_DESCRIPTIONS: Record<string, string> = {
   new_visitor: "a first-time visitor who has never seen this site before",
@@ -18,7 +19,16 @@ serve(async (req) => {
   }
 
   try {
-    const { originalContent, segment, componentType } = await req.json();
+    const { originalContent, segment, componentType, password } = await req.json();
+
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!originalContent || !segment) {
       return new Response(

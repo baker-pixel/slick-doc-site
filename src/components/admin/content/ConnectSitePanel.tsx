@@ -25,11 +25,12 @@ interface Props {
   clientId: string;
   mode?: "admin" | "client";
   onSiteConnected?: (siteId: string) => void;
+  adminPassword?: string;
 }
 
 const PLUGIN_DOWNLOAD_URL = "/downloads/orange-door.zip";
 
-export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: Props) {
+export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, adminPassword }: Props) {
   const [site, setSite] = useState<ConnectedSite | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -79,7 +80,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected }: 
     setScanning(true);
     try {
       const { data, error } = await supabase.functions.invoke("scan-wordpress-site", {
-        body: { site_id: site.id },
+        body: { site_id: site.id, password: adminPassword },
       });
       if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Scan failed");
       toast.success(

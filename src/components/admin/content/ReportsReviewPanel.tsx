@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { RefreshCw, Eye, Calendar, TrendingUp, Lightbulb, Target, Download, Trash2, Send, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { Json } from "@/integrations/supabase/types";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ClientReport {
   id: string;
@@ -33,6 +34,7 @@ interface ClientAccount {
 }
 
 export const ReportsReviewPanel = () => {
+  const { adminPassword } = useAdminAuth();
   const [reports, setReports] = useState<ClientReport[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +115,7 @@ export const ReportsReviewPanel = () => {
           metrics: sendingReport.metrics,
           insights: sendingReport.insights,
           recommendations: sendingReport.recommendations,
+          password: adminPassword,
         },
       });
 

@@ -53,6 +53,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { toast } from "sonner";
 import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface GeneratedAd {
   platform: "google" | "meta";
@@ -139,6 +140,7 @@ interface AdTemplate {
 }
 
 export default function AIAdGenerator() {
+  const { adminPassword } = useAdminAuth();
   // Form state
   const [goal, setGoal] = useState("");
   const [location, setLocation] = useState("");
@@ -275,7 +277,8 @@ export default function AIAdGenerator() {
           generateVariants,
           includePredictions,
           includeBudgetRecs,
-          generateLandingPage
+          generateLandingPage,
+          password: adminPassword
         }
       });
 
@@ -479,9 +482,10 @@ ${metaAd.imagePrompts.join("\n")}`;
     setGeneratingImage(prompt);
     try {
       const { data, error } = await supabase.functions.invoke("generate-ads", {
-        body: { 
+        body: {
           generateImageOnly: true,
-          imagePrompt: prompt
+          imagePrompt: prompt,
+          password: adminPassword
         }
       });
       

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -48,13 +49,16 @@ serve(async (req) => {
   if (preflight) return preflight;
 
   try {
-    const { proposalId } = await req.json();
+    const { proposalId, password } = await req.json();
     if (!proposalId) throw new Error("proposalId is required");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) return errorResponse("Unauthorized", 401);
 
     const { data: proposal, error } = await supabase
       .from("sales_proposals")

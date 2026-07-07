@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FileText, Plus, Trash2, Eye, Download, Sparkles, Image, BarChart3 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface CaseStudyResults {
   metrics: Array<{ label: string; before: string; after: string; improvement: string }>;
@@ -31,6 +32,7 @@ interface CaseStudy {
 }
 
 export default function CaseStudyBuilderPanel() {
+  const { adminPassword } = useAdminAuth();
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
@@ -131,7 +133,7 @@ export default function CaseStudyBuilderPanel() {
     setIsGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-case-study", {
-        body: { clientAccountId: selectedClient },
+        body: { clientAccountId: selectedClient, password: adminPassword },
       });
 
       if (error) throw error;

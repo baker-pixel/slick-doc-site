@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loader2, Eye, Plus, Trash2, Building2, Info, Sparkles, Wand2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 // Variable descriptions for tooltips
 const VARIABLE_DESCRIPTIONS: Record<string, string> = {
@@ -94,6 +95,7 @@ const RECIPIENT_SOURCES = [
 ];
 
 export function CampaignSenderPanel() {
+  const { adminPassword } = useAdminAuth();
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [recipientSource, setRecipientSource] = useState("manual");
@@ -387,7 +389,8 @@ export function CampaignSenderPanel() {
           tone: "professional",
           clientName: selectedClient?.business_name,
           industry: selectedClient?.industry,
-          customInstructions: aiPrompt
+          customInstructions: aiPrompt,
+          password: adminPassword
         }
       });
 

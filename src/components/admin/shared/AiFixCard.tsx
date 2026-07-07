@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Wand2, CheckCircle2, Copy, AlertCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { friendlyEdgeMessage, getEdgeErrorMessage } from "@/lib/edge-error";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 export interface AiFixCardProps {
   clientAccountId: string;
@@ -44,6 +45,7 @@ export const AiFixCard = ({
   context,
   compact = false,
 }: AiFixCardProps) => {
+  const { adminPassword } = useAdminAuth();
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [fix, setFix] = useState<FixRecord | null>(null);
@@ -62,6 +64,7 @@ export const AiFixCard = ({
           issue_summary: issueSummary,
           severity,
           context,
+          password: adminPassword,
         },
       });
       const errMsg = await getEdgeErrorMessage(error, data);

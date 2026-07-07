@@ -48,6 +48,7 @@ export function ProjectSetupWizard({
   onClose,
   client,
   onSuccess,
+  adminPassword,
 }: ProjectSetupWizardProps) {
   const [step, setStep] = useState<"details" | "milestones">("details");
   const [loading, setLoading] = useState(false);
@@ -79,7 +80,7 @@ export function ProjectSetupWizard({
     setAiLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-client-projects", {
-        body: { clientAccountId: client.id, returnOnly: true },
+        body: { clientAccountId: client.id, returnOnly: true, password: adminPassword },
       });
 
       if (error || data?.error) throw new Error(data?.error || "AI unavailable");

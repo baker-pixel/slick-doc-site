@@ -25,6 +25,7 @@ import {
   Download,
   Share2
 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface BeforeAfterShowcase {
   id: string;
@@ -62,6 +63,7 @@ const projectTypes = [
 ];
 
 export default function BeforeAfterShowcasePanel() {
+  const { adminPassword } = useAdminAuth();
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
@@ -167,7 +169,7 @@ export default function BeforeAfterShowcasePanel() {
     setIsGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-before-after', {
-        body: { clientId: selectedClient }
+        body: { clientId: selectedClient, password: adminPassword }
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

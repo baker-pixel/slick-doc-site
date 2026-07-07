@@ -543,6 +543,7 @@ export default function SocialMediaPostsPanel() {
           platforms: [newPost.platform],
           topic: contentTopic,
           tone: activeClient.tone || "professional",
+          password: adminPassword,
         },
       });
       if (error) throw error;
@@ -568,7 +569,7 @@ export default function SocialMediaPostsPanel() {
     try {
       const prompt = imagePrompt || `Professional marketing image for ${activeClient.business_name} in the ${activeClient.industry || "marketing"} industry`;
       const { data, error } = await supabase.functions.invoke("generate-social-image", {
-        body: { prompt, platform: newPost.platform, count: 4 },
+        body: { prompt, platform: newPost.platform, count: 4, password: adminPassword },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

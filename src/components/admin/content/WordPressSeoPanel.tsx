@@ -11,6 +11,7 @@ import {
   Loader2, Search, AlertTriangle, CheckCircle2,
   Lightbulb, Target, TrendingUp, ShieldCheck,
 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface AuditResult {
   seo_score: number;
@@ -70,6 +71,7 @@ function toPlainEnglish(issue: string): string {
 }
 
 export function WordPressSeoPanel({ clientId }: Props) {
+  const { adminPassword } = useAdminAuth();
   const [siteId, setSiteId] = useState<string | null>(null);
   const [audit, setAudit] = useState<Audit | null>(null);
   const [loadingAudit, setLoadingAudit] = useState(true);
@@ -109,6 +111,7 @@ export function WordPressSeoPanel({ clientId }: Props) {
             clientId={clientId}
             mode="admin"
             onSiteConnected={setSiteId}
+            adminPassword={adminPassword}
           />
         </div>
         <div>

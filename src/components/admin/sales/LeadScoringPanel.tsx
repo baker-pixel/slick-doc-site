@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ScoredLead {
   id: string;
@@ -134,6 +135,7 @@ const generateAction = (tier: "hot" | "warm" | "cold"): string => {
 };
 
 export default function LeadScoringPanel() {
+  const { adminPassword } = useAdminAuth();
   const [leads, setLeads] = useState<ScoredLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTier, setSelectedTier] = useState<string>("all");
@@ -247,6 +249,7 @@ export default function LeadScoringPanel() {
                 intentScore: l.intentScore,
                 signals: l.signals.map(s => s.text),
               })),
+              password: adminPassword,
             },
           });
           if (!error && data?.insights) {

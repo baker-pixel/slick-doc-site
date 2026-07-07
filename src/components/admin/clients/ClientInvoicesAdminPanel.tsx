@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Trash2, Edit, Receipt, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface ClientAccount {
   id: string;
@@ -34,6 +35,7 @@ interface ClientInvoice {
 }
 
 export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {}) {
+  const { adminPassword } = useAdminAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<ClientInvoice | null>(null);
   const [formData, setFormData] = useState({
@@ -82,6 +84,7 @@ export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {
           title: invoiceNumber,
           description,
           details: { amount, currency, due_date: format(new Date(dueDate), 'MMM d, yyyy') },
+          password: adminPassword,
         },
       });
       toast.success("Notification sent to client");

@@ -218,6 +218,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
           clientName: selectedClient?.business_name,
           industry: undefined,
           customInstructions: aiEmailPrompt,
+          password,
         },
       });
 

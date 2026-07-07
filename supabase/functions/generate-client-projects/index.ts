@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface ActionItem {
   action: string;
@@ -21,13 +22,25 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
-    const { clientAccountId, returnOnly = false } = await req.json();
+    const { clientAccountId, returnOnly = false, password } = await req.json();
 
     if (!clientAccountId) {
       return new Response(
         JSON.stringify({ error: "clientAccountId is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === supabaseServiceKey;
+    if (!isServer) {
+      const auth = await checkAdminAuth(req, supabase, password);
+      if (!auth.authorized) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Duplicate guard only when actually saving to DB

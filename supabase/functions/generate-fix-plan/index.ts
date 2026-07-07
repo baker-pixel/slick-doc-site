@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface FixRequest {
   client_account_id: string;
@@ -11,6 +12,7 @@ interface FixRequest {
   issue_summary?: string;
   context?: Record<string, unknown>;
   severity?: "low" | "medium" | "high" | "critical";
+  password?: string;
 }
 
 serve(async (req) => {
@@ -28,6 +30,14 @@ serve(async (req) => {
         JSON.stringify({ error: "client_account_id, source and issue_title are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    const auth = await checkAdminAuth(req, supabase, body.password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { data: client } = await supabase

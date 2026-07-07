@@ -16,6 +16,7 @@ import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Fil
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 // Variable descriptions for tooltips
 const VARIABLE_DESCRIPTIONS: Record<string, string> = {
@@ -98,6 +99,7 @@ const getCategoryColor = (category: string) => {
 };
 
 export function EmailTemplatesPanel() {
+  const { adminPassword } = useAdminAuth();
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -310,7 +312,7 @@ export function EmailTemplatesPanel() {
     setIsGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-email-template", {
-        body: aiForm,
+        body: { ...aiForm, password: adminPassword },
       });
 
       if (error) throw error;

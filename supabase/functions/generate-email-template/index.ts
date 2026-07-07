@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface GenerateRequest {
   templateType: string;
@@ -10,6 +11,7 @@ interface GenerateRequest {
   purpose?: string;
   clientName?: string;
   customInstructions?: string;
+  password?: string;
 }
 
 const TEMPLATE_TYPES: Record<string, { description: string; defaultPurpose: string }> = {
@@ -98,6 +100,14 @@ const handler = async (req: Request): Promise<Response> => {
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const raw: GenerateRequest = await req.json();
+
+    const auth = await checkAdminAuth(req, _sb, raw.password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Sanitize inputs — truncate to safe lengths, strip prompt injection attempts
     const templateType = String(raw.templateType || "followup").slice(0, 50);

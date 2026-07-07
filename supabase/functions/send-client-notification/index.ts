@@ -1,5 +1,6 @@
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -15,6 +16,7 @@ interface NotificationRequest {
   description?: string;
   details?: Record<string, string | number>;
   admin_email?: string;
+  password?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -29,7 +31,15 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const body: NotificationRequest = await req.json();
     client_account_id = body.client_account_id;
-    const { type, title, description, details, admin_email } = body;
+    const { type, title, description, details, admin_email, password } = body;
+
+    const auth = await checkClientOrAdminAuth(req, supabase, client_account_id, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     console.log(`Sending ${type} notification for client: ${client_account_id}`);
 

@@ -49,3 +49,43 @@ export async function checkAdminAuth(
 
   return { authorized: false, userId: null, via: null };
 }
+
+/**
+ * For endpoints reachable from both the admin panel and the client portal:
+ * authorizes an admin (session or password, via checkAdminAuth) OR a signed-in
+ * portal user who owns the given client account. Mirrors the inline pattern
+ * used in extract-brand-assets/handle-approval before this was extracted.
+ */
+export async function checkClientOrAdminAuth(
+  req: Request,
+  supabase: SupabaseClient,
+  clientAccountId: string | null | undefined,
+  password?: string | null,
+): Promise<AdminAuthResult> {
+  const adminAuth = await checkAdminAuth(req, supabase, password);
+  if (adminAuth.authorized) return adminAuth;
+
+  if (!clientAccountId) return { authorized: false, userId: null, via: null };
+
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const bearerToken = authHeader.replace("Bearer ", "");
+  if (!bearerToken) return { authorized: false, userId: null, via: null };
+
+  try {
+    const { data: userData, error } = await supabase.auth.getUser(bearerToken);
+    if (error || !userData?.user) return { authorized: false, userId: null, via: null };
+
+    const { data: portalUser } = await supabase
+      .from("client_portal_users")
+      .select("id")
+      .eq("user_id", userData.user.id)
+      .eq("client_account_id", clientAccountId)
+      .maybeSingle();
+
+    if (portalUser) return { authorized: true, userId: userData.user.id, via: "session" };
+  } catch (e) {
+    console.error("Client ownership auth check failed:", e);
+  }
+
+  return { authorized: false, userId: null, via: null };
+}

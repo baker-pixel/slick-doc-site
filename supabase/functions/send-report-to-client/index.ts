@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -20,6 +21,7 @@ interface ReportEmailRequest {
   metrics: Record<string, unknown> | null;
   insights: Record<string, unknown> | null;
   recommendations: Record<string, unknown> | null;
+  password?: string;
 }
 
 const formatJsonForEmail = (data: Record<string, unknown> | string | null): string => {
@@ -57,7 +59,16 @@ const handler = async (req: Request): Promise<Response> => {
       metrics,
       insights,
       recommendations,
+      password,
     }: ReportEmailRequest = await req.json();
+
+    const auth = await checkAdminAuth(req, _sb, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     console.log(`Sending report to ${clientEmail} for ${businessName}`);
 

@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI } from "../_shared/ai.ts";
+import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -20,8 +21,11 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id } = await req.json();
+    const { client_id, password } = await req.json();
     if (!client_id) return json({ error: "client_id is required" }, 400);
+
+    const auth = await checkClientOrAdminAuth(req, supabase, client_id, password);
+    if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
     const kit = await getClientBrandKit(supabase, client_id, true);
 

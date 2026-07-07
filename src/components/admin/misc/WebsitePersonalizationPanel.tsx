@@ -23,6 +23,7 @@ import {
   Code,
   Wand2
 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 type UserSegment = 'new_visitor' | 'returning_visitor' | 'local_user' | 'out_of_town' | 'past_buyer' | 'engaged_scroller';
 
@@ -80,6 +81,7 @@ const segmentConfig: Record<UserSegment, { label: string; icon: React.ReactNode;
 };
 
 export default function WebsitePersonalizationPanel() {
+  const { adminPassword } = useAdminAuth();
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
@@ -194,7 +196,8 @@ export default function WebsitePersonalizationPanel() {
         body: {
           originalContent: newRule.original_content,
           segment: newRule.segment,
-          componentType: newRule.component_type
+          componentType: newRule.component_type,
+          password: adminPassword
         }
       });
 

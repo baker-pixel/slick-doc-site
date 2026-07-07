@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { callAIJson, MODELS } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface LeadInput {
   id: string;
@@ -16,6 +18,7 @@ interface LeadInput {
 
 interface RequestBody {
   leads: LeadInput[];
+  password?: string;
 }
 
 interface InsightsResponse {
@@ -30,7 +33,15 @@ serve(async (req) => {
   if (preflight) return preflight;
 
   try {
-    const { leads } = (await req.json()) as RequestBody;
+    const { leads, password } = (await req.json()) as RequestBody;
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) return errorResponse("Unauthorized", 401);
+
     if (!Array.isArray(leads) || leads.length === 0) {
       return jsonResponse({ insights: {} });
     }

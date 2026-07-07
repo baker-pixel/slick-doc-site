@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, extractJson, AIError } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -15,6 +16,14 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+
+    const auth = await checkAdminAuth(req, supabase, body.password);
+    if (!auth.authorized) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     let gapAnalysis: Record<string, unknown>;
 

@@ -324,6 +324,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
           businessName: selectedClientForInvite.business_name,
           token: invitation.token,
           portalOrigin: getClientPortalOrigin(),
+          password: adminPassword,
         },
       });
 
@@ -366,6 +367,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
           businessName: getClientName(refreshed.client_account_id),
           token: refreshed.token,
           portalOrigin: getClientPortalOrigin(),
+          password: adminPassword,
         },
       });
 

@@ -2,9 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface RequestBody {
   clientAccountId: string;
+  password?: string;
 }
 
 interface CaseStudyOutline {
@@ -19,13 +21,16 @@ serve(async (req) => {
   if (preflight) return preflight;
 
   try {
-    const { clientAccountId } = (await req.json()) as RequestBody;
+    const { clientAccountId, password } = (await req.json()) as RequestBody;
     if (!clientAccountId) throw new Error("clientAccountId is required");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) return errorResponse("Unauthorized", 401);
 
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")

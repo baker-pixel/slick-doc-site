@@ -77,7 +77,9 @@ export async function inviteLeadToPortal(
 
     // Fallback: generate projects from browser in case edge-to-edge call failed
     supabase.functions
-      .invoke("generate-client-projects", { body: { clientAccountId: clientId, returnOnly: false } })
+      .invoke("generate-client-projects", {
+        body: { clientAccountId: clientId, returnOnly: false, password: adminPassword },
+      })
       .catch((err: unknown) => console.error("Auto project generation failed:", err));
 
     // Brand extraction is handled inside seed-tier-workflow (background fetch)
@@ -105,6 +107,7 @@ export async function inviteLeadToPortal(
         email: lead.email,
         firstName: lead.first_name || "there",
         clientAccountId: clientId,
+        password: adminPassword,
       },
     });
   } catch (emailErr) {
