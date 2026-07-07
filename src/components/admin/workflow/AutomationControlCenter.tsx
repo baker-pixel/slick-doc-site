@@ -169,7 +169,7 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
       toast({ title: `🚀 Starting automation for ${clientName}...` });
 
       const { data, error } = await supabase.functions.invoke("auto-run-client-tasks", {
-        body: { clientId },
+        body: { clientId, password: adminPassword },
       });
 
       if (error) throw error;
@@ -217,7 +217,7 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
         setRunningClients(prev => new Set(prev).add(client.id));
         
         const { data, error } = await supabase.functions.invoke("auto-run-client-tasks", {
-          body: { clientId: client.id },
+          body: { clientId: client.id, password: adminPassword },
         });
 
         if (error) throw error;

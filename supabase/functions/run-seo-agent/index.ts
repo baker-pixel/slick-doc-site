@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -922,6 +923,15 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+
+    const auth = await checkAdminAuth(req, sb, body.password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let task: Record<string, unknown>;
 
     if (body.task_id) {

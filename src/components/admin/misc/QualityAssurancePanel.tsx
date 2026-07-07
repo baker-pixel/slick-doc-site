@@ -92,7 +92,7 @@ export default function QualityAssurancePanel() {
     mutationFn: async (url: string) => {
       setIsScanning(true);
       const { data, error } = await supabase.functions.invoke('run-qa-scan', {
-        body: { clientId: selectedClient, url }
+        body: { clientId: selectedClient, url, password: adminPassword }
       });
       if (error) throw error;
       return data;

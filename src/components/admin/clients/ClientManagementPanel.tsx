@@ -211,7 +211,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       // Auto-run all FULL tasks for the new client
       try {
         const { data, error: autoRunError } = await supabase.functions.invoke("auto-run-client-tasks", {
-          body: { clientId: insertedClient.id },
+          body: { clientId: insertedClient.id, password: adminPassword },
         });
 
         if (autoRunError) {

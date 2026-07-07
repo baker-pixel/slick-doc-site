@@ -4,14 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
  * Triggers the auto-run-client-tasks edge function to execute
  * all FULL automation tasks sequentially for a given client.
  */
-export async function runAutoTasks(clientId: string): Promise<{
+export async function runAutoTasks(clientId: string, password?: string): Promise<{
   success: boolean;
   completed: number;
   failed: number;
   results: { taskId: string; name: string; status: string; error?: string }[];
 }> {
   const { data, error } = await supabase.functions.invoke("auto-run-client-tasks", {
-    body: { clientId },
+    body: { clientId, password },
   });
 
   if (error) {

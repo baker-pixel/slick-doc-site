@@ -172,7 +172,7 @@ export function ClientTasksPanel({ adminPassword, clientId }: { adminPassword: s
 
     try {
       const { runAutoTasks } = await import("@/lib/n8n");
-      const result = await runAutoTasks(pendingAutomatable[0].client_account_id);
+      const result = await runAutoTasks(pendingAutomatable[0].client_account_id, adminPassword);
 
       toast.success(`Completed ${result.completed}/${result.completed + result.failed} tasks`);
       fetchTasks();

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,13 +18,21 @@ serve(async (req) => {
   );
 
   try {
-    const { clientId, url } = await req.json();
+    const { clientId, url, password } = await req.json();
 
     if (!clientId || !url) {
       return new Response(
         JSON.stringify({ error: "clientId and url are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Insert a pending report first so the UI can show scanning state

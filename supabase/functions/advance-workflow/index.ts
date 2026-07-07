@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,10 +37,17 @@ serve(async (req) => {
   );
 
   try {
-    const { workflow_id, completed_step_number, client_id } = await req.json();
+    const { workflow_id, completed_step_number, client_id, password } = await req.json();
 
     if (!workflow_id || completed_step_number == null) {
       return json({ error: "workflow_id and completed_step_number are required" }, 400);
+    }
+
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isServer) {
+      const auth = await checkClientOrAdminAuth(req, supabase, client_id, password);
+      if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
     }
 
     // 1. Fetch all steps for this workflow

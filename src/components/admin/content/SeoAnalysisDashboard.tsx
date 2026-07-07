@@ -44,6 +44,7 @@ import { InsightColumns } from "@/components/admin/shared/InsightColumns";
 import { ActionPriorityList } from "@/components/admin/shared/ActionPriorityList";
 import { WordPressConnectPanel } from "@/components/admin/content/WordPressConnectPanel";
 import { SeoFixQueuePanel } from "@/components/admin/content/SeoFixQueuePanel";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface SeoAnalysis {
   id: string;
@@ -117,6 +118,7 @@ interface FullAuditResult {
 }
 
 export default function SeoAnalysisDashboard() {
+  const { adminPassword } = useAdminAuth();
   const [analyses, setAnalyses] = useState<SeoAnalysis[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>("");
@@ -153,7 +155,7 @@ export default function SeoAnalysisDashboard() {
 
     try {
       const { data, error } = await supabase.functions.invoke("run-seo-agent", {
-        body: { client_id: selectedClient, audit_scope: "full" },
+        body: { client_id: selectedClient, audit_scope: "full", password: adminPassword },
       });
       if (error) throw error;
       const result = (data as any)?.result as FullAuditResult;

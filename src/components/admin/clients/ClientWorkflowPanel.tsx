@@ -449,6 +449,7 @@ export function ClientWorkflowPanel({ adminPassword, onNavigateToSection }: Clie
                   workflow_id: wf.id,
                   completed_step_number: wfStep.step_number,
                   client_id: selectedClientId,
+                  password: adminPassword,
                 },
               })
               .catch((e) => console.error("advance-workflow failed from admin:", e));

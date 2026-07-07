@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Upload, Brain, FileText, Loader2, Trash2 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface SOPDocument {
   id: string;
@@ -26,6 +27,7 @@ interface SOPDocument {
 }
 
 export function SOPManagementPanel() {
+  const { adminPassword } = useAdminAuth();
   const [sops, setSOPs] = useState<SOPDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -127,7 +129,7 @@ export function SOPManagementPanel() {
 
     try {
       const { data, error } = await supabase.functions.invoke("parse-sop", {
-        body: { sopId: sop.id, documentText: sop.description },
+        body: { sopId: sop.id, documentText: sop.description, password: adminPassword },
       });
 
       if (error) throw error;

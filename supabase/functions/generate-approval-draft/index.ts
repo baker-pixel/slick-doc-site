@@ -19,6 +19,11 @@ serve(async (req) => {
   );
 
   try {
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    if (bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+
     const { client_id, workflow_id, step_id } = await req.json();
     if (!client_id) return json({ error: "client_id required" }, 400);
 

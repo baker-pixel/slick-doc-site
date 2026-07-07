@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +18,16 @@ serve(async (req) => {
   );
 
   try {
-    const { clientId }: { clientId: string } = await req.json();
+    const { clientId, password }: { clientId: string; password?: string } = await req.json();
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log(`Auto-running tasks for client ${clientId}`);
 
     // Get all pending FULL automation tasks for this client, ordered
@@ -145,6 +155,11 @@ function mapTaskToJobType(taskName: string): string {
     "Add client to CRM": "add_to_crm",
     "Schedule Kickoff Call": "schedule_kickoff",
     "Run PageSpeed Test": "run_page_speed_test",
+    // task_templates seed (20260506115909) names — no substring overlap
+    // with the legacy names above, so these need their own entries.
+    "Analyze current website performance": "run_page_speed_test",
+    "Run basic SEO audit": "run_seo_audit",
+    "Generate marketing gap report": "run_keyword_gap_analysis",
     "Create Google Review Link": "create_google_review_link",
     "Create Review QR Code": "create_review_qr_code",
     "Setup Review Automation": "setup_review_automation",

@@ -2,10 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, extractJson, AIError } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface ParseSOPRequest {
   sopId: string;
   documentText?: string;
+  password?: string;
 }
 
 serve(async (req) => {
@@ -20,7 +22,16 @@ serve(async (req) => {
 
   try {
 
-    const { sopId, documentText }: ParseSOPRequest = await req.json();
+    const { sopId, documentText, password }: ParseSOPRequest = await req.json();
+
+    const auth = await checkAdminAuth(req, supabase, password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log(`Parsing SOP ${sopId}`);
 
     // Get SOP document

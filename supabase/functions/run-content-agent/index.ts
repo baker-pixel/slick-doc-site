@@ -5,6 +5,7 @@ import { getRecentContentFeedback, feedbackToPromptBlock, getRecentApprovedConte
 import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -27,6 +28,18 @@ serve(async (req) => {
         JSON.stringify({ error: "task_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isServer) {
+      const auth = await checkAdminAuth(req, supabase, body.password);
+      if (!auth.authorized) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Fetch the task

@@ -243,7 +243,7 @@ export function SmartTaskQueue({ adminPassword }: SmartTaskQueueProps) {
 
     try {
       const { runAutoTasks } = await import("@/lib/n8n");
-      const result = await runAutoTasks(selectedClientId!);
+      const result = await runAutoTasks(selectedClientId!, adminPassword);
 
       if (result.failed > 0) {
         toast.warning(`Completed ${result.completed}/${result.completed + result.failed} tasks`, {

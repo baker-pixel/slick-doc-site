@@ -94,6 +94,7 @@ export function OnboardingAutomationPanel({ adminPassword }: { adminPassword?: s
           workflow_id: workflow.id,
           completed_step_number: step.step_number,
           client_id: workflow.client_id,
+          password: adminPassword,
         },
       });
       if (error) throw error;
