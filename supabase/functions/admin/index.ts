@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,36 +24,18 @@ Deno.serve(async (req) => {
     // changes needed at any call site. The shared ADMIN_PASSWORD remains a
     // fallback during migration (and is what the ~75 other edge functions
     // outside this proxy still check directly, unchanged for now).
-    let authorizedUserId: string | null = null;
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const bearerToken = authHeader.replace("Bearer ", "");
-    if (bearerToken && bearerToken !== supabaseServiceKey) {
-      try {
-        const { data: userData, error: userErr } = await supabase.auth.getUser(bearerToken);
-        if (!userErr && userData?.user) {
-          const { data: roleRow } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", userData.user.id)
-            .eq("role", "admin")
-            .maybeSingle();
-          if (roleRow) authorizedUserId = userData.user.id;
-        }
-      } catch (e) {
-        console.error("Admin JWT auth check failed (falling back to password):", e);
-      }
-    }
+    const auth = await checkAdminAuth(req, supabase, password);
+    const authorizedUserId = auth.userId;
 
-    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
-    const passwordValid = !!password && !!adminPassword && password === adminPassword;
-
-    if (!authorizedUserId && !passwordValid) {
+    if (!auth.authorized) {
       console.log("Admin auth failed: no valid session or password");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
 
     // Whitelist of tables the generic list/update/delete actions may touch.
     // Prevents a leaked ADMIN_PASSWORD from becoming full-database access

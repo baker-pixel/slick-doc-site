@@ -26,6 +26,7 @@ import {
   Download
 } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface QAReport {
   id: string;
@@ -53,6 +54,7 @@ const issueCategories = [
 ];
 
 export default function QualityAssurancePanel() {
+  const { adminPassword } = useAdminAuth();
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [urlToScan, setUrlToScan] = useState("");
@@ -111,7 +113,7 @@ export default function QualityAssurancePanel() {
   const applyFixMutation = useMutation({
     mutationFn: async ({ reportId, fixType }: { reportId: string; fixType: string }) => {
       const { data, error } = await supabase.functions.invoke('apply-qa-fix', {
-        body: { reportId, fixType }
+        body: { reportId, fixType, password: adminPassword }
       });
       if (error) throw error;
       return data;

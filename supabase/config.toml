@@ -1,7 +1,7 @@
 project_id = "axbeaqpjyzzmbvyaofbn"
 
 [functions.check-alerts]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-review-response]
 verify_jwt = false
@@ -25,7 +25,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.process-agent-jobs]
-verify_jwt = false
+verify_jwt = true
 
 [functions.connect-site]
 verify_jwt = false
@@ -37,7 +37,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.publish-scheduled-content]
-verify_jwt = false
+verify_jwt = true
 
 [functions.admin]
 verify_jwt = false
@@ -64,7 +64,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.process-email-queue]
-verify_jwt = false
+verify_jwt = true
 
 [functions.queue-sequence-emails]
 verify_jwt = false
@@ -118,7 +118,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.run-ai-batch]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-email-template]
 verify_jwt = false
@@ -130,25 +130,25 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.detect-inactive-leads]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-client-projects]
 verify_jwt = false
 
 [functions.check-stalled-workflows]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-prospect-report]
 verify_jwt = false
 
 [functions.run-prospect-drip]
-verify_jwt = false
+verify_jwt = true
 
 [functions.fill-scheduled-content]
-verify_jwt = false
+verify_jwt = true
 
 [functions.auto-schedule-content]
-verify_jwt = false
+verify_jwt = true
 
 [functions.handle-approval]
 verify_jwt = false
@@ -193,4 +193,4 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-approval-reminders]
-verify_jwt = false
+verify_jwt = true

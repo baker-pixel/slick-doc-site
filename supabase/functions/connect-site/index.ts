@@ -37,6 +37,26 @@ serve(async (req) => {
     const yoastActive    = plugins.includes("yoast-seo");
     const rankmathActive = plugins.includes("rank-math");
 
+    // Idempotent claim: a site can be (re-)registered with the token it
+    // already has on file (e.g. plugin reactivation resends the same
+    // od_secret_token) or claimed fresh if no token is on file yet. Once a
+    // real token is stored, a request bearing a *different* token is
+    // rejected -- otherwise anyone who knows a client's public site_url
+    // could silently overwrite their stored token and break the fix/scan
+    // pipeline for that site.
+    const { data: currentSite } = await supabase
+      .from("connected_sites")
+      .select("token")
+      .eq("site_url", normalizedUrl)
+      .maybeSingle();
+
+    if (currentSite?.token && currentSite.token !== token) {
+      return new Response(
+        JSON.stringify({ error: "Site already connected with a different token" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Match to a client via previously stored wordpress_url in client_credentials
     let clientId: string | null = null;
     const { data: creds } = await supabase
