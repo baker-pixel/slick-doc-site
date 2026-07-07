@@ -539,12 +539,10 @@ export default function SocialMediaPostsPanel() {
     try {
       const { data, error } = await supabase.functions.invoke("generate-social-content", {
         body: {
-          clientName: activeClient.business_name,
-          industry: activeClient.industry || "marketing",
-          platform: newPost.platform,
+          clientAccountId: activeClient.id,
+          platforms: [newPost.platform],
           topic: contentTopic,
           tone: activeClient.tone || "professional",
-          websiteSummary: activeClient.website_summary || "",
         },
       });
       if (error) throw error;

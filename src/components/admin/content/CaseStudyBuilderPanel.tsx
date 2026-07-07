@@ -130,42 +130,28 @@ export default function CaseStudyBuilderPanel() {
 
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-ads", {
-        body: {
-          prompt: `Generate a compelling case study outline for a ${client.industry || "business"} client named "${client.business_name}". Include:
-1. A catchy title
-2. The main challenge they faced
-3. The solution we provided
-4. 3-4 suggested metrics to highlight (with placeholder values)
-
-Format as JSON with keys: title, challenge, solution, metrics (array with label, before, after, improvement)`
-        }
+      const { data, error } = await supabase.functions.invoke("generate-case-study", {
+        body: { clientAccountId: selectedClient },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      const content = data?.content;
-      if (content) {
-        try {
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            setFormData(prev => ({
-              ...prev,
-              title: parsed.title || prev.title,
-              industry: client.industry || "",
-              challenge: parsed.challenge || prev.challenge,
-              solution: parsed.solution || prev.solution,
-              metrics: parsed.metrics?.length ? parsed.metrics : prev.metrics
-            }));
-            toast.success("AI generated case study outline!");
-          }
-        } catch {
-          toast.error("Could not parse AI response");
-        }
+      const outline = data?.outline;
+      if (outline) {
+        setFormData(prev => ({
+          ...prev,
+          title: outline.title || prev.title,
+          industry: client.industry || "",
+          challenge: outline.challenge || prev.challenge,
+          solution: outline.solution || prev.solution,
+          metrics: outline.metrics?.length ? outline.metrics : prev.metrics
+        }));
+        toast.success("AI generated case study outline — review before publishing");
       }
     } catch (error) {
-      toast.error("Failed to generate with AI");
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast.error("Failed to generate with AI", { description: message });
     } finally {
       setIsGenerating(false);
     }

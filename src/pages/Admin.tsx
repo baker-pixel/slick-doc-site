@@ -78,7 +78,6 @@ import { ClientPhaseTracker } from "@/components/admin/clients/ClientPhaseTracke
 import ClientProgressTracker from "@/components/admin/clients/ClientProgressTracker";
 import { ReviewWorkflowPanel } from "@/components/admin/workflow/ReviewWorkflowPanel";
 import { ClientWorkflowPanel } from "@/components/admin/clients/ClientWorkflowPanel";
-import { OrangeDoorDashboard } from "@/components/admin/misc/OrangeDoorDashboard";
 import { AICopilotPanel } from "@/components/admin/core/AICopilotPanel";
 import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelector";
 import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientHeader";
@@ -1286,14 +1285,6 @@ const AdminInner = () => {
 
   const renderActiveSection = () => {
     switch (activeSection) {
-      case "home":
-        return (
-          <OrangeDoorDashboard 
-            onNavigate={(section) => setActiveSection(section as AdminSection)}
-            onAddClient={() => setActiveSection("clients")}
-            adminPassword={storedPassword}
-          />
-        );
       case "automation-center":
         return <AutomationControlCenter adminPassword={storedPassword} />;
       case "sop-command-center":

@@ -16,6 +16,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { AdminSection } from "@/components/admin/core/AdminSidebar";
 
 interface OnboardingStep {
   id: string;
@@ -24,7 +25,7 @@ interface OnboardingStep {
   icon: React.ReactNode;
   details: string[];
   tip: string;
-  targetSection?: string;
+  targetSection?: AdminSection;
 }
 
 const onboardingSteps: OnboardingStep[] = [
@@ -39,7 +40,7 @@ const onboardingSteps: OnboardingStep[] = [
       "Monitor your pipeline performance in real-time"
     ],
     tip: "Start each day by checking the Overview to see new submissions.",
-    targetSection: "overview"
+    targetSection: "home"
   },
   {
     id: "leads",
@@ -78,7 +79,7 @@ const onboardingSteps: OnboardingStep[] = [
       "Analytics: Track opens, clicks, and conversions"
     ],
     tip: "Set up a welcome sequence to automatically nurture new leads.",
-    targetSection: "email-templates"
+    targetSection: "templates"
   },
   {
     id: "content",
@@ -91,7 +92,7 @@ const onboardingSteps: OnboardingStep[] = [
       "Pipeline: Track content from draft to published"
     ],
     tip: "Batch your content creation for efficiency - plan a week at a time.",
-    targetSection: "content-calendar"
+    targetSection: "calendar"
   },
   {
     id: "analytics",
@@ -104,7 +105,7 @@ const onboardingSteps: OnboardingStep[] = [
       "Track automation job success rates"
     ],
     tip: "Review analytics weekly to identify trends and optimization opportunities.",
-    targetSection: "reports"
+    targetSection: "reports-review"
   },
   {
     id: "advanced",
@@ -123,7 +124,7 @@ const onboardingSteps: OnboardingStep[] = [
 
 interface AdminOnboardingProps {
   onComplete: () => void;
-  onNavigate?: (section: string) => void;
+  onNavigate?: (section: AdminSection) => void;
 }
 
 export function AdminOnboarding({ onComplete, onNavigate }: AdminOnboardingProps) {

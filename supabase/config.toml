@@ -3,6 +3,24 @@ project_id = "axbeaqpjyzzmbvyaofbn"
 [functions.check-alerts]
 verify_jwt = false
 
+[functions.generate-review-response]
+verify_jwt = false
+
+[functions.generate-case-study]
+verify_jwt = false
+
+[functions.generate-sales-proposal]
+verify_jwt = false
+
+[functions.send-sales-proposal]
+verify_jwt = false
+
+[functions.generate-before-after]
+verify_jwt = false
+
+[functions.generate-lead-insights]
+verify_jwt = false
+
 [functions.process-agent-jobs]
 verify_jwt = false
 

@@ -170,14 +170,17 @@ export default function BeforeAfterShowcasePanel() {
         body: { clientId: selectedClient }
       });
       if (error) throw error;
-      
+      if (data?.error) throw new Error(data.error);
+
+      setIsCreating(true);
       setNewShowcase(prev => ({
         ...prev,
         ...data.showcase
       }));
-      toast.success('Showcase data generated from analytics');
-    } catch (error) {
-      toast.error('Failed to generate showcase');
+      toast.success('Showcase data generated from SEO audit history');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast.error('Could not auto-generate showcase', { description: message });
     } finally {
       setIsGenerating(false);
     }

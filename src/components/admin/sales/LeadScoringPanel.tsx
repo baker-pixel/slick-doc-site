@@ -124,17 +124,6 @@ const getTier = (score: number): "hot" | "warm" | "cold" => {
   return "cold";
 };
 
-const generateAISummary = (lead: Partial<ScoredLead>): string => {
-  const summaries = [
-    `High-intent prospect from ${lead.businessName}. Shows strong buying signals with ${lead.signals?.length || 0} positive indicators detected.`,
-    `${lead.name} is actively seeking marketing solutions. Multiple urgency signals suggest they're ready to act.`,
-    `Qualified lead with clear pain points. Recommended for immediate follow-up based on intent analysis.`,
-    `Engaged prospect with budget discussions indicated. High probability of conversion with proper nurturing.`,
-    `New lead showing research behavior. May need additional touchpoints before sales engagement.`
-  ];
-  return summaries[Math.floor(Math.random() * summaries.length)];
-};
-
 const generateAction = (tier: "hot" | "warm" | "cold"): string => {
   const actions = {
     hot: ["Schedule call within 24 hours", "Send personalized proposal", "Direct sales outreach", "Priority follow-up required"],
@@ -235,16 +224,42 @@ export default function LeadScoringPanel() {
       // Sort by score
       scoredLeads.sort((a, b) => b.overallScore - a.overallScore);
 
-      // Generate AI summaries for top leads
-      scoredLeads.slice(0, 20).forEach(lead => {
-        lead.aiSummary = generateAISummary(lead);
-      });
-
       setLeads(scoredLeads);
+      setLoading(false);
+
+      // Real AI insight for the top leads, fetched after the list renders so
+      // scoring (which is instant, local, and real) isn't blocked on it.
+      // Best-effort: if it fails, leads just show no AI Insight block rather
+      // than a fabricated one.
+      const topLeads = scoredLeads.slice(0, 20);
+      if (topLeads.length > 0) {
+        try {
+          const { data, error } = await supabase.functions.invoke("generate-lead-insights", {
+            body: {
+              leads: topLeads.map(l => ({
+                id: l.id,
+                name: l.name,
+                businessName: l.businessName,
+                tier: l.tier,
+                overallScore: l.overallScore,
+                urgencyScore: l.urgencyScore,
+                budgetScore: l.budgetScore,
+                intentScore: l.intentScore,
+                signals: l.signals.map(s => s.text),
+              })),
+            },
+          });
+          if (!error && data?.insights) {
+            const insights = data.insights as Record<string, string>;
+            setLeads(prev => prev.map(l => insights[l.id] ? { ...l, aiSummary: insights[l.id] } : l));
+          }
+        } catch (insightError) {
+          console.warn("Lead insight generation failed (non-fatal):", insightError);
+        }
+      }
     } catch (error) {
       console.error("Error fetching leads:", error);
       toast.error("Failed to load leads");
-    } finally {
       setLoading(false);
     }
   };

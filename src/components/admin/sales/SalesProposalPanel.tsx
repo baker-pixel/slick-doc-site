@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
@@ -25,8 +26,7 @@ import {
   DollarSign,
   Calendar,
   BarChart3,
-  Palette,
-  Download
+  Palette
 } from "lucide-react";
 
 interface SalesProposal {
@@ -704,12 +704,12 @@ export default function SalesProposalPanel() {
                     </div>
                     
                     <div className="flex gap-2 mt-4">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedProposal(proposal)}>
                         <Eye className="h-4 w-4 mr-1" />
                         Preview
                       </Button>
                       {proposal.status === 'draft' && (
-                        <Button 
+                        <Button
                           size="sm"
                           onClick={() => sendProposalMutation.mutate(proposal.id)}
                         >
@@ -717,11 +717,7 @@ export default function SalesProposalPanel() {
                           Send
                         </Button>
                       )}
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-1" />
-                        PDF
-                      </Button>
-                      <Button 
+                      <Button
                         variant="ghost" 
                         size="sm"
                         onClick={() => deleteProposalMutation.mutate(proposal.id)}
@@ -736,6 +732,81 @@ export default function SalesProposalPanel() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedProposal} onOpenChange={(open) => !open && setSelectedProposal(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Proposal for {selectedProposal?.prospect_business}</DialogTitle>
+          </DialogHeader>
+          {selectedProposal && (
+            <div className="space-y-6 py-2">
+              <div className="text-sm text-muted-foreground">
+                {selectedProposal.prospect_name} • {selectedProposal.prospect_email}
+                {selectedProposal.prospect_industry && ` • ${selectedProposal.prospect_industry}`}
+              </div>
+
+              {selectedProposal.industry_analysis?.opportunities && (
+                <div>
+                  <h4 className="font-semibold mb-2">Opportunities</h4>
+                  <ul className="list-disc pl-5 text-sm space-y-1 text-muted-foreground">
+                    {selectedProposal.industry_analysis.opportunities.map((o, i) => <li key={i}>{o}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {selectedProposal.proposed_services?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Proposed Services</h4>
+                  <div className="space-y-2">
+                    {selectedProposal.proposed_services.map((s, i) => (
+                      <div key={i} className="p-3 bg-muted rounded-lg">
+                        <div className="font-medium text-sm">{s.name}</div>
+                        <div className="text-sm text-muted-foreground">{s.description}</div>
+                        {s.price > 0 && <div className="text-sm font-medium mt-1">${s.price.toLocaleString()}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedProposal.timeline?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Timeline</h4>
+                  <div className="space-y-2">
+                    {selectedProposal.timeline.map((t, i) => (
+                      <div key={i} className="text-sm">
+                        <span className="font-medium">{t.phase}</span>
+                        <span className="text-muted-foreground"> ({t.duration})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedProposal.pricing_breakdown?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Pricing</h4>
+                  <div className="space-y-1">
+                    {selectedProposal.pricing_breakdown.map((p, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span>{p.item}</span>
+                        <span className="font-medium">${p.price.toLocaleString()}{p.frequency === "monthly" ? "/mo" : p.frequency === "yearly" ? "/yr" : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedProposal.total_investment != null && (
+                <div className="pt-3 border-t flex justify-between items-center">
+                  <span className="font-semibold">Total Investment</span>
+                  <span className="text-lg font-bold text-primary">${selectedProposal.total_investment.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

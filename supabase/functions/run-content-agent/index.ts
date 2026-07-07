@@ -2,46 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 import { getRecentContentFeedback, feedbackToPromptBlock } from "../_shared/contentFeedback.ts";
+import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI, callAIJson, MODELS } from "../_shared/ai.ts";
-
-interface QaVerdict {
-  score: number;
-  brand_fit: boolean;
-  issues: string[];
-}
-
-/**
- * Cheap second-model critique pass before a draft reaches admin review.
- * Best-effort: a QA failure must never block content from reaching the
- * admin queue, it only adds context to help them review faster.
- */
-async function critiqueContent(
-  content: string,
-  contentType: string,
-  tone: string,
-  clientId: string,
-): Promise<QaVerdict | null> {
-  try {
-    return await callAIJson<QaVerdict>({
-      source: "run-content-agent:qa",
-      promptId: "content-qa-critique.v1",
-      model: MODELS.fast,
-      clientId,
-      system:
-        "You are a strict marketing content editor. Score the draft honestly. " +
-        "Return JSON only: { \"score\": 1-10, \"brand_fit\": boolean, \"issues\": string[] }. " +
-        "issues should be empty if there are none — do not invent problems.",
-      prompt: `Content type: ${contentType}\nExpected tone: ${tone}\n\nDraft:\n${content}`,
-      maxTokens: 300,
-      temperature: 0,
-      retries: 0,
-    });
-  } catch (e) {
-    console.warn("[run-content-agent] QA critique failed (non-fatal):", e instanceof Error ? e.message : e);
-    return null;
-  }
-}
+import { callAI, MODELS } from "../_shared/ai.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -249,7 +212,7 @@ Keep it under 150 words. Make it engaging and ready to post.`;
     }
 
     // Notify admin that content needs review before client sees it.
-    const qaFlag = qa && (qa.score < 6 || !qa.brand_fit || qa.issues.length > 0);
+    const qaFlag = qaNeedsAttention(qa);
     await supabase.from("activity_feed").insert({
       client_account_id: task.client_id,
       activity_type: "content_draft_ready",
