@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getClientPortalOrigin } from "@/lib/getPortalUrl";
+import { inviteLeadToPortal } from "@/lib/inviteLeadToPortal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -221,58 +221,16 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
 
     setIsCreatingClient(true);
     try {
-      // 1. Create client account
-      const { data: createRes, error: createErr } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "create_client_account",
-          password: adminPassword,
-          data: {
-            email: selectedLead.email,
-            business_name: selectedLead.business_name,
-            first_name: selectedLead.first_name,
-            last_name: selectedLead.last_name,
-            tier: selectedTier,
-          },
-        },
-      });
-
-      if (createErr) throw createErr;
-      if ((createRes as any)?.error) throw new Error((createRes as any).error);
-
-      const clientAccountId = (createRes as any)?.data?.id;
-      if (!clientAccountId) throw new Error("Failed to create client account");
-
-      // 2. Create invitation
-      const { data: inviteRes, error: inviteErr } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "create_invitation",
-          password: adminPassword,
-          data: {
-            client_account_id: clientAccountId,
-            email: selectedLead.email,
-            first_name: selectedLead.first_name,
-            last_name: selectedLead.last_name,
-          },
-        },
-      });
-
-      if (inviteErr) throw inviteErr;
-      if ((inviteRes as any)?.error) throw new Error((inviteRes as any).error);
-
-      const inviteToken = (inviteRes as any)?.data?.token;
-
-      // 3. Send invitation email
-      const { error: sendErr } = await supabase.functions.invoke("send-client-invite", {
-        body: {
+      await inviteLeadToPortal(
+        {
           email: selectedLead.email,
-          firstName: selectedLead.first_name,
-          businessName: selectedLead.business_name,
-          token: inviteToken,
-          portalOrigin: getClientPortalOrigin(),
+          first_name: selectedLead.first_name,
+          last_name: selectedLead.last_name,
+          business_name: selectedLead.business_name,
         },
-      });
-
-      if (sendErr) throw sendErr;
+        adminPassword,
+        selectedTier,
+      );
 
       toast({
         title: "Client created & invite sent!",

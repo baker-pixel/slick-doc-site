@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
 import { friendlyEdgeMessage } from "@/lib/edge-error";
+import { inviteLeadToPortal, type InviteLead } from "@/lib/inviteLeadToPortal";
 import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
@@ -32,7 +33,6 @@ import { ClientOnboardingChecklist } from "@/components/admin/clients/ClientOnbo
 import { SOPManagementPanel } from "@/components/admin/workflow/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/workflow/AutomationJobsPanel";
 import { AutomationControlCenter } from "@/components/admin/workflow/AutomationControlCenter";
-import { ContentReviewPanel } from "@/components/admin/content/ContentReviewPanel";
 import { ReportsReviewPanel } from "@/components/admin/content/ReportsReviewPanel";
 import { EmailSequencesPanel } from "@/components/admin/email/EmailSequencesPanel";
 import { EmailTemplatesPanel } from "@/components/admin/email/EmailTemplatesPanel";
@@ -47,7 +47,6 @@ import ClientMeetingsAdminPanel from "@/components/admin/clients/ClientMeetingsA
 import ClientRequestsAdminPanel from "@/components/admin/clients/ClientRequestsAdminPanel";
 import BrandAssetsAdminPanel from "@/components/admin/content/BrandAssetsAdminPanel";
 import TeamDirectoryPanel from "@/components/admin/misc/TeamDirectoryPanel";
-import DeliverablesAdminPanel from "@/components/admin/content/DeliverablesAdminPanel";
 import { ServiceAgreementsPanel } from "@/components/admin/sales/ServiceAgreementsPanel";
 import { ClientAnalyticsAdminPanel } from "@/components/admin/clients/ClientAnalyticsAdminPanel";
 import { ClientInvoicesAdminPanel } from "@/components/admin/clients/ClientInvoicesAdminPanel";
@@ -58,8 +57,8 @@ import { TaskTemplatesPanel } from "@/components/admin/workflow/TaskTemplatesPan
 import { ClientTasksPanel } from "@/components/admin/clients/ClientTasksPanel";
 import { OnboardingAutomationPanel } from "@/components/admin/clients/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/misc/IntegrationConfigPanel";
-import SeoAnalysisDashboard from "@/components/admin/content/SeoAnalysisDashboard";
-import { WordPressSeoPanel } from "@/components/admin/content/WordPressSeoPanel";
+import { SeoHubPanel } from "@/components/admin/content/SeoHubPanel";
+import { WorkPanel } from "@/components/admin/content/WorkPanel";
 import { MarketingOSDashboard } from "@/components/admin/misc/MarketingOSDashboard";
 import { GoogleReviewEngine } from "@/components/admin/content/GoogleReviewEngine";
 import ClientWinNotifications from "@/components/admin/clients/ClientWinNotifications";
@@ -487,102 +486,10 @@ const AdminInner = () => {
     loadInvitations();
   }, [isAuthenticated]);
 
-  const tierFromScore = (score: number | null | undefined): string => {
-    if (!score) return 'foundation';
-    if (score >= 70) return 'transformation';
-    if (score >= 45) return 'growth';
-    return 'foundation';
-  };
-
-  const handleInviteToPortal = async (lead: {
-    email: string;
-    first_name: string | null;
-    last_name: string | null;
-    business_name: string;
-    industry?: string | null;
-    overall_score?: number | null;
-    website_url?: string | null;
-  }) => {
+  const handleInviteToPortal = async (lead: InviteLead) => {
     setInvitingEmail(lead.email);
     try {
-      // 1. Check if client account exists
-      const { data: existing } = await supabase
-        .from("client_accounts")
-        .select("id")
-        .eq("email", lead.email)
-        .maybeSingle();
-
-      let clientId: string;
-      const tier = tierFromScore(lead.overall_score);
-
-      if (existing) {
-        clientId = existing.id;
-      } else {
-        // 2a. Create client account
-        const { data: newClient, error: createErr } = await supabase
-          .from("client_accounts")
-          .insert({
-            business_name: lead.business_name,
-            email: lead.email,
-            first_name: lead.first_name || null,
-            last_name: lead.last_name || null,
-            industry: lead.industry || 'General',
-            website_url: lead.website_url || null,
-            status: 'active',
-            tier,
-            plan_tier: tier,
-          })
-          .select("id")
-          .single();
-        if (createErr) throw createErr;
-        clientId = newClient.id;
-
-        // Seed workflow + client_onboarding + kick off project generation
-        try {
-          await supabase.functions.invoke("seed-tier-workflow", {
-            body: { client_id: clientId, tier },
-          });
-        } catch (wfErr) {
-          console.error("Failed to seed workflow:", wfErr);
-        }
-
-        // Fallback: generate projects from browser in case edge-to-edge call failed
-        supabase.functions.invoke("generate-client-projects", {
-          body: { clientAccountId: clientId, returnOnly: false },
-        }).catch((err: unknown) => console.error("Auto project generation failed:", err));
-
-        // Brand extraction is handled inside seed-tier-workflow (background fetch)
-        // — no separate call here to avoid duplicate assets
-      }
-
-      // 3. Create invitation via admin API
-      const { error: invErr } = await callAdminApi(storedPassword, {
-        action: "insert",
-        table: "client_invitations",
-        data: {
-          client_account_id: clientId,
-          email: lead.email,
-          first_name: lead.first_name || null,
-          last_name: lead.last_name || null,
-          invited_by: 'admin',
-        },
-      });
-      if (invErr) throw new Error(invErr);
-
-      // 4. Send invitation email
-      try {
-        await supabase.functions.invoke("send-client-invite", {
-          body: {
-            email: lead.email,
-            firstName: lead.first_name || 'there',
-            clientAccountId: clientId,
-          },
-        });
-      } catch (emailErr) {
-        console.error("Failed to send invite email:", emailErr);
-      }
-
-      // 5. Update lead status to 'invited'
+      await inviteLeadToPortal(lead, storedPassword);
       setInvitedEmails(prev => new Set(prev).add(lead.email));
       toast({ title: "Invitation sent!", description: `${lead.email} has been invited to the portal.` });
       fetchData(storedPassword);
@@ -1283,6 +1190,42 @@ const AdminInner = () => {
     </Tabs>
   );
 
+  // "Inbound Leads", "Pipeline", and "Prospect Engine" used to be three
+  // separate sidebar items. They're all facets of the same job -- working
+  // leads -- so they're one section with an inner mode switch instead.
+  // The mode is derived from activeSection itself (still the source of
+  // truth other stacking logic below reads), not separate local state.
+  const leadsHubMode: "inbound" | "outbound" | "pipeline" | "scoring" =
+    activeSection === "prospect-engine" ? "outbound" :
+    activeSection === "pipeline" ? "pipeline" :
+    activeSection === "lead-scoring" ? "scoring" :
+    "inbound";
+
+  const renderLeadsHub = () => (
+    <div className="space-y-4">
+      <Tabs
+        value={leadsHubMode}
+        onValueChange={(v) => {
+          if (v === "inbound") setActiveSection("contacts");
+          else if (v === "outbound") setActiveSection("prospect-engine");
+          else if (v === "pipeline") setActiveSection("pipeline");
+          else if (v === "scoring") setActiveSection("lead-scoring");
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="inbound">Inbound</TabsTrigger>
+          <TabsTrigger value="outbound">Outbound</TabsTrigger>
+          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="scoring">Scoring</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {leadsHubMode === "inbound" && renderLeadsSection()}
+      {leadsHubMode === "outbound" && <ProspectEnginePanel />}
+      {leadsHubMode === "pipeline" && <PipelineDashboard adminPassword={storedPassword} />}
+      {leadsHubMode === "scoring" && <LeadScoringPanel />}
+    </div>
+  );
+
   const renderActiveSection = () => {
     switch (activeSection) {
       case "automation-center":
@@ -1308,7 +1251,7 @@ const AdminInner = () => {
       case "task-notifications":
         return <TaskNotificationsPanel />;
       case "pipeline":
-        return <PipelineDashboard adminPassword={storedPassword} />;
+        return renderLeadsHub();
       case "alerts":
         return <AutomationAlertsPanel />;
       case "review-workflow":
@@ -1333,7 +1276,7 @@ const AdminInner = () => {
       case "contacts":
       case "gap-analysis":
       case "pdf-leads":
-        return renderLeadsSection();
+        return renderLeadsHub();
       case "emails":
         return <EmailAdminPanel password={storedPassword} />;
       case "templates":
@@ -1344,11 +1287,22 @@ const AdminInner = () => {
         return <CampaignSenderPanel />;
       case "clients":
         return (
-          <div className="space-y-6">
-            <ClientPhaseTracker adminPassword={storedPassword} />
-            <ClientOnboardingChecklist adminPassword={storedPassword} />
-            <ClientManagementPanel adminPassword={storedPassword} />
-          </div>
+          <Tabs defaultValue="all-clients" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="all-clients">All Clients</TabsTrigger>
+              <TabsTrigger value="phases">Phases</TabsTrigger>
+              <TabsTrigger value="new-onboarding">New Client Onboarding</TabsTrigger>
+            </TabsList>
+            <TabsContent value="all-clients">
+              <ClientManagementPanel adminPassword={storedPassword} />
+            </TabsContent>
+            <TabsContent value="phases">
+              <ClientPhaseTracker adminPassword={storedPassword} />
+            </TabsContent>
+            <TabsContent value="new-onboarding">
+              <ClientOnboardingChecklist adminPassword={storedPassword} />
+            </TabsContent>
+          </Tabs>
         );
       case "client-projects":
         return <ClientProjectsAdminPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
@@ -1369,7 +1323,7 @@ const AdminInner = () => {
       case "team-directory":
         return <TeamDirectoryPanel adminPassword={storedPassword} />;
       case "deliverables":
-        return <DeliverablesAdminPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
+        return <WorkPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
       case "service-agreements":
         return <ServiceAgreementsPanel />;
       case "sops":
@@ -1381,16 +1335,15 @@ const AdminInner = () => {
       case "client-tasks":
         return <ClientTasksPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
       case "seo-dashboard":
-        return <SeoAnalysisDashboard />;
       case "wordpress-seo":
-        return <WordPressSeoPanel clientId={selectedClient?.id ?? ""} clientName={selectedClient?.business_name} />;
+        return <SeoHubPanel selectedClientId={selectedClient?.id} selectedClientName={selectedClient?.business_name} />;
       case "onboarding":
         return <OnboardingAutomationPanel adminPassword={storedPassword} />;
       case "integrations":
         return <IntegrationConfigPanel />;
       case "approvals":
       case "content-review":
-        return <ContentReviewPanel clientId={selectedClient?.id} />;
+        return <WorkPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
       case "reports-review":
         return <ReportsReviewPanel />;
       case "marketing-os":
@@ -1400,9 +1353,8 @@ const AdminInner = () => {
       case "win-notifications":
         return <ClientWinNotifications />;
       case "prospect-engine":
-        return <ProspectEnginePanel />;
       case "lead-scoring":
-        return <LeadScoringPanel />;
+        return renderLeadsHub();
       case "ad-generator":
         return <AIAdGenerator />;
       case "case-studies":

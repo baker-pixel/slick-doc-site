@@ -8,7 +8,6 @@ import {
   FileText,
   BarChart3,
   FolderOpen,
-  FileCheck,
   Mail,
   Share2,
   Search,
@@ -16,9 +15,8 @@ import {
   Contact,
   Layers,
   Palette,
-  Plug,
-  Radar,
   LogOut,
+  HelpCircle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -109,13 +107,16 @@ interface NavItem {
   id: AdminSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Additional section ids that should show this item as active -- for
+   * sections merged behind one nav entry (e.g. SEO also covers the old
+   * "wordpress-seo" id) so the highlighted item stays correct. */
+  matchIds?: AdminSection[];
 }
 
 // AGENTS group
 const agentItems: NavItem[] = [
-  { id: "seo-dashboard",  label: "SEO",       icon: Search },
-  { id: "wordpress-seo", label: "WP Plugin",  icon: Plug },
-  { id: "content-review", label: "Content",  icon: FileText },
+  { id: "seo-dashboard", label: "SEO", icon: Search, matchIds: ["wordpress-seo"] },
+  { id: "content-review", label: "Content", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "emails", label: "Email", icon: Mail },
   { id: "reports-review", label: "Reports", icon: BarChart3 },
@@ -123,9 +124,7 @@ const agentItems: NavItem[] = [
 
 // GROWTH group
 const growthItems: NavItem[] = [
-  { id: "prospect-engine", label: "Prospect Engine", icon: Radar },
-  { id: "contacts",        label: "Inbound Leads",   icon: Contact },
-  { id: "pipeline",        label: "Pipeline",        icon: BarChart3 },
+  { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "prospect-engine", "pipeline", "lead-scoring"] },
 ];
 
 // OPERATIONS group
@@ -134,8 +133,6 @@ const operationsItems: NavItem[] = [
   { id: "client-projects", label: "Projects", icon: Layers },
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
-  { id: "approvals", label: "Approvals", icon: FileCheck },
-  { id: "deliverables", label: "Deliverables", icon: FolderOpen },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -148,8 +145,12 @@ interface NavGroupProps {
   collapsible?: boolean;
 }
 
+function isItemActive(item: NavItem, activeSection: AdminSection): boolean {
+  return activeSection === item.id || !!item.matchIds?.includes(activeSection);
+}
+
 function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = false, collapsible = true }: NavGroupProps) {
-  const hasActiveItem = items.some(item => item.id === activeSection);
+  const hasActiveItem = items.some(item => isItemActive(item, activeSection));
   const [open, setOpen] = useState(defaultOpen || hasActiveItem);
 
   useEffect(() => {
@@ -162,7 +163,7 @@ function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = 
         {items.map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
-              isActive={activeSection === item.id}
+              isActive={isItemActive(item, activeSection)}
               onClick={() => onSectionChange(item.id)}
               tooltip={item.label}
             >
@@ -238,6 +239,16 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={activeSection === "feature-guide"}
+              onClick={() => onSectionChange("feature-guide")}
+              tooltip="Help & Feature Guide"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span>Help</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={onLogout}
