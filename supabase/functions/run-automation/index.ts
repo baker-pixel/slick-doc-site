@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 import type { AutomationType, AutomationRequest } from "./types.ts";
 
 import { sendIntakeForm } from "./handlers/send-intake-form.ts";
@@ -254,11 +255,16 @@ serve(async (req) => {
   try {
     const body: AutomationRequest = await req.json();
 
-    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
-    if (adminPassword) {
-      const provided =
-        req.headers.get("x-admin-password") ?? (body as Record<string, unknown>).password as string | undefined;
-      if (provided !== adminPassword) {
+    // Callers: process-agent-jobs / auto-run-client-tasks (service key
+    // bearer) and the admin panel (session JWT + admin role, or legacy
+    // ADMIN_PASSWORD in body/x-admin-password header during migration).
+    const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isServer) {
+      const password =
+        req.headers.get("x-admin-password") ?? (body as unknown as Record<string, unknown>).password as string | undefined;
+      const auth = await checkAdminAuth(req, supabase, password);
+      if (!auth.authorized) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },

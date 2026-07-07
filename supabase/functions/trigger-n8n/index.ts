@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,17 +32,19 @@ serve(async (req) => {
     }
 
     // This function forwards client OAuth tokens to n8n — server/admin only.
-    // Callers: advance-workflow, publish/fill-scheduled-content
-    // (service key bearer) and the admin panel (ADMIN_PASSWORD in body).
+    // Callers: advance-workflow, publish/fill-scheduled-content (service key
+    // bearer) and the admin panel (session JWT + admin role, or legacy
+    // ADMIN_PASSWORD in body during migration).
     const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
     const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
-    const isAdminCall = !!adminPassword && body.password === adminPassword;
-    if (!isServer && !isAdminCall) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!isServer) {
+      const auth = await checkAdminAuth(req, supabase, body.password);
+      if (!auth.authorized) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const N8N_WEBHOOK_URL = Deno.env.get("N8N_WEBHOOK_URL_PROD");
