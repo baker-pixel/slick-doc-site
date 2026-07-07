@@ -175,31 +175,24 @@ serve(async (req) => {
       }
     }
 
-    // 5b. Route automation steps: n8n types → trigger-n8n, others → run-automation
-    const N8N_TYPES = new Set(["n8n_post_social", "n8n_post_blog"]);
+    // 5b. Route automation steps to run-automation. (Previously split n8n_post_social/
+    // n8n_post_blog off to trigger-n8n -- removed along with those step definitions in
+    // seed-tier-workflow, since real publishing already runs on its own continuous
+    // schedule rather than as a one-time onboarding checklist gate. trigger-n8n/
+    // n8n-callback are still used directly by publish-scheduled-content for
+    // Google Business Profile posts and newsletter sends, which have no
+    // non-n8n equivalent.)
     if (automationToUnlock.length > 0 && resolvedClientId) {
       for (const step of automationToUnlock) {
-        if (N8N_TYPES.has(step.task_type)) {
-          await enqueue("trigger-n8n", `n8n-step:${step.id}`, {
-            clientId: resolvedClientId,
-            workflow_id,
-            step_id: step.id,
-            step_number: step.step_number,
-            task_type: step.task_type,
-            trigger: step.task_type,
-            payload: step.payload || {},
-          });
-        } else {
-          await enqueue("run-automation", `automation-step:${step.id}`, {
-            clientId: resolvedClientId,
-            jobType: step.task_type,
-            workflowId: workflow_id,
-            stepId: step.id,
-            stepNumber: step.step_number,
-            payload: step.payload || {},
-            _source: "advance-workflow",
-          });
-        }
+        await enqueue("run-automation", `automation-step:${step.id}`, {
+          clientId: resolvedClientId,
+          jobType: step.task_type,
+          workflowId: workflow_id,
+          stepId: step.id,
+          stepNumber: step.step_number,
+          payload: step.payload || {},
+          _source: "advance-workflow",
+        });
       }
     }
 

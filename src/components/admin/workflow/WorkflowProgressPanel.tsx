@@ -63,7 +63,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.C
 const PHASE_CONFIG: { name: string; taskTypes: string[] }[] = [
   { name: "Phase 1 — Analysis", taskTypes: ["website_analysis", "seo_audit", "gap_report"] },
   { name: "Phase 2 — Content Creation", taskTypes: ["content", "social_content", "email_template", "ad_copy"] },
-  { name: "Phase 3 — Publishing", taskTypes: ["n8n_post_blog", "n8n_post_social", "email_campaign"] },
+  { name: "Phase 3 — Publishing", taskTypes: ["email_campaign"] },
   { name: "Phase 4 — Reporting", taskTypes: ["analytics", "report", "notify_client"] },
 ];
 

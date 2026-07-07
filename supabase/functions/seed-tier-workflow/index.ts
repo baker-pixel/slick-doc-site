@@ -65,30 +65,33 @@ const ONBOARDING_STEPS = [
 
 const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 5
 
-// Automation steps — original step_numbers start at 1 but will be offset by 5
+// Automation steps — original step_numbers start at 1 but will be offset by 5.
+// No "Publish X" step here anymore (was n8n_post_social/n8n_post_blog, routed
+// to trigger-n8n) -- actual publishing already happens on its own continuous
+// schedule (auto-schedule-content -> content_calendar -> publish-scheduled-
+// content), not as a one-time onboarding checklist gate, and n8n has no real
+// role left in it for the platforms this covers (see git history for the
+// removal). Step numbers are intentionally left with gaps rather than
+// renumbered, since depends_on references specific step_numbers.
 const FOUNDATION_STEPS = [
   { step_number: 1, step_name: "Analyze current website performance", task_type: "website_analysis", depends_on: null },
   { step_number: 2, step_name: "Run basic SEO audit", task_type: "seo_audit", depends_on: 1 },
   { step_number: 3, step_name: "Generate marketing gap report", task_type: "gap_report", depends_on: 2 },
   { step_number: 4, step_name: "Create Google Business Profile post", task_type: "content", depends_on: 3, payload: { content_type: "gbp_post" } },
-  { step_number: 5, step_name: "Publish GBP post", task_type: "n8n_post_social", depends_on: 4, payload: { content_type: "gbp_post" } },
   { step_number: 6, step_name: "Write blog article", task_type: "content", depends_on: 3, payload: { content_type: "blog" } },
-  { step_number: 7, step_name: "Publish blog article", task_type: "n8n_post_blog", depends_on: 6 },
-  { step_number: 8, step_name: "Generate quarterly SEO report", task_type: "report", depends_on: 7 },
+  { step_number: 8, step_name: "Generate quarterly SEO report", task_type: "report", depends_on: 6 },
 ];
 
 const GROWTH_EXTRA = [
   { step_number: 9, step_name: "Create email nurture sequence", task_type: "email_template", depends_on: 3 },
   { step_number: 10, step_name: "Generate retargeting ad copy", task_type: "ad_copy", depends_on: 3 },
   { step_number: 11, step_name: "Create social media content batch", task_type: "social_content", depends_on: 3, payload: { content_type: "social_batch" } },
-  { step_number: 12, step_name: "Publish social content", task_type: "n8n_post_social", depends_on: 11 },
 ];
 
 const TRANSFORMATION_EXTRA = [
   { step_number: 13, step_name: "Write second blog article", task_type: "content", depends_on: 8, payload: { content_type: "blog" } },
-  { step_number: 14, step_name: "Publish second blog", task_type: "n8n_post_blog", depends_on: 13 },
   { step_number: 15, step_name: "Create retention email sequence", task_type: "email_template", depends_on: 8, payload: { content_type: "retention" } },
-  { step_number: 16, step_name: "Scrape and compile analytics report", task_type: "analytics", depends_on: 14 },
+  { step_number: 16, step_name: "Scrape and compile analytics report", task_type: "analytics", depends_on: 13 },
   { step_number: 17, step_name: "Generate full monthly report", task_type: "report", depends_on: 16 },
 ];
 
@@ -231,7 +234,7 @@ serve(async (req) => {
       const s = steps[i];
       // Onboarding steps (client-driven) get 1 business day each
       const isOnboarding = s.task_type.startsWith("client_");
-      const bizDays = isOnboarding ? 1 : s.task_type.includes("n8n") ? 3 : 2;
+      const bizDays = isOnboarding ? 1 : 2;
       if (i === 0) {
         estimatedDates.push(toDateStr(addBusinessDays(today, bizDays)));
       } else {

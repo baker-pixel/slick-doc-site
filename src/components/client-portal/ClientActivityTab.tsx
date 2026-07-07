@@ -83,8 +83,6 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   social_content: "We're creating your social media content",
   email_template: "We're building your automated email sequences",
   ad_copy: "We're drafting your ad campaigns",
-  n8n_post_blog: "We're publishing your blog post",
-  n8n_post_social: "We're posting to your social media",
   email_campaign: "We're sending your email campaign",
   analytics: "We're pulling your performance data",
   report: "We're preparing your monthly results report",
