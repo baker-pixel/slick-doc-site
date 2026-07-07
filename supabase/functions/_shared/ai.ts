@@ -303,6 +303,16 @@ export interface ToolCallResult {
 export interface AIToolCallOptions extends Omit<AICallOptions, "messages" | "jsonMode" | "prompt" | "system"> {
   messages: AgentMessage[];
   tools: ToolDefinition[];
+  /**
+   * "required" (default) forces the model to call one of the provided tools
+   * every turn -- it cannot just reply with prose instead of acting. Use
+   * "auto" only for genuinely optional tool use; for an agent loop, a model
+   * that's allowed to skip tools can silently stop making progress while
+   * looking like it finished normally. Callers that want a clean stop
+   * condition under "required" need to give the model an explicit tool for
+   * that (e.g. a "finish" tool) rather than relying on plain-text replies.
+   */
+  toolChoice?: "auto" | "required";
 }
 
 function safeParseJsonObject(raw: string): Record<string, unknown> {
@@ -360,7 +370,7 @@ async function attemptGroqToolsOnce(
         model,
         messages: toGroqToolMessages(messages),
         tools: toGroqTools(tools),
-        tool_choice: "auto",
+        tool_choice: opts.toolChoice ?? "required",
         ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       }),
@@ -455,6 +465,7 @@ async function attemptAnthropicToolsOnce(
         ...(system.length ? { system: system.join("\n\n") } : {}),
         messages: conversation,
         tools: toAnthropicTools(tools),
+        tool_choice: (opts.toolChoice ?? "required") === "required" ? { type: "any" } : { type: "auto" },
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       }),
     });
