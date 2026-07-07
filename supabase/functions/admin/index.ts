@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
       "email_cleanup_log", "email_logs", "email_queue", "email_sequences",
       "pipeline_stages", "project_milestones", "automation_alerts",
       "workflow_steps", "client_oauth_tokens",
+      "agent_traces", "agent_pending_actions",
     ]);
     if (table && !ALLOWED_TABLES.has(table)) {
       console.warn(`Admin action blocked: table "${table}" not in whitelist`);

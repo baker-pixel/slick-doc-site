@@ -18,6 +18,7 @@ import {
   LogOut,
   HelpCircle,
   Send,
+  Bot,
 } from "lucide-react";
 import {
   Sidebar,
@@ -63,6 +64,7 @@ export type AdminSection =
   | "task-templates"
   | "brand-assets"
   | "service-agreements"
+  | "ai-agent"
   | "settings"
   // Legacy sections kept for routing compatibility
   | "pipeline"
@@ -116,6 +118,7 @@ interface NavItem {
 
 // AGENTS group
 const agentItems: NavItem[] = [
+  { id: "ai-agent", label: "AI Agent", icon: Bot },
   { id: "seo-dashboard", label: "SEO", icon: Search, matchIds: ["wordpress-seo"] },
   { id: "content-review", label: "Content", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "social-posts", label: "Social", icon: Share2 },
