@@ -299,12 +299,15 @@ serve(async (req) => {
       })
       .eq("id", approval_id);
 
-    // Sync status back to generated_content so admin sees changes were requested
+    // Sync status back to generated_content so admin sees changes were requested,
+    // and carry the reason with it -- content_approvals rows are ephemeral
+    // (cascade on generated_content delete), this is the durable copy the
+    // next generation call reads back via _shared/contentFeedback.ts.
     const generatedContentIdForChanges: string | null = approval.content_id || null;
     if (generatedContentIdForChanges) {
       await supabase
         .from("generated_content")
-        .update({ status: "changes_requested", updated_at: new Date().toISOString() })
+        .update({ status: "changes_requested", rejection_reason: feedback, updated_at: new Date().toISOString() })
         .eq("id", generatedContentIdForChanges);
     }
 

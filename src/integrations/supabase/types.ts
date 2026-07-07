@@ -10,7 +10,32 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -257,6 +282,83 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_job_dedupe: {
+        Row: {
+          created_at: string
+          idempotency_key: string
+          result: Json | null
+        }
+        Insert: {
+          created_at?: string
+          idempotency_key: string
+          result?: Json | null
+        }
+        Update: {
+          created_at?: string
+          idempotency_key?: string
+          result?: Json | null
+        }
+        Relationships: []
+      }
+      agent_runs: {
+        Row: {
+          attempt_count: number
+          client_id: string | null
+          completion_tokens: number | null
+          created_at: string
+          error_message: string | null
+          fallback_used: boolean
+          id: string
+          latency_ms: number | null
+          metadata: Json
+          model: string
+          prompt_id: string | null
+          prompt_tokens: number | null
+          source: string
+          status: string
+        }
+        Insert: {
+          attempt_count?: number
+          client_id?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          error_message?: string | null
+          fallback_used?: boolean
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model: string
+          prompt_id?: string | null
+          prompt_tokens?: number | null
+          source: string
+          status: string
+        }
+        Update: {
+          attempt_count?: number
+          client_id?: string | null
+          completion_tokens?: number | null
+          created_at?: string
+          error_message?: string | null
+          fallback_used?: boolean
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json
+          model?: string
+          prompt_id?: string | null
+          prompt_tokens?: number | null
+          source?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_fixes: {
         Row: {
           after_snapshot: Json | null
@@ -497,6 +599,8 @@ export type Database = {
           asset_type: string
           category: string
           client_account_id: string
+          client_notes: string | null
+          confirmed: boolean
           created_at: string
           description: string | null
           file_path: string | null
@@ -512,6 +616,8 @@ export type Database = {
           asset_type?: string
           category?: string
           client_account_id: string
+          client_notes?: string | null
+          confirmed?: boolean
           created_at?: string
           description?: string | null
           file_path?: string | null
@@ -527,6 +633,8 @@ export type Database = {
           asset_type?: string
           category?: string
           client_account_id?: string
+          client_notes?: string | null
+          confirmed?: boolean
           created_at?: string
           description?: string | null
           file_path?: string | null
@@ -597,13 +705,16 @@ export type Database = {
       }
       client_accounts: {
         Row: {
+          brand_voice: Json | null
           business_name: string
+          business_summary: Json | null
           context_profile: Json | null
           created_at: string
           email: string
           first_name: string | null
           google_place_id: string | null
           google_review_url: string | null
+          icp: Json | null
           id: string
           industry: string | null
           intake_completed_at: string | null
@@ -624,13 +735,16 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          brand_voice?: Json | null
           business_name: string
+          business_summary?: Json | null
           context_profile?: Json | null
           created_at?: string
           email: string
           first_name?: string | null
           google_place_id?: string | null
           google_review_url?: string | null
+          icp?: Json | null
           id?: string
           industry?: string | null
           intake_completed_at?: string | null
@@ -651,13 +765,16 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          brand_voice?: Json | null
           business_name?: string
+          business_summary?: Json | null
           context_profile?: Json | null
           created_at?: string
           email?: string
           first_name?: string | null
           google_place_id?: string | null
           google_review_url?: string | null
+          icp?: Json | null
           id?: string
           industry?: string | null
           intake_completed_at?: string | null
@@ -752,12 +869,58 @@ export type Database = {
           },
         ]
       }
+      client_context_versions: {
+        Row: {
+          brand_voice: Json | null
+          business_summary: Json | null
+          change_reason: string | null
+          changed_by: string | null
+          client_id: string
+          created_at: string
+          icp: Json | null
+          id: string
+          version: number
+        }
+        Insert: {
+          brand_voice?: Json | null
+          business_summary?: Json | null
+          change_reason?: string | null
+          changed_by?: string | null
+          client_id: string
+          created_at?: string
+          icp?: Json | null
+          id?: string
+          version?: number
+        }
+        Update: {
+          brand_voice?: Json | null
+          business_summary?: Json | null
+          change_reason?: string | null
+          changed_by?: string | null
+          client_id?: string
+          created_at?: string
+          icp?: Json | null
+          id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_context_versions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_credentials: {
         Row: {
           client_id: string | null
           created_at: string | null
           id: string
+          updated_at: string | null
           wordpress_app_password: string | null
+          wordpress_plugin_api_key: string | null
           wordpress_url: string | null
           wordpress_username: string | null
         }
@@ -765,7 +928,9 @@ export type Database = {
           client_id?: string | null
           created_at?: string | null
           id?: string
+          updated_at?: string | null
           wordpress_app_password?: string | null
+          wordpress_plugin_api_key?: string | null
           wordpress_url?: string | null
           wordpress_username?: string | null
         }
@@ -773,7 +938,9 @@ export type Database = {
           client_id?: string | null
           created_at?: string | null
           id?: string
+          updated_at?: string | null
           wordpress_app_password?: string | null
+          wordpress_plugin_api_key?: string | null
           wordpress_url?: string | null
           wordpress_username?: string | null
         }
@@ -781,7 +948,7 @@ export type Database = {
           {
             foreignKeyName: "client_credentials_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "client_accounts"
             referencedColumns: ["id"]
           },
@@ -1421,6 +1588,50 @@ export type Database = {
           },
         ]
       }
+      client_postforme_accounts: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          id: string
+          platform: string
+          postforme_account_id: string
+          profile_photo_url: string | null
+          status: string
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          id?: string
+          platform: string
+          postforme_account_id: string
+          profile_photo_url?: string | null
+          status?: string
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          platform?: string
+          postforme_account_id?: string
+          profile_photo_url?: string | null
+          status?: string
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_postforme_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_projects: {
         Row: {
           client_account_id: string
@@ -1693,6 +1904,47 @@ export type Database = {
           },
         ]
       }
+      client_usage: {
+        Row: {
+          client_id: string
+          cost_usd: number | null
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          source_fn: string | null
+          units: number
+        }
+        Insert: {
+          client_id: string
+          cost_usd?: number | null
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          source_fn?: string | null
+          units?: number
+        }
+        Update: {
+          client_id?: string
+          cost_usd?: number | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          source_fn?: string | null
+          units?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_usage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_workflows: {
         Row: {
           client_id: string
@@ -1727,6 +1979,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "client_workflows_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connected_sites: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          last_scanned_at: string | null
+          plugin_version: string | null
+          rankmath_active: boolean
+          site_url: string
+          status: string
+          token: string
+          updated_at: string
+          wp_version: string | null
+          yoast_active: boolean
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          last_scanned_at?: string | null
+          plugin_version?: string | null
+          rankmath_active?: boolean
+          site_url: string
+          status?: string
+          token: string
+          updated_at?: string
+          wp_version?: string | null
+          yoast_active?: boolean
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          last_scanned_at?: string | null
+          plugin_version?: string | null
+          rankmath_active?: boolean
+          site_url?: string
+          status?: string
+          token?: string
+          updated_at?: string
+          wp_version?: string | null
+          yoast_active?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connected_sites_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
@@ -1802,6 +2107,7 @@ export type Database = {
           publish_status: string | null
           publish_triggered_at: string | null
           published_at: string | null
+          reminder_sent_at: string | null
           reviewed_at: string | null
           scheduled_for: string | null
           status: string
@@ -1823,6 +2129,7 @@ export type Database = {
           publish_status?: string | null
           publish_triggered_at?: string | null
           published_at?: string | null
+          reminder_sent_at?: string | null
           reviewed_at?: string | null
           scheduled_for?: string | null
           status?: string
@@ -1844,6 +2151,7 @@ export type Database = {
           publish_status?: string | null
           publish_triggered_at?: string | null
           published_at?: string | null
+          reminder_sent_at?: string | null
           reviewed_at?: string | null
           scheduled_for?: string | null
           status?: string
@@ -1880,6 +2188,7 @@ export type Database = {
           id: string
           metadata: Json | null
           platform: string | null
+          postforme_post_id: string | null
           published_at: string | null
           scheduled_for: string
           status: string
@@ -1897,6 +2206,7 @@ export type Database = {
           id?: string
           metadata?: Json | null
           platform?: string | null
+          postforme_post_id?: string | null
           published_at?: string | null
           scheduled_for: string
           status?: string
@@ -1914,6 +2224,7 @@ export type Database = {
           id?: string
           metadata?: Json | null
           platform?: string | null
+          postforme_post_id?: string | null
           published_at?: string | null
           scheduled_for?: string
           status?: string
@@ -2622,6 +2933,7 @@ export type Database = {
           id: string
           job_id: string | null
           metadata: Json | null
+          rejection_reason: string | null
           status: string
           title: string | null
           updated_at: string
@@ -2634,6 +2946,7 @@ export type Database = {
           id?: string
           job_id?: string | null
           metadata?: Json | null
+          rejection_reason?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -2646,6 +2959,7 @@ export type Database = {
           id?: string
           job_id?: string | null
           metadata?: Json | null
+          rejection_reason?: string | null
           status?: string
           title?: string | null
           updated_at?: string
@@ -2862,6 +3176,66 @@ export type Database = {
             columns: ["content_id"]
             isOneToOne: false
             referencedRelation: "learning_content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outreach_campaigns: {
+        Row: {
+          channel: string
+          client_id: string
+          contact_count: number
+          created_at: string
+          id: string
+          last_contact_at: string | null
+          metadata: Json | null
+          next_contact_at: string | null
+          prospect_id: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          client_id: string
+          contact_count?: number
+          created_at?: string
+          id?: string
+          last_contact_at?: string | null
+          metadata?: Json | null
+          next_contact_at?: string | null
+          prospect_id: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          client_id?: string
+          contact_count?: number
+          created_at?: string
+          id?: string
+          last_contact_at?: string | null
+          metadata?: Json | null
+          next_contact_at?: string | null
+          prospect_id?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outreach_campaigns_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
             referencedColumns: ["id"]
           },
         ]
@@ -3175,57 +3549,91 @@ export type Database = {
       }
       prospects: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           business_type: string | null
+          city: string | null
+          client_id: string | null
           context_profile: Json | null
           converted_at: string | null
           created_at: string
           drip_step: number
           email: string
           gap_score: number | null
+          icp_fit_score: number | null
           id: string
           name: string
           pdf_report_url: string | null
+          personalization_hook: string | null
+          phone: string | null
           recommended_tier: string | null
+          research_snapshot: Json | null
+          source: string
           status: string
           submission_id: string | null
           top_weaknesses: Json | null
           website_url: string
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           business_type?: string | null
+          city?: string | null
+          client_id?: string | null
           context_profile?: Json | null
           converted_at?: string | null
           created_at?: string
           drip_step?: number
           email: string
           gap_score?: number | null
+          icp_fit_score?: number | null
           id?: string
           name: string
           pdf_report_url?: string | null
+          personalization_hook?: string | null
+          phone?: string | null
           recommended_tier?: string | null
+          research_snapshot?: Json | null
+          source?: string
           status?: string
           submission_id?: string | null
           top_weaknesses?: Json | null
           website_url: string
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           business_type?: string | null
+          city?: string | null
+          client_id?: string | null
           context_profile?: Json | null
           converted_at?: string | null
           created_at?: string
           drip_step?: number
           email?: string
           gap_score?: number | null
+          icp_fit_score?: number | null
           id?: string
           name?: string
           pdf_report_url?: string | null
+          personalization_hook?: string | null
+          phone?: string | null
           recommended_tier?: string | null
+          research_snapshot?: Json | null
+          source?: string
           status?: string
           submission_id?: string | null
           top_weaknesses?: Json | null
           website_url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "prospects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "prospects_submission_id_fkey"
             columns: ["submission_id"]
@@ -3458,6 +3866,50 @@ export type Database = {
             columns: ["contact_submission_id"]
             isOneToOne: false
             referencedRelation: "contact_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scan_results: {
+        Row: {
+          errors: number
+          id: string
+          notices: number
+          raw_data: Json
+          scanned_at: string
+          seo_score: number
+          site_id: string
+          total_issues: number
+          warnings: number
+        }
+        Insert: {
+          errors?: number
+          id?: string
+          notices?: number
+          raw_data?: Json
+          scanned_at?: string
+          seo_score?: number
+          site_id: string
+          total_issues?: number
+          warnings?: number
+        }
+        Update: {
+          errors?: number
+          id?: string
+          notices?: number
+          raw_data?: Json
+          scanned_at?: string
+          seo_score?: number
+          site_id?: string
+          total_issues?: number
+          warnings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_results_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "connected_sites"
             referencedColumns: ["id"]
           },
         ]
@@ -4169,30 +4621,39 @@ export type Database = {
       }
       workflow_tasks: {
         Row: {
+          audit_scope: string | null
           client_id: string
           created_at: string
           id: string
+          pages_crawled: number | null
           payload: Json | null
+          progress_message: string | null
           result: Json | null
           status: string
           task_type: string
           updated_at: string
         }
         Insert: {
+          audit_scope?: string | null
           client_id: string
           created_at?: string
           id?: string
+          pages_crawled?: number | null
           payload?: Json | null
+          progress_message?: string | null
           result?: Json | null
           status?: string
           task_type: string
           updated_at?: string
         }
         Update: {
+          audit_scope?: string | null
           client_id?: string
           created_at?: string
           id?: string
+          pages_crawled?: number | null
           payload?: Json | null
+          progress_message?: string | null
           result?: Json | null
           status?: string
           task_type?: string
@@ -4208,11 +4669,115 @@ export type Database = {
           },
         ]
       }
+      wp_fix_queue: {
+        Row: {
+          applied_at: string | null
+          created_at: string
+          current_value: string | null
+          error_message: string | null
+          field: string
+          id: string
+          media_id: number | null
+          page_title: string | null
+          page_url: string | null
+          post_id: number | null
+          scan_id: string | null
+          site_id: string
+          status: string
+          suggested_value: string
+          updated_at: string
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string
+          current_value?: string | null
+          error_message?: string | null
+          field: string
+          id?: string
+          media_id?: number | null
+          page_title?: string | null
+          page_url?: string | null
+          post_id?: number | null
+          scan_id?: string | null
+          site_id: string
+          status?: string
+          suggested_value: string
+          updated_at?: string
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string
+          current_value?: string | null
+          error_message?: string | null
+          field?: string
+          id?: string
+          media_id?: number | null
+          page_title?: string | null
+          page_url?: string | null
+          post_id?: number | null
+          scan_id?: string | null
+          site_id?: string
+          status?: string
+          suggested_value?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wp_fix_queue_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "scan_results"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wp_fix_queue_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "connected_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      agent_jobs_archive: { Args: { msg_id: number }; Returns: boolean }
+      agent_jobs_delete: { Args: { msg_id: number }; Returns: boolean }
+      agent_jobs_enqueue: { Args: { msg: Json }; Returns: number }
+      agent_jobs_read: {
+        Args: { qty: number; vt: number }
+        Returns: {
+          enqueued_at: string
+          message: Json
+          msg_id: number
+          read_ct: number
+        }[]
+      }
+      client_update_company_context: {
+        Args: {
+          p_client_account_id: string
+          p_context_profile: Json
+          p_industry: string
+          p_tone: string
+          p_website_summary: string
+          p_website_url: string
+        }
+        Returns: undefined
+      }
+      create_project_with_milestones: {
+        Args: {
+          p_client_account_id: string
+          p_description?: string
+          p_milestones?: Json
+          p_name: string
+          p_start_date?: string
+          p_target_end_date?: string
+        }
+        Returns: Json
+      }
+      create_seo_audit_task: { Args: { p_client_id: string }; Returns: string }
       generate_tasks_for_client: {
         Args: { p_client_id: string }
         Returns: number
@@ -4365,6 +4930,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "client"],

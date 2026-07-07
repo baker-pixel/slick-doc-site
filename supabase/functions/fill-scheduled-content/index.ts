@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
+import { feedbackToPromptBlock, type ContentFeedbackItem } from "../_shared/contentFeedback.ts";
 
 interface ContextProfile {
   services?: string[];
@@ -120,6 +121,31 @@ serve(async (req) => {
       }
     }
 
+    // Feedback loop: batch-fetch recent rejection reasons across all clients
+    // in this run so drafts stop repeating issues admin/client already
+    // flagged. Same table/shape as _shared/contentFeedback.ts's per-client
+    // helper, queried in bulk here since we already have all clientIds.
+    const { data: recentFeedbackRows } = await supabase
+      .from("generated_content")
+      .select("client_id, content_type, title, rejection_reason")
+      .in("client_id", clientIds)
+      .in("status", ["rejected", "changes_requested"])
+      .not("rejection_reason", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(clientIds.length * 5);
+
+    const feedbackByClient: Record<string, ContentFeedbackItem[]> = {};
+    for (const item of recentFeedbackRows || []) {
+      if (!feedbackByClient[item.client_id]) feedbackByClient[item.client_id] = [];
+      if (feedbackByClient[item.client_id].length < 5) {
+        feedbackByClient[item.client_id].push({
+          content_type: item.content_type,
+          title: item.title,
+          reason: item.rejection_reason,
+        });
+      }
+    }
+
     const results: { id: string; success: boolean; error?: string }[] = [];
 
     for (const slot of slots) {
@@ -128,7 +154,8 @@ serve(async (req) => {
         if (!client) throw new Error("Client not found");
 
         const recentTopics = recentByClient[slot.client_account_id] || [];
-        const generatedContent = await generateContent(slot, client, recentTopics, GROQ_API_KEY);
+        const recentFeedback = feedbackByClient[slot.client_account_id] || [];
+        const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, GROQ_API_KEY);
 
         // Update the calendar slot with the generated draft text so it's previewable,
         // but leave status="draft" and client_approved=false — the slot is NOT schedulable
@@ -240,13 +267,14 @@ async function generateContent(
   slot: any,
   client: ClientInfo,
   recentTopics: string[],
+  recentFeedback: ContentFeedbackItem[],
   _apiKey: string
 ): Promise<string> {
   const now = new Date();
   const month = MONTHS[now.getMonth()];
   const season = SEASONS[now.getMonth()];
 
-  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, month, season);
+  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, recentFeedback, month, season);
 
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
@@ -348,6 +376,7 @@ function buildPrompt(
   platform: string,
   client: ClientInfo,
   recentTopics: string[],
+  recentFeedback: ContentFeedbackItem[],
   month: string,
   season: string
 ): { system: string; user: string } {
@@ -356,6 +385,7 @@ function buildPrompt(
   const clientContext = buildClientContext(client);
   const brandVoice = getBrandVoice(client);
   const avoidRepeat = avoidRepetitionInstruction(recentTopics);
+  const feedbackBlock = feedbackToPromptBlock(recentFeedback);
   const services = client.context_profile?.services || [];
   const differentiators = client.context_profile?.differentiators || [];
   const location = client.context_profile?.location || "";
@@ -374,7 +404,7 @@ RULES:
 - Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
 - Be specific to ${biz}'s actual services and differentiators — never generic filler
 - Every piece must sound like it comes from this specific business, not a template
-- Reference ${month} or ${season} naturally only when it adds genuine value`;
+- Reference ${month} or ${season} naturally only when it adds genuine value${feedbackBlock ? `\n\n${feedbackBlock}` : ""}`;
 
   switch (contentType) {
     case "social_post": {

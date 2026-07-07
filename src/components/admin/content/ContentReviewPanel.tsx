@@ -49,6 +49,8 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
   const [isPublishing, setIsPublishing] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectingContent, setRejectingContent] = useState<GeneratedContent | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   
   // Content generation state
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -139,15 +141,30 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
     }
   };
 
-  const handleReject = async (content: GeneratedContent) => {
-    setRejectingId(content.id);
+  const openRejectDialog = (content: GeneratedContent) => {
+    setRejectingContent(content);
+    setRejectReason("");
+  };
+
+  const handleReject = async () => {
+    if (!rejectingContent) return;
+    if (!rejectReason.trim()) {
+      toast({ title: "Reason required", description: "Say what's wrong so future drafts can avoid it", variant: "destructive" });
+      return;
+    }
+    setRejectingId(rejectingContent.id);
     try {
       const { error } = await supabase
         .from("generated_content")
-        .update({ status: "rejected", updated_at: new Date().toISOString() })
-        .eq("id", content.id);
+        .update({
+          status: "rejected",
+          rejection_reason: rejectReason.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", rejectingContent.id);
       if (error) throw error;
-      toast({ title: "Rejected", description: "Content has been rejected" });
+      toast({ title: "Rejected", description: "Content has been rejected — reason saved for future drafts" });
+      setRejectingContent(null);
       fetchData();
     } catch {
       toast({ title: "Error", description: "Failed to reject content", variant: "destructive" });
@@ -455,7 +472,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                         size="sm"
                         variant="destructive"
                         disabled={rejectingId === content.id}
-                        onClick={() => handleReject(content)}
+                        onClick={() => openRejectDialog(content)}
                       >
                         {rejectingId === content.id ? (
                           <Loader2 className="w-3 h-3 mr-1 animate-spin" />
@@ -539,7 +556,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                   variant="destructive"
                   disabled={rejectingId === previewContent.id}
                   onClick={() => {
-                    handleReject(previewContent);
+                    openRejectDialog(previewContent);
                     setPreviewContent(null);
                   }}
                 >
@@ -605,6 +622,54 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
                 <>
                   <Send className="w-4 h-4 mr-2" />
                   Approve &amp; Send to Client
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={!!rejectingContent} onOpenChange={(open) => !open && setRejectingContent(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Content</DialogTitle>
+            <DialogDescription>
+              Say what's wrong with this draft. The reason is saved and shown to the AI the next time it generates content for this client, so it can avoid the same mistake.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="font-medium">{rejectingContent?.title || "Untitled"}</p>
+              <p className="text-sm text-muted-foreground">
+                {formatContentType(rejectingContent?.content_type || "")} for {rejectingContent?.client_accounts?.business_name}
+              </p>
+            </div>
+            <Textarea
+              placeholder="e.g. Too salesy, doesn't mention our new pricing, wrong tone for LinkedIn..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectingContent(null)} disabled={rejectingId === rejectingContent?.id}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={!rejectReason.trim() || rejectingId === rejectingContent?.id}
+            >
+              {rejectingId === rejectingContent?.id ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                <>
+                  <X className="w-4 h-4 mr-2" />
+                  Reject
                 </>
               )}
             </Button>
