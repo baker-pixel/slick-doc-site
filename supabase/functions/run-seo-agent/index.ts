@@ -793,122 +793,6 @@ async function runFullSiteAudit(
   return finalResult;
 }
 
-// ── Legacy Simple Audit ───────────────────────────────────────────────────────
-
-async function runLegacyAudit(
-  sb: ReturnType<typeof createClient>,
-  task: Record<string, unknown>,
-  client: Record<string, unknown>,
-  taskId: string,
-) {
-  const siteUrl = client.website_url as string;
-  let htmlSignals = "";
-  let fetchFailed = false;
-
-  if (siteUrl) {
-    try {
-      const siteRes = await fetch(siteUrl, {
-        headers: { "User-Agent": "OrangeDoorSEOBot/1.0" },
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (siteRes.ok) {
-        const html   = (await siteRes.text()).slice(0, MAX_HTML_CHARS);
-        const lower  = html.toLowerCase();
-        const titleM = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-        const metaM  = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
-        const h1Tags = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)].map(m => m[1].replace(/<[^>]+>/g, "").trim());
-        const imgM   = html.match(/<img[^>]*>/gi) || [];
-        const imgsBad = imgM.filter(t => !/alt=["'][^"']+["']/i.test(t)).length;
-        const hasVP  = lower.includes('name="viewport"');
-        const hasSchema = lower.includes('"@type"') || lower.includes("application/ld+json");
-        const hasOG  = lower.includes('property="og:');
-        const hasCan = lower.includes('rel="canonical"');
-        const text   = stripTags(html);
-        const words  = text.split(/\s+/).filter(w => w.length > 0).length;
-        const isHttps = siteUrl.startsWith("https://");
-
-        htmlSignals = `
-REAL HTML SIGNALS (crawled from ${siteUrl}):
-
-On-Page SEO:
-- Page Title: ${titleM ? `"${titleM[1].trim()}" (${titleM[1].trim().length} chars)` : "MISSING — critical"}
-- Meta Description: ${metaM ? `"${metaM[1].trim().slice(0, 120)}" (${metaM[1].trim().length} chars)` : "MISSING — critical"}
-- H1 Tags (${h1Tags.length}): ${h1Tags.slice(0, 3).join(" | ") || "NONE — critical"}
-- Word Count: ${words} ${words < 300 ? "(too thin)" : "(ok)"}
-- Images: ${imgM.length} total, ${imgsBad} missing alt text
-
-Technical:
-- HTTPS: ${isHttps ? "Yes" : "NO — critical"}
-- Viewport Meta: ${hasVP ? "Present" : "MISSING — critical"}
-- Canonical Tag: ${hasCan ? "Present" : "Missing"}
-- Schema Markup: ${hasSchema ? "Present" : "Missing"}
-- Open Graph: ${hasOG ? "Present" : "Missing"}
-
-Content Preview: ${text.slice(0, 500)}`;
-      } else {
-        fetchFailed = true;
-        htmlSignals = `\nNote: HTTP ${siteRes.status} — score conservatively.`;
-      }
-    } catch (e) {
-      fetchFailed = true;
-      htmlSignals = `\nNote: Fetch failed (${e instanceof Error ? e.message : "timeout"})`;
-    }
-  }
-
-  const cp     = (client.context_profile as Record<string, unknown> | null) ?? {};
-  const services = Array.isArray(cp.services) ? (cp.services as string[]).join(", ") : (client.industry ?? "General");
-  const diffs    = Array.isArray(cp.differentiators) ? `Key differentiators: ${(cp.differentiators as string[]).join("; ")}.` : "";
-  const audience = cp.target_audience ? `Target audience: ${cp.target_audience}.` : "";
-
-  const prompt = `You are a senior SEO analyst. Produce a precise, evidence-based SEO audit.
-
-BUSINESS CONTEXT:
-- Name: ${client.business_name ?? "Unknown"}
-- Industry/Services: ${services}
-- Website: ${siteUrl ?? "Not provided"}
-- Summary: ${client.website_summary ?? "No summary"}
-${diffs}
-${audience}
-${htmlSignals}
-
-SCORING RUBRIC:
-- 85-100: All on-page elements present and optimised; schema; HTTPS; viewport; 600+ words; canonical
-- 70-84: Most elements present with minor gaps
-- 50-69: 1-2 critical elements missing; thin content
-- 30-49: Multiple critical issues
-- 0-29: Site uncrawlable or no SEO signals
-
-${fetchFailed ? "IMPORTANT: Site could not be fetched. Score conservatively (max 40)." : "Base every point on the signals above. Do not fabricate."}
-
-Return ONLY valid JSON:
-{
-  "seo_score": number,
-  "working_well": string[],
-  "needs_improvement": string[],
-  "recommended_keywords": string[],
-  "action_summary": string
-}`;
-
-  const parsed = await callAIJson<Record<string, unknown>>({
-    source: "run-seo-agent:quick_audit",
-    system: "You are a senior SEO analyst. Return valid JSON only. No markdown, no extra text.",
-    prompt,
-    maxTokens: 1000,
-    temperature: 0,
-  });
-
-  const result = {
-    seo_score:            typeof parsed.seo_score === "number" ? parsed.seo_score : 50,
-    working_well:         Array.isArray(parsed.working_well)       ? parsed.working_well.slice(0, 5) : [],
-    needs_improvement:    Array.isArray(parsed.needs_improvement)   ? parsed.needs_improvement.slice(0, 6) : [],
-    recommended_keywords: Array.isArray(parsed.recommended_keywords) ? parsed.recommended_keywords.slice(0, 8) : [],
-    action_summary:       typeof parsed.action_summary === "string" ? parsed.action_summary : "",
-    generated_at:         new Date().toISOString(),
-  };
-
-  await sb.from("workflow_tasks").update({ status: "completed", result }).eq("id", taskId);
-}
-
 // ── Main Handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -984,23 +868,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Client not found" }), { status: 404, headers: corsHeaders });
     }
 
-    const isFullAudit = (task.payload as any)?.audit_scope === "full"
-      || (task.payload as any)?.analysis_type === "full_site_audit"
-      || task.audit_scope === "full";
+    console.log(`Task ${taskId}: FULL SITE AUDIT for ${(client as any).business_name}`);
 
-    console.log(`Task ${taskId}: ${isFullAudit ? "FULL SITE AUDIT" : "legacy simple audit"} for ${(client as any).business_name}`);
-
-    if (isFullAudit) {
-      const result = await runFullSiteAudit(sb, task, client, taskId);
-      return new Response(JSON.stringify({ success: true, task_id: taskId, result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } else {
-      await runLegacyAudit(sb, task, client, taskId);
-      return new Response(JSON.stringify({ success: true, task_id: taskId }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const result = await runFullSiteAudit(sb, task, client, taskId);
+    return new Response(JSON.stringify({ success: true, task_id: taskId, result }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e) {
     console.error("run-seo-agent error:", e);
     const msg = e instanceof Error ? e.message : "Unknown error";

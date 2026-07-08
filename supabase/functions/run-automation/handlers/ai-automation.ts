@@ -1,6 +1,14 @@
 import type { ClientData } from "../types.ts";
 import { createDeliverable, formatDate } from "../shared.ts";
 import { callAI, extractJson } from "../../_shared/ai.ts";
+import { getClientBrandKit, brandKitToPromptBlock } from "../../_shared/brandKit.ts";
+import {
+  getRecentContentFeedback, feedbackToPromptBlock,
+  getRecentApprovedContent, approvedContentToPromptBlock,
+} from "../../_shared/contentFeedback.ts";
+import { critiqueContent, qaNeedsAttention, type QaVerdict } from "../../_shared/contentQa.ts";
+
+const BRAND_VOICE_JOB_TYPES = new Set(["content_generation", "email_sequence"]);
 
 export async function generateMonthlyReport(supabase: any, client: ClientData) {
   const today = new Date();
@@ -29,17 +37,34 @@ export async function runAiAutomation(supabase: any, client: ClientData, jobType
 
   const sopContent = sops?.map((s: any) => s.parsed_content || s.description).join("\n\n") || "";
 
+  // Brand voice + prior-content context — best-effort, never blocks
+  // generation. Only fetched for the two jobTypes where tone/voice actually
+  // matters; "report" is data-driven, not brand-voice-sensitive.
+  let brandContextBlock = "";
+  if (BRAND_VOICE_JOB_TYPES.has(jobType)) {
+    const [brandKit, feedback, approved] = await Promise.all([
+      getClientBrandKit(supabase, client.id).catch(() => null),
+      getRecentContentFeedback(supabase, client.id),
+      getRecentApprovedContent(supabase, client.id),
+    ]);
+    brandContextBlock = [
+      brandKit ? brandKitToPromptBlock(brandKit) : "",
+      approvedContentToPromptBlock(approved),
+      feedbackToPromptBlock(feedback),
+    ].filter(Boolean).join("\n\n");
+  }
+
   let systemPrompt = "";
   let userPrompt = "";
 
   switch (jobType) {
     case "email_sequence":
-      systemPrompt = `You are an expert email marketing specialist. Create a personalized email sequence.\n\nSOPs:\n${sopContent}\n\nOutput JSON: { "sequence_name": "string", "emails": [{ "subject": "string", "body": "string (HTML)", "send_delay_days": number, "purpose": "string" }] }`;
+      systemPrompt = `You are an expert email marketing specialist. Create a personalized email sequence.\n\n${brandContextBlock}\n\nSOPs:\n${sopContent}\n\nOutput JSON: { "sequence_name": "string", "emails": [{ "subject": "string", "body": "string (HTML)", "send_delay_days": number, "purpose": "string" }] }`;
       userPrompt = `Create a ${client.tier}-tier email sequence for ${client.business_name}. Additional context: ${JSON.stringify(inputData || {})}`;
       break;
     case "content_generation":
       const industryContext = client.industry ? `The business is in the ${client.industry} industry.` : "";
-      systemPrompt = `You are a digital marketing content expert specializing in creating industry-specific, engaging content. Create content that speaks directly to the target audience and incorporates industry best practices and terminology.\n\n${industryContext}\n\nOutput JSON: { "content_pieces": [{ "type": "blog_post | social_post | ad_copy", "title": "string", "content": "string", "platform": "string", "target_audience": "string", "key_message": "string" }] }`;
+      systemPrompt = `You are a digital marketing content expert specializing in creating industry-specific, engaging content. Create content that speaks directly to the target audience and incorporates industry best practices and terminology.\n\n${industryContext}\n\n${brandContextBlock}\n\nOutput JSON: { "content_pieces": [{ "type": "blog_post | social_post | ad_copy", "title": "string", "content": "string", "platform": "string", "target_audience": "string", "key_message": "string" }] }`;
       userPrompt = `Create ${client.tier}-tier content for ${client.business_name}${client.industry ? ` (${client.industry} industry)` : ""}.
 
 Make sure the content:
@@ -76,14 +101,39 @@ Context: ${JSON.stringify(inputData || {})}`;
   // Store results and create deliverables based on type
   if (jobType === "content_generation" && parsedOutput.content_pieces) {
     const pieces = parsedOutput.content_pieces as Array<{ type: string; title: string; content: string; platform?: string }>;
-    for (const piece of pieces) {
+
+    // Self-QA: cheap second-model critique per piece, best-effort. Never
+    // blocks a piece from reaching admin review -- only flags it.
+    const qaResults = await Promise.all(
+      pieces.map((piece) => critiqueContent(piece.content, piece.type || "content", client.tone || "professional", client.id)),
+    );
+
+    for (let i = 0; i < pieces.length; i++) {
+      const piece = pieces[i];
       await supabase.from("generated_content").insert({
         client_id: client.id,
         content_type: piece.type || "other",
         title: piece.title,
         content: piece.content,
-        metadata: { platform: piece.platform },
+        metadata: { platform: piece.platform, ...(qaResults[i] ? { qa: qaResults[i] } : {}) },
       });
+    }
+
+    const flagged = pieces
+      .map((piece, i) => ({ piece, qa: qaResults[i] }))
+      .filter(({ qa }) => qaNeedsAttention(qa));
+
+    if (flagged.length > 0) {
+      await supabase.from("activity_feed").insert({
+        client_account_id: client.id,
+        activity_type: "content_draft_ready",
+        title: `Content draft ready for review — ${flagged.length} piece(s) flagged by QA`,
+        description: flagged
+          .map(({ piece, qa }) => `"${piece.title}" (score ${qa!.score}/10): ${qa!.issues.join("; ") || "brand tone mismatch"}`)
+          .join(" | "),
+        icon: "alert-triangle",
+        metadata: { qa_flagged: flagged.map(({ piece, qa }) => ({ title: piece.title, qa })) },
+      }).catch(() => {});
     }
 
     await createDeliverable(
@@ -120,6 +170,26 @@ ${p.content.substring(0, 300)}${p.content.length > 300 ? '...' : ''}`).join('\n\
   if (jobType === "email_sequence") {
     const sequenceName = (parsedOutput as any).sequence_name || "Custom Sequence";
     const emails = (parsedOutput as any).emails || [];
+
+    const qaResults: (QaVerdict | null)[] = await Promise.all(
+      emails.map((e: any) => critiqueContent(e.body || "", "email", client.tone || "professional", client.id)),
+    );
+    const flagged = emails
+      .map((e: any, i: number) => ({ email: e, qa: qaResults[i] }))
+      .filter(({ qa }: { qa: QaVerdict | null }) => qaNeedsAttention(qa));
+
+    if (flagged.length > 0) {
+      await supabase.from("activity_feed").insert({
+        client_account_id: client.id,
+        activity_type: "content_draft_ready",
+        title: `Email sequence "${sequenceName}" ready for review — ${flagged.length} email(s) flagged by QA`,
+        description: flagged
+          .map(({ email, qa }: { email: any; qa: QaVerdict | null }) => `"${email.subject}" (score ${qa!.score}/10): ${qa!.issues.join("; ") || "brand tone mismatch"}`)
+          .join(" | "),
+        icon: "alert-triangle",
+        metadata: { qa_flagged: flagged.map(({ email, qa }: { email: any; qa: QaVerdict | null }) => ({ subject: email.subject, qa })) },
+      }).catch(() => {});
+    }
 
     await createDeliverable(
       supabase,

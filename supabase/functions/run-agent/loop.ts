@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAIWithTools, callAI, MODELS, type AgentMessage, type ToolDefinition } from "../_shared/ai.ts";
+import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 import type { ClientData } from "../run-automation/types.ts";
 import { AUTOMATION_TOOLS, toToolDefinitions, findTool } from "./tools.ts";
 
@@ -54,10 +55,12 @@ export interface AgentTraceRow {
   error_message: string | null;
 }
 
-function systemPrompt(client: ClientData): string {
+function systemPrompt(client: ClientData, brandContextBlock: string): string {
   return `You are Orange Door Marketing's automation agent, working on behalf of the agency (not the client) to progress a specific client's account.
 
 Client: ${client.business_name} (tier: ${client.tier}, industry: ${client.industry ?? "unknown"})
+
+${brandContextBlock}
 
 You have tools available, each representing one piece of agency automation work. Some tools email the client directly -- those are marked in their description and will NOT execute immediately when you call them. Instead they are queued for a human admin to approve; you'll receive a tool result telling you it was queued, not that it succeeded. Everything else executes immediately and produces an internal record or a "pending review" deliverable that a human reviews before anything reaches the client -- you do not need approval for those.
 
@@ -159,8 +162,10 @@ export async function runAgentLoop(
   traceId: string,
 ): Promise<AgentTraceRow> {
   const startedAt = Date.now();
+  const brandKit = await getClientBrandKit(supabase, client.id).catch(() => null);
+  const brandContextBlock = brandKit ? brandKitToPromptBlock(brandKit) : "";
   const messages: AgentMessage[] = [
-    { role: "system", content: systemPrompt(client) },
+    { role: "system", content: systemPrompt(client, brandContextBlock) },
     { role: "user", content: goal },
   ];
   const tools = [...toToolDefinitions(AUTOMATION_TOOLS), FINISH_TOOL];
