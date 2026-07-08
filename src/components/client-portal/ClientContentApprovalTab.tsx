@@ -8,10 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
   Loader2, FileCheck, CheckCircle, XCircle, Clock, MessageSquare,
   FileText, Image, Mail, Share2, PenTool, Video, Megaphone, Calendar,
-  ClipboardList, Sparkles, Target, Hash, Link, AtSign, Type, AlignLeft
+  ClipboardList, Sparkles, Target, Hash, Link, AtSign, Type, AlignLeft,
+  Facebook, Instagram, Linkedin, Twitter, LayoutGrid,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -28,10 +30,30 @@ interface ContentApproval {
   submitted_at: string;
   reviewed_at: string | null;
   publish_status: string | null;
+  platform: string | null;
+  content_id: string | null;
+  image_url?: string | null;
 }
 
 interface ClientContentApprovalTabProps {
   clientAccountId: string;
+}
+
+type PlatformFilter = "all" | "facebook" | "instagram" | "twitter" | "linkedin" | "other";
+
+const PLATFORM_CONFIG: Record<Exclude<PlatformFilter, "all">, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+  facebook: { label: "Facebook", icon: Facebook },
+  instagram: { label: "Instagram", icon: Instagram },
+  twitter: { label: "X", icon: Twitter },
+  linkedin: { label: "LinkedIn", icon: Linkedin },
+  other: { label: "Other", icon: LayoutGrid },
+};
+
+function normalizePlatform(platform: string | null): Exclude<PlatformFilter, "all"> {
+  const p = (platform || "").toLowerCase();
+  if (p === "facebook" || p === "instagram" || p === "linkedin") return p;
+  if (p === "twitter" || p === "x") return "twitter";
+  return "other";
 }
 
 // Content type configurations with icons, colors, and descriptions
@@ -495,6 +517,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
   const [selectedApproval, setSelectedApproval] = useState<ContentApproval | null>(null);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   // Whether the client_approval onboarding step is unlocked but not yet complete
   // (draft is being generated in the background — show helpful empty state instead of blank)
   const [approvalStepPending, setApprovalStepPending] = useState(false);
@@ -554,7 +577,29 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
         .order("submitted_at", { ascending: false });
 
       if (error) throw error;
-      setApprovals(data || []);
+      const rows = (data || []) as ContentApproval[];
+
+      // content_approvals has no image column of its own -- the image
+      // (when one exists) lives on content_calendar.metadata.image_url,
+      // matched via the shared content_id. A live join rather than a copy
+      // made at approval-creation time, since images are often still
+      // generating (via the nightly image batch) when the approval is
+      // first created.
+      const contentIds = [...new Set(rows.map((r) => r.content_id).filter(Boolean))] as string[];
+      let imageByContentId: Record<string, string> = {};
+      if (contentIds.length > 0) {
+        const { data: calRows } = await supabase
+          .from("content_calendar")
+          .select("content_id, metadata")
+          .in("content_id", contentIds);
+        imageByContentId = Object.fromEntries(
+          (calRows || [])
+            .map((c: any) => [c.content_id, (c.metadata as { image_url?: string } | null)?.image_url])
+            .filter(([, url]) => !!url)
+        );
+      }
+
+      setApprovals(rows.map((r) => ({ ...r, image_url: r.content_id ? imageByContentId[r.content_id] : undefined })));
     } catch (error) {
       console.error("Error fetching approvals:", error);
     } finally {
@@ -724,8 +769,18 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
     );
   }
 
-  const pendingApprovals = approvals.filter((a) => a.status === "pending");
-  const reviewedApprovals = approvals.filter((a) => a.status !== "pending");
+  const platformCounts = approvals.reduce<Record<Exclude<PlatformFilter, "all">, number>>((acc, a) => {
+    const key = normalizePlatform(a.platform);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, { facebook: 0, instagram: 0, twitter: 0, linkedin: 0, other: 0 });
+
+  const filteredApprovals = platformFilter === "all"
+    ? approvals
+    : approvals.filter((a) => normalizePlatform(a.platform) === platformFilter);
+
+  const pendingApprovals = filteredApprovals.filter((a) => a.status === "pending");
+  const reviewedApprovals = filteredApprovals.filter((a) => a.status !== "pending");
 
   return (
     <div className="space-y-6">
@@ -733,6 +788,27 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
         <h2 className="text-2xl font-bold text-foreground">Content Approvals</h2>
         <p className="text-muted-foreground">Review and approve content before it goes live</p>
       </div>
+
+      {approvals.length > 0 && (
+        <Tabs value={platformFilter} onValueChange={(v) => setPlatformFilter(v as PlatformFilter)}>
+          <TabsList className="flex-wrap h-auto">
+            <TabsTrigger value="all" className="gap-1.5">
+              All <span className="text-xs text-muted-foreground">({approvals.length})</span>
+            </TabsTrigger>
+            {(Object.keys(PLATFORM_CONFIG) as Array<Exclude<PlatformFilter, "all">>).map((key) => {
+              const count = platformCounts[key];
+              if (count === 0) return null;
+              const { label, icon: PlatformIcon } = PLATFORM_CONFIG[key];
+              return (
+                <TabsTrigger key={key} value={key} className="gap-1.5">
+                  <PlatformIcon className="h-3.5 w-3.5" />
+                  {label} <span className="text-xs text-muted-foreground">({count})</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
+      )}
 
       {approvals.length === 0 ? (
         <Card>
@@ -793,13 +869,22 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                       </CardHeader>
                       <CardContent className="pt-2">
                         <p className="text-xs text-muted-foreground mb-2">{typeConfig.description}</p>
-                        {approval.content_preview && (
-                          <div className="bg-muted/50 rounded-md p-3 mt-2">
-                            <p className="text-sm text-foreground line-clamp-3">
-                              {approval.content_preview}
-                            </p>
-                          </div>
-                        )}
+                        <div className="flex gap-3 mt-2">
+                          {approval.image_url && (
+                            <img
+                              src={approval.image_url}
+                              alt=""
+                              className="w-20 h-20 rounded-md object-cover flex-shrink-0 border"
+                            />
+                          )}
+                          {approval.content_preview && (
+                            <div className="bg-muted/50 rounded-md p-3 flex-1 min-w-0">
+                              <p className="text-sm text-foreground line-clamp-3">
+                                {approval.content_preview}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 mt-3">
                           <Button size="sm" variant="default" className="text-xs">
                             <Sparkles className="h-3 w-3 mr-1" />
@@ -916,6 +1001,21 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                       </div>
                     </div>
                   </div>
+
+                  {/* Image */}
+                  {selectedApproval.image_url && (
+                    <div>
+                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <Image className="h-4 w-4" />
+                        Image
+                      </h4>
+                      <img
+                        src={selectedApproval.image_url}
+                        alt=""
+                        className="w-full max-h-96 object-cover rounded-lg border"
+                      />
+                    </div>
+                  )}
 
                   {/* Full Content Preview */}
                   {(selectedApproval.full_content || selectedApproval.content_preview) && (
