@@ -287,17 +287,19 @@ export function ClientTasksPanel({ adminPassword, clientId }: { adminPassword: s
       </CardHeader>
       <CardContent>
         <div className="flex gap-2 mb-4">
-          <Select value={clientFilter} onValueChange={setClientFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Client" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clients</SelectItem>
-              {clients.map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!clientId && (
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Client" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Clients</SelectItem>
+                {clients.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-36">
               <SelectValue placeholder="Status" />

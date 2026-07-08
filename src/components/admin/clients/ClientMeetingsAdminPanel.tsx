@@ -200,7 +200,7 @@ const ClientMeetingsAdminPanel = ({ onNavigate, clientId }: ClientMeetingsAdminP
       toast({ title: "Meeting created successfully" });
       setCreateDialogOpen(false);
       setCreateForm({
-        client_account_id: "",
+        client_account_id: clientId || "",
         title: "",
         description: "",
         meeting_type: "video",
@@ -500,24 +500,26 @@ const ClientMeetingsAdminPanel = ({ onNavigate, clientId }: ClientMeetingsAdminP
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Client *</Label>
-                <Select 
-                  value={createForm.client_account_id} 
-                  onValueChange={(value) => setCreateForm({ ...createForm, client_account_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.business_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!clientId && (
+                <div className="space-y-2">
+                  <Label>Client *</Label>
+                  <Select
+                    value={createForm.client_account_id}
+                    onValueChange={(value) => setCreateForm({ ...createForm, client_account_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.business_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Meeting Title *</Label>

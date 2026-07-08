@@ -327,21 +327,23 @@ export default function ClientDocumentsPanel({ clientId }: { clientId?: string }
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Client *</Label>
-                    <Select value={selectedClient} onValueChange={setSelectedClient}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a client" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients.map((client) => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.business_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!clientId && (
+                    <div className="space-y-2">
+                      <Label>Client *</Label>
+                      <Select value={selectedClient} onValueChange={setSelectedClient}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a client" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clients.map((client) => (
+                            <SelectItem key={client.id} value={client.id}>
+                              {client.business_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>Category *</Label>
                     <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -432,19 +434,21 @@ export default function ClientDocumentsPanel({ clientId }: { clientId?: string }
                 className="pl-9"
               />
             </div>
-            <Select value={filterClient} onValueChange={setFilterClient}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Clients" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Clients</SelectItem>
-                {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.business_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!clientId && (
+              <Select value={filterClient} onValueChange={setFilterClient}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Clients</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.business_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={filterCategory} onValueChange={setFilterCategory}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="All Categories" />

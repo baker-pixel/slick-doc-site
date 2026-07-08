@@ -35,7 +35,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
   const [isOpen, setIsOpen] = useState(false);
   const [editingAnalytics, setEditingAnalytics] = useState<ClientAnalytics | null>(null);
   const [formData, setFormData] = useState({
-    client_account_id: '',
+    client_account_id: clientId ?? '',
     period_start: '',
     period_end: '',
     website_visits: '',
@@ -191,7 +191,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
 
   const resetForm = () => {
     setFormData({
-      client_account_id: '',
+      client_account_id: clientId ?? '',
       period_start: '',
       period_end: '',
       website_visits: '',
@@ -267,19 +267,21 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
               <DialogTitle>{editingAnalytics ? 'Edit Analytics' : 'Add Analytics Snapshot'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Client *</Label>
-                <Select value={formData.client_account_id} onValueChange={(v) => setFormData({ ...formData, client_account_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>{client.business_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!clientId && (
+                <div className="space-y-2">
+                  <Label>Client *</Label>
+                  <Select value={formData.client_account_id} onValueChange={(v) => setFormData({ ...formData, client_account_id: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>{client.business_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Period Start *</Label>
