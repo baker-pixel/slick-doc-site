@@ -43,6 +43,10 @@ serve(async (req) => {
 
     // Fresh drafts that need an image: real content (not an unfilled
     // placeholder), no image yet, and not already sitting in a pending batch.
+    // Kept small (not OpenAI's 50k/batch limit) because check-image-batches
+    // can only safely apply a handful of results per invocation on this
+    // runtime (see its MAX_APPLY_PER_RUN comment) -- a small, frequent batch
+    // drains fast; a huge one takes many hours to fully apply.
     const { data: slots, error: fetchErr } = await supabase
       .from("content_calendar")
       .select("id, client_account_id, title, content, platform, metadata")
@@ -50,7 +54,7 @@ serve(async (req) => {
       .not("content", "like", "[Auto-generated placeholder%")
       .is("metadata->>image_url", null)
       .is("metadata->>image_batch_id", null)
-      .limit(200);
+      .limit(20);
 
     if (fetchErr) throw new Error(`Failed to fetch slots needing images: ${fetchErr.message}`);
 
@@ -137,13 +141,15 @@ serve(async (req) => {
 
     for (const slot of slots) {
       if (!includedSlotIds.includes(slot.id)) continue;
+      // image_batch_status intentionally left unset here -- check-image-batches
+      // treats "no status yet" and "any non-terminal status" the same way
+      // (still pending), only "completed"/"failed" mean done.
       await supabase
         .from("content_calendar")
         .update({
           metadata: {
             ...((slot as any).metadata || {}),
             image_batch_id: batch.id,
-            image_batch_status: batch.status || "submitted",
           },
         })
         .eq("id", slot.id);
