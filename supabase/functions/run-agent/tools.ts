@@ -30,7 +30,7 @@ import { runKeywordGapAnalysis } from "../run-automation/handlers/run-keyword-ga
 import { setupLeadAutomations } from "../run-automation/handlers/setup-lead-automations.ts";
 import { setupRetargetingAudiences } from "../run-automation/handlers/setup-retargeting-audiences.ts";
 import { setupRetentionAutomations } from "../run-automation/handlers/setup-retention-automations.ts";
-import { generateMonthlyReport, runAiAutomation } from "../run-automation/handlers/ai-automation.ts";
+import { runAiAutomation } from "../run-automation/handlers/ai-automation.ts";
 import { runCustomAutomation } from "../run-automation/handlers/custom.ts";
 import { addSegmentationLogicToFunnelSteps } from "../run-automation/handlers/add-segmentation-logic.ts";
 import { buildRenewalReminderSequence } from "../run-automation/handlers/build-renewal-reminder-sequence.ts";
@@ -182,15 +182,8 @@ export const AUTOMATION_TOOLS: AutomationTool[] = [
     run: (supabase, client) => setupRetentionAutomations(supabase, client),
   },
   {
-    name: "generate_monthly_report",
-    description: "Generates the client's monthly performance report (last calendar month) and stores it as a deliverable for review -- does not send it. Sending is a separate, explicit admin action.",
-    parameters: noInputSchema,
-    requiresApproval: false,
-    run: (supabase, client) => generateMonthlyReport(supabase, client),
-  },
-  {
     name: "report",
-    description: "Generates a performance report for a specific period and stores it as a deliverable for review -- does not send it. Use periodStart/periodEnd in notes for a period other than last month.",
+    description: "Generates a performance report and stores it as a deliverable for review -- does not send it, sending is a separate explicit admin action. Defaults to last calendar month; pass periodStart/periodEnd (YYYY-MM-DD) in notes for a different period.",
     parameters: freeformContextSchema,
     requiresApproval: false,
     run: (supabase, client, inputData) => runAiAutomation(supabase, client, "report", inputData),

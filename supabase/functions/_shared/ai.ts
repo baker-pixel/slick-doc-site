@@ -145,6 +145,19 @@ function withJsonHint(messages: ChatMessage[], jsonMode?: boolean): ChatMessage[
   return finalMessages;
 }
 
+/** Best-effort extraction of the actual provider-reported reason, so a bare
+ * status code doesn't end up being the only thing anyone downstream (agent
+ * traces, alerts, logs) ever sees for a failed call. */
+function extractProviderErrorMessage(bodyText: string): string | null {
+  try {
+    const parsed = JSON.parse(bodyText);
+    const msg = parsed?.error?.message ?? parsed?.message;
+    return typeof msg === "string" ? msg.slice(0, 300) : null;
+  } catch {
+    return null;
+  }
+}
+
 function throwForStatus(res: Response, bodyText: string, source: string): never {
   const retryAfter = Number(res.headers.get("retry-after")) || null;
   if (res.status === 429) {
@@ -159,7 +172,12 @@ function throwForStatus(res: Response, bodyText: string, source: string): never 
     throw new AIError(`AI provider error: ${res.status}`, res.status, true);
   }
   console.error(`[ai] ${source} non-retryable error ${res.status}: ${bodyText.slice(0, 500)}`);
-  throw new AIError(`AI request rejected: ${res.status}`, res.status, false);
+  const providerMessage = extractProviderErrorMessage(bodyText);
+  throw new AIError(
+    providerMessage ? `AI request rejected: ${providerMessage}` : `AI request rejected: ${res.status}`,
+    res.status,
+    false,
+  );
 }
 
 async function attemptGroqOnce(

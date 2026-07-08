@@ -10,15 +10,14 @@ import { critiqueContent, qaNeedsAttention, type QaVerdict } from "../../_shared
 
 const BRAND_VOICE_JOB_TYPES = new Set(["content_generation", "email_sequence"]);
 
+// Thin, named wrapper for callers that want to be explicit about generating
+// "the usual monthly report" (run-ai-batch's cron, the generate_monthly_
+// report/generate_report legacy job types). The "report" case below
+// defaults to last-calendar-month itself when no period is given, so this
+// no longer needs to compute dates -- it's the same call as
+// runAiAutomation(supabase, client, "report") with no inputData.
 export async function generateMonthlyReport(supabase: any, client: ClientData) {
-  const today = new Date();
-  const periodStart = new Date(today);
-  periodStart.setMonth(periodStart.getMonth() - 1);
-
-  return runAiAutomation(supabase, client, "report", {
-    periodStart: periodStart.toISOString().split("T")[0],
-    periodEnd: today.toISOString().split("T")[0],
-  });
+  return runAiAutomation(supabase, client, "report");
 }
 
 export async function runAiAutomation(supabase: any, client: ClientData, jobType: string, inputData?: Record<string, unknown>) {
@@ -76,8 +75,16 @@ Make sure the content:
 Context: ${JSON.stringify(inputData || {})}`;
       break;
     case "report": {
-      const periodStart = (inputData as any)?.periodStart as string | undefined;
-      const periodEnd = (inputData as any)?.periodEnd as string | undefined;
+      // Default to "last calendar month" when no explicit period is given,
+      // so this one tool covers both "just give me the usual report" and
+      // "report on this specific period" -- previously two separate tools
+      // (generate_monthly_report / report) existed for exactly this
+      // distinction, which just meant an agent calling this had to guess
+      // which one to use and sometimes called both for the same goal.
+      const defaultPeriodStart = new Date();
+      defaultPeriodStart.setMonth(defaultPeriodStart.getMonth() - 1);
+      const periodStart = ((inputData as any)?.periodStart as string | undefined) ?? defaultPeriodStart.toISOString().split("T")[0];
+      const periodEnd = ((inputData as any)?.periodEnd as string | undefined) ?? new Date().toISOString().split("T")[0];
 
       // Real, cheaply-available counts to ground the report in -- the
       // previous version of this prompt (and a separate, now-removed
@@ -90,13 +97,13 @@ Context: ${JSON.stringify(inputData || {})}`;
       const [{ count: contentCount }, { data: latestAudit }, { count: tasksCount }] = await Promise.all([
         supabase.from("generated_content").select("id", { count: "exact", head: true })
           .eq("client_id", client.id).in("status", ["approved", "client_approved", "published"])
-          .gte("updated_at", periodStart ?? "1970-01-01").lte("updated_at", periodEnd ?? "9999-12-31"),
+          .gte("updated_at", periodStart).lte("updated_at", periodEnd),
         supabase.from("seo_audits").select("score, created_at")
           .eq("client_account_id", client.id).not("score", "is", null)
           .order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("client_tasks").select("id", { count: "exact", head: true })
           .eq("client_account_id", client.id).eq("status", "completed")
-          .gte("completed_at", periodStart ?? "1970-01-01").lte("completed_at", periodEnd ?? "9999-12-31"),
+          .gte("completed_at", periodStart).lte("completed_at", periodEnd),
       ]);
 
       const realData = [
@@ -106,7 +113,7 @@ Context: ${JSON.stringify(inputData || {})}`;
       ].join("\n");
 
       systemPrompt = `You are a marketing analytics expert. Generate an honest, grounded performance report using ONLY the real data provided -- never invent a specific number, percentage, or metric that isn't derivable from it. If you don't have enough real data for a metric, omit it from "metrics" rather than making one up; write the narrative around what actually happened (work completed, content shipped) instead of guessed traffic/conversion figures.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
-      userPrompt = `Generate a performance report for ${client.business_name}. Period: ${periodStart ?? "unknown"} to ${periodEnd ?? "unknown"}.\n\nREAL DATA FOR THIS PERIOD:\n${realData}`;
+      userPrompt = `Generate a performance report for ${client.business_name}. Period: ${periodStart} to ${periodEnd}.\n\nREAL DATA FOR THIS PERIOD:\n${realData}`;
       break;
     }
   }
@@ -254,7 +261,13 @@ Preview:
   }
 
   if (jobType === "report") {
-    const periodStart = (inputData as any)?.periodStart || new Date().toISOString().split("T")[0];
+    // Same "default to last calendar month" fallback used to build the
+    // prompt above -- must match, otherwise the stored report_period_start/
+    // end columns (today-to-today) would contradict what the report text
+    // itself says the period was.
+    const fallbackStart = new Date();
+    fallbackStart.setMonth(fallbackStart.getMonth() - 1);
+    const periodStart = (inputData as any)?.periodStart || fallbackStart.toISOString().split("T")[0];
     const periodEnd = (inputData as any)?.periodEnd || new Date().toISOString().split("T")[0];
 
     // client_reports has no dedicated executive_summary column -- fold it in
