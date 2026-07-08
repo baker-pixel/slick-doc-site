@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
+import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 
 export interface InviteLead {
   email: string;
@@ -87,26 +88,32 @@ export async function inviteLeadToPortal(
   }
 
   // 3. Create invitation via admin API
-  const { error: invErr } = await callAdminApi(adminPassword, {
-    action: "insert",
-    table: "client_invitations",
-    data: {
-      client_account_id: clientId,
-      email: lead.email,
-      first_name: lead.first_name || null,
-      last_name: lead.last_name || null,
-      invited_by: "admin",
+  const { data: inviteResult, error: invErr } = await callAdminApi<{ data: { id: string; token: string } }>(
+    adminPassword,
+    {
+      action: "create_invitation",
+      data: {
+        client_account_id: clientId,
+        email: lead.email,
+        first_name: lead.first_name || null,
+        last_name: lead.last_name || null,
+      },
     },
-  });
+  );
   if (invErr) throw new Error(invErr);
+  const invitation = inviteResult?.data;
+  if (!invitation) throw new Error("Invitation was not created");
 
   // 4. Send invitation email
   try {
     await supabase.functions.invoke("send-client-invite", {
       body: {
+        invitationId: invitation.id,
         email: lead.email,
         firstName: lead.first_name || "there",
-        clientAccountId: clientId,
+        businessName: lead.business_name,
+        token: invitation.token,
+        portalOrigin: getClientPortalOrigin(),
         password: adminPassword,
       },
     });
