@@ -18,6 +18,7 @@ interface ClientCalendarTabProps {
 
 interface CalendarItem {
   id: string;
+  content_id: string | null;
   title: string;
   content: string;
   content_type: string;
@@ -77,7 +78,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("content_calendar")
-        .select("id, title, content, content_type, scheduled_for, platform, status, published_at, client_approved")
+        .select("id, content_id, title, content, content_type, scheduled_for, platform, status, published_at, client_approved")
         .eq("client_account_id", clientAccountId)
         .order("scheduled_for", { ascending: true });
       if (error) throw error;
@@ -85,11 +86,30 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
     },
   });
 
+  // content_calendar has no state of its own for "sent to client, awaiting
+  // their decision" -- that only exists in content_approvals. Without this,
+  // every unreviewed draft looked identical to a real pending approval.
+  const { data: pendingApprovalContentIds = new Set<string>() } = useQuery({
+    queryKey: ["client-calendar-pending-approvals", clientAccountId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("content_approvals")
+        .select("content_id")
+        .eq("client_account_id", clientAccountId)
+        .eq("status", "pending");
+      if (error) throw error;
+      return new Set((data || []).map(a => a.content_id).filter(Boolean) as string[]);
+    },
+  });
+
+  const isTrulyPending = (item: CalendarItem) =>
+    !!item.content_id && pendingApprovalContentIds.has(item.content_id);
+
   const filteredItems = useMemo(() => {
     if (statusFilter === "all") return items;
-    if (statusFilter === "pending") return items.filter(i => !i.client_approved && i.status !== "published");
+    if (statusFilter === "pending") return items.filter(isTrulyPending);
     return items.filter(i => i.status === statusFilter);
-  }, [items, statusFilter]);
+  }, [items, statusFilter, pendingApprovalContentIds]);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -251,9 +271,15 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
                   }>
                     {selectedItem.status}
                   </Badge>
-                  {selectedItem.client_approved === false && (
-                    <Badge variant="outline" className="border-amber-500 text-amber-600">Awaiting Approval</Badge>
-                  )}
+                  {isTrulyPending(selectedItem) ? (
+                    <Badge variant="outline" className="border-amber-500 text-amber-600">
+                      Awaiting your approval — check the Approvals tab
+                    </Badge>
+                  ) : selectedItem.status === "draft" && selectedItem.client_approved === false ? (
+                    <Badge variant="outline" className="border-muted-foreground/40 text-muted-foreground">
+                      In production — not yet ready for review
+                    </Badge>
+                  ) : null}
                 </div>
 
                 <div className="space-y-1">

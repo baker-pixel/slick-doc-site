@@ -3,6 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
 import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
+import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
+
+// Platforms where a QA-passing draft skips the manual admin "send for
+// approval" click and goes straight to the client's Approvals tab. Blog,
+// email, and other content types stay on manual admin review.
+const AUTO_FORWARD_PLATFORMS = new Set(["facebook", "instagram", "twitter", "linkedin"]);
 
 interface ContextProfile {
   services?: string[];
@@ -181,13 +187,67 @@ serve(async (req) => {
         const recentApproved = approvedByClient[slot.client_account_id] || [];
         const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY);
 
-        // Update the calendar slot with the generated draft text so it's previewable,
-        // but leave status="draft" and client_approved=false — the slot is NOT schedulable
-        // until admin reviews, client approves, and handle-approval creates the scheduled row.
+        // Self-QA: cheap second-model critique, best-effort. A QA failure
+        // (null) never blocks the draft -- it just means no auto-forward.
+        const qa = await critiqueContent(
+          generatedContent,
+          slot.content_type,
+          client.context_profile?.tone || "professional",
+          client.id,
+        );
+        const flagged = qaNeedsAttention(qa);
+        const autoForward = AUTO_FORWARD_PLATFORMS.has(slot.platform) && !flagged;
+
+        // Save the draft to generated_content. Include full traceability
+        // metadata so the admin panel can link back to the slot.
+        const { data: draftRecord, error: draftErr } = await supabase
+          .from("generated_content")
+          .insert({
+            client_id: slot.client_account_id,
+            content_type: slot.content_type,
+            title: slot.title,
+            content: generatedContent,
+            status: autoForward ? "approved" : "pending_admin_review",
+            metadata: {
+              source: "fill-scheduled-content",
+              content_calendar_slot_id: slot.id,
+              platform: slot.platform,
+              scheduled_for: slot.scheduled_for,
+              context_used: !!(client.context_profile),
+              generated_at: new Date().toISOString(),
+              ...(qa ? { qa } : {}),
+              ...(autoForward ? { auto_forwarded: true } : {}),
+            },
+          })
+          .select("id")
+          .single();
+
+        if (draftErr) {
+          console.error(`generated_content insert failed for slot ${slot.id}:`, draftErr.message);
+          try {
+            await supabase.from("automation_alerts").insert({
+              alert_type: "data_error",
+              severity: "warning",
+              title: "generated_content insert failed in fill-scheduled-content",
+              message: draftErr.message,
+              source: "fill-scheduled-content",
+              metadata: { slot_id: slot.id, client_id: slot.client_account_id, timestamp: new Date().toISOString() },
+            });
+          } catch { /* best-effort */ }
+        }
+
+        // Update the calendar slot with the generated draft text (and the
+        // forward link to generated_content, so downstream consumers --
+        // content_approvals matching, admin panel, this backfill's future
+        // self) can join the two tables). Still leaves status="draft" and
+        // client_approved=false unless auto-forwarded above — the slot is
+        // NOT schedulable until a client_approvals row is approved and
+        // handle-approval creates the scheduled row.
         const { error: updateErr } = await supabase
           .from("content_calendar")
           .update({
             content: generatedContent,
+            content_id: draftRecord?.id ?? null,
             metadata: {
               ...((slot.metadata as object) || {}),
               ai_draft_generated: true,
@@ -199,56 +259,69 @@ serve(async (req) => {
 
         if (updateErr) throw new Error(`Failed to update slot draft text: ${updateErr.message}`);
 
-        // Save the draft to generated_content for admin review.
-        // Include full traceability metadata so the admin panel can link back to the slot.
-        const { data: draftRecord, error: draftErr } = await supabase
-          .from("generated_content")
-          .insert({
-            client_id: slot.client_account_id,
+        if (autoForward && draftRecord?.id) {
+          // QA passed on a target social platform -- skip the manual admin
+          // click and send straight to the client's Approvals tab.
+          const { error: approvalErr } = await supabase.from("content_approvals").insert({
+            client_account_id: slot.client_account_id,
+            content_id: draftRecord.id,
             content_type: slot.content_type,
-            title: slot.title,
-            content: generatedContent,
-            status: "pending_admin_review",
-            metadata: {
-              source: "fill-scheduled-content",
-              content_calendar_slot_id: slot.id,
-              platform: slot.platform,
-              scheduled_for: slot.scheduled_for,
-              context_used: !!(client.context_profile),
-              generated_at: new Date().toISOString(),
-            },
-          })
-          .select("id")
-          .single();
-
-        if (draftErr) {
-          console.error(`generated_content insert failed for slot ${slot.id}:`, draftErr.message);
-          await supabase.from("automation_alerts").insert({
-            alert_type: "data_error",
-            severity: "warning",
-            title: "generated_content insert failed in fill-scheduled-content",
-            message: draftErr.message,
-            source: "fill-scheduled-content",
-            metadata: { slot_id: slot.id, client_id: slot.client_account_id, timestamp: new Date().toISOString() },
-          }).catch(() => {});
-        }
-
-        // Notify admins that a draft is ready for review.
-        await supabase.from("activity_feed").insert({
-          client_account_id: slot.client_account_id,
-          activity_type: "content_draft_ready",
-          title: `Draft ready for admin review: ${slot.title}`,
-          description: `${slot.content_type} generated for ${slot.platform} — needs admin review before going to client.`,
-          icon: "file-text",
-          metadata: {
-            content_calendar_slot_id: slot.id,
-            generated_content_id: draftRecord?.id || null,
+            title: slot.title || "Untitled",
+            content_preview: generatedContent.substring(0, 300),
+            full_content: generatedContent,
+            status: "pending",
+            publish_status: "pending",
             platform: slot.platform,
             scheduled_for: slot.scheduled_for,
-          },
-        }).catch(() => {});
+            submitted_at: new Date().toISOString(),
+          });
 
-        console.log(`Draft saved for slot ${slot.id} (${slot.platform}/${slot.content_type}) — awaiting admin review`);
+          if (approvalErr) {
+            console.error(`content_approvals insert failed for slot ${slot.id}:`, approvalErr.message);
+          }
+
+          try {
+            await supabase.from("activity_feed").insert({
+              client_account_id: slot.client_account_id,
+              activity_type: "content_sent_for_approval",
+              title: `Sent to client for approval: ${slot.title}`,
+              description: `${slot.content_type} for ${slot.platform} passed QA (score ${qa?.score ?? "n/a"}/10) and was sent straight to the client — no admin action needed.`,
+              icon: "send",
+              metadata: {
+                content_calendar_slot_id: slot.id,
+                generated_content_id: draftRecord.id,
+                platform: slot.platform,
+                scheduled_for: slot.scheduled_for,
+                qa,
+              },
+            });
+          } catch { /* best-effort */ }
+
+          console.log(`Draft auto-forwarded to client approval for slot ${slot.id} (${slot.platform}/${slot.content_type})`);
+        } else {
+          // Notify admins that a draft is ready for review.
+          try {
+            await supabase.from("activity_feed").insert({
+              client_account_id: slot.client_account_id,
+              activity_type: "content_draft_ready",
+              title: `Draft ready for admin review: ${slot.title}`,
+              description: flagged
+                ? `${slot.content_type} generated for ${slot.platform} — QA flagged it (score ${qa?.score}/10): ${qa?.issues.join("; ") || "brand tone mismatch"}.`
+                : `${slot.content_type} generated for ${slot.platform} — needs admin review before going to client.`,
+              icon: "file-text",
+              metadata: {
+                content_calendar_slot_id: slot.id,
+                generated_content_id: draftRecord?.id || null,
+                platform: slot.platform,
+                scheduled_for: slot.scheduled_for,
+                qa,
+              },
+            });
+          } catch { /* best-effort */ }
+
+          console.log(`Draft saved for slot ${slot.id} (${slot.platform}/${slot.content_type}) — awaiting admin review`);
+        }
+
         results.push({ id: slot.id, success: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
