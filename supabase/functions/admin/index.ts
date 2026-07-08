@@ -1550,6 +1550,90 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "publishContentForApproval": {
+        const contentId = (data as any)?.contentId as string | undefined;
+        if (!contentId) {
+          return new Response(
+            JSON.stringify({ error: "contentId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: content, error: contentErr } = await supabase
+          .from("generated_content")
+          .select("*")
+          .eq("id", contentId)
+          .maybeSingle();
+
+        if (contentErr) throw contentErr;
+        if (!content) {
+          return new Response(
+            JSON.stringify({ error: "Content not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Dedup: don't create a second pending/approved approval for the same content.
+        const { data: existingRows, error: existingErr } = await supabase
+          .from("content_approvals")
+          .select("id, status")
+          .eq("content_id", contentId)
+          .in("status", ["pending", "approved"])
+          .limit(1);
+
+        if (existingErr) throw existingErr;
+
+        if (existingRows && existingRows.length > 0) {
+          return new Response(
+            JSON.stringify({ alreadyQueued: true, status: existingRows[0].status }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const meta = (content.metadata as Record<string, unknown>) || {};
+        const platform = (meta.platform as string) || null;
+        const scheduledFor = (meta.scheduled_for as string)
+          || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // Insert into content_approvals FIRST -- if this fails we don't touch generated_content
+        const { error: approvalError } = await supabase
+          .from("content_approvals")
+          .insert({
+            client_account_id: content.client_id,
+            content_id: content.id,
+            content_type: content.content_type,
+            title: content.title || "Untitled",
+            content_preview: String(content.content || "").substring(0, 300),
+            full_content: content.content,
+            status: "pending",
+            publish_status: "pending",
+            platform,
+            scheduled_for: scheduledFor,
+            submitted_at: new Date().toISOString(),
+          });
+
+        if (approvalError) throw approvalError;
+
+        const { error: updateError } = await supabase
+          .from("generated_content")
+          .update({ status: "approved", updated_at: new Date().toISOString() })
+          .eq("id", content.id);
+
+        if (updateError) {
+          console.error("content_approvals inserted but generated_content status update failed:", updateError);
+          return new Response(
+            JSON.stringify({ success: true, partialFailure: true }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        console.log(`Published content ${content.id} for client approval`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "createContentApproval": {
         if (!approval?.client_account_id || !approval?.title || !approval?.content_type) {
           return new Response(

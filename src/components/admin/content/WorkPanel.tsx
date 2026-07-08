@@ -20,7 +20,7 @@ export function WorkPanel({ clientId, adminPassword }: WorkPanelProps) {
         <TabsTrigger value="deliverables">Deliverables</TabsTrigger>
       </TabsList>
       <TabsContent value="content">
-        <ContentReviewPanel clientId={clientId} />
+        <ContentReviewPanel clientId={clientId} adminPassword={adminPassword} />
       </TabsContent>
       <TabsContent value="deliverables">
         <DeliverablesAdminPanel adminPassword={adminPassword} clientId={clientId} />

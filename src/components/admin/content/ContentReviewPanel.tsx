@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from "@/hooks/use-toast";
 import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Share2 } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface GeneratedContent {
   id: string;
@@ -34,7 +35,7 @@ interface ClientAccount {
   tier: string;
 }
 
-export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => {
+export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: string; adminPassword: string }) => {
   const [contents, setContents] = useState<GeneratedContent[]>([]);
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -222,57 +223,23 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
     setIsPublishing(true);
 
     try {
-      // Dedup: don't create a second pending/approved approval for the same content.
-      // Use limit(1) + array check — maybeSingle() throws if historical duplicates exist.
-      const { data: existingRows } = await supabase
-        .from("content_approvals")
-        .select("id, status")
-        .eq("content_id", publishingContent.id)
-        .in("status", ["pending", "approved"])
-        .limit(1);
+      // Routed through the admin edge function (service role) rather than a
+      // direct client insert -- content_approvals' RLS requires a real
+      // Supabase Auth session with an admin role, which the legacy
+      // password-only admin login never establishes.
+      const { data, error } = await callAdminApi<{ alreadyQueued?: boolean; status?: string; partialFailure?: boolean }>(
+        adminPassword,
+        { action: "publishContentForApproval", contentId: publishingContent.id },
+      );
 
-      if (existingRows && existingRows.length > 0) {
+      if (error) throw new Error(error);
+
+      if (data?.alreadyQueued) {
         toast({
           title: "Already in client queue",
-          description: `This content is already in the client's approval queue (${existingRows[0].status}).`,
+          description: `This content is already in the client's approval queue (${data.status}).`,
         });
-        setPublishingContent(null);
-        return;
-      }
-
-      // Preserve scheduling metadata from the cron pipeline when available
-      const meta = publishingContent.metadata || {};
-      const platform = (meta.platform as string) || null;
-      const scheduledFor = (meta.scheduled_for as string)
-        || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-      // Insert into content_approvals FIRST — if this fails we don't touch generated_content
-      const { error: approvalError } = await supabase
-        .from("content_approvals")
-        .insert({
-          client_account_id: publishingContent.client_id,
-          content_id: publishingContent.id,
-          content_type: publishingContent.content_type,
-          title: publishingContent.title || "Untitled",
-          content_preview: publishingContent.content.substring(0, 300),
-          full_content: publishingContent.content,
-          status: "pending",
-          publish_status: "pending",
-          platform,
-          scheduled_for: scheduledFor,
-          submitted_at: new Date().toISOString(),
-        });
-
-      if (approvalError) throw approvalError;
-
-      // Insert succeeded — now mark internal draft as approved
-      const { error: updateError } = await supabase
-        .from("generated_content")
-        .update({ status: "approved", updated_at: new Date().toISOString() })
-        .eq("id", publishingContent.id);
-
-      if (updateError) {
-        console.error("content_approvals inserted but generated_content status update failed:", updateError);
+      } else if (data?.partialFailure) {
         toast({
           title: "Partial failure — action needed",
           description: "Content was added to client queue, but internal status could not be updated. Refresh and manually mark it approved.",
@@ -289,7 +256,7 @@ export const ContentReviewPanel = ({ clientId }: { clientId?: string } = {}) => 
       fetchData();
     } catch (error: any) {
       console.error("Publish error:", error);
-      toast({ title: "Error", description: "Failed to send content for approval", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to send content for approval", variant: "destructive" });
     } finally {
       setIsPublishing(false);
     }
