@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Loader2, Upload, FileText, Trash2, Download, FolderOpen, Search, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface ClientAccount {
   id: string;
@@ -44,7 +45,7 @@ const categories = [
   { value: "report", label: "Reports" },
 ];
 
-export default function ClientDocumentsPanel({ clientId }: { clientId?: string } = {}) {
+export default function ClientDocumentsPanel({ clientId, adminPassword }: { clientId?: string; adminPassword: string }) {
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,9 +136,10 @@ export default function ClientDocumentsPanel({ clientId }: { clientId?: string }
       if (uploadError) throw uploadError;
 
       // Create document record
-      const { error: insertError } = await supabase
-        .from("client_documents")
-        .insert({
+      const { error: insertError } = await callAdminApi(adminPassword, {
+        action: "create",
+        table: "client_documents",
+        data: {
           client_account_id: selectedClient,
           name: selectedFile.name,
           file_path: filePath,
@@ -146,9 +148,10 @@ export default function ClientDocumentsPanel({ clientId }: { clientId?: string }
           category: selectedCategory,
           description: description || null,
           uploaded_by: "Admin",
-        });
+        },
+      });
 
-      if (insertError) throw insertError;
+      if (insertError) throw new Error(insertError);
 
       toast({
         title: "Document uploaded",
@@ -186,12 +189,9 @@ export default function ClientDocumentsPanel({ clientId }: { clientId?: string }
       }
 
       // Delete record
-      const { error: dbError } = await supabase
-        .from("client_documents")
-        .delete()
-        .eq("id", doc.id);
+      const { error: dbError } = await callAdminApi(adminPassword, { action: "delete", table: "client_documents", id: doc.id });
 
-      if (dbError) throw dbError;
+      if (dbError) throw new Error(dbError);
 
       toast({
         title: "Document deleted",

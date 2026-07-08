@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FileText, Plus, Trash2, Eye, Download, Sparkles, Image, BarChart3 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface CaseStudyResults {
   metrics: Array<{ label: string; before: string; after: string; improvement: string }>;
@@ -76,20 +77,24 @@ export default function CaseStudyBuilderPanel() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData & { clientId: string }) => {
-      const { error } = await supabase.from("case_studies").insert({
-        client_account_id: data.clientId,
-        title: data.title,
-        industry: data.industry,
-        challenge: data.challenge,
-        solution: data.solution,
-        results: {
-          metrics: data.metrics.filter(m => m.label),
-          testimonial: data.testimonial || null,
-          testimonial_author: data.testimonialAuthor || null
+      const { error } = await callAdminApi(adminPassword, {
+        action: "create",
+        table: "case_studies",
+        data: {
+          client_account_id: data.clientId,
+          title: data.title,
+          industry: data.industry,
+          challenge: data.challenge,
+          solution: data.solution,
+          results: {
+            metrics: data.metrics.filter(m => m.label),
+            testimonial: data.testimonial || null,
+            testimonial_author: data.testimonialAuthor || null
+          },
+          status: "draft"
         },
-        status: "draft"
       });
-      if (error) throw error;
+      if (error) throw new Error(error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["case-studies"] });
@@ -101,8 +106,8 @@ export default function CaseStudyBuilderPanel() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("case_studies").delete().eq("id", id);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, { action: "delete", table: "case_studies", id });
+      if (error) throw new Error(error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["case-studies"] });
@@ -112,8 +117,8 @@ export default function CaseStudyBuilderPanel() {
 
   const publishMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: "draft" | "published" }) => {
-      const { error } = await supabase.from("case_studies").update({ status }).eq("id", id);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, { action: "update", table: "case_studies", id, data: { status } });
+      if (error) throw new Error(error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["case-studies"] });

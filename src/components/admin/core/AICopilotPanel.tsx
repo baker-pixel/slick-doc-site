@@ -26,6 +26,8 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface Client {
   id: string;
@@ -101,6 +103,7 @@ export function AICopilotPanel({
   const [clients, setClients] = useState<Client[]>([]);
   const [internalSelectedClientId, setInternalSelectedClientId] = useState<string>("");
   const selectedClientId = propSelectedClientId || internalSelectedClientId;
+  const { adminPassword } = useAdminAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [output, setOutput] = useState<string>("");
@@ -213,16 +216,20 @@ export function AICopilotPanel({
           }
         })();
 
-        await supabase.from("generated_content").insert({
-          client_id: selectedClientId,
-          title: `${command.label} — ${selectedClient?.business_name ?? "Client"}`,
-          content: finalContent,
-          content_type: contentType,
-          status: "draft",
-          metadata: {
-            source: "ai_copilot",
-            command_id: command.id,
-            generated_at: new Date().toISOString(),
+        await callAdminApi(adminPassword, {
+          action: "create",
+          table: "generated_content",
+          data: {
+            client_id: selectedClientId,
+            title: `${command.label} — ${selectedClient?.business_name ?? "Client"}`,
+            content: finalContent,
+            content_type: contentType,
+            status: "draft",
+            metadata: {
+              source: "ai_copilot",
+              command_id: command.id,
+              generated_at: new Date().toISOString(),
+            },
           },
         });
       }

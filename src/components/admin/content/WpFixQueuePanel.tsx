@@ -9,6 +9,8 @@ import {
   Wand2, CheckCircle2, Loader2, AlertTriangle,
   RefreshCw, Globe, ChevronDown, ChevronUp, XCircle,
 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface Fix {
   id: string;
@@ -68,6 +70,7 @@ function groupByPage(fixes: Fix[]): PageGroup[] {
 }
 
 export function WpFixQueuePanel({ siteId }: Props) {
+  const { adminPassword } = useAdminAuth();
   const [fixes, setFixes] = useState<Fix[]>([]);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<Set<string>>(new Set());
@@ -139,11 +142,8 @@ export function WpFixQueuePanel({ siteId }: Props) {
   async function rejectFix(id: string) {
     setRejecting(prev => new Set(prev).add(id));
     try {
-      const { error } = await supabase
-        .from("wp_fix_queue")
-        .update({ status: "rejected" })
-        .eq("id", id);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, { action: "update", table: "wp_fix_queue", id, data: { status: "rejected" } });
+      if (error) throw new Error(error);
       setFixes(prev => prev.map(f => f.id === id ? { ...f, status: "rejected" } : f));
     } catch {
       toast.error("Could not dismiss fix");

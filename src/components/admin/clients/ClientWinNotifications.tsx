@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface WinNotification {
   id: string;
@@ -134,6 +136,7 @@ const generateMockWins = (clients: ClientAccount[]): WinNotification[] => {
 };
 
 export default function ClientWinNotifications() {
+  const { adminPassword } = useAdminAuth();
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [wins, setWins] = useState<WinNotification[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>("all");
@@ -166,9 +169,10 @@ export default function ClientWinNotifications() {
   const sendNotification = async (win: WinNotification) => {
     try {
       // Save to database so it appears in client portal
-      const { error } = await supabase
-        .from("client_notifications")
-        .insert({
+      const { error } = await callAdminApi(adminPassword, {
+        action: "create",
+        table: "client_notifications",
+        data: {
           client_account_id: win.clientId,
           notification_type: win.type,
           title: win.title,
@@ -177,9 +181,10 @@ export default function ClientWinNotifications() {
           metric_value: win.change.toString(),
           is_positive: win.isPositive,
           priority: win.priority
-        });
+        },
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       toast.success(`Notification sent to ${win.clientName}!`);
       setWins(prev => prev.map(w => w.id === win.id ? { ...w, sent: true } : w));
@@ -194,22 +199,23 @@ export default function ClientWinNotifications() {
     if (unsent.length === 0) return;
 
     try {
-      const notifications = unsent.map(win => ({
-        client_account_id: win.clientId,
-        notification_type: win.type,
-        title: win.title,
-        description: win.description,
-        metric: win.metric,
-        metric_value: win.change.toString(),
-        is_positive: win.isPositive,
-        priority: win.priority
-      }));
+      const results = await Promise.all(unsent.map(win => callAdminApi(adminPassword, {
+        action: "create",
+        table: "client_notifications",
+        data: {
+          client_account_id: win.clientId,
+          notification_type: win.type,
+          title: win.title,
+          description: win.description,
+          metric: win.metric,
+          metric_value: win.change.toString(),
+          is_positive: win.isPositive,
+          priority: win.priority
+        },
+      })));
 
-      const { error } = await supabase
-        .from("client_notifications")
-        .insert(notifications);
-
-      if (error) throw error;
+      const firstError = results.find(r => r.error)?.error;
+      if (firstError) throw new Error(firstError);
 
       unsent.forEach(win => {
         setWins(prev => prev.map(w => w.id === win.id ? { ...w, sent: true } : w));

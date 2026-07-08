@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, AlertTriangle, CheckCircle, Bell, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface AutomationAlert {
   id: string;
@@ -22,6 +24,7 @@ interface AutomationAlert {
 }
 
 export default function AutomationAlertsPanel() {
+  const { adminPassword } = useAdminAuth();
   const [alerts, setAlerts] = useState<AutomationAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAcknowledged, setShowAcknowledged] = useState(false);
@@ -74,15 +77,17 @@ export default function AutomationAlertsPanel() {
 
   const acknowledgeAlert = async (alertId: string) => {
     try {
-      const { error } = await supabase
-        .from("automation_alerts")
-        .update({
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "automation_alerts",
+        id: alertId,
+        data: {
           acknowledged_at: new Date().toISOString(),
           acknowledged_by: "admin",
-        })
-        .eq("id", alertId);
+        },
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       setAlerts((prev) =>
         prev.map((a) =>
@@ -100,12 +105,9 @@ export default function AutomationAlertsPanel() {
 
   const dismissAlert = async (alertId: string) => {
     try {
-      const { error } = await supabase
-        .from("automation_alerts")
-        .delete()
-        .eq("id", alertId);
+      const { error } = await callAdminApi(adminPassword, { action: "delete", table: "automation_alerts", id: alertId });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       toast.success("Alert dismissed");

@@ -77,7 +77,6 @@ import SocialMediaPostsPanel from "@/components/admin/content/SocialMediaPostsPa
 import FeatureGuidePanel from "@/components/admin/core/FeatureGuidePanel";
 import { ClientPhaseTracker } from "@/components/admin/clients/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/clients/ClientProgressTracker";
-import { ReviewWorkflowPanel } from "@/components/admin/workflow/ReviewWorkflowPanel";
 import { ClientWorkflowPanel } from "@/components/admin/clients/ClientWorkflowPanel";
 import { AICopilotPanel } from "@/components/admin/core/AICopilotPanel";
 import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelector";
@@ -88,7 +87,6 @@ import { SOPCommandCenter } from "@/components/admin/workflow/SOPCommandCenter";
 import { DailyDigestGenerator } from "@/components/admin/email/DailyDigestGenerator";
 import { TeamPerformanceMetrics } from "@/components/admin/misc/TeamPerformanceMetrics";
 import { WorkloadBalancer } from "@/components/admin/workflow/WorkloadBalancer";
-import { SmartTaskQueue } from "@/components/admin/workflow/SmartTaskQueue";
 import { TaskNotificationsPanel } from "@/components/admin/workflow/TaskNotificationsPanel";
 import { cn } from "@/lib/utils";
 
@@ -1448,16 +1446,12 @@ const AdminInner = () => {
             // context.clientId available for pre-selecting client in future
           }}
         />;
-      case "smart-task-queue":
-        return <SmartTaskQueue adminPassword={storedPassword} />;
       case "task-notifications":
         return <TaskNotificationsPanel />;
       case "pipeline":
         return renderLeadsHub();
       case "alerts":
         return <AutomationAlertsPanel />;
-      case "review-workflow":
-        return <ReviewWorkflowPanel adminPassword={storedPassword} />;
       case "quick-actions":
         return <QuickActionsPanel />;
       case "calendar":
@@ -1513,7 +1507,7 @@ const AdminInner = () => {
       case "client-invoices":
         return <ClientInvoicesAdminPanel clientId={selectedClient?.id} />;
       case "client-documents":
-        return <ClientDocumentsPanel clientId={selectedClient?.id} />;
+        return <ClientDocumentsPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
       case "client-messages":
         return <ClientMessagesAdminPanel clientId={selectedClient?.id} />;
       case "client-meetings":
@@ -1584,7 +1578,6 @@ const AdminInner = () => {
     const titles: Record<AdminSection, string> = {
       home: "Dashboard",
       clients: "Client Management",
-      "smart-task-queue": "Smart Task Queue",
       "client-workflow": "Workflows",
       "client-tasks": "Client Tasks",
       "client-projects": "Client Projects",
@@ -1619,7 +1612,6 @@ const AdminInner = () => {
       "automation-center": "Automation Control Center",
       "sop-command-center": "SOP Command Center",
       "content-review": "Content Review",
-      "review-workflow": "Review Workflow",
       "reports-review": "Reports Review",
       "task-notifications": "Task Notifications",
       "daily-digest": "Daily Digest",
@@ -1651,13 +1643,13 @@ const AdminInner = () => {
 
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
-    "home", "daily-digest", "smart-task-queue", "task-notifications",
+    "home", "daily-digest", "task-notifications",
     "pipeline", "contacts", "gap-analysis", "pdf-leads",
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",
     "integrations", "calendar",
-    "quick-actions", "activity-feed", "review-workflow", "client-workflow",
+    "quick-actions", "activity-feed", "client-workflow",
     "prospect-engine",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
     "automation-center", "sop-command-center", "client-health",

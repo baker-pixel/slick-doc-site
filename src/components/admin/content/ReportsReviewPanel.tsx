@@ -10,6 +10,7 @@ import { RefreshCw, Eye, Calendar, TrendingUp, Lightbulb, Target, Download, Tras
 import { format } from "date-fns";
 import { Json } from "@/integrations/supabase/types";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface ClientReport {
   id: string;
@@ -84,10 +85,7 @@ export const ReportsReviewPanel = () => {
   };
 
   const handleDelete = async (reportId: string) => {
-    const { error } = await supabase
-      .from("client_reports")
-      .delete()
-      .eq("id", reportId);
+    const { error } = await callAdminApi(adminPassword, { action: "delete", table: "client_reports", id: reportId });
 
     if (error) {
       toast({ title: "Error", description: "Failed to delete report", variant: "destructive" });

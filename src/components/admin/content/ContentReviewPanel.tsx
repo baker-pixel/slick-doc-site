@@ -128,11 +128,13 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
   const handleApprove = async (content: GeneratedContent) => {
     setApprovingId(content.id);
     try {
-      const { error } = await supabase
-        .from("generated_content")
-        .update({ status: "approved", updated_at: new Date().toISOString() })
-        .eq("id", content.id);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "generated_content",
+        id: content.id,
+        data: { status: "approved", updated_at: new Date().toISOString() },
+      });
+      if (error) throw new Error(error);
       toast({ title: "Approved", description: "Content approved internally. Use 'Send to Client' to request their sign-off." });
       fetchData();
     } catch {
@@ -155,15 +157,17 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
     }
     setRejectingId(rejectingContent.id);
     try {
-      const { error } = await supabase
-        .from("generated_content")
-        .update({
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "generated_content",
+        id: rejectingContent.id,
+        data: {
           status: "rejected",
           rejection_reason: rejectReason.trim(),
           updated_at: new Date().toISOString(),
-        })
-        .eq("id", rejectingContent.id);
-      if (error) throw error;
+        },
+      });
+      if (error) throw new Error(error);
       toast({ title: "Rejected", description: "Content has been rejected — reason saved for future drafts" });
       setRejectingContent(null);
       fetchData();
@@ -189,15 +193,17 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
       ? "pending_admin_review"
       : undefined;
 
-    const { error } = await supabase
-      .from("generated_content")
-      .update({
+    const { error } = await callAdminApi(adminPassword, {
+      action: "update",
+      table: "generated_content",
+      id: editingContent.id,
+      data: {
         content: editedContent,
         title: editedTitle || null,
         updated_at: new Date().toISOString(),
         ...(resetStatus ? { status: resetStatus } : {}),
-      })
-      .eq("id", editingContent.id);
+      },
+    });
 
     if (error) {
       toast({ title: "Error", description: "Failed to save changes", variant: "destructive" });

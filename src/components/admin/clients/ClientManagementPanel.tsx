@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Plus, Play, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, ExternalLink, Trash2, Clock, CheckCircle2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { TierBadge } from "../core/TierBadge";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface ClientAccount {
   id: string;
@@ -173,40 +174,32 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       return;
     }
 
-    const { data: insertedClient, error } = await supabase.from("client_accounts").insert({
-      email: newClient.email,
-      business_name: newClient.business_name,
-      first_name: newClient.first_name || null,
-      last_name: newClient.last_name || null,
-      tier: newClient.tier,
-      plan_tier: newClient.plan_tier,
-      website_url: newClient.website_url || null,
-      status: "active",
-    }).select().single();
+    const { data: createResult, error: createError } = await callAdminApi<{ data: ClientAccount }>(adminPassword, {
+      action: "create",
+      table: "client_accounts",
+      data: {
+        email: newClient.email,
+        business_name: newClient.business_name,
+        first_name: newClient.first_name || null,
+        last_name: newClient.last_name || null,
+        tier: newClient.tier,
+        plan_tier: newClient.plan_tier,
+        website_url: newClient.website_url || null,
+        status: "active",
+      },
+    });
+    const insertedClient = createResult?.data;
+    const error = createError ? new Error(createError) : null;
 
-    if (error) {
-      toast.error("Failed to add client: " + error.message);
+    if (error || !insertedClient) {
+      toast.error("Failed to add client: " + (error?.message || "Unknown error"));
     } else {
-      toast.success("Client added! Seeding workflow and running onboarding automations...");
+      // The generic "create" action already seeds the tier workflow for new
+      // client_accounts rows server-side -- no separate seed call needed here.
+      toast.success("Client added! Running onboarding automations...");
       setAddDialogOpen(false);
       setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", plan_tier: "foundation", website_url: "", industry: "" });
       fetchClients();
-
-      // Seed the tier-based workflow for this client
-      try {
-        const { error: workflowError } = await supabase.functions.invoke("seed-tier-workflow", {
-          body: { client_id: insertedClient.id, password: adminPassword },
-        });
-        if (workflowError) {
-          console.error("Workflow seed error:", workflowError);
-          toast.warning("Client created but workflow seeding failed. Start it manually from Workflows.");
-        } else {
-          toast.success("Workflow seeded — step 1 will begin shortly.");
-        }
-      } catch (err) {
-        console.error("Workflow seed error:", err);
-        toast.warning("Client created but workflow seeding failed. Start it manually from Workflows.");
-      }
 
       // Auto-run all FULL tasks for the new client
       try {
@@ -265,7 +258,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
         const updateFields: Record<string, unknown> = {};
         if (contextProfile) updateFields.context_profile = contextProfile;
         if (newClient.industry) updateFields.industry = newClient.industry;
-        await supabase.from("client_accounts").update(updateFields).eq("id", insertedClient.id);
+        await callAdminApi(adminPassword, { action: "update", table: "client_accounts", id: insertedClient.id, data: updateFields });
         if (contextProfile) toast.success("Client context profile built from website scan.");
       }
     }

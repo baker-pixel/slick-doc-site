@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
+import { callAdminApi } from "@/lib/admin-api";
 import { 
   Zap, 
   Play, 
@@ -245,16 +246,16 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
 
   const saveScheduleConfig = async () => {
     try {
-      const { error } = await supabase
-        .from("admin_settings")
-        .upsert({
+      const { error } = await callAdminApi(adminPassword, {
+        action: "updateAdminSetting",
+        data: {
           key: "automation_schedule",
           value: JSON.stringify(scheduleConfig),
           description: "Automation schedule configuration",
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "key" });
+        },
+      });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       toast({ title: "Schedule saved!" });
     } catch (error) {

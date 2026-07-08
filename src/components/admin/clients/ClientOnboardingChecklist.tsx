@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ProjectSetupWizard } from "../misc/ProjectSetupWizard";
 import type { Json } from "@/integrations/supabase/types";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface OnboardingStep {
   id: string;
@@ -370,11 +371,13 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
       const contextProfile = data?.analysis?.context_profile;
       if (!contextProfile) throw new Error("No context profile returned from scan");
 
-      const { error: updateError } = await supabase
-        .from("client_accounts")
-        .update({ context_profile: { ...(contextProfile as Record<string, unknown>), source: "website_scan", partial: false } })
-        .eq("id", selectedClient.id);
-      if (updateError) throw updateError;
+      const { error: updateError } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "client_accounts",
+        id: selectedClient.id,
+        data: { context_profile: { ...(contextProfile as Record<string, unknown>), source: "website_scan", partial: false } },
+      });
+      if (updateError) throw new Error(updateError);
 
       toast.success("Context profile built from website scan. Content generation will now use this data.");
       await fetchNewClients();

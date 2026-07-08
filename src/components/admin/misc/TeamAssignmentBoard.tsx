@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   AlertTriangle
 } from "lucide-react";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface TeamAssignmentBoardProps {
   adminPassword: string;
@@ -97,10 +98,8 @@ export function TeamAssignmentBoard({ adminPassword }: TeamAssignmentBoardProps)
   // Add team member mutation
   const addMemberMutation = useMutation({
     mutationFn: async (member: typeof newMember) => {
-      const { error } = await supabase
-        .from("team_members")
-        .insert(member);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, { action: "create", table: "team_members", data: member });
+      if (error) throw new Error(error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-members"] });

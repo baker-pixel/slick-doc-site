@@ -49,9 +49,10 @@ export async function inviteLeadToPortal(
     clientId = existing.id;
   } else {
     // 2a. Create client account
-    const { data: newClient, error: createErr } = await supabase
-      .from("client_accounts")
-      .insert({
+    const { data: createResult, error: createErr } = await callAdminApi<{ data: { id: string } }>(adminPassword, {
+      action: "create",
+      table: "client_accounts",
+      data: {
         business_name: lead.business_name,
         email: lead.email,
         first_name: lead.first_name || null,
@@ -61,11 +62,11 @@ export async function inviteLeadToPortal(
         status: "active",
         tier,
         plan_tier: tier,
-      })
-      .select("id")
-      .single();
-    if (createErr) throw createErr;
-    clientId = newClient.id;
+      },
+    });
+    if (createErr) throw new Error(createErr);
+    if (!createResult?.data) throw new Error("Client account was not created");
+    clientId = createResult.data.id;
 
     // 2b. Seed workflow + client_onboarding + kick off project generation
     try {

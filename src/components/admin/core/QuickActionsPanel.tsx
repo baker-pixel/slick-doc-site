@@ -12,6 +12,8 @@ import {
   CheckCircle, Users, Sparkles, Clock, ArrowRight, Eye, Copy, Trash2, Edit, X, CheckCircle2, Circle
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface EmailTemplate {
   id: string;
@@ -48,6 +50,7 @@ interface GeneratedContentItem {
 }
 
 export function QuickActionsPanel() {
+  const { adminPassword } = useAdminAuth();
   const generatedContentRef = useRef<HTMLDivElement>(null);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -183,13 +186,15 @@ export function QuickActionsPanel() {
     setIsSavingContent(true);
     
     try {
-      const { error } = await supabase
-        .from("generated_content")
-        .update({ content: editedContent, updated_at: new Date().toISOString() })
-        .eq("id", selectedContent.id);
-      
-      if (error) throw error;
-      
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "generated_content",
+        id: selectedContent.id,
+        data: { content: editedContent, updated_at: new Date().toISOString() },
+      });
+
+      if (error) throw new Error(error);
+
       toast({ title: "Content updated!" });
       setEditContentModal(false);
       fetchData();
@@ -202,9 +207,9 @@ export function QuickActionsPanel() {
 
   const deleteContent = async (id: string) => {
     try {
-      const { error } = await supabase.from("generated_content").delete().eq("id", id);
-      if (error) throw error;
-      
+      const { error } = await callAdminApi(adminPassword, { action: "delete", table: "generated_content", id });
+      if (error) throw new Error(error);
+
       toast({ title: "Content deleted" });
       fetchData();
     } catch (error: any) {
@@ -215,13 +220,15 @@ export function QuickActionsPanel() {
   const togglePublishStatus = async (item: GeneratedContentItem) => {
     const newStatus = item.status === "published" ? "draft" : "published";
     try {
-      const { error } = await supabase
-        .from("generated_content")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", item.id);
-      
-      if (error) throw error;
-      
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "generated_content",
+        id: item.id,
+        data: { status: newStatus, updated_at: new Date().toISOString() },
+      });
+
+      if (error) throw new Error(error);
+
       toast({ title: newStatus === "published" ? "Content published!" : "Moved to draft" });
       fetchData();
     } catch (error: any) {

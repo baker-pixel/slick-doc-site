@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Upload, Brain, FileText, Loader2, Trash2 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface SOPDocument {
   id: string;
@@ -101,16 +102,20 @@ export function SOPManagementPanel() {
       }
 
       // Insert SOP record
-      const { error } = await supabase.from("sop_documents").insert({
-        tier: newSOP.tier,
-        category: newSOP.category,
-        name: newSOP.name,
-        description: newSOP.description || null,
-        file_url: fileUrl,
-        is_active: true,
+      const { error } = await callAdminApi(adminPassword, {
+        action: "create",
+        table: "sop_documents",
+        data: {
+          tier: newSOP.tier,
+          category: newSOP.category,
+          name: newSOP.name,
+          description: newSOP.description || null,
+          file_url: fileUrl,
+          is_active: true,
+        },
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error);
 
       toast.success("SOP added successfully");
       setAddDialogOpen(false);
@@ -150,7 +155,7 @@ export function SOPManagementPanel() {
   const deleteSOP = async (id: string) => {
     if (!confirm("Are you sure you want to delete this SOP?")) return;
 
-    const { error } = await supabase.from("sop_documents").delete().eq("id", id);
+    const { error } = await callAdminApi(adminPassword, { action: "delete", table: "sop_documents", id });
 
     if (error) {
       toast.error("Failed to delete SOP");

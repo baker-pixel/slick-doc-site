@@ -48,6 +48,9 @@ Deno.serve(async (req) => {
       "pipeline_stages", "project_milestones", "automation_alerts",
       "workflow_steps", "client_oauth_tokens",
       "agent_traces", "agent_pending_actions",
+      "generated_content", "client_reports", "sop_documents",
+      "client_documents", "client_notifications", "case_studies",
+      "team_members", "ai_fixes", "wp_fix_queue",
     ]);
     if (table && !ALLOWED_TABLES.has(table)) {
       console.warn(`Admin action blocked: table "${table}" not in whitelist`);
@@ -1659,6 +1662,38 @@ Deno.serve(async (req) => {
         console.log(`Created content approval: ${newApproval.id}`);
         return new Response(
           JSON.stringify({ data: newApproval }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "updateAdminSetting": {
+        // Not exposed via the generic table whitelist -- admin_settings can
+        // hold behavior-affecting config, so it gets its own narrow action
+        // rather than a fully dynamic table/column write.
+        const settingKey = (data as any)?.key as string | undefined;
+        const settingValue = (data as any)?.value as string | undefined;
+        const settingDescription = (data as any)?.description as string | undefined;
+
+        if (!settingKey || settingValue === undefined) {
+          return new Response(
+            JSON.stringify({ error: "key and value are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error } = await supabase
+          .from("admin_settings")
+          .upsert({
+            key: settingKey,
+            value: settingValue,
+            description: settingDescription || null,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "key" });
+
+        if (error) throw error;
+        console.log(`Updated admin setting: ${settingKey}`);
+        return new Response(
+          JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

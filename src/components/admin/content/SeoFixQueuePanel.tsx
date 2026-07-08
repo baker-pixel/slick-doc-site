@@ -10,6 +10,8 @@ import {
   Wand2, XCircle, CheckCircle2, Loader2, Clock, AlertTriangle,
   ChevronDown, ChevronUp, RefreshCw
 } from "lucide-react";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface Fix {
   id: string;
@@ -57,6 +59,7 @@ const statusColor: Record<string, string> = {
 };
 
 export function SeoFixQueuePanel({ clientId }: Props) {
+  const { adminPassword } = useAdminAuth();
   const [fixes, setFixes] = useState<Fix[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,11 +131,8 @@ export function SeoFixQueuePanel({ clientId }: Props) {
   async function rejectFix(id: string) {
     setRejecting(id);
     try {
-      const { error } = await supabase
-        .from("ai_fixes")
-        .update({ status: "rejected" })
-        .eq("id", id);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, { action: "update", table: "ai_fixes", id, data: { status: "rejected" } });
+      if (error) throw new Error(error);
       setFixes(prev => prev.map(f => f.id === id ? { ...f, status: "rejected" } : f));
       toast.success("Fix rejected");
     } catch (e) {

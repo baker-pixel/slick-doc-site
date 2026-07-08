@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Star, Sparkles, Copy, QrCode, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface ClientAccount {
   id: string;
@@ -54,11 +55,13 @@ export function GoogleReviewEngine() {
   const updateClientReviewUrl = useMutation({
     mutationFn: async () => {
       if (!selectedClientId || !reviewUrl) return;
-      const { error } = await supabase
-        .from("client_accounts")
-        .update({ google_review_url: reviewUrl })
-        .eq("id", selectedClientId);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "client_accounts",
+        id: selectedClientId,
+        data: { google_review_url: reviewUrl },
+      });
+      if (error) throw new Error(error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-accounts-reviews"] });
