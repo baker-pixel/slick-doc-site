@@ -29,9 +29,14 @@ import {
   BarChart3,
   AlertTriangle,
   RefreshCw,
+  FileCheck,
+  MessageCircle,
+  FileText,
+  Send,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
 
@@ -88,6 +93,39 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   report: "We're preparing your monthly results report",
   notify_client: "Your marketing plan is complete — time to review!",
 };
+
+// Allowlist, not denylist -- new activity_types added later default to
+// hidden from clients until explicitly reviewed for client-appropriate
+// tone (e.g. "content_draft_ready" says "needs admin review", not meant
+// for this feed).
+const CLIENT_VISIBLE_ACTIVITY_TYPES = new Set([
+  "deliverable_submitted",
+  "deliverable_updated",
+  "report_generated",
+  "content_batch",
+  "content_approved",
+  "content_sent_for_approval",
+  "message_created",
+]);
+
+const ACTIVITY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  "check-circle": CheckCircle2,
+  "file-check": FileCheck,
+  "file-text": FileText,
+  "message-circle": MessageCircle,
+  "sparkles": Sparkles,
+  "send": Send,
+  "alert-triangle": AlertTriangle,
+};
+
+interface ActivityFeedItem {
+  id: string;
+  activity_type: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  created_at: string;
+}
 
 const CTA_CONFIG: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   client_form: { label: "Fill Out Form", icon: FileEdit },
@@ -296,6 +334,46 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
 
       const platforms = expiredTokens.map((t) => t.platform);
       return { platforms, failedCount: count };
+    },
+  });
+
+  // Ongoing snapshot for clients past onboarding -- real counts + a real
+  // activity feed, so Home stays useful instead of freezing on one static
+  // "you're all done" card for the rest of the relationship.
+  const { data: ongoingStats } = useQuery({
+    queryKey: ["client-ongoing-stats", clientAccountId],
+    queryFn: async () => {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      const [publishedRes, pendingApprovalRes, activityRes] = await Promise.all([
+        supabase
+          .from("content_calendar")
+          .select("id", { count: "exact", head: true })
+          .eq("client_account_id", clientAccountId)
+          .eq("status", "published")
+          .gte("published_at", thirtyDaysAgo),
+        supabase
+          .from("content_approvals")
+          .select("id", { count: "exact", head: true })
+          .eq("client_account_id", clientAccountId)
+          .eq("status", "pending"),
+        supabase
+          .from("activity_feed")
+          .select("id, activity_type, title, description, icon, created_at")
+          .eq("client_account_id", clientAccountId)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
+
+      const activity = ((activityRes.data || []) as ActivityFeedItem[])
+        .filter((a) => CLIENT_VISIBLE_ACTIVITY_TYPES.has(a.activity_type))
+        .slice(0, 8);
+
+      return {
+        publishedLast30Days: publishedRes.count || 0,
+        pendingApprovals: pendingApprovalRes.count || 0,
+        activity,
+      };
     },
   });
 
@@ -785,6 +863,63 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           </div>
         </div>
 
+        {wfAllDone ? (
+          <div className="space-y-6">
+            {/* Ongoing snapshot */}
+            <div className="grid grid-cols-2 gap-3">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-2xl font-bold">{ongoingStats?.publishedLast30Days ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">Posts published (last 30 days)</p>
+                </CardContent>
+              </Card>
+              <Card className={cn(!!ongoingStats?.pendingApprovals && "border-amber-500/40 bg-amber-500/5")}>
+                <CardContent className="p-4 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-2xl font-bold">{ongoingStats?.pendingApprovals ?? 0}</p>
+                    <p className="text-xs text-muted-foreground">Awaiting your approval</p>
+                  </div>
+                  {!!ongoingStats?.pendingApprovals && (
+                    <Button size="sm" onClick={() => onTabChange?.("approvals")}>Review</Button>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent activity */}
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Recent Activity</h3>
+              {ongoingStats?.activity && ongoingStats.activity.length > 0 ? (
+                <div className="space-y-1">
+                  {ongoingStats.activity.map((item) => {
+                    const ItemIcon = ACTIVITY_ICON_MAP[item.icon || ""] || Activity;
+                    return (
+                      <div key={item.id} className="flex items-start gap-3 rounded-lg px-4 py-3 bg-muted/30">
+                        <ItemIcon className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{item.title}</p>
+                          {item.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="p-6 text-sm text-muted-foreground text-center">
+                    No recent activity yet — check back soon.
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Step list */}
         <div className="space-y-1">
           {workflowSteps.map((step, i) => {
@@ -900,25 +1035,23 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         </div>
 
         {/* Status callout */}
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-4 flex items-start gap-3">
-            <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
-              {wfAllDone ? (
-                <p className="text-foreground font-medium">
-                  Your initial marketing plan is complete. Your team is now running ongoing campaigns for you. 🎉
-                </p>
-              ) : currentStep ? (
+        {currentStep && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-4 flex items-start gap-3">
+              <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
                 <p className="text-foreground">
                   {currentStep.task_type.startsWith("client_")
                     ? <>Complete this step to unlock the next: <span className="font-semibold">{currentStep.step_name}</span></>
                     : <>Your team is currently working on: <span className="font-semibold">{currentStep.step_name}</span></>
                   }
                 </p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        </>
+        )}
 
         {/* Business confirmation Dialog */}
         {bizFormDialog}

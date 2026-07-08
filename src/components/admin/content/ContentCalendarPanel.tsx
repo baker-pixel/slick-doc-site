@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { format, isSameDay, startOfDay } from "date-fns";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { callAdminApi } from "@/lib/admin-api";
 
 interface CalendarItem {
   id: string;
@@ -248,17 +249,12 @@ export function ContentCalendarPanel() {
       };
 
       if (editingItem) {
-        const { error } = await supabase
-          .from("content_calendar")
-          .update(itemData)
-          .eq("id", editingItem.id);
-        if (error) throw error;
+        const { error } = await callAdminApi(adminPassword, { action: "update", table: "content_calendar", id: editingItem.id, data: itemData });
+        if (error) throw new Error(error);
         toast({ title: "Schedule updated!" });
       } else {
-        const { error } = await supabase
-          .from("content_calendar")
-          .insert(itemData);
-        if (error) throw error;
+        const { error } = await callAdminApi(adminPassword, { action: "create", table: "content_calendar", data: itemData });
+        if (error) throw new Error(error);
         toast({ title: "Content scheduled!" });
       }
 
@@ -273,8 +269,8 @@ export function ContentCalendarPanel() {
 
   const deleteScheduledItem = async (id: string) => {
     try {
-      const { error } = await supabase.from("content_calendar").delete().eq("id", id);
-      if (error) throw error;
+      const { error } = await callAdminApi(adminPassword, { action: "delete", table: "content_calendar", id });
+      if (error) throw new Error(error);
       toast({ title: "Removed from calendar" });
       fetchData();
     } catch (error: any) {
