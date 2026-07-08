@@ -38,7 +38,6 @@ import { cn } from "@/lib/utils";
 export type AdminSection = 
   | "home"
   | "clients"
-  | "smart-task-queue"
   | "client-workflow"
   | "client-tasks"
   | "client-projects"
@@ -73,7 +72,6 @@ export type AdminSection =
   | "automation-center"
   | "sop-command-center"
   | "content-review"
-  | "review-workflow"
   | "reports-review"
   | "task-notifications"
   | "daily-digest"
