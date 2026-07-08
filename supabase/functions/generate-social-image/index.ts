@@ -7,22 +7,76 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Build a concise DALL-E prompt from the post caption and business name.
-// Keeps it under 900 chars (DALL-E 3 limit is 4000 but shorter = more reliable).
-function buildImagePrompt(caption: string, businessName: string, platform: string): string {
-  // Strip hashtags — they add noise to the image prompt
-  const cleanCaption = caption.replace(/#\w+/g, "").replace(/\s{2,}/g, " ").trim();
-  // Take first 200 chars of the caption as context
-  const snippet = cleanCaption.slice(0, 200);
+const MAX_COUNT = 4;
 
+// DALL-E 3 only supports n=1 per request (unlike DALL-E 2) -- generating
+// multiple variations means multiple parallel requests, not a single call
+// with n>1.
+function buildFinalPrompt(prompt: string, platform: string): string {
   return [
-    `Professional marketing photo for ${businessName}.`,
-    `Context: ${snippet}`,
+    prompt.trim(),
     `Style: bright, clean, modern business photography.`,
     `Platform: ${platform}. Aspect ratio: square (1:1).`,
     `No text overlays, no logos, no watermarks.`,
-    `High quality, visually appealing, suitable for social media.`,
   ].join(" ");
+}
+
+async function generateOne(openaiKey: string, prompt: string): Promise<string> {
+  const res = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: "1024x1024",   // square — works for Instagram feed + Stories crop
+      quality: "standard", // "hd" costs 2× — standard is fine for social
+      response_format: "url",
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    let msg = `Image generation failed (${res.status})`;
+    try { msg = JSON.parse(errText)?.error?.message || msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const imageUrl: string | undefined = data.data?.[0]?.url;
+  if (!imageUrl) throw new Error("No image URL returned from DALL-E");
+  return imageUrl;
+}
+
+// DALL-E URLs expire in ~60 min — re-host in Supabase Storage so the URL is
+// permanent. Falls back to the temporary URL if the download/upload fails;
+// still usable, just time-limited.
+async function persistImage(supabase: any, imageUrl: string, platform: string): Promise<string> {
+  try {
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) return imageUrl;
+
+    const imageBytes = await imgRes.arrayBuffer();
+    const fileName = `social/${platform}/${crypto.randomUUID()}_${Date.now()}.png`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("generated-images")
+      .upload(fileName, imageBytes, { contentType: "image/png", upsert: true });
+
+    if (uploadErr) {
+      console.warn("Storage upload failed:", uploadErr.message, "— returning temporary DALL-E URL");
+      return imageUrl;
+    }
+
+    const { data: publicData } = supabase.storage.from("generated-images").getPublicUrl(fileName);
+    return publicData.publicUrl;
+  } catch (e) {
+    console.warn("Failed to persist image, returning temporary DALL-E URL:", e instanceof Error ? e.message : e);
+    return imageUrl;
+  }
 }
 
 serve(async (req) => {
@@ -43,98 +97,44 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
 
-  if (!openaiKey) {
-    return json({ error: "OPENAI_API_KEY is not configured. Add it via: supabase secrets set OPENAI_API_KEY=sk-..." }, 503);
-  }
-
   try {
-    const { caption, businessName, platform = "instagram", contentCalendarId, password } = await req.json();
+    const { prompt, platform = "instagram", count = 1, password } = await req.json();
 
     const auth = await checkAdminAuth(req, supabase, password);
     if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
-    if (!caption || !businessName) {
-      return json({ error: "caption and businessName are required" }, 400);
+    if (!openaiKey) {
+      return json({ error: "OPENAI_API_KEY is not configured. Add it via: supabase secrets set OPENAI_API_KEY=sk-..." }, 503);
     }
 
-    const prompt = buildImagePrompt(caption, businessName, platform);
-    console.log(`Generating image for ${businessName} (${platform}): ${prompt.slice(0, 100)}...`);
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return json({ error: "prompt is required" }, 400);
+    }
 
-    const dalleRes = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openaiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt,
-        n: 1,
-        size: "1024x1024",   // square — works for Instagram feed + Stories crop
-        quality: "standard", // "hd" costs 2× — standard is fine for social
-        response_format: "url",
+    const requested = Math.max(1, Math.min(Number(count) || 1, MAX_COUNT));
+    const finalPrompt = buildFinalPrompt(prompt, platform);
+
+    console.log(`Generating ${requested} image(s) for platform=${platform}: ${finalPrompt.slice(0, 100)}...`);
+
+    const results = await Promise.allSettled(
+      Array.from({ length: requested }, async () => {
+        const rawUrl = await generateOne(openaiKey, finalPrompt);
+        return persistImage(supabase, rawUrl, platform);
       }),
-    });
+    );
 
-    if (!dalleRes.ok) {
-      const errText = await dalleRes.text();
-      console.error("DALL-E error:", dalleRes.status, errText);
-      let msg = `Image generation failed (${dalleRes.status})`;
-      try { msg = JSON.parse(errText)?.error?.message || msg; } catch { /* ignore */ }
+    const images = results
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+      .map((r) => r.value);
+
+    if (images.length === 0) {
+      const firstError = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      const msg = firstError?.reason instanceof Error ? firstError.reason.message : "Image generation failed";
       return json({ error: msg }, 502);
     }
 
-    const dalleData = await dalleRes.json();
-    const imageUrl: string = dalleData.data?.[0]?.url;
-
-    if (!imageUrl) {
-      return json({ error: "No image URL returned from DALL-E" }, 500);
-    }
-
-    // Download the image and upload to Supabase Storage so the URL is permanent.
-    // DALL-E URLs expire in ~60 min — storage URL lasts forever.
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) {
-      // Fallback: return the temporary URL; it's still valid for ~60 min which is
-      // enough for PfM to fetch it during publishing.
-      console.warn("Could not download image to storage — returning temporary DALL-E URL");
-      if (contentCalendarId) {
-        await patchCalendarMetadata(supabase, contentCalendarId, imageUrl);
-      }
-      return json({ imageUrl, permanent: false });
-    }
-
-    const imageBytes = await imgRes.arrayBuffer();
-    const fileName = `social/${platform}/${contentCalendarId ?? crypto.randomUUID()}_${Date.now()}.png`;
-
-    const { error: uploadErr } = await supabase.storage
-      .from("generated-images")
-      .upload(fileName, imageBytes, {
-        contentType: "image/png",
-        upsert: true,
-      });
-
-    if (uploadErr) {
-      console.warn("Storage upload failed:", uploadErr.message, "— returning DALL-E URL");
-      if (contentCalendarId) {
-        await patchCalendarMetadata(supabase, contentCalendarId, imageUrl);
-      }
-      return json({ imageUrl, permanent: false });
-    }
-
-    const { data: publicData } = supabase.storage
-      .from("generated-images")
-      .getPublicUrl(fileName);
-
-    const permanentUrl = publicData.publicUrl;
-
-    // Patch the content_calendar metadata so next publish attempt uses the cached image
-    if (contentCalendarId) {
-      await patchCalendarMetadata(supabase, contentCalendarId, permanentUrl);
-    }
-
-    console.log(`Image generated and stored: ${permanentUrl}`);
-    return json({ imageUrl: permanentUrl, permanent: true });
+    console.log(`Generated ${images.length}/${requested} image(s)`);
+    return json({ images });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("generate-social-image error:", msg);
@@ -151,20 +151,3 @@ serve(async (req) => {
     return json({ error: msg }, 500);
   }
 });
-
-async function patchCalendarMetadata(
-  supabase: ReturnType<typeof createClient>,
-  calendarId: string,
-  imageUrl: string,
-) {
-  const { data: row } = await supabase
-    .from("content_calendar")
-    .select("metadata")
-    .eq("id", calendarId)
-    .single();
-
-  await supabase
-    .from("content_calendar")
-    .update({ metadata: { ...((row?.metadata as object) || {}), image_url: imageUrl } })
-    .eq("id", calendarId);
-}
