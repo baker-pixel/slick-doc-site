@@ -190,7 +190,10 @@ serve(async (req) => {
           workflowId: workflow_id,
           stepId: step.id,
           stepNumber: step.step_number,
-          payload: step.payload || {},
+          // run-automation's AutomationRequest reads `inputData`, not `payload` --
+          // this was silently dropping every workflow step's context (e.g. the
+          // `content_type` payload on "content" steps) since callers never matched.
+          inputData: step.payload || {},
           _source: "advance-workflow",
         });
       }
