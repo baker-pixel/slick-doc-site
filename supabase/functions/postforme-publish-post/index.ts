@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -176,20 +177,29 @@ serve(async (req) => {
       postBody.scheduled_at = new Date(item.scheduled_for).toISOString();
     }
 
-    // Auto-generate image for Instagram if none exists
+    // Auto-generate image for Instagram if none exists. This is a safety net --
+    // generate-social-images-batch (daily, alongside drafting) should normally
+    // have already populated metadata.image_url well before publish time.
     let imageUrl = (item.metadata as { image_url?: string } | null)?.image_url ?? null;
     if (!imageUrl && item.platform === "instagram") {
       const { data: clientRow } = await supabase
         .from("client_accounts")
-        .select("business_name")
+        .select("business_name, industry, context_profile")
         .eq("id", item.client_account_id)
         .single();
 
+      const prompt = clientRow
+        ? buildSocialImagePrompt(clientRow, { content: item.content || "", title: item.title, platform: item.platform })
+        : `Professional marketing image for a business on ${item.platform}.`;
+
+      // generate-social-image expects {prompt, platform, count} and returns
+      // {images: string[]} -- called here with the service role bearer this
+      // function already holds, which generate-social-image's isServer check accepts.
       const imgRes = await supabase.functions.invoke("generate-social-image", {
-        body: { caption: item.content || "", businessName: clientRow?.business_name || "", platform: "instagram", contentCalendarId },
+        body: { prompt, platform: "instagram", count: 1 },
       });
       if (!imgRes.error && !imgRes.data?.error) {
-        imageUrl = imgRes.data?.imageUrl ?? null;
+        imageUrl = imgRes.data?.images?.[0] ?? null;
       } else {
         console.warn(`Image generation failed for ${contentCalendarId}: ${imgRes.data?.error || imgRes.error?.message}`);
       }

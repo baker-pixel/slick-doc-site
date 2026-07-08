@@ -9,9 +9,6 @@ const corsHeaders = {
 
 const MAX_COUNT = 4;
 
-// DALL-E 3 only supports n=1 per request (unlike DALL-E 2) -- generating
-// multiple variations means multiple parallel requests, not a single call
-// with n>1.
 function buildFinalPrompt(prompt: string, platform: string): string {
   return [
     prompt.trim(),
@@ -21,6 +18,10 @@ function buildFinalPrompt(prompt: string, platform: string): string {
   ].join(" ");
 }
 
+// gpt-image-1 only supports n=1 per request -- generating multiple
+// variations means multiple parallel requests, not a single call with n>1.
+// Unlike dall-e-3 (retired March 2026), it does not accept response_format
+// and always returns base64 (b64_json), never a hosted url.
 async function generateOne(openaiKey: string, prompt: string): Promise<string> {
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -29,12 +30,11 @@ async function generateOne(openaiKey: string, prompt: string): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "dall-e-3",
+      model: "gpt-image-1",
       prompt,
       n: 1,
-      size: "1024x1024",   // square — works for Instagram feed + Stories crop
-      quality: "standard", // "hd" costs 2× — standard is fine for social
-      response_format: "url",
+      size: "1024x1024", // square — works for Instagram feed + Stories crop
+      quality: "medium",
     }),
   });
 
@@ -46,37 +46,24 @@ async function generateOne(openaiKey: string, prompt: string): Promise<string> {
   }
 
   const data = await res.json();
-  const imageUrl: string | undefined = data.data?.[0]?.url;
-  if (!imageUrl) throw new Error("No image URL returned from DALL-E");
-  return imageUrl;
+  const b64: string | undefined = data.data?.[0]?.b64_json;
+  if (!b64) throw new Error("No image data returned from gpt-image-1");
+  return b64;
 }
 
-// DALL-E URLs expire in ~60 min — re-host in Supabase Storage so the URL is
-// permanent. Falls back to the temporary URL if the download/upload fails;
-// still usable, just time-limited.
-async function persistImage(supabase: any, imageUrl: string, platform: string): Promise<string> {
-  try {
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) return imageUrl;
+// Decode the base64 image and upload it to Supabase Storage for a permanent URL.
+async function persistImage(supabase: any, base64: string, platform: string): Promise<string> {
+  const imageBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const fileName = `social/${platform}/${crypto.randomUUID()}_${Date.now()}.png`;
 
-    const imageBytes = await imgRes.arrayBuffer();
-    const fileName = `social/${platform}/${crypto.randomUUID()}_${Date.now()}.png`;
+  const { error: uploadErr } = await supabase.storage
+    .from("generated-images")
+    .upload(fileName, imageBytes, { contentType: "image/png", upsert: true });
 
-    const { error: uploadErr } = await supabase.storage
-      .from("generated-images")
-      .upload(fileName, imageBytes, { contentType: "image/png", upsert: true });
+  if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
-    if (uploadErr) {
-      console.warn("Storage upload failed:", uploadErr.message, "— returning temporary DALL-E URL");
-      return imageUrl;
-    }
-
-    const { data: publicData } = supabase.storage.from("generated-images").getPublicUrl(fileName);
-    return publicData.publicUrl;
-  } catch (e) {
-    console.warn("Failed to persist image, returning temporary DALL-E URL:", e instanceof Error ? e.message : e);
-    return imageUrl;
-  }
+  const { data: publicData } = supabase.storage.from("generated-images").getPublicUrl(fileName);
+  return publicData.publicUrl;
 }
 
 serve(async (req) => {
@@ -100,8 +87,15 @@ serve(async (req) => {
   try {
     const { prompt, platform = "instagram", count = 1, password } = await req.json();
 
-    const auth = await checkAdminAuth(req, supabase, password);
-    if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
+    // Server-to-server callers (postforme-publish-post, generate-social-images-batch)
+    // invoke this with the service role key and no admin session/password --
+    // checkAdminAuth has no bypass for that, so it would 401 every such call.
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isServer) {
+      const auth = await checkAdminAuth(req, supabase, password);
+      if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
+    }
 
     if (!openaiKey) {
       return json({ error: "OPENAI_API_KEY is not configured. Add it via: supabase secrets set OPENAI_API_KEY=sk-..." }, 503);
@@ -118,8 +112,8 @@ serve(async (req) => {
 
     const results = await Promise.allSettled(
       Array.from({ length: requested }, async () => {
-        const rawUrl = await generateOne(openaiKey, finalPrompt);
-        return persistImage(supabase, rawUrl, platform);
+        const base64 = await generateOne(openaiKey, finalPrompt);
+        return persistImage(supabase, base64, platform);
       }),
     );
 
@@ -139,14 +133,16 @@ serve(async (req) => {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("generate-social-image error:", msg);
 
-    await supabase.from("automation_alerts").insert({
-      alert_type: "function_error",
-      severity: "error",
-      title: "generate-social-image failed",
-      message: msg,
-      source: "generate-social-image",
-      metadata: { timestamp: new Date().toISOString() },
-    }).catch(() => {});
+    try {
+      await supabase.from("automation_alerts").insert({
+        alert_type: "function_error",
+        severity: "error",
+        title: "generate-social-image failed",
+        message: msg,
+        source: "generate-social-image",
+        metadata: { timestamp: new Date().toISOString() },
+      });
+    } catch { /* best-effort */ }
 
     return json({ error: msg }, 500);
   }
