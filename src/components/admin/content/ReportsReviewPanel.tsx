@@ -170,18 +170,77 @@ export const ReportsReviewPanel = () => {
 
   const renderJsonContent = (data: Json | null, title: string, icon: React.ReactNode) => {
     if (!data) return null;
-    
-    const content = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-    
+
+    const priorityColor: Record<string, string> = {
+      high: "text-red-500", medium: "text-amber-500", low: "text-lime-600",
+    };
+
+    let body: React.ReactNode;
+    if (typeof data === "string") {
+      body = <p className="text-sm whitespace-pre-wrap">{data}</p>;
+    } else if (Array.isArray(data)) {
+      if (data.length === 0) {
+        body = <p className="text-sm text-muted-foreground">No data available</p>;
+      } else if (typeof data[0] === "object" && data[0] !== null && "action" in (data[0] as object)) {
+        // Recommendations: { priority, action, expected_impact }[]
+        body = (
+          <ul className="space-y-3">
+            {(data as Array<{ priority?: string; action?: string; expected_impact?: string }>).map((rec, i) => (
+              <li key={i} className="border-b border-border/50 pb-2 last:border-0">
+                {rec.priority && (
+                  <span className={`text-[11px] font-semibold uppercase ${priorityColor[rec.priority.toLowerCase()] ?? "text-muted-foreground"}`}>
+                    {rec.priority} priority
+                  </span>
+                )}
+                <p className="text-sm font-medium">{rec.action}</p>
+                {rec.expected_impact && <p className="text-xs text-muted-foreground">Expected impact: {rec.expected_impact}</p>}
+              </li>
+            ))}
+          </ul>
+        );
+      } else {
+        // Insights: string[]
+        body = (
+          <ul className="list-disc list-inside space-y-1">
+            {(data as unknown[]).map((item, i) => (
+              <li key={i} className="text-sm">{String(item)}</li>
+            ))}
+          </ul>
+        );
+      }
+    } else if (typeof data === "object") {
+      const obj = data as Record<string, unknown>;
+      // Legacy pre-fix shapes: { summary: "..." } / { content: "..." }
+      if ("summary" in obj || "content" in obj) {
+        body = <p className="text-sm whitespace-pre-wrap">{String(obj.summary ?? obj.content)}</p>;
+      } else {
+        const entries = Object.entries(obj);
+        body = entries.length === 0
+          ? <p className="text-sm text-muted-foreground">No data available</p>
+          : (
+            <div className="space-y-1">
+              {entries.map(([key, value]) => (
+                <div key={key} className="text-sm">
+                  <span className="font-medium capitalize">{key.replace(/_/g, " ")}:</span>{" "}
+                  {String(value)}
+                </div>
+              ))}
+            </div>
+          );
+      }
+    } else {
+      body = <p className="text-sm text-muted-foreground">No data available</p>;
+    }
+
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           {icon}
           {title}
         </div>
-        <pre className="text-xs bg-muted/50 p-3 rounded-lg overflow-x-auto whitespace-pre-wrap">
-          {content}
-        </pre>
+        <div className="bg-muted/50 p-3 rounded-lg">
+          {body}
+        </div>
       </div>
     );
   };

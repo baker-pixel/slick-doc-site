@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI as sharedCallAI } from "../_shared/ai.ts";
+import { generateMonthlyReport } from "../run-automation/handlers/ai-automation.ts";
+import type { ClientData as AutomationClientData } from "../run-automation/types.ts";
 
 interface BatchConfig {
   batchType: 'daily' | 'weekly' | 'monthly';
@@ -13,6 +15,7 @@ interface ClientData {
   business_name: string;
   email: string;
   tier: string;
+  level: number;
   industry?: string;
 }
 
@@ -110,59 +113,17 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
   return { success: true, contentId: data.id };
 }
 
-async function generateReport(supabase: any, client: ClientData): Promise<any> {
-  const systemPrompt = `You are a marketing analytics expert creating a monthly performance report for ${client.business_name}. Be professional and data-driven.`;
-  
-  const prompt = `Create a monthly marketing performance summary report for ${client.business_name}. Include sections for:
-1. Executive Summary (2-3 sentences)
-2. Key Metrics Overview (use placeholder metrics like "Website Traffic: [+15% MoM]")
-3. Top Achievements This Month (3 bullet points)
-4. Areas for Improvement (2-3 bullet points)  
-5. Recommendations for Next Month (3 action items)
-6. Looking Ahead (brief outlook)
-
-Format it professionally with clear headers.`;
-
-  console.log(`Generating monthly report for ${client.business_name}...`);
-  
-  const reportContent = await callAI(prompt, systemPrompt);
-  
-  const reportPeriodStart = new Date();
-  reportPeriodStart.setMonth(reportPeriodStart.getMonth() - 1);
-  
-  const { data, error } = await supabase
-    .from('client_reports')
-    .insert({
-      client_id: client.id,
-      report_type: 'monthly',
-      report_period_start: reportPeriodStart.toISOString().split('T')[0],
-      report_period_end: new Date().toISOString().split('T')[0],
-      metrics: {
-        status: 'generated',
-        generated_at: new Date().toISOString(),
-      },
-      insights: { summary: reportContent },
-      recommendations: { content: reportContent },
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error saving report:', error);
-    return { success: false, error: error.message };
-  }
-
-  // Create deliverable for client to review
-  await supabase.from('deliverables').insert({
-    client_account_id: client.id,
-    title: `Monthly Performance Report - ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
-    description: reportContent,
-    category: 'report',
-    status: 'pending_review',
-  });
-
-  return { success: true, reportId: data.id };
-}
+// Monthly reports are generated via the shared ai-automation.ts implementation
+// (generateMonthlyReport) rather than a separate implementation here. The
+// version that used to live in this file asked the model to "use placeholder
+// metrics like Website Traffic: [+15% MoM]" -- i.e. explicitly fabricate
+// numbers with no basis in real data -- and stored the raw markdown output
+// wrapped in {summary: text}/{content: text} instead of the structured
+// {executive_summary, metrics, insights, recommendations} shape the rest of
+// the app (ReportsReviewPanel, send-report-to-client) expects. That's what
+// produced the malformed, duplicated-content report email a client actually
+// received. The shared implementation also gets brand-kit context that this
+// one never had.
 
 async function processAutomatedTask(supabase: any, client: ClientData, task: any): Promise<any> {
   const systemPrompt = `You are an AI assistant helping ${client.business_name} with marketing tasks. Complete the following task professionally.`;
@@ -239,7 +200,7 @@ serve(async (req) => {
     // Get active clients
     let clientQuery = supabase
       .from('client_accounts')
-      .select('id, business_name, email, tier, industry, context_profile')
+      .select('id, business_name, email, tier, level, industry, context_profile')
       .eq('status', 'active');
     
     if (clientId) {
@@ -391,10 +352,8 @@ serve(async (req) => {
         // 3. Run reports (monthly)
         if (config.runReports) {
           try {
-            const reportResult = await generateReport(supabase, client);
-            if (reportResult.success) {
-              results.reportsCreated++;
-            }
+            await generateMonthlyReport(supabase, client as AutomationClientData);
+            results.reportsCreated++;
           } catch (reportError) {
             console.error(`Error generating report:`, reportError);
             results.errors.push(`Report error for ${client.business_name}: ${reportError}`);

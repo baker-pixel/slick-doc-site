@@ -24,22 +24,67 @@ interface ReportEmailRequest {
   password?: string;
 }
 
-const formatJsonForEmail = (data: Record<string, unknown> | string | null): string => {
-  if (!data) return "<p style='color: #6b7280;'>No data available</p>";
-  
-  if (typeof data === "string") {
-    return `<p>${data.replace(/\n/g, "<br>")}</p>`;
-  }
-  
-  // Handle object data
+const NO_DATA = "<p style='color: #6b7280;'>No data available</p>";
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const priorityColor: Record<string, string> = {
+  high: "#dc2626",
+  medium: "#d97706",
+  low: "#65a30d",
+};
+
+/** Metrics is a flat key/value object -- generic label: value rendering is fine here. */
+const formatMetricsForEmail = (data: Record<string, unknown> | string | null): string => {
+  if (!data) return NO_DATA;
+  if (typeof data === "string") return `<p>${escapeHtml(data).replace(/\n/g, "<br>")}</p>`;
   const entries = Object.entries(data);
-  if (entries.length === 0) return "<p style='color: #6b7280;'>No data available</p>";
-  
+  if (entries.length === 0) return NO_DATA;
   return entries.map(([key, value]) => {
     const formattedKey = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-    const formattedValue = typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
-    return `<div style="margin-bottom: 8px;"><strong>${formattedKey}:</strong> ${formattedValue}</div>`;
+    return `<div style="margin-bottom: 8px;"><strong>${escapeHtml(formattedKey)}:</strong> ${escapeHtml(String(value))}</div>`;
   }).join("");
+};
+
+/** Insights is an array of plain-text strings (or legacy free text) -- render as a bulleted list. */
+const formatInsightsForEmail = (data: unknown): string => {
+  if (!data) return NO_DATA;
+  if (typeof data === "string") return `<p>${escapeHtml(data).replace(/\n/g, "<br>")}</p>`;
+  if (Array.isArray(data)) {
+    if (data.length === 0) return NO_DATA;
+    return `<ul style="margin: 0; padding-left: 20px;">${data.map((item) => `<li style="margin-bottom: 6px;">${escapeHtml(String(item))}</li>`).join("")}</ul>`;
+  }
+  // Legacy shape from before this was a proper array: { summary: "..." }
+  if (typeof data === "object" && data !== null && "summary" in data) {
+    return `<p>${escapeHtml(String((data as Record<string, unknown>).summary)).replace(/\n/g, "<br>")}</p>`;
+  }
+  return NO_DATA;
+};
+
+/** Recommendations is an array of { priority, action, expected_impact } objects. */
+const formatRecommendationsForEmail = (data: unknown): string => {
+  if (!data) return NO_DATA;
+  if (typeof data === "string") return `<p>${escapeHtml(data).replace(/\n/g, "<br>")}</p>`;
+  if (Array.isArray(data)) {
+    if (data.length === 0) return NO_DATA;
+    return data.map((item) => {
+      if (typeof item !== "object" || item === null) return `<div style="margin-bottom: 8px;">${escapeHtml(String(item))}</div>`;
+      const rec = item as { priority?: string; action?: string; expected_impact?: string };
+      const color = priorityColor[rec.priority?.toLowerCase() ?? ""] ?? "#6b7280";
+      return `
+        <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #d1fae5;">
+          ${rec.priority ? `<span style="display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; color: ${color};">${escapeHtml(rec.priority)} priority</span><br>` : ""}
+          <strong>${escapeHtml(rec.action ?? "")}</strong>
+          ${rec.expected_impact ? `<div style="color: #6b7280; font-size: 13px; margin-top: 2px;">Expected impact: ${escapeHtml(rec.expected_impact)}</div>` : ""}
+        </div>`;
+    }).join("");
+  }
+  // Legacy shape: { content: "..." }
+  if (typeof data === "object" && data !== null && "content" in data) {
+    return `<p>${escapeHtml(String((data as Record<string, unknown>).content)).replace(/\n/g, "<br>")}</p>`;
+  }
+  return NO_DATA;
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -106,7 +151,7 @@ const handler = async (req: Request): Promise<Response> => {
                 📈 Key Metrics
               </h2>
               <div style="font-size: 14px; color: #374151;">
-                ${formatJsonForEmail(metrics as Record<string, unknown>)}
+                ${formatMetricsForEmail(metrics as Record<string, unknown>)}
               </div>
             </div>
             ` : ""}
@@ -117,7 +162,7 @@ const handler = async (req: Request): Promise<Response> => {
                 💡 Insights
               </h2>
               <div style="font-size: 14px; color: #374151;">
-                ${formatJsonForEmail(insights as Record<string, unknown>)}
+                ${formatInsightsForEmail(insights)}
               </div>
             </div>
             ` : ""}
@@ -128,7 +173,7 @@ const handler = async (req: Request): Promise<Response> => {
                 🎯 Recommendations
               </h2>
               <div style="font-size: 14px; color: #374151;">
-                ${formatJsonForEmail(recommendations as Record<string, unknown>)}
+                ${formatRecommendationsForEmail(recommendations)}
               </div>
             </div>
             ` : ""}

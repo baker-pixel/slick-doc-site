@@ -75,10 +75,40 @@ Make sure the content:
 
 Context: ${JSON.stringify(inputData || {})}`;
       break;
-    case "report":
-      systemPrompt = `You are a marketing analytics expert. Generate an insightful performance report.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
-      userPrompt = `Generate a performance report for ${client.business_name}. Period: ${JSON.stringify(inputData || {})}`;
+    case "report": {
+      const periodStart = (inputData as any)?.periodStart as string | undefined;
+      const periodEnd = (inputData as any)?.periodEnd as string | undefined;
+
+      // Real, cheaply-available counts to ground the report in -- the
+      // previous version of this prompt (and a separate, now-removed
+      // duplicate in run-ai-batch) asked the model to "use placeholder
+      // metrics" with no real data behind them, which produced an actual
+      // client-facing email full of invented percentages. There's no
+      // traffic/ads/CRM analytics pipeline in this codebase to pull real
+      // percentages from, so the honest fix is: report only what's
+      // verifiably true, and never let the model invent a number.
+      const [{ count: contentCount }, { data: latestAudit }, { count: tasksCount }] = await Promise.all([
+        supabase.from("generated_content").select("id", { count: "exact", head: true })
+          .eq("client_id", client.id).in("status", ["approved", "client_approved", "published"])
+          .gte("updated_at", periodStart ?? "1970-01-01").lte("updated_at", periodEnd ?? "9999-12-31"),
+        supabase.from("seo_audits").select("score, created_at")
+          .eq("client_account_id", client.id).not("score", "is", null)
+          .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("client_tasks").select("id", { count: "exact", head: true })
+          .eq("client_account_id", client.id).eq("status", "completed")
+          .gte("completed_at", periodStart ?? "1970-01-01").lte("completed_at", periodEnd ?? "9999-12-31"),
+      ]);
+
+      const realData = [
+        `Content pieces approved/published this period: ${contentCount ?? 0}`,
+        `Automation tasks completed this period: ${tasksCount ?? 0}`,
+        latestAudit ? `Most recent SEO audit score: ${latestAudit.score}/100 (as of ${latestAudit.created_at})` : "No SEO audit on file.",
+      ].join("\n");
+
+      systemPrompt = `You are a marketing analytics expert. Generate an honest, grounded performance report using ONLY the real data provided -- never invent a specific number, percentage, or metric that isn't derivable from it. If you don't have enough real data for a metric, omit it from "metrics" rather than making one up; write the narrative around what actually happened (work completed, content shipped) instead of guessed traffic/conversion figures.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
+      userPrompt = `Generate a performance report for ${client.business_name}. Period: ${periodStart ?? "unknown"} to ${periodEnd ?? "unknown"}.\n\nREAL DATA FOR THIS PERIOD:\n${realData}`;
       break;
+    }
   }
 
   const aiContent = await callAI({
@@ -227,17 +257,26 @@ Preview:
     const periodStart = (inputData as any)?.periodStart || new Date().toISOString().split("T")[0];
     const periodEnd = (inputData as any)?.periodEnd || new Date().toISOString().split("T")[0];
 
+    // client_reports has no dedicated executive_summary column -- fold it in
+    // as the lead item so it isn't silently dropped when this report is
+    // previewed or emailed.
+    const summaryLine = typeof parsedOutput.executive_summary === "string" ? parsedOutput.executive_summary : null;
+    const insightsWithSummary = [
+      ...(summaryLine ? [summaryLine] : []),
+      ...((parsedOutput.insights as string[] | undefined) || []),
+    ];
+
     await supabase.from("client_reports").insert({
       client_id: client.id,
       report_type: "monthly",
       report_period_start: periodStart,
       report_period_end: periodEnd,
       metrics: parsedOutput.metrics || {},
-      insights: parsedOutput.insights || [],
+      insights: insightsWithSummary,
       recommendations: parsedOutput.recommendations || [],
     });
 
-    const insights = (parsedOutput.insights || []) as string[];
+    const insights = insightsWithSummary;
     const recommendations = (parsedOutput.recommendations || []) as Array<{ priority: string; action: string; expected_impact: string }>;
 
     await createDeliverable(
