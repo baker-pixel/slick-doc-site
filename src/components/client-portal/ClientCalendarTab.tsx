@@ -1,14 +1,15 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, ExternalLink } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, ExternalLink, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 interface ClientCalendarTabProps {
   clientAccountId: string;
@@ -57,9 +58,22 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
 };
 
 export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", clientEmail }: ClientCalendarTabProps) {
+  const queryClient = useQueryClient();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const handleDeleteDraft = async (item: CalendarItem) => {
+    try {
+      const { error } = await supabase.from("content_calendar").delete().eq("id", item.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["client-calendar", clientAccountId] });
+      setSelectedItem(null);
+      toast({ title: "Post deleted" });
+    } catch {
+      toast({ title: "Error", description: "Failed to delete post.", variant: "destructive" });
+    }
+  };
 
   const { data: hasContext } = useQuery({
     queryKey: ["client-has-context", clientAccountId],
@@ -298,6 +312,18 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
                   <p className="text-xs font-medium text-muted-foreground">Content</p>
                   <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded-lg p-3">{selectedItem.content}</p>
                 </div>
+
+                {selectedItem.content_type === "social_post" && selectedItem.status === "draft" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDeleteDraft(selectedItem)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete draft
+                  </Button>
+                )}
               </div>
             </>
           )}

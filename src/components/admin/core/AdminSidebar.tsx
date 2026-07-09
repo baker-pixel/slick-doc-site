@@ -79,7 +79,6 @@ export type AdminSection =
   | "activity-feed"
   | "feature-guide"
   | "quick-actions"
-  | "win-notifications"
   | "before-after"
   | "case-studies"
   | "website-personalization"
@@ -94,7 +93,6 @@ export type AdminSection =
   | "templates"
   | "sequences"
   | "campaigns"
-  | "calendar"
   | "analytics"
   | "prospect-engine";
 

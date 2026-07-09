@@ -39,7 +39,6 @@ import { EmailSequencesPanel } from "@/components/admin/email/EmailSequencesPane
 import { EmailTemplatesPanel } from "@/components/admin/email/EmailTemplatesPanel";
 import { CampaignSenderPanel } from "@/components/admin/email/CampaignSenderPanel";
 import { QuickActionsPanel } from "@/components/admin/core/QuickActionsPanel";
-import { ContentCalendarPanel } from "@/components/admin/content/ContentCalendarPanel";
 import PipelineDashboard from "@/components/admin/sales/PipelineDashboard";
 import AutomationAlertsPanel from "@/components/admin/workflow/AutomationAlertsPanel";
 import ClientDocumentsPanel from "@/components/admin/clients/ClientDocumentsPanel";
@@ -62,7 +61,6 @@ import { SeoHubPanel } from "@/components/admin/content/SeoHubPanel";
 import { WorkPanel } from "@/components/admin/content/WorkPanel";
 import { MarketingOSDashboard } from "@/components/admin/misc/MarketingOSDashboard";
 import { GoogleReviewEngine } from "@/components/admin/content/GoogleReviewEngine";
-import ClientWinNotifications from "@/components/admin/clients/ClientWinNotifications";
 import LeadScoringPanel from "@/components/admin/sales/LeadScoringPanel";
 import ProspectEnginePanel from "@/components/admin/sales/ProspectEnginePanel";
 import AIAdGenerator from "@/components/admin/content/AIAdGenerator";
@@ -1454,8 +1452,6 @@ const AdminInner = () => {
         return <AutomationAlertsPanel />;
       case "quick-actions":
         return <QuickActionsPanel />;
-      case "calendar":
-        return <ContentCalendarPanel />;
       case "analytics":
         return (
           <AdminAnalyticsSection
@@ -1546,8 +1542,6 @@ const AdminInner = () => {
         return <MarketingOSDashboard />;
       case "review-engine":
         return <GoogleReviewEngine />;
-      case "win-notifications":
-        return <ClientWinNotifications />;
       case "prospect-engine":
       case "lead-scoring":
         return renderLeadsHub();
@@ -1619,7 +1613,6 @@ const AdminInner = () => {
       "activity-feed": "Activity Feed",
       "feature-guide": "Feature Guide",
       "quick-actions": "Quick Actions",
-      "win-notifications": "Win Notifications",
       "before-after": "Before & After Showcase",
       "case-studies": "Case Study Builder",
       "website-personalization": "Website Personalization",
@@ -1635,7 +1628,6 @@ const AdminInner = () => {
       templates: "Email Templates",
       sequences: "Email Sequences",
       campaigns: "Campaigns",
-      calendar: "Content Calendar",
       analytics: "Analytics",
     };
     return titles[activeSection];
@@ -1648,13 +1640,13 @@ const AdminInner = () => {
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",
-    "integrations", "calendar",
+    "integrations",
     "quick-actions", "activity-feed", "client-workflow",
     "prospect-engine",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
     "automation-center", "sop-command-center", "client-health",
     "onboarding", "social-posts", "seo-dashboard", "marketing-os",
-    "review-engine", "win-notifications", "case-studies", "before-after",
+    "review-engine", "case-studies", "before-after",
     "quality-assurance", "website-personalization",
     // Agent office sections — show all clients' work, no client selection required
     "deliverables", "approvals", "content-review", "reports-review",

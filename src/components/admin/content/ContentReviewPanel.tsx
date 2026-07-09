@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Share2 } from "lucide-react";
+import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Share2, ImageIcon, CalendarClock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { callAdminApi } from "@/lib/admin-api";
 
@@ -35,8 +35,106 @@ interface ClientAccount {
   tier: string;
 }
 
+// Scheduling/publishing state lives on content_calendar, keyed back to this
+// row via content_calendar.content_id = generated_content.id -- not on
+// generated_content itself, so the review panel can't show "did this
+// actually go out" without joining it in separately.
+interface CalendarLifecycleInfo {
+  platform: string | null;
+  status: string;
+  scheduled_for: string | null;
+  published_at: string | null;
+  error_message: string | null;
+  image_url: string | null;
+}
+
+// The client's own decision lives in content_approvals, also keyed by
+// content_id -- generated_content.status is kept roughly in sync by
+// handle-approval, but publish_status (queued/published/failed) only
+// exists here.
+interface ApprovalLifecycleInfo {
+  status: string;
+  publish_status: string | null;
+  reviewed_at: string | null;
+  feedback: string | null;
+}
+
+interface LifecycleStep {
+  label: string;
+  done: boolean;
+  detail?: string;
+  failed?: boolean;
+}
+
+function buildLifecycle(
+  content: GeneratedContent,
+  cal: CalendarLifecycleInfo | undefined,
+  appr: ApprovalLifecycleInfo | undefined,
+): LifecycleStep[] {
+  const qa = content.metadata?.qa as { score?: number } | undefined;
+  const sentToClient = !!appr || ["approved", "client_approved", "changes_requested", "rejected", "published"].includes(content.status);
+  const clientDecided = appr?.status === "approved" || appr?.status === "rejected" || ["client_approved", "rejected", "changes_requested"].includes(content.status);
+  const clientRejected = appr?.status === "rejected" || content.status === "rejected" || content.status === "changes_requested";
+  const scheduled = !!cal?.scheduled_for && cal.status !== "published";
+  const published = cal?.status === "published" || content.status === "published";
+  const failed = cal?.status === "failed";
+
+  return [
+    { label: "Drafted", done: true, detail: qa ? `QA ${qa.score}/10` : undefined },
+    { label: "Sent to client", done: sentToClient },
+    {
+      label: clientRejected ? "Changes requested" : "Client approved",
+      done: clientDecided,
+      failed: clientRejected,
+      detail: appr?.feedback || undefined,
+    },
+    { label: "Scheduled", done: scheduled || published, detail: cal?.scheduled_for ? new Date(cal.scheduled_for).toLocaleDateString() : undefined },
+    {
+      label: failed ? "Publish failed" : "Published",
+      done: published || failed,
+      failed,
+      detail: failed ? (cal?.error_message ?? undefined) : cal?.published_at ? new Date(cal.published_at).toLocaleDateString() : undefined,
+    },
+  ];
+}
+
+// Compact step trail spanning generated_content -> content_approvals ->
+// content_calendar, so admins can see where a piece actually is (sent to
+// client? scheduled? published? did publishing fail?) without opening three
+// different screens.
+function LifecycleStrip({ content, cal, appr }: { content: GeneratedContent; cal?: CalendarLifecycleInfo; appr?: ApprovalLifecycleInfo }) {
+  const steps = buildLifecycle(content, cal, appr);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] mb-1">
+      {steps.map((step, i) => (
+        <span key={step.label} className="flex items-center gap-1.5">
+          <span
+            className={
+              step.failed
+                ? "flex items-center gap-0.5 text-destructive"
+                : step.done
+                  ? "flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400"
+                  : "flex items-center gap-0.5 text-muted-foreground/50"
+            }
+            title={step.detail}
+          >
+            {step.failed ? <AlertTriangle className="w-3 h-3" /> : step.done ? <CheckCircle2 className="w-3 h-3" /> : null}
+            {step.label}
+          </span>
+          {i < steps.length - 1 && <span className="text-muted-foreground/30">→</span>}
+        </span>
+      ))}
+      {cal?.platform && (
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 ml-1">{cal.platform}</Badge>
+      )}
+    </div>
+  );
+}
+
 export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: string; adminPassword: string }) => {
   const [contents, setContents] = useState<GeneratedContent[]>([]);
+  const [calendarByContentId, setCalendarByContentId] = useState<Record<string, CalendarLifecycleInfo>>({});
+  const [approvalByContentId, setApprovalByContentId] = useState<Record<string, ApprovalLifecycleInfo>>({});
   const [clients, setClients] = useState<ClientAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedClient, setSelectedClient] = useState<string>(clientId || "all");
@@ -79,6 +177,50 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
 
     if (contentsRes.data) setContents(contentsRes.data as GeneratedContent[]);
     if (clientsRes.data) setClients(clientsRes.data);
+
+    const contentIds = (contentsRes.data || []).map((c: any) => c.id);
+    if (contentIds.length > 0) {
+      const [calendarRes, approvalsRes] = await Promise.all([
+        supabase
+          .from("content_calendar")
+          .select("content_id, platform, status, scheduled_for, published_at, error_message, metadata")
+          .in("content_id", contentIds),
+        supabase
+          .from("content_approvals")
+          .select("content_id, status, publish_status, reviewed_at, feedback")
+          .in("content_id", contentIds),
+      ]);
+
+      const calendarMap: Record<string, CalendarLifecycleInfo> = {};
+      for (const row of calendarRes.data || []) {
+        if (!row.content_id) continue;
+        calendarMap[row.content_id] = {
+          platform: row.platform,
+          status: row.status,
+          scheduled_for: row.scheduled_for,
+          published_at: row.published_at,
+          error_message: row.error_message,
+          image_url: (row.metadata as Record<string, unknown> | null)?.image_url as string | null ?? null,
+        };
+      }
+      setCalendarByContentId(calendarMap);
+
+      const approvalMap: Record<string, ApprovalLifecycleInfo> = {};
+      for (const row of approvalsRes.data || []) {
+        if (!row.content_id) continue;
+        approvalMap[row.content_id] = {
+          status: row.status,
+          publish_status: row.publish_status,
+          reviewed_at: row.reviewed_at,
+          feedback: row.feedback,
+        };
+      }
+      setApprovalByContentId(approvalMap);
+    } else {
+      setCalendarByContentId({});
+      setApprovalByContentId({});
+    }
+
     setLoading(false);
   };
 
@@ -403,12 +545,20 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
                 </p>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col">
-                <div className="flex-1 mb-4">
+                {calendarByContentId[content.id]?.image_url && (
+                  <img
+                    src={calendarByContentId[content.id].image_url!}
+                    alt=""
+                    className="w-full h-32 object-cover rounded-md mb-3 border"
+                  />
+                )}
+                <div className="flex-1 mb-3">
                   <p className="text-sm text-muted-foreground line-clamp-4">
                     {content.content.substring(0, 200)}...
                   </p>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <LifecycleStrip content={content} cal={calendarByContentId[content.id]} appr={approvalByContentId[content.id]} />
+                <div className="flex gap-2 flex-wrap mt-3">
                   <Button
                     size="sm"
                     variant="outline"
@@ -487,6 +637,36 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
               {previewContent?.client_accounts?.business_name} • {previewContent && new Date(previewContent.created_at).toLocaleDateString()}
             </p>
           </DialogHeader>
+
+          {previewContent && (
+            <div className="mt-2 p-3 rounded-lg border bg-muted/30">
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <CalendarClock className="w-3.5 h-3.5" /> Lifecycle
+              </p>
+              <LifecycleStrip
+                content={previewContent}
+                cal={calendarByContentId[previewContent.id]}
+                appr={approvalByContentId[previewContent.id]}
+              />
+              {approvalByContentId[previewContent.id]?.feedback && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Client feedback: "{approvalByContentId[previewContent.id]?.feedback}"
+                </p>
+              )}
+            </div>
+          )}
+
+          {previewContent && calendarByContentId[previewContent.id]?.image_url && (
+            <div className="mt-3 flex items-center gap-2">
+              <ImageIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <img
+                src={calendarByContentId[previewContent.id].image_url!}
+                alt=""
+                className="max-h-64 rounded-md border object-contain"
+              />
+            </div>
+          )}
+
           <div className="mt-4 prose prose-sm dark:prose-invert max-w-none">
             <pre className="whitespace-pre-wrap text-sm font-sans bg-muted/50 p-4 rounded-lg">
               {previewContent?.content}

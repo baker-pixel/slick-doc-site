@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { imageQualityForPlatform, imageSizeForPlatform } from "../_shared/socialImagePrompt.ts";
+import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,54 +20,6 @@ function buildFinalPrompt(prompt: string): string {
     `Clean negative space suitable for a text overlay.`,
     `No text overlays, no logos, no watermarks.`,
   ].join(" ");
-}
-
-// gpt-image-1 only supports n=1 per request -- generating multiple
-// variations means multiple parallel requests, not a single call with n>1.
-// Unlike dall-e-3 (retired March 2026), it does not accept response_format
-// and always returns base64 (b64_json), never a hosted url.
-async function generateOne(openaiKey: string, prompt: string, platform: string): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openaiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-image-1",
-      prompt,
-      n: 1,
-      size: imageSizeForPlatform(platform),
-      quality: imageQualityForPlatform(platform),
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    let msg = `Image generation failed (${res.status})`;
-    try { msg = JSON.parse(errText)?.error?.message || msg; } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-
-  const data = await res.json();
-  const b64: string | undefined = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error("No image data returned from gpt-image-1");
-  return b64;
-}
-
-// Decode the base64 image and upload it to Supabase Storage for a permanent URL.
-async function persistImage(supabase: any, base64: string, platform: string): Promise<string> {
-  const imageBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  const fileName = `social/${platform}/${crypto.randomUUID()}_${Date.now()}.png`;
-
-  const { error: uploadErr } = await supabase.storage
-    .from("generated-images")
-    .upload(fileName, imageBytes, { contentType: "image/png", upsert: true });
-
-  if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
-
-  const { data: publicData } = supabase.storage.from("generated-images").getPublicUrl(fileName);
-  return publicData.publicUrl;
 }
 
 serve(async (req) => {
@@ -116,8 +68,9 @@ serve(async (req) => {
 
     const results = await Promise.allSettled(
       Array.from({ length: requested }, async () => {
-        const base64 = await generateOne(openaiKey, finalPrompt, platform);
-        return persistImage(supabase, base64, platform);
+        const base64 = await generateGptImage(openaiKey, finalPrompt, platform);
+        const fileName = `social/${platform}/${crypto.randomUUID()}_${Date.now()}.png`;
+        return persistGeneratedImage(supabase, base64, fileName);
       }),
     );
 

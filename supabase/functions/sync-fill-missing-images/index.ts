@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildSocialImagePrompt, imageQualityForPlatform, imageSizeForPlatform } from "../_shared/socialImagePrompt.ts";
+import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
+import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,33 +24,9 @@ const TARGET_PLATFORMS = ["instagram"];
 const MAX_PER_RUN = 5;
 
 async function generateAndPersistImage(supabase: any, openaiKey: string, prompt: string, contentCalendarId: string, platform: string): Promise<string> {
-  const res = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: imageSizeForPlatform(platform), quality: imageQualityForPlatform(platform) }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    let msg = `Image generation failed (${res.status})`;
-    try { msg = JSON.parse(errText)?.error?.message || msg; } catch { /* ignore */ }
-    throw new Error(msg);
-  }
-
-  const data = await res.json();
-  const b64: string | undefined = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error("No image data returned from gpt-image-1");
-
-  const imageBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const base64 = await generateGptImage(openaiKey, prompt, platform);
   const fileName = `social/sync/${contentCalendarId}_${Date.now()}.png`;
-
-  const { error: uploadErr } = await supabase.storage
-    .from("generated-images")
-    .upload(fileName, imageBytes, { contentType: "image/png", upsert: true });
-  if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
-
-  const { data: publicData } = supabase.storage.from("generated-images").getPublicUrl(fileName);
-  return publicData.publicUrl;
+  return persistGeneratedImage(supabase, base64, fileName);
 }
 
 serve(async (req) => {

@@ -195,13 +195,14 @@ export const AUTOMATION_TOOLS: AutomationTool[] = [
     requiresApproval: false,
     run: (supabase, client, inputData) => runAiAutomation(supabase, client, "email_sequence", inputData),
   },
-  {
-    name: "content_generation",
-    description: "Drafts blog/social/ad content pieces for the client and stores them for review -- does not publish them.",
-    parameters: freeformContextSchema,
-    requiresApproval: false,
-    run: (supabase, client, inputData) => runAiAutomation(supabase, client, "content_generation", inputData),
-  },
+  // content_generation intentionally not exposed as a tool here -- content
+  // drafts are owned by the fill-scheduled-content cron, which is the one
+  // path tied to the calendar cadence, QA critique, image eligibility, and
+  // auto-forward-to-approval. run-ai-batch already disables this same
+  // capability on its own cron for the identical reason ("Enabling it here
+  // would create a duplicate, unreviewed content path" -- see its
+  // batchActions comment); an agent calling it directly would reopen the
+  // same gap through a different door.
   {
     name: "custom",
     description: "Logs a completed one-off task that doesn't match any other tool. Provide taskName and description in notes.",

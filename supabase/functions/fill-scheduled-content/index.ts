@@ -331,20 +331,25 @@ serve(async (req) => {
     }
 
     // Kick off image generation for any freshly-drafted slots that need one
-    // (currently Instagram) via OpenAI's Batch API -- submitted now, well
-    // ahead of publish time, so the up-to-24h batch window is a non-issue.
-    // Uses this function's own service-role client so generate-social-images-batch's
-    // isServer check passes without needing a password. Best-effort: a
-    // submission failure here shouldn't fail the whole drafting run.
+    // (currently Instagram). Using sync-fill-missing-images (a few
+    // synchronous gpt-image-1 calls) rather than the OpenAI Batch API path
+    // (generate-social-images-batch + check-image-batches): the batch
+    // approach is ~50% cheaper when it works, but repeatedly hit
+    // WORKER_RESOURCE_LIMIT crashes downloading/applying batch output files
+    // on this runtime and left real client-facing posts stuck with no
+    // image for hours. generate-social-images-batch is left in place,
+    // unused, in case that gets revisited later -- not deleted, just not
+    // called from here anymore. Best-effort: a failure here shouldn't fail
+    // the whole drafting run.
     try {
-      const batchRes = await supabase.functions.invoke("generate-social-images-batch", { body: {} });
-      if (batchRes.error) {
-        console.error("generate-social-images-batch invoke failed:", batchRes.error.message);
+      const fillRes = await supabase.functions.invoke("sync-fill-missing-images", { body: {} });
+      if (fillRes.error) {
+        console.error("sync-fill-missing-images invoke failed:", fillRes.error.message);
       } else {
-        console.log("Image batch submission result:", JSON.stringify(batchRes.data));
+        console.log("Image fill result:", JSON.stringify(fillRes.data));
       }
     } catch (e) {
-      console.error("Failed to invoke generate-social-images-batch:", e instanceof Error ? e.message : e);
+      console.error("Failed to invoke sync-fill-missing-images:", e instanceof Error ? e.message : e);
     }
 
     return new Response(

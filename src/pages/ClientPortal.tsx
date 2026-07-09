@@ -117,7 +117,7 @@ export default function ClientPortal() {
   const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(user?.id);
   const [activeTab, setActiveTab] = useState<PortalTab>(preferences.default_landing_page || "activity");
   // When navigating to social from the onboarding activity tab, open to Connected Accounts
-  const [socialInitialTab, setSocialInitialTab] = useState<"composer" | "feed" | "accounts">("accounts");
+  const [socialInitialTab, setSocialInitialTab] = useState<"composer" | "accounts">("accounts");
 
   const handleTabChange = (tab: PortalTab) => {
     if (tab === "social") setSocialInitialTab(isOnboardingComplete ? "composer" : "accounts");

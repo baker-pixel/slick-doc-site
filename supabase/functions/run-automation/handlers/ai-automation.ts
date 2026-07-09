@@ -6,7 +6,7 @@ import {
   getRecentContentFeedback, feedbackToPromptBlock,
   getRecentApprovedContent, approvedContentToPromptBlock,
 } from "../../_shared/contentFeedback.ts";
-import { critiqueContent, qaNeedsAttention, type QaVerdict } from "../../_shared/contentQa.ts";
+import { critiqueContentBatch, qaNeedsAttention, type QaVerdict } from "../../_shared/contentQa.ts";
 
 const BRAND_VOICE_JOB_TYPES = new Set(["content_generation", "email_sequence"]);
 
@@ -139,10 +139,13 @@ Context: ${JSON.stringify(inputData || {})}`;
   if (jobType === "content_generation" && parsedOutput.content_pieces) {
     const pieces = parsedOutput.content_pieces as Array<{ type: string; title: string; content: string; platform?: string }>;
 
-    // Self-QA: cheap second-model critique per piece, best-effort. Never
-    // blocks a piece from reaching admin review -- only flags it.
-    const qaResults = await Promise.all(
-      pieces.map((piece) => critiqueContent(piece.content, piece.type || "content", client.tone || "professional", client.id)),
+    // Self-QA: cheap second-model critique, best-effort, one call for the
+    // whole batch of pieces rather than one call per piece. Never blocks a
+    // piece from reaching admin review -- only flags it.
+    const qaResults = await critiqueContentBatch(
+      pieces.map((piece) => ({ content: piece.content, contentType: piece.type || "content" })),
+      client.tone || "professional",
+      client.id,
     );
 
     for (let i = 0; i < pieces.length; i++) {
@@ -208,8 +211,10 @@ ${p.content.substring(0, 300)}${p.content.length > 300 ? '...' : ''}`).join('\n\
     const sequenceName = (parsedOutput as any).sequence_name || "Custom Sequence";
     const emails = (parsedOutput as any).emails || [];
 
-    const qaResults: (QaVerdict | null)[] = await Promise.all(
-      emails.map((e: any) => critiqueContent(e.body || "", "email", client.tone || "professional", client.id)),
+    const qaResults: (QaVerdict | null)[] = await critiqueContentBatch(
+      emails.map((e: any) => ({ content: e.body || "", contentType: "email" })),
+      client.tone || "professional",
+      client.id,
     );
     const flagged = emails
       .map((e: any, i: number) => ({ email: e, qa: qaResults[i] }))
