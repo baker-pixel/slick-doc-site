@@ -17,7 +17,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
-import { friendlyEdgeMessage } from "@/lib/edge-error";
+import { friendlyEdgeMessage, getEdgeErrorMessage } from "@/lib/edge-error";
 import { inviteLeadToPortal, type InviteLead } from "@/lib/inviteLeadToPortal";
 import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -242,10 +242,20 @@ const AdminInner = () => {
     const { data, error } = await supabase.functions.invoke("admin", {
       body: { action: "authenticate" },
     });
-    if (error) throw new Error(friendlyEdgeMessage(error.message));
+    if (error) {
+      // FunctionsHttpError hides the real body ({"error":"Unauthorized"}) behind a
+      // generic "non-2xx status code" message -- read the body before mapping.
+      const raw = (await getEdgeErrorMessage(error, data)) || error.message;
+      // A 401 here means the login itself worked but the account lacks the
+      // admin role -- "session expired" would be misleading.
+      if (/unauthorized|401/i.test(raw)) {
+        throw new Error("This account doesn't have admin access. Contact your administrator if you believe this is a mistake.");
+      }
+      throw new Error(friendlyEdgeMessage(raw));
+    }
     const result = data as { authenticated?: boolean; password?: string; error?: string } | null;
-    if (result?.error) throw new Error(result.error);
-    if (!result?.authenticated) throw new Error("Not authorized as an admin");
+    if (result?.error) throw new Error(friendlyEdgeMessage(result.error));
+    if (!result?.authenticated) throw new Error("This account doesn't have admin access. Contact your administrator if you believe this is a mistake.");
 
     const effectivePassword = result.password || "";
     authLogin(effectivePassword);
@@ -266,7 +276,7 @@ const AdminInner = () => {
       setNeedsPasswordSetup(false);
       await completeAdminLogin();
     } catch (error: any) {
-      toast({ title: "Could not set password", description: error.message, variant: "destructive" });
+      toast({ title: "Could not set password", description: friendlyEdgeMessage(error.message || "Please try again."), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -283,7 +293,7 @@ const AdminInner = () => {
       if (signInErr) throw signInErr;
       await completeAdminLogin();
     } catch (error: any) {
-      toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
+      toast({ title: "Sign in failed", description: friendlyEdgeMessage(error.message || "Unable to sign in. Please try again."), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -465,6 +475,16 @@ const AdminInner = () => {
       const { data, error } = await callAdminApi(password, { action: "authenticate" });
       if (error) throw new Error(error);
       if (!(data as any)?.authenticated) throw new Error("Invalid password");
+
+      // The backend mints a session token for the shared legacy-admin user
+      // so RLS-gated direct table queries (client lists, prospects, etc.)
+      // see everything, same as a real admin login. Best-effort: password
+      // auth alone still unlocks all edge-function-backed panels.
+      const tokenHash = (data as any)?.token_hash;
+      if (tokenHash) {
+        const { error: otpErr } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
+        if (otpErr) console.warn("Could not establish admin session:", otpErr.message);
+      }
 
       authLogin(password);
       toast({ title: "Access granted" });

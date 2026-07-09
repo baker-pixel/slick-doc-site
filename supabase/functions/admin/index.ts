@@ -65,6 +65,38 @@ Deno.serve(async (req) => {
     switch (action) {
       case "authenticate": {
         console.log(`Admin authenticated successfully via ${authorizedUserId ? "real user session" : "legacy password"}`);
+
+        // A password-only login carries no Supabase JWT, so every direct
+        // table query from the panel hits RLS as anon (or as whatever
+        // portal session the browser happens to hold) -- admins saw partial
+        // or empty data. Mint a real session for a dedicated legacy-admin
+        // user (admin role) and hand its magiclink token_hash back; the
+        // frontend verifies it to establish a proper admin JWT. Best-effort:
+        // a failure here still returns authenticated:true (edge-function
+        // calls keep working on the password alone).
+        let legacyTokenHash: string | undefined;
+        if (!authorizedUserId) {
+          try {
+            const legacyEmail = "legacy-admin@orangedoormarketing.com";
+            let link = await supabase.auth.admin.generateLink({ type: "magiclink", email: legacyEmail });
+
+            if (link.error) {
+              const created = await supabase.auth.admin.createUser({ email: legacyEmail, email_confirm: true });
+              if (created.error) throw created.error;
+              await supabase.from("user_roles").insert({ user_id: created.data.user.id, role: "admin" });
+              link = await supabase.auth.admin.generateLink({ type: "magiclink", email: legacyEmail });
+              if (link.error) throw link.error;
+            } else if (link.data.user?.id) {
+              // Idempotent role guarantee; duplicate-key errors are fine.
+              await supabase.from("user_roles").insert({ user_id: link.data.user.id, role: "admin" }).then(() => {}, () => {});
+            }
+
+            legacyTokenHash = link.data.properties?.hashed_token;
+          } catch (e) {
+            console.error("Could not mint legacy admin session:", e instanceof Error ? e.message : e);
+          }
+        }
+
         return new Response(
           // A real, JWT-verified admin gets the shared password back so the
           // frontend can keep populating it for the other edge functions
@@ -74,6 +106,7 @@ Deno.serve(async (req) => {
           JSON.stringify({
             authenticated: true,
             ...(authorizedUserId ? { password: adminPassword } : {}),
+            ...(legacyTokenHash ? { token_hash: legacyTokenHash } : {}),
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
