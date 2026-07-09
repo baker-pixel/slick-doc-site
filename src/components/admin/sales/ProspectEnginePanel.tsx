@@ -122,6 +122,9 @@ export default function ProspectEnginePanel() {
   // ICP guidance
   const [icpInfo, setIcpInfo]       = useState<IcpInfo | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  // "maps" = Google Places (local businesses); "web" = AI web research
+  // (B2B/national ICPs Maps can't reach). Auto-switches after Suggest.
+  const [discSource, setDiscSource] = useState<"maps" | "web">("maps");
   // Set when the typed query fails the ICP check; second click overrides.
   const [icpMismatch, setIcpMismatch] = useState<string | null>(null);
 
@@ -234,6 +237,7 @@ export default function ProspectEnginePanel() {
         maps_suitable: data.maps_suitable !== false,
         suggestions: data.suggestions ?? [],
       });
+      if (data.maps_suitable === false) setDiscSource("web");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast({ title: "ICP suggestion failed", description: msg, variant: "destructive" });
@@ -243,17 +247,18 @@ export default function ProspectEnginePanel() {
   };
 
   const runDiscovery = async () => {
-    if (!discClientId || !discQuery || !discLocation) {
-      toast({ title: "Fill in all fields", variant: "destructive" });
+    if (!discClientId || (discSource === "maps" && (!discQuery || !discLocation))) {
+      toast({ title: discSource === "maps" ? "Fill in all fields" : "Select a client first", variant: "destructive" });
       return;
     }
     setDiscovering(true);
     setDiscResult(null);
     try {
-      // Validate the query against the client's ICP first -- a mismatch
-      // (e.g. "HVAC companies" for an AI consultancy) needs an explicit
-      // second click to run anyway.
-      if (!icpMismatch) {
+      // Maps searches are free-text -- validate against the client's ICP
+      // first; a mismatch (e.g. "HVAC companies" for an AI consultancy)
+      // needs an explicit second click to run anyway. Web research is
+      // built from the ICP itself, so no check needed there.
+      if (discSource === "maps" && !icpMismatch) {
         const { data: check } = await supabase.functions.invoke("prospect-icp", {
           body: { client_id: discClientId, action: "check", query: discQuery, location: discLocation, password: adminPassword },
         });
@@ -265,10 +270,16 @@ export default function ProspectEnginePanel() {
       }
       setIcpMismatch(null);
 
-      const { data, error } = await supabase.functions.invoke("discover-prospects", {
-        body: { client_id: discClientId, query: discQuery, location: discLocation, max_results: 20, password: adminPassword },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        discSource === "maps" ? "discover-prospects" : "discover-prospects-web",
+        {
+          body: discSource === "maps"
+            ? { client_id: discClientId, query: discQuery, location: discLocation, max_results: 20, password: adminPassword }
+            : { client_id: discClientId, focus: discQuery || undefined, geography: discLocation || undefined, max_results: 15, password: adminPassword },
+        },
+      );
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       setDiscResult({
         discovered: data.discovered ?? 0,
         skipped: data.skipped_duplicates ?? 0,
@@ -592,7 +603,7 @@ export default function ProspectEnginePanel() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
             <div className="space-y-1.5">
               <Label className="text-xs">Client</Label>
               <Select
@@ -610,17 +621,29 @@ export default function ProspectEnginePanel() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Business type</Label>
+              <Label className="text-xs">Source</Label>
+              <Select value={discSource} onValueChange={v => { setDiscSource(v as "maps" | "web"); setIcpMismatch(null); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="maps">Google Maps (local)</SelectItem>
+                  <SelectItem value="web">AI web research (B2B)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{discSource === "maps" ? "Business type" : "Focus (optional)"}</Label>
               <Input
-                placeholder="e.g. HVAC companies"
+                placeholder={discSource === "maps" ? "e.g. HVAC companies" : "e.g. fintech compliance teams"}
                 value={discQuery}
                 onChange={e => { setDiscQuery(e.target.value); setIcpMismatch(null); }}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Location</Label>
+              <Label className="text-xs">{discSource === "maps" ? "Location" : "Geography (optional)"}</Label>
               <Input
-                placeholder="e.g. Toronto, ON"
+                placeholder={discSource === "maps" ? "e.g. Toronto, ON" : "defaults to ICP geography"}
                 value={discLocation}
                 onChange={e => { setDiscLocation(e.target.value); setIcpMismatch(null); }}
               />
@@ -637,7 +660,7 @@ export default function ProspectEnginePanel() {
               </Button>
               <Button
                 onClick={runDiscovery}
-                disabled={discovering || !discClientId || !discQuery || !discLocation}
+                disabled={discovering || !discClientId || (discSource === "maps" && (!discQuery || !discLocation))}
                 className={`gap-2 ${icpMismatch ? "bg-amber-600 hover:bg-amber-700" : ""}`}
               >
                 {discovering ? (
@@ -669,8 +692,8 @@ export default function ProspectEnginePanel() {
                 <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                   <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                   <span>
-                    This client's customers aren't local businesses — Google Maps discovery is a
-                    poor fit for them. The suggestions below are the closest local proxies.
+                    This client's customers aren't local businesses — switched the source to
+                    AI web research, which finds companies matching the ICP anywhere.
                   </span>
                 </div>
               )}
