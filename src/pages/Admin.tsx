@@ -26,7 +26,6 @@ import { AdminSidebar, type AdminSection } from "@/components/admin/core/AdminSi
 import { AdminStatsCards } from "@/components/admin/core/AdminStatsCards";
 import { AdminAnalyticsSection } from "@/components/admin/core/AdminAnalyticsSection";
 import { AdminOnboarding } from "@/components/admin/core/AdminOnboarding";
-import { QuickStartChecklist } from "@/components/admin/core/QuickStartChecklist";
 import { EmailAdminPanel } from "@/components/admin/email/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/sales/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/clients/ClientManagementPanel";
@@ -1755,13 +1754,6 @@ const AdminInner = () => {
               />
             ) : (
               <>
-                {activeSection === "pipeline" && (
-                  <QuickStartChecklist
-                    onNavigate={setActiveSection as (section: string) => void}
-                    password={storedPassword}
-                  />
-                )}
-
                 {(["contacts", "gap-analysis", "pdf-leads", "analytics"] as AdminSection[]).includes(activeSection) && (
                   <AdminStatsCards
                     contactsCount={contacts.length}
