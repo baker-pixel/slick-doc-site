@@ -59,19 +59,41 @@ interface Prospect {
   status: string;
   gap_score: number | null;
   icp_fit_score: number | null;
+  icp_fit_reason: string | null;
   client_id: string | null;
   created_at: string;
   approved_at: string | null;
 }
 
+interface IcpSuggestion {
+  query: string;
+  location: string;
+}
+
+interface IcpInfo {
+  summary: string;
+  maps_suitable: boolean;
+  suggestions: IcpSuggestion[];
+}
+
 const PAGE_SIZE = 15;
 
 const STATUS_COLORS: Record<string, string> = {
-  discovered: "bg-amber-100 text-amber-800 border-amber-200",
-  pending:    "bg-blue-100 text-blue-800 border-blue-200",
-  nurture:    "bg-purple-100 text-purple-800 border-purple-200",
-  converted:  "bg-green-100 text-green-800 border-green-200",
-  rejected:   "bg-gray-100 text-gray-600 border-gray-200",
+  discovered:   "bg-amber-100 text-amber-800 border-amber-200",
+  pending:      "bg-blue-100 text-blue-800 border-blue-200",
+  nurture:      "bg-purple-100 text-purple-800 border-purple-200",
+  converted:    "bg-green-100 text-green-800 border-green-200",
+  rejected:     "bg-gray-100 text-gray-600 border-gray-200",
+  exhausted:    "bg-slate-100 text-slate-600 border-slate-200",
+  unsubscribed: "bg-rose-100 text-rose-700 border-rose-200",
+  bounced:      "bg-red-100 text-red-700 border-red-200",
+};
+
+const fitBadgeClass = (score: number | null) => {
+  if (score === null) return "bg-gray-100 text-gray-500 border-gray-200";
+  if (score >= 61) return "bg-green-100 text-green-700 border-green-200";
+  if (score >= 31) return "bg-amber-100 text-amber-700 border-amber-200";
+  return "bg-red-100 text-red-700 border-red-200";
 };
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -95,12 +117,19 @@ export default function ProspectEnginePanel() {
   const [discQuery, setDiscQuery]       = useState("");
   const [discLocation, setDiscLocation] = useState("");
   const [discovering, setDiscovering]   = useState(false);
-  const [discResult, setDiscResult]     = useState<{ discovered: number; skipped: number } | null>(null);
+  const [discResult, setDiscResult]     = useState<{ discovered: number; skipped: number; noWebsite: number; emailEnrichment: boolean } | null>(null);
+
+  // ICP guidance
+  const [icpInfo, setIcpInfo]       = useState<IcpInfo | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  // Set when the typed query fails the ICP check; second click overrides.
+  const [icpMismatch, setIcpMismatch] = useState<string | null>(null);
 
   // Filters
   const [filterClient, setFilterClient] = useState("all");
   const [filterSearch, setFilterSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [pageQueue, setPageQueue] = useState(1);
+  const [pageAll, setPageAll] = useState(1);
 
   const loadClients = useCallback(async () => {
     const { data } = await supabase
@@ -115,7 +144,7 @@ export default function ProspectEnginePanel() {
     setLoading(true);
     let query = supabase
       .from("prospects")
-      .select("id, name, email, website_url, phone, city, business_type, source, status, gap_score, icp_fit_score, client_id, created_at, approved_at")
+      .select("id, name, email, website_url, phone, city, business_type, source, status, gap_score, icp_fit_score, icp_fit_reason, client_id, created_at, approved_at")
       .order("created_at", { ascending: false })
       .limit(500);
 
@@ -137,7 +166,8 @@ export default function ProspectEnginePanel() {
 
   useEffect(() => {
     loadProspects();
-    setPage(1);
+    setPageQueue(1);
+    setPageAll(1);
     setSelected(new Set());
   }, [loadProspects]);
 
@@ -186,6 +216,32 @@ export default function ProspectEnginePanel() {
     }
   };
 
+  const suggestFromIcp = async () => {
+    if (!discClientId) {
+      toast({ title: "Select a client first", variant: "destructive" });
+      return;
+    }
+    setSuggesting(true);
+    setIcpInfo(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("prospect-icp", {
+        body: { client_id: discClientId, action: "suggest", password: adminPassword },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      setIcpInfo({
+        summary: data.icp?.summary ?? "",
+        maps_suitable: data.maps_suitable !== false,
+        suggestions: data.suggestions ?? [],
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "ICP suggestion failed", description: msg, variant: "destructive" });
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   const runDiscovery = async () => {
     if (!discClientId || !discQuery || !discLocation) {
       toast({ title: "Fill in all fields", variant: "destructive" });
@@ -194,11 +250,31 @@ export default function ProspectEnginePanel() {
     setDiscovering(true);
     setDiscResult(null);
     try {
+      // Validate the query against the client's ICP first -- a mismatch
+      // (e.g. "HVAC companies" for an AI consultancy) needs an explicit
+      // second click to run anyway.
+      if (!icpMismatch) {
+        const { data: check } = await supabase.functions.invoke("prospect-icp", {
+          body: { client_id: discClientId, action: "check", query: discQuery, location: discLocation, password: adminPassword },
+        });
+        if (check && check.fit === false) {
+          setIcpMismatch(check.reason || "This search doesn't match the client's ideal customer profile.");
+          setDiscovering(false);
+          return;
+        }
+      }
+      setIcpMismatch(null);
+
       const { data, error } = await supabase.functions.invoke("discover-prospects", {
         body: { client_id: discClientId, query: discQuery, location: discLocation, max_results: 20, password: adminPassword },
       });
       if (error) throw error;
-      setDiscResult({ discovered: data.discovered ?? 0, skipped: data.skipped_duplicates ?? 0 });
+      setDiscResult({
+        discovered: data.discovered ?? 0,
+        skipped: data.skipped_duplicates ?? 0,
+        noWebsite: data.skipped_no_website ?? 0,
+        emailEnrichment: data.email_enrichment !== false,
+      });
       toast({ title: `${data.discovered ?? 0} new prospects found` });
       if ((data.discovered ?? 0) > 0) loadProspects();
     } catch (err: unknown) {
@@ -212,8 +288,10 @@ export default function ProspectEnginePanel() {
   const clientName = (id: string | null) =>
     id ? (clients.find(c => c.id === id)?.business_name ?? id.slice(0, 8)) : "Unassigned";
 
-  // Derived lists
-  const reviewQueue = prospects.filter(p => p.status === "discovered");
+  // Derived lists -- review queue ranked by ICP fit (unscored last)
+  const reviewQueue = prospects
+    .filter(p => p.status === "discovered")
+    .sort((a, b) => (b.icp_fit_score ?? -1) - (a.icp_fit_score ?? -1));
 
   const searchFilter = (p: Prospect) => {
     if (!filterSearch) return true;
@@ -229,11 +307,11 @@ export default function ProspectEnginePanel() {
   const filteredQueue  = reviewQueue.filter(searchFilter);
   const allFiltered    = prospects.filter(p => p.status !== "discovered").filter(searchFilter);
 
-  const paginate = <T,>(arr: T[]) =>
-    arr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginate = <T,>(arr: T[], pg: number) =>
+    arr.slice((pg - 1) * PAGE_SIZE, pg * PAGE_SIZE);
 
-  const queuePage  = paginate(filteredQueue);
-  const allPage    = paginate(allFiltered);
+  const queuePage  = paginate(filteredQueue, pageQueue);
+  const allPage    = paginate(allFiltered, pageAll);
 
   const totalQueuePages = Math.ceil(filteredQueue.length / PAGE_SIZE);
   const totalAllPages   = Math.ceil(allFiltered.length / PAGE_SIZE);
@@ -288,6 +366,20 @@ export default function ProspectEnginePanel() {
           {p.business_type && (
             <div className="text-xs text-muted-foreground mt-0.5">{p.business_type}</div>
           )}
+        </td>
+        <td className="p-3">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className={`text-xs ${fitBadgeClass(p.icp_fit_score)}`}>
+                  {p.icp_fit_score === null ? "—" : p.icp_fit_score}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px]">
+                {p.icp_fit_reason || (p.icp_fit_score === null ? "Not scored yet — scoring runs after context enrichment" : "No reason recorded")}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </td>
         <td className="p-3">
           {p.website_url ? (
@@ -433,6 +525,7 @@ export default function ProspectEnginePanel() {
           </th>
         )}
         <th className="p-3 text-left text-xs font-medium text-muted-foreground">Business</th>
+        <th className="p-3 text-left text-xs font-medium text-muted-foreground">Fit</th>
         <th className="p-3 text-left text-xs font-medium text-muted-foreground">Website</th>
         <th className="p-3 text-left text-xs font-medium text-muted-foreground">Contact</th>
         <th className="p-3 text-left text-xs font-medium text-muted-foreground">Source</th>
@@ -502,7 +595,10 @@ export default function ProspectEnginePanel() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
             <div className="space-y-1.5">
               <Label className="text-xs">Client</Label>
-              <Select value={discClientId} onValueChange={setDiscClientId}>
+              <Select
+                value={discClientId}
+                onValueChange={v => { setDiscClientId(v); setIcpInfo(null); setIcpMismatch(null); }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select client..." />
                 </SelectTrigger>
@@ -518,7 +614,7 @@ export default function ProspectEnginePanel() {
               <Input
                 placeholder="e.g. HVAC companies"
                 value={discQuery}
-                onChange={e => setDiscQuery(e.target.value)}
+                onChange={e => { setDiscQuery(e.target.value); setIcpMismatch(null); }}
               />
             </div>
             <div className="space-y-1.5">
@@ -526,32 +622,89 @@ export default function ProspectEnginePanel() {
               <Input
                 placeholder="e.g. Toronto, ON"
                 value={discLocation}
-                onChange={e => setDiscLocation(e.target.value)}
+                onChange={e => { setDiscLocation(e.target.value); setIcpMismatch(null); }}
               />
             </div>
-            <Button
-              onClick={runDiscovery}
-              disabled={discovering || !discClientId || !discQuery || !discLocation}
-              className="gap-2"
-            >
-              {discovering ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Radar className="w-4 h-4" />
-              )}
-              {discovering ? "Scanning..." : "Discover"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={suggestFromIcp}
+                disabled={suggesting || !discClientId}
+                className="gap-2"
+              >
+                {suggesting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                Suggest
+              </Button>
+              <Button
+                onClick={runDiscovery}
+                disabled={discovering || !discClientId || !discQuery || !discLocation}
+                className={`gap-2 ${icpMismatch ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+              >
+                {discovering ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Radar className="w-4 h-4" />
+                )}
+                {discovering ? "Scanning..." : icpMismatch ? "Discover anyway" : "Discover"}
+              </Button>
+            </div>
           </div>
+
+          {icpMismatch && (
+            <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>
+                This search doesn't match the client's ICP: {icpMismatch}{" "}
+                Click "Discover anyway" to override.
+              </span>
+            </div>
+          )}
+
+          {icpInfo && (
+            <div className="mt-3 space-y-2">
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Ideal customer:</span> {icpInfo.summary}
+              </div>
+              {!icpInfo.maps_suitable && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>
+                    This client's customers aren't local businesses — Google Maps discovery is a
+                    poor fit for them. The suggestions below are the closest local proxies.
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {icpInfo.suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs text-orange-800 hover:bg-orange-100 transition-colors"
+                    onClick={() => { setDiscQuery(s.query); setDiscLocation(s.location); setIcpMismatch(null); }}
+                  >
+                    {s.query} · {s.location}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {discResult && (
-            <div className="mt-3 flex items-center gap-3 text-sm">
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
               <Badge className="bg-green-100 text-green-700 border-green-200">
                 {discResult.discovered} new
               </Badge>
               <span className="text-muted-foreground">
-                {discResult.skipped} duplicates skipped
+                {discResult.skipped} duplicates · {discResult.noWebsite} without a website skipped
               </span>
               {discResult.discovered > 0 && (
                 <span className="text-muted-foreground">→ added to review queue below</span>
+              )}
+              {discResult.discovered > 0 && !discResult.emailEnrichment && (
+                <span className="flex items-center gap-1 text-amber-700">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Email enrichment is off (no Hunter.io key) — emails must be entered manually before approving.
+                </span>
               )}
             </div>
           )}
@@ -565,11 +718,11 @@ export default function ProspectEnginePanel() {
           <Input
             placeholder="Search prospects..."
             value={filterSearch}
-            onChange={e => { setFilterSearch(e.target.value); setPage(1); }}
+            onChange={e => { setFilterSearch(e.target.value); setPageQueue(1); setPageAll(1); }}
             className="pl-9"
           />
         </div>
-        <Select value={filterClient} onValueChange={v => { setFilterClient(v); setPage(1); }}>
+        <Select value={filterClient} onValueChange={v => { setFilterClient(v); setPageQueue(1); setPageAll(1); }}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="All clients" />
           </SelectTrigger>
@@ -652,7 +805,7 @@ export default function ProspectEnginePanel() {
                     ))}
                     {filteredQueue.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                        <td colSpan={9} className="py-12 text-center text-muted-foreground">
                           {loading ? "Loading..." : "No prospects awaiting review"}
                         </td>
                       </tr>
@@ -661,7 +814,7 @@ export default function ProspectEnginePanel() {
                 </table>
               </div>
               <div className="px-4 pb-4">
-                <Pagination page={page} total={totalQueuePages} onChange={setPage} />
+                <Pagination page={pageQueue} total={totalQueuePages} onChange={setPageQueue} />
               </div>
             </CardContent>
           </Card>
@@ -685,7 +838,7 @@ export default function ProspectEnginePanel() {
                     ))}
                     {allFiltered.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                        <td colSpan={8} className="py-12 text-center text-muted-foreground">
                           {loading ? "Loading..." : "No prospects found"}
                         </td>
                       </tr>
@@ -694,7 +847,7 @@ export default function ProspectEnginePanel() {
                 </table>
               </div>
               <div className="px-4 pb-4">
-                <Pagination page={page} total={totalAllPages} onChange={setPage} />
+                <Pagination page={pageAll} total={totalAllPages} onChange={setPageAll} />
               </div>
             </CardContent>
           </Card>

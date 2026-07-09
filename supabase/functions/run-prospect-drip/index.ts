@@ -321,7 +321,8 @@ serve(async (req) => {
       }
     }
 
-    // 4. Build suppression set — skip prospects whose email matches an active client
+    // 4. Build suppression sets
+    // a) prospects whose email matches an active client → converted
     const { data: allClientRows } = await supabase
       .from("client_accounts")
       .select("email")
@@ -330,6 +331,37 @@ serve(async (req) => {
       (allClientRows ?? []).map((c: { email: string }) => c.email.toLowerCase()),
     );
 
+    // Query with both stored and lowercased forms -- table rows may differ
+    // in case from what the prospect row holds; set membership below is
+    // always compared lowercase.
+    const nurtureEmails = [...new Set(
+      (nurtureProspects as Prospect[])
+        .filter(p => p.email)
+        .flatMap(p => [p.email, p.email.toLowerCase()]),
+    )];
+
+    // b) opt-outs -- every drip email links to /email-preferences, which
+    // writes this table. Not honoring it = CAN-SPAM/CASL violation.
+    const unsubscribedSet = new Set<string>();
+    const bouncedSet = new Set<string>();
+    if (nurtureEmails.length > 0) {
+      const { data: optOuts } = await supabase
+        .from("email_preferences")
+        .select("email")
+        .eq("subscribed", false)
+        .in("email", nurtureEmails);
+      for (const r of optOuts ?? []) unsubscribedSet.add((r as { email: string }).email.toLowerCase());
+
+      // c) hard bounces / spam complaints recorded by resend-webhook --
+      // retrying these tanks the sending domain's reputation.
+      const { data: badSends } = await supabase
+        .from("email_logs")
+        .select("recipient_email, status")
+        .in("status", ["bounced", "complained"])
+        .in("recipient_email", nurtureEmails);
+      for (const r of badSends ?? []) bouncedSet.add((r as { recipient_email: string }).recipient_email.toLowerCase());
+    }
+
     // 5. Send drip emails
     for (const prospect of nurtureProspects as Prospect[]) {
       if (!prospect.email || !prospect.email.includes("@")) {
@@ -337,9 +369,23 @@ serve(async (req) => {
         continue;
       }
 
-      if (clientEmailSet.has(prospect.email.toLowerCase())) {
+      const emailLower = prospect.email.toLowerCase();
+
+      if (clientEmailSet.has(emailLower)) {
         await supabase.from("prospects").update({ status: "converted" }).eq("id", prospect.id);
         console.log(`Prospect ${prospect.email} is now a client — marked converted`);
+        continue;
+      }
+
+      if (unsubscribedSet.has(emailLower)) {
+        await supabase.from("prospects").update({ status: "unsubscribed" }).eq("id", prospect.id);
+        console.log(`Prospect ${prospect.email} unsubscribed — removed from drip`);
+        continue;
+      }
+
+      if (bouncedSet.has(emailLower)) {
+        await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospect.id);
+        console.log(`Prospect ${prospect.email} previously bounced/complained — removed from drip`);
         continue;
       }
 
@@ -397,13 +443,38 @@ serve(async (req) => {
         });
 
         if (emailRes.ok) {
+          // Sequence is done after the last step -- park in a terminal
+          // status instead of leaving it "nurture" forever (which both
+          // reprocessed it every run and misreported it as active).
+          const isFinalStep = nextStep >= Math.max(...Object.keys(DRIP_SCHEDULE).map(Number));
           const { count: updated } = await supabase
             .from("prospects")
-            .update({ drip_step: nextStep })
+            .update({ drip_step: nextStep, ...(isFinalStep ? { status: "exhausted" } : {}) })
             .eq("id", prospect.id)
             .eq("drip_step", prospect.drip_step)
             .select("id", { count: "exact", head: true });
           if (updated && updated > 0) emailsSent++;
+
+          // Log the send so resend-webhook can match delivery/bounce/
+          // complaint events back to it (matches on resend_id).
+          try {
+            const sendData = await emailRes.json().catch(() => ({}));
+            await supabase.from("email_logs").insert({
+              recipient_email: prospect.email,
+              subject: emailContent.subject,
+              status: "sent",
+              resend_id: sendData?.id || null,
+              metadata: {
+                source: "run-prospect-drip",
+                prospect_id: prospect.id,
+                client_id: prospect.client_id,
+                drip_step: nextStep,
+              },
+            });
+          } catch (logErr) {
+            console.error(`Failed to log drip send for ${prospect.email}:`, logErr);
+          }
+
           console.log(`Drip step ${nextStep} sent to ${prospect.email} from ${fromAddress}`);
         } else {
           console.error(`Failed drip ${nextStep} to ${prospect.email}:`, await emailRes.text());

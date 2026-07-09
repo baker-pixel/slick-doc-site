@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/icp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -207,6 +208,52 @@ serve(async (req: Request) => {
       console.log(`Hunter enrichment: ${emailsEnriched} emails found`);
     }
 
+    // ── ICP fit scoring ────────────────────────────────────────
+    // Score enriched prospects against their client's ICP so the review
+    // queue can rank by fit instead of showing an undifferentiated list.
+    // Runs after context enrichment so the scorer has real signals.
+    let scored = 0;
+    {
+      const { data: unscored } = await supabase
+        .from("prospects")
+        .select("id, name, business_type, city, website_url, context_profile, client_id")
+        .not("context_profile", "is", null)
+        .not("client_id", "is", null)
+        .is("icp_fit_score", null)
+        .in("status", ["discovered", "pending"])
+        .limit(20);
+
+      if (unscored && unscored.length > 0) {
+        const icpCache = new Map<string, ClientICP | null>();
+        for (const p of unscored) {
+          try {
+            if (!icpCache.has(p.client_id)) {
+              const { data: client } = await supabase
+                .from("client_accounts")
+                .select("id, business_name, industry, icp, context_profile")
+                .eq("id", p.client_id)
+                .single();
+              icpCache.set(p.client_id, client ? await ensureClientICP(supabase, client) : null);
+            }
+            const icp = icpCache.get(p.client_id);
+            if (!icp) continue;
+
+            const fit = await scoreProspectFit(p, icp, p.client_id);
+            if (fit) {
+              await supabase
+                .from("prospects")
+                .update({ icp_fit_score: fit.score, icp_fit_reason: fit.reason })
+                .eq("id", p.id);
+              scored++;
+            }
+          } catch (e) {
+            console.warn("Fit scoring error for prospect", p.id, e);
+          }
+        }
+        console.log(`ICP fit scoring: ${scored}/${unscored.length} prospects scored`);
+      }
+    }
+
     // Alert if errors
     if (errors > 0) {
       await supabase.from("automation_alerts").insert({
@@ -226,7 +273,7 @@ serve(async (req: Request) => {
       .is("context_profile", null);
 
     return new Response(
-      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, emailsEnriched, hasMore: (count ?? 0) > 0 }),
+      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, emailsEnriched, scored, hasMore: (count ?? 0) > 0 }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

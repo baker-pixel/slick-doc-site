@@ -130,16 +130,21 @@ serve(async (req) => {
 
     const existingUrls = new Set((existing ?? []).map((p) => p.website_url));
 
+    const noWebsite = enriched.filter((p) => !p.website).length;
     const newProspects = enriched.filter(
       (p) => p.website && !existingUrls.has(p.website),
     );
+    const skippedDuplicates = enriched.length - noWebsite - newProspects.length;
+    const emailEnrichment = !!Deno.env.get("HUNTER_API_KEY");
 
     if (newProspects.length === 0) {
       return new Response(
         JSON.stringify({
           discovered: 0,
-          skipped_duplicates: enriched.length,
-          message: "All discovered businesses already exist for this client",
+          skipped_duplicates: skippedDuplicates,
+          skipped_no_website: noWebsite,
+          email_enrichment: emailEnrichment,
+          message: "No new businesses found (duplicates or missing websites)",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -187,12 +192,14 @@ serve(async (req) => {
       body: "{}",
     }).catch((e) => console.error("backfill-prospect-context trigger failed:", e));
 
-    console.log(`discover-prospects: client=${client_id} found=${rawResults.length} inserted=${inserted?.length ?? 0} skipped=${enriched.length - newProspects.length}`);
+    console.log(`discover-prospects: client=${client_id} found=${rawResults.length} inserted=${inserted?.length ?? 0} duplicates=${skippedDuplicates} no_website=${noWebsite}`);
 
     return new Response(
       JSON.stringify({
         discovered: inserted?.length ?? 0,
-        skipped_duplicates: enriched.length - newProspects.length,
+        skipped_duplicates: skippedDuplicates,
+        skipped_no_website: noWebsite,
+        email_enrichment: emailEnrichment,
         prospects: inserted,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -209,8 +216,11 @@ serve(async (req) => {
 
 function extractCity(address: string): string | null {
   // "123 Main St, Toronto, ON M5V 1A1, Canada" → "Toronto"
+  // "Toronto, ON M5V 1A1, Canada" → "Toronto"; "Toronto, Canada" → "Toronto"
   const parts = address.split(",").map((s) => s.trim());
-  return parts.length >= 2 ? parts[parts.length - 3] ?? parts[1] ?? null : null;
+  if (parts.length >= 3) return parts[parts.length - 3] || null;
+  if (parts.length === 2) return parts[0] || null;
+  return null;
 }
 
 function extractBusinessType(types: string[]): string | null {
