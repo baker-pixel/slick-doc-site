@@ -41,8 +41,25 @@ serve(async (req) => {
       return json({ error: "OPENAI_API_KEY is not configured. Add it via: supabase secrets set OPENAI_API_KEY=sk-..." }, 503);
     }
 
-    // Fresh drafts that need an image: real content (not an unfilled
-    // placeholder), no image yet, and not already sitting in a pending batch.
+    // Only generate images for content actually sitting in (or headed to)
+    // the client's approval queue -- not just any content_calendar row
+    // missing an image. Plenty of older rows predate content_id ever being
+    // linked and have no approval tied to them at all; generating images
+    // for those wastes the batch on posts the client will never see.
+    const { data: linkedApprovals, error: apprErr } = await supabase
+      .from("content_approvals")
+      .select("content_id")
+      .in("platform", BATCH_PLATFORMS)
+      .not("content_id", "is", null);
+
+    if (apprErr) throw new Error(`Failed to fetch approvals needing images: ${apprErr.message}`);
+
+    const approvalContentIds = [...new Set((linkedApprovals || []).map((a: any) => a.content_id))];
+
+    if (approvalContentIds.length === 0) {
+      return json({ submitted: 0, message: "No approvals need images" });
+    }
+
     // Kept small (not OpenAI's 50k/batch limit) because check-image-batches
     // can only safely apply a handful of results per invocation on this
     // runtime (see its MAX_APPLY_PER_RUN comment) -- a small, frequent batch
@@ -50,8 +67,7 @@ serve(async (req) => {
     const { data: slots, error: fetchErr } = await supabase
       .from("content_calendar")
       .select("id, client_account_id, title, content, platform, metadata")
-      .in("platform", BATCH_PLATFORMS)
-      .not("content", "like", "[Auto-generated placeholder%")
+      .in("content_id", approvalContentIds)
       .is("metadata->>image_url", null)
       .is("metadata->>image_batch_id", null)
       .limit(20);

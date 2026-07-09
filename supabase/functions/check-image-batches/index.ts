@@ -199,6 +199,14 @@ serve(async (req) => {
       if (batch.status === "completed") {
         // Which of this batch's slots still need a result applied -- lets us
         // resume across multiple polls instead of doing everything at once.
+        // (Tried prioritizing approval-linked content_ids over orphaned rows
+        // here -- reliably crashed instead, since searching a smaller,
+        // scattered subset means scanning much further into the output file
+        // before finding a match. Reverted: this runtime can only reliably
+        // afford "find the first remaining match", not "find a specific
+        // one". Correct targeting now happens at submission time instead --
+        // see generate-social-images-batch, which only submits
+        // approval-linked content going forward.)
         const { data: remainingSlots } = await supabase
           .from("content_calendar")
           .select("id")
