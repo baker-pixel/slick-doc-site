@@ -15,13 +15,9 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "expired", "cancelled"
 // batch-status value we're repurposing) means "OpenAI is done, we're still
 // working through applying results", so leftover items get picked up again
 // next poll instead of being stranded once local status flips to completed.
-// Verified empirically: even 3/run hits WORKER_RESOURCE_LIMIT on this
-// runtime (same wall-clock time as a successful 1/run -- a hard resource
-// ceiling, not a timeout). 1/run reliably succeeds (~19s). Slow, but these
-// images have a multi-day lead time before they're needed, so draining a
-// backlog over several hours of 30-min polls is a non-issue. Keeping
-// per-batch submission size small (see generate-social-images-batch) is the
-// real fix so this rarely needs to drain a large backlog at all.
+// 1/run reliably succeeds (~19s) now that resume offsets (see
+// scanForNextMatch) make each run's download cost constant instead of
+// growing with how much of the batch is already applied.
 const MAX_APPLY_PER_RUN = 1;
 
 interface BatchOutputLine {
@@ -31,61 +27,171 @@ interface BatchOutputLine {
   error: { code: string; message: string } | null;
 }
 
+interface ScanResult {
+  found: { line: BatchOutputLine; lineStart: number; lineEnd: number } | null;
+  // Everything before this absolute byte offset is fully consumed and never
+  // needed again -- safe to persist and resume from on the next poll. When a
+  // wanted line was found this equals its lineStart, so a crashed/failed
+  // apply re-reads that line next run instead of losing it.
+  resumeOffset: number;
+  eof: boolean;
+}
+
 // Batch output files are one JSON line per item, each line often 1MB+ once
-// it includes a base64 image. Downloading the whole file with .text() (or
-// even JSON.parse-ing every line) buffers the entire thing in memory at
-// once, which is what actually caused the WORKER_RESOURCE_LIMIT crash on a
-// 60-item batch. Stream the response instead and stop reading as soon as
-// we've found the lines we need -- never materialize more than one line's
-// worth of base64 at a time, and never read past what this run needs.
-async function findMatchingLines(
+// it includes a base64 image. Two things made the naive approach crash the
+// worker ("Memory limit exceeded", HTTP 546):
+//   1. Buffering the whole file (or decoding every line to a JS string)
+//      materializes tens of MB at once.
+//   2. Re-scanning from byte 0 every poll means each successful apply makes
+//      the next run's skip-prefix longer -- progress made the crash *more*
+//      likely until the job stalled entirely (observed stuck at 14/60).
+// So: request the file from a persisted byte offset (HTTP Range; if the
+// server ignores it and returns 200, raw prefix bytes are dropped without
+// ever being decoded), scan for newlines at the byte level, and only decode
+// a line's first bytes to sniff its custom_id. Unwanted lines are dropped
+// chunk-by-chunk without being buffered; only a wanted line is ever
+// materialized in full.
+async function scanForNextMatch(
   url: string,
   headers: Record<string, string>,
   wantedIds: Set<string>,
-  maxCount: number,
-): Promise<BatchOutputLine[]> {
-  const res = await fetch(url, { headers });
+  startOffset: number,
+): Promise<ScanResult> {
+  const res = await fetch(url, { headers: { ...headers, Range: `bytes=${startOffset}-` } });
+
+  // Requested range starts at/past EOF -- everything already consumed.
+  if (res.status === 416) {
+    res.body?.cancel().catch(() => {});
+    return { found: null, resumeOffset: startOffset, eof: true };
+  }
   if (!res.ok || !res.body) {
     console.error(`Failed to download batch file: ${res.status}`);
-    return [];
+    return { found: null, resumeOffset: startOffset, eof: false };
   }
 
-  const found: BatchOutputLine[] = [];
-  const reader = res.body.getReader();
+  const ranged = res.status === 206;
+  let absPos = ranged ? startOffset : 0;
+
+  const HEAD_SNIFF_BYTES = 512; // custom_id sits well within a line's first bytes
   const decoder = new TextDecoder();
-  let buffer = "";
 
+  let lineStart = startOffset;
+  let verdict: "unknown" | "wanted" | "discard" = "unknown";
+  let head = new Uint8Array(0);
+  let lineChunks: Uint8Array[] = [];
+  let lineBytes = 0;
+  let resumeOffset = startOffset;
+  let found: ScanResult["found"] = null;
+  let eof = false;
+
+  const resetLine = (nextStart: number) => {
+    lineStart = nextStart;
+    head = new Uint8Array(0);
+    lineChunks = [];
+    lineBytes = 0;
+  };
+
+  const decideVerdict = (): "wanted" | "discard" => {
+    const m = decoder.decode(head).match(/"custom_id"\s*:\s*"([^"]+)"/);
+    return m && wantedIds.has(m[1]) ? "wanted" : "discard";
+  };
+
+  const materializeLine = (): BatchOutputLine | null => {
+    const all = new Uint8Array(lineBytes);
+    let o = 0;
+    for (const c of lineChunks) {
+      all.set(c, o);
+      o += c.length;
+    }
+    try {
+      return JSON.parse(decoder.decode(all)) as BatchOutputLine;
+    } catch (e) {
+      console.error("Failed to parse batch output line:", e instanceof Error ? e.message : e);
+      return null;
+    }
+  };
+
+  const reader = res.body.getReader();
   try {
-    while (found.length < maxCount) {
+    outer: while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      if (done) {
+        eof = true;
+        break;
+      }
+      let chunk = value as Uint8Array;
 
-      let newlineIdx: number;
-      while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, newlineIdx);
-        buffer = buffer.slice(newlineIdx + 1);
-        if (!line.trim()) continue;
-
-        // Cheap check before the expensive JSON.parse (which would
-        // materialize the line's base64 payload) -- custom_id sits near
-        // the start of the line, well before that payload.
-        const idMatch = line.match(/"custom_id"\s*:\s*"([^"]+)"/);
-        if (!idMatch || !wantedIds.has(idMatch[1])) continue;
-
-        try {
-          found.push(JSON.parse(line) as BatchOutputLine);
-        } catch (e) {
-          console.error("Failed to parse batch output line:", e instanceof Error ? e.message : e);
+      // Server ignored Range and sent the file from byte 0 -- drop the
+      // already-consumed prefix without decoding any of it.
+      if (absPos < startOffset) {
+        if (absPos + chunk.length <= startOffset) {
+          absPos += chunk.length;
+          continue;
         }
-        if (found.length >= maxCount) break;
+        chunk = chunk.subarray(startOffset - absPos);
+        absPos = startOffset;
+      }
+
+      let idx = 0;
+      while (idx < chunk.length) {
+        const nl = chunk.indexOf(10, idx); // "\n"
+        const seg = chunk.subarray(idx, nl === -1 ? chunk.length : nl);
+
+        if (verdict === "unknown") {
+          if (head.length < HEAD_SNIFF_BYTES && seg.length > 0) {
+            const take = Math.min(HEAD_SNIFF_BYTES - head.length, seg.length);
+            const merged = new Uint8Array(head.length + take);
+            merged.set(head);
+            merged.set(seg.subarray(0, take), head.length);
+            head = merged;
+          }
+          if (head.length >= HEAD_SNIFF_BYTES || nl !== -1) verdict = decideVerdict();
+        }
+        if (verdict === "wanted") {
+          lineChunks.push(seg.slice());
+          lineBytes += seg.length;
+        }
+
+        if (nl === -1) {
+          absPos += chunk.length - idx;
+          break;
+        }
+
+        const lineEnd = absPos + (nl - idx) + 1; // past the newline
+        absPos = lineEnd;
+        idx = nl + 1;
+
+        if (verdict === "wanted") {
+          const line = materializeLine();
+          if (line) {
+            found = { line, lineStart, lineEnd };
+            break outer;
+          }
+          resumeOffset = lineEnd; // unparseable -- skip it for good
+        } else {
+          resumeOffset = lineEnd;
+        }
+        verdict = "unknown";
+        resetLine(lineEnd);
       }
     }
   } finally {
-    try { await reader.cancel(); } catch { /* stream may already be closed */ }
+    try {
+      await reader.cancel();
+    } catch { /* stream may already be closed */ }
   }
 
-  return found;
+  // File may not end with a trailing newline -- flush the last partial line.
+  if (eof && !found && lineBytes > 0) {
+    if (verdict === "unknown") verdict = decideVerdict();
+    if (verdict === "wanted") {
+      const line = materializeLine();
+      if (line) found = { line, lineStart, lineEnd: absPos };
+    }
+    if (!found) resumeOffset = absPos;
+  }
+
+  return { found, resumeOffset, eof };
 }
 
 async function persistBase64Image(supabase: any, base64: string, contentCalendarId: string): Promise<string> {
@@ -102,6 +208,13 @@ async function persistBase64Image(supabase: any, base64: string, contentCalendar
   return publicData.publicUrl;
 }
 
+async function markBatchStatus(supabase: any, contentCalendarId: string, existingMeta: Record<string, unknown>, status: string) {
+  await supabase
+    .from("content_calendar")
+    .update({ metadata: { ...existingMeta, image_batch_status: status } })
+    .eq("id", contentCalendarId);
+}
+
 async function applyResultLine(supabase: any, line: BatchOutputLine) {
   const contentCalendarId = line.custom_id;
 
@@ -113,21 +226,24 @@ async function applyResultLine(supabase: any, line: BatchOutputLine) {
 
   const existingMeta = (slot?.metadata as Record<string, unknown>) || {};
 
+  // sync-fill-missing-images (a separate, synchronous image-generation
+  // path) may have already filled this row in while this batch was still
+  // in flight -- skip the decode+upload entirely rather than paying for
+  // and writing a second, redundant image over a real one.
+  if (existingMeta.image_url) {
+    await markBatchStatus(supabase, contentCalendarId, existingMeta, "completed");
+    return;
+  }
+
   if (line.error || !line.response || line.response.status_code !== 200) {
     console.warn(`Batch item failed for slot ${contentCalendarId}:`, line.error?.message || "no response");
-    await supabase
-      .from("content_calendar")
-      .update({ metadata: { ...existingMeta, image_batch_status: "failed" } })
-      .eq("id", contentCalendarId);
+    await markBatchStatus(supabase, contentCalendarId, existingMeta, "failed");
     return;
   }
 
   const b64 = line.response.body?.data?.[0]?.b64_json;
   if (!b64) {
-    await supabase
-      .from("content_calendar")
-      .update({ metadata: { ...existingMeta, image_batch_status: "failed" } })
-      .eq("id", contentCalendarId);
+    await markBatchStatus(supabase, contentCalendarId, existingMeta, "failed");
     return;
   }
 
@@ -139,10 +255,7 @@ async function applyResultLine(supabase: any, line: BatchOutputLine) {
       .eq("id", contentCalendarId);
   } catch (e) {
     console.error(`Failed to persist batch image for slot ${contentCalendarId}:`, e instanceof Error ? e.message : e);
-    await supabase
-      .from("content_calendar")
-      .update({ metadata: { ...existingMeta, image_batch_status: "failed" } })
-      .eq("id", contentCalendarId);
+    await markBatchStatus(supabase, contentCalendarId, existingMeta, "failed");
   }
 }
 
@@ -199,45 +312,76 @@ serve(async (req) => {
       if (batch.status === "completed") {
         // Which of this batch's slots still need a result applied -- lets us
         // resume across multiple polls instead of doing everything at once.
-        // (Tried prioritizing approval-linked content_ids over orphaned rows
-        // here -- reliably crashed instead, since searching a smaller,
-        // scattered subset means scanning much further into the output file
-        // before finding a match. Reverted: this runtime can only reliably
-        // afford "find the first remaining match", not "find a specific
-        // one". Correct targeting now happens at submission time instead --
-        // see generate-social-images-batch, which only submits
-        // approval-linked content going forward.)
         const { data: remainingSlots } = await supabase
           .from("content_calendar")
-          .select("id")
+          .select("id, metadata")
           .eq("metadata->>image_batch_id", job.openai_batch_id)
           .or("metadata->>image_batch_status.is.null,metadata->>image_batch_status.not.in.(completed,failed)");
 
-        const remainingIds = new Set((remainingSlots || []).map((s: any) => s.id));
+        const remainingIds = new Set<string>();
+        // Slots sync-fill-missing-images already gave an image don't need
+        // their batch result at all -- flip them to completed directly
+        // instead of paying a file scan to reach the same conclusion.
+        for (const slot of remainingSlots || []) {
+          const meta = (slot.metadata as Record<string, unknown>) || {};
+          if (meta.image_url) {
+            await markBatchStatus(supabase, slot.id, meta, "completed");
+          } else {
+            remainingIds.add(slot.id);
+          }
+        }
 
         if (remainingIds.size > 0) {
-          const linesToApply: BatchOutputLine[] = [];
+          const offsets = ((job.resume_offsets as Record<string, number>) || {});
+          let applied = 0;
+          let allFilesExhausted = true;
 
           for (const fileId of [batch.output_file_id, batch.error_file_id].filter(Boolean)) {
-            if (linesToApply.length >= MAX_APPLY_PER_RUN) break;
-            const found = await findMatchingLines(
+            if (applied >= MAX_APPLY_PER_RUN) {
+              allFilesExhausted = false;
+              break;
+            }
+
+            const scan = await scanForNextMatch(
               `${OPENAI_API}/files/${fileId}/content`,
               { Authorization: `Bearer ${openaiKey}` },
               remainingIds,
-              MAX_APPLY_PER_RUN - linesToApply.length,
+              offsets[fileId] || 0,
             );
-            linesToApply.push(...found);
+
+            let newOffset = scan.resumeOffset;
+            if (scan.found) {
+              allFilesExhausted = false;
+              try {
+                await applyResultLine(supabase, scan.found.line);
+                applied++;
+                remainingIds.delete(scan.found.line.custom_id);
+                newOffset = scan.found.lineEnd;
+              } catch (e) {
+                console.error(`Failed to apply batch line for ${scan.found.line.custom_id}:`, e instanceof Error ? e.message : e);
+                newOffset = scan.found.lineStart; // retry this line next run
+              }
+            } else if (!scan.eof) {
+              allFilesExhausted = false; // download error -- retry from same offset
+            }
+            offsets[fileId] = newOffset;
           }
 
-          for (const line of linesToApply) {
-            try {
-              await applyResultLine(supabase, line);
-            } catch (e) {
-              console.error(`Failed to apply batch line for ${line.custom_id}:`, e instanceof Error ? e.message : e);
+          await supabase.from("image_batch_jobs").update({ resume_offsets: offsets }).eq("id", job.id);
+
+          // Both files scanned to EOF and none of the remaining slots'
+          // results exist in them -- they'd otherwise stay "remaining"
+          // forever and pin this job in finalizing. Mark them failed so
+          // sync-fill-missing-images / publish-time fallback takes over.
+          if (applied === 0 && allFilesExhausted && remainingIds.size > 0) {
+            console.warn(`Image batch ${job.openai_batch_id}: ${remainingIds.size} slots have no result in output/error files; marking failed`);
+            for (const slot of remainingSlots || []) {
+              if (!remainingIds.has(slot.id)) continue;
+              await markBatchStatus(supabase, slot.id, (slot.metadata as Record<string, unknown>) || {}, "failed");
             }
           }
 
-          console.log(`Image batch ${job.openai_batch_id}: applied ${linesToApply.length}/${remainingIds.size} remaining items this run`);
+          console.log(`Image batch ${job.openai_batch_id}: applied ${applied}/${remainingIds.size + applied} remaining items this run`);
         }
 
         const { count: stillRemaining } = await supabase
