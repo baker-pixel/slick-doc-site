@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
+import { buildSocialImagePrompt, imageQualityForPlatform, imageSizeForPlatform } from "../_shared/socialImagePrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,7 +98,7 @@ serve(async (req) => {
         custom_id: slot.id,
         method: "POST",
         url: "/v1/images/generations",
-        body: { model: "gpt-image-1", prompt, n: 1, size: "1024x1024", quality: "medium" },
+        body: { model: "gpt-image-1", prompt, n: 1, size: imageSizeForPlatform(slot.platform), quality: imageQualityForPlatform(slot.platform) },
       }));
       includedSlotIds.push(slot.id);
     }

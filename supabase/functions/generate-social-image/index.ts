@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { imageQualityForPlatform, imageSizeForPlatform } from "../_shared/socialImagePrompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,11 +10,14 @@ const corsHeaders = {
 
 const MAX_COUNT = 4;
 
-function buildFinalPrompt(prompt: string, platform: string): string {
+// Callers pass a fully-built prompt (usually from buildSocialImagePrompt,
+// which already sets subject and style) -- only append the hard constraints,
+// don't force a photography style or an aspect ratio the canvas already
+// decides.
+function buildFinalPrompt(prompt: string): string {
   return [
     prompt.trim(),
-    `Style: bright, clean, modern business photography.`,
-    `Platform: ${platform}. Aspect ratio: square (1:1).`,
+    `Clean negative space suitable for a text overlay.`,
     `No text overlays, no logos, no watermarks.`,
   ].join(" ");
 }
@@ -22,7 +26,7 @@ function buildFinalPrompt(prompt: string, platform: string): string {
 // variations means multiple parallel requests, not a single call with n>1.
 // Unlike dall-e-3 (retired March 2026), it does not accept response_format
 // and always returns base64 (b64_json), never a hosted url.
-async function generateOne(openaiKey: string, prompt: string): Promise<string> {
+async function generateOne(openaiKey: string, prompt: string, platform: string): Promise<string> {
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: {
@@ -33,8 +37,8 @@ async function generateOne(openaiKey: string, prompt: string): Promise<string> {
       model: "gpt-image-1",
       prompt,
       n: 1,
-      size: "1024x1024", // square — works for Instagram feed + Stories crop
-      quality: "medium",
+      size: imageSizeForPlatform(platform),
+      quality: imageQualityForPlatform(platform),
     }),
   });
 
@@ -106,13 +110,13 @@ serve(async (req) => {
     }
 
     const requested = Math.max(1, Math.min(Number(count) || 1, MAX_COUNT));
-    const finalPrompt = buildFinalPrompt(prompt, platform);
+    const finalPrompt = buildFinalPrompt(prompt);
 
     console.log(`Generating ${requested} image(s) for platform=${platform}: ${finalPrompt.slice(0, 100)}...`);
 
     const results = await Promise.allSettled(
       Array.from({ length: requested }, async () => {
-        const base64 = await generateOne(openaiKey, finalPrompt);
+        const base64 = await generateOne(openaiKey, finalPrompt, platform);
         return persistImage(supabase, base64, platform);
       }),
     );
