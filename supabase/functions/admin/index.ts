@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       "agent_traces", "agent_pending_actions",
       "generated_content", "client_reports", "sop_documents",
       "client_documents", "client_notifications", "case_studies",
-      "team_members", "ai_fixes", "wp_fix_queue",
+      "team_members", "ai_fixes", "wp_fix_queue", "prospects",
     ]);
     if (table && !ALLOWED_TABLES.has(table)) {
       console.warn(`Admin action blocked: table "${table}" not in whitelist`);
@@ -179,6 +179,53 @@ Deno.serve(async (req) => {
         if (error) throw error;
         return new Response(
           JSON.stringify({ data: rows }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "update_prospects_status": {
+        // Bulk approve/reject from the prospect review queue. Runs here
+        // (service role) because prospects RLS no longer allows anon
+        // writes and the admin panel's legacy password login carries no
+        // admin JWT. `emails` lets drafted addresses ride along with an
+        // approval in one call.
+        const { ids, status, emails } = data || {};
+        if (!Array.isArray(ids) || ids.length === 0 || !status) {
+          return new Response(
+            JSON.stringify({ error: "data.ids (array) and data.status are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (!["pending", "rejected", "discovered"].includes(status)) {
+          return new Response(
+            JSON.stringify({ error: `Status not allowed from review actions: ${status}` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (emails && typeof emails === "object") {
+          for (const [pid, email] of Object.entries(emails)) {
+            if (typeof email === "string" && email.includes("@") && ids.includes(pid)) {
+              await supabase.from("prospects").update({ email }).eq("id", pid);
+            }
+          }
+        }
+
+        const patch: Record<string, unknown> = { status };
+        if (status === "pending") {
+          patch.approved_at = new Date().toISOString();
+          patch.approved_by = authorizedUserId ?? "admin";
+        }
+
+        const { data: updatedRows, error } = await supabase
+          .from("prospects")
+          .update(patch)
+          .in("id", ids)
+          .select("id");
+        if (error) throw error;
+
+        return new Response(
+          JSON.stringify({ updated: (updatedRows ?? []).length }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

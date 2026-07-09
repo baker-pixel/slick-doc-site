@@ -134,34 +134,43 @@ export default function ProspectEnginePanel() {
   const [pageQueue, setPageQueue] = useState(1);
   const [pageAll, setPageAll] = useState(1);
 
+  // All reads/writes go through the `admin` edge function (service role +
+  // checkAdminAuth) rather than direct table queries: prospects RLS is
+  // admin-JWT-only now, and a legacy password login carries no JWT -- direct
+  // queries would return nothing (or, before the lockdown, leak data).
   const loadClients = useCallback(async () => {
-    const { data } = await supabase
-      .from("client_accounts")
-      .select("id, business_name")
-      .eq("status", "active")
-      .order("business_name");
-    setClients(data ?? []);
-  }, []);
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_accounts", password: adminPassword },
+    });
+    if (error || data?.error) {
+      toast({ title: "Error loading clients", description: data?.error || error?.message, variant: "destructive" });
+      return;
+    }
+    const rows = (data?.data ?? [])
+      .filter((c: { status?: string }) => c.status === "active")
+      .map((c: { id: string; business_name: string }) => ({ id: c.id, business_name: c.business_name }))
+      .sort((a: ClientOption, b: ClientOption) => a.business_name.localeCompare(b.business_name));
+    setClients(rows);
+  }, [adminPassword]);
 
   const loadProspects = useCallback(async () => {
     setLoading(true);
-    let query = supabase
-      .from("prospects")
-      .select("id, name, email, website_url, phone, city, business_type, source, status, gap_score, icp_fit_score, icp_fit_reason, client_id, created_at, approved_at")
-      .order("created_at", { ascending: false })
-      .limit(500);
-
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "prospects", password: adminPassword },
+    });
+    if (error || data?.error) {
+      toast({ title: "Error loading prospects", description: data?.error || error?.message, variant: "destructive" });
+      setProspects([]);
+      setLoading(false);
+      return;
+    }
+    let rows: Prospect[] = data?.data ?? [];
     if (filterClient !== "all") {
-      query = query.eq("client_id", filterClient);
+      rows = rows.filter(p => p.client_id === filterClient);
     }
-
-    const { data, error } = await query;
-    if (error) {
-      toast({ title: "Error loading prospects", description: error.message, variant: "destructive" });
-    }
-    setProspects(data ?? []);
+    setProspects(rows.slice(0, 500));
     setLoading(false);
-  }, [filterClient]);
+  }, [filterClient, adminPassword]);
 
   useEffect(() => {
     loadClients();
@@ -189,28 +198,24 @@ export default function ProspectEnginePanel() {
   const updateStatus = async (ids: string[], status: string) => {
     ids.forEach(id => markAction(id, true));
 
-    // Save any drafted emails before approving
+    // Drafted emails ride along with an approval in the same call
+    const emails: Record<string, string> = {};
     if (status === "pending") {
-      const emailUpdates = ids
-        .filter(id => emailDrafts[id]?.includes("@"))
-        .map(id =>
-          supabase.from("prospects").update({ email: emailDrafts[id] }).eq("id", id)
-        );
-      if (emailUpdates.length > 0) await Promise.all(emailUpdates);
+      for (const id of ids) {
+        if (emailDrafts[id]?.includes("@")) emails[id] = emailDrafts[id];
+      }
     }
 
-    const updates: Record<string, unknown> = { status };
-    if (status === "pending") {
-      updates.approved_at = new Date().toISOString();
-      updates.approved_by = "admin";
-    }
-    const { error } = await supabase
-      .from("prospects")
-      .update(updates)
-      .in("id", ids);
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: {
+        action: "update_prospects_status",
+        data: { ids, status, emails },
+        password: adminPassword,
+      },
+    });
     ids.forEach(id => markAction(id, false));
-    if (error) {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    if (error || data?.error) {
+      toast({ title: "Update failed", description: data?.error || error?.message, variant: "destructive" });
     } else {
       toast({ title: status === "pending" ? `${ids.length} approved` : `${ids.length} rejected` });
       setSelected(new Set());
