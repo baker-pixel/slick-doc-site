@@ -60,24 +60,26 @@ export interface ScorableFinding { category: SeoCategory; severity: Severity; ch
 
 export function computeScores(
   findings: ScorableFinding[],
-  opts: { pages: string[]; performanceMeasured: boolean },
+  opts: { pages: string[]; performancePages: string[] },
 ): { overall_score: number; subscores: Record<SeoCategory, number | null> } {
   const cats = Object.keys(CATEGORY_WEIGHT) as SeoCategory[];
   const pages = opts.pages.length ? opts.pages : [...new Set(findings.map((f) => f.page))];
-  const pageCount = Math.max(1, pages.length);
 
   const subscores = {} as Record<SeoCategory, number | null>;
   for (const cat of cats) {
-    // Performance with no PageSpeed data is "not measured", not 100 or 0.
-    if (cat === "performance" && !opts.performanceMeasured) { subscores[cat] = null; continue; }
+    // Performance is sampled, not run on every page -- average it ONLY over
+    // the pages actually measured, so a genuinely slow site isn't diluted by
+    // pages we never tested. No measured pages = "not measured" (null).
+    const scope = cat === "performance" ? opts.performancePages : pages;
+    if (scope.length === 0) { subscores[cat] = null; continue; }
     let total = 0;
-    for (const page of pages) {
+    for (const page of scope) {
       const deduction = findings
         .filter((f) => f.category === cat && f.page === page && !INFORMATIONAL.has(f.check_id))
         .reduce((sum, f) => sum + SEVERITY_DEDUCTION[f.severity], 0);
       total += Math.max(0, 100 - deduction);
     }
-    subscores[cat] = Math.round(total / pageCount);
+    subscores[cat] = Math.round(total / scope.length);
   }
 
   // Overall = weighted blend over MEASURED categories only, renormalized so a

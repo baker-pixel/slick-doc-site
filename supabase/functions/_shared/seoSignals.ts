@@ -172,9 +172,11 @@ async function getPageSpeed(url: string): Promise<PageSpeed | null> {
   if (!key) return null; // caller emits an explicit "not measured" finding
   try {
     const base = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
+    // Slow sites take PageSpeed longer to analyze -- give it room, since those
+    // are exactly the sites whose performance score matters most.
     const [m, d] = await Promise.all([
-      fetch(`${base}?url=${encodeURIComponent(url)}&strategy=mobile&key=${key}`, { signal: AbortSignal.timeout(25000) }),
-      fetch(`${base}?url=${encodeURIComponent(url)}&strategy=desktop&key=${key}`, { signal: AbortSignal.timeout(25000) }),
+      fetch(`${base}?url=${encodeURIComponent(url)}&strategy=mobile&key=${key}`, { signal: AbortSignal.timeout(55000) }),
+      fetch(`${base}?url=${encodeURIComponent(url)}&strategy=desktop&key=${key}`, { signal: AbortSignal.timeout(55000) }),
     ]);
     if (!m.ok && !d.ok) return null;
     const md = m.ok ? await m.json() : null;
@@ -226,7 +228,10 @@ function parseOnPage(html: string, url: string) {
   };
 }
 
-export async function gatherPageSignals(url: string): Promise<PageSignals> {
+// withPageSpeed is capped by the caller to a few pages -- PageSpeed is the
+// slow leg (~20-40s/page) and performance is largely site-wide, so we sample
+// it rather than run it on every page and blow the request timeout.
+export async function gatherPageSignals(url: string, withPageSpeed = true): Promise<PageSignals> {
   const { html, via, status } = await fetchHtml(url);
   if (!html) {
     return {
@@ -238,6 +243,6 @@ export async function gatherPageSignals(url: string): Promise<PageSignals> {
     };
   }
   const parsed = parseOnPage(html, url);
-  const performance = await getPageSpeed(url);
+  const performance = withPageSpeed ? await getPageSpeed(url) : null;
   return { url, reachable: true, fetched_via: via, status_code: status, ...parsed, performance };
 }

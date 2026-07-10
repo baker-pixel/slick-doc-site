@@ -80,11 +80,11 @@ function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">> {
   if (!s.has_open_graph) out.push(mk(CHECKS.missing_open_graph, p, "No Open Graph tags, so shared links look plain on social media.", "No og: tags.", { has_open_graph: false }));
   if (s.word_count < 300) out.push(mk(CHECKS.thin_content, p, "This page has little text, which search engines may see as thin.", `~${s.word_count} words (aim 500+).`, { word_count: s.word_count }));
 
-  // Performance (from PageSpeed, or an explicit "not measured")
+  // Performance findings only where PageSpeed actually ran (sampled pages).
+  // "Not measured" is emitted once at the site level by the caller, never
+  // per-page -- so unsampled pages don't spam a coverage gap as findings.
   const ps = s.performance;
-  if (!ps) {
-    out.push(mk(CHECKS.perf_not_measured, p, "Page speed wasn't measured for this page.", "PageSpeed data unavailable (no API key or API error).", { performance: null }));
-  } else {
+  if (ps) {
     if (ps.mobile_score < 50) out.push(mk(CHECKS.perf_poor, p, "This page is slow on mobile, which hurts rankings and visitors.", `Mobile performance ${ps.mobile_score}/100.`, { mobile_score: ps.mobile_score }));
     if (ps.lcp_ms !== null && ps.lcp_ms > 4000) out.push(mk(CHECKS.perf_lcp, p, "The main content takes too long to appear.", `LCP ${(ps.lcp_ms / 1000).toFixed(1)}s (target <2.5s).`, { lcp_ms: ps.lcp_ms }));
     if (ps.cls !== null && ps.cls > 0.25) out.push(mk(CHECKS.perf_cls, p, "The page jumps around as it loads.", `CLS ${ps.cls.toFixed(3)} (target <0.1).`, { cls: ps.cls }));
@@ -129,14 +129,31 @@ serve(async (req) => {
       return json({ status: "inconclusive", audit_id: row?.id, message: "Site could not be crawled." });
     }
 
-    // ── Gather signals (bounded loop) ──
-    const signals: PageSignals[] = [];
-    for (const url of pages.slice(0, MAX_PAGES)) {
-      try { signals.push(await gatherPageSignals(url)); } catch (e) { console.error("signal error", url, e); }
-    }
+    // ── Gather signals (parallel; PageSpeed sampled, not per-page) ──
+    // On-page parse is cheap and runs on every page; PageSpeed is slow, so it
+    // runs only on the homepage as a site-wide performance sample. Pages are
+    // fetched concurrently to stay well under the request timeout.
+    const targets = pages.slice(0, MAX_PAGES);
+    // Sample PageSpeed on a few pages (concurrently) so one slow/failed call
+    // doesn't leave performance unmeasured for the whole audit.
+    const PAGESPEED_PAGES = 3;
+    const settled = await Promise.allSettled(
+      targets.map((url, i) => gatherPageSignals(url, i < PAGESPEED_PAGES)),
+    );
+    const signals: PageSignals[] = settled
+      .filter((r): r is PromiseFulfilledResult<PageSignals> => r.status === "fulfilled")
+      .map((r) => r.value);
 
     // ── Deterministic findings + stable identity + diff scaffolding ──
+    const performanceMeasured = signals.some((s) => s.performance !== null);
     const raw = signals.flatMap(runChecks);
+    // Site-level "performance not measured" (once), only if no page got data.
+    if (!performanceMeasured && signals.length > 0) {
+      raw.push(mk(CHECKS.perf_not_measured, signals[0].url,
+        "Page speed wasn't measured this run.",
+        "PageSpeed data unavailable (no API key, API disabled, or request error).",
+        { performance: null }));
+    }
     const findings: Finding[] = [];
     for (const f of raw) {
       findings.push({ ...f, id: await findingId(f.check_id, f.pages[0]), status: "open" });
@@ -168,10 +185,12 @@ serve(async (req) => {
     }
 
     // ── Score against the rubric (per-page average; renormalized) ──
-    const performanceMeasured = signals.some((s) => s.performance !== null);
     const { overall_score, subscores } = computeScores(
       findings.map((f) => ({ category: f.category, severity: f.severity, check_id: f.check_id, page: f.pages[0] })),
-      { pages: signals.filter((s) => s.reachable).map((s) => s.url), performanceMeasured },
+      {
+        pages: signals.filter((s) => s.reachable).map((s) => s.url),
+        performancePages: signals.filter((s) => s.performance !== null).map((s) => s.url),
+      },
     );
 
     // ── Diff vs previous audit → regressions + resolved count ──
