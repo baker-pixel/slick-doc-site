@@ -156,6 +156,9 @@ verify_jwt = true
 [functions.handle-approval]
 verify_jwt = false
 
+[functions.seo-audit]
+verify_jwt = false
+
 [functions.generate-personalized-content]
 verify_jwt = false
 
