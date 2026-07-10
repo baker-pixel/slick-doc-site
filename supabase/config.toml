@@ -162,6 +162,9 @@ verify_jwt = false
 [functions.seo-reaudit-scan]
 verify_jwt = false
 
+[functions.generate-social-strategy]
+verify_jwt = false
+
 [functions.generate-personalized-content]
 verify_jwt = false
 

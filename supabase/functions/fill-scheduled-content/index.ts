@@ -4,6 +4,7 @@ import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
 import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
 import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
+import { getSocialPillars } from "../_shared/socialStrategy.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -177,6 +178,11 @@ serve(async (req) => {
 
     const results: { id: string; success: boolean; error?: string }[] = [];
 
+    // Cache each client's social pillars + a rotating cursor, so posts spread
+    // across the strategy's themes instead of clustering on one.
+    const pillarsByClient: Record<string, string[]> = {};
+    const pillarCursor: Record<string, number> = {};
+
     for (const slot of slots) {
       try {
         const client = clientMap[slot.client_account_id];
@@ -185,7 +191,20 @@ serve(async (req) => {
         const recentTopics = recentByClient[slot.client_account_id] || [];
         const recentFeedback = feedbackByClient[slot.client_account_id] || [];
         const recentApproved = approvedByClient[slot.client_account_id] || [];
-        const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY);
+
+        // On-strategy: pick the next pillar in rotation for this client.
+        if (!(slot.client_account_id in pillarsByClient)) {
+          pillarsByClient[slot.client_account_id] = await getSocialPillars(supabase, slot.client_account_id);
+          pillarCursor[slot.client_account_id] = 0;
+        }
+        const pillars = pillarsByClient[slot.client_account_id];
+        let pillar: string | undefined;
+        if (pillars.length > 0) {
+          pillar = pillars[pillarCursor[slot.client_account_id] % pillars.length];
+          pillarCursor[slot.client_account_id]++;
+        }
+
+        const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
 
         // Self-QA: cheap second-model critique, best-effort. A QA failure
         // (null) never blocks the draft -- it just means no auto-forward.
@@ -388,13 +407,14 @@ async function generateContent(
   recentTopics: string[],
   recentFeedback: ContentFeedbackItem[],
   recentApproved: ApprovedContentItem[],
-  _apiKey: string
+  _apiKey: string,
+  pillar?: string
 ): Promise<string> {
   const now = new Date();
   const month = MONTHS[now.getMonth()];
   const season = SEASONS[now.getMonth()];
 
-  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, recentFeedback, recentApproved, month, season);
+  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, recentFeedback, recentApproved, month, season, pillar);
 
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
@@ -499,12 +519,14 @@ function buildPrompt(
   recentFeedback: ContentFeedbackItem[],
   recentApproved: ApprovedContentItem[],
   month: string,
-  season: string
+  season: string,
+  pillar?: string
 ): { system: string; user: string } {
   const biz = client.business_name;
   const industry = client.industry || "local business";
   const clientContext = buildClientContext(client);
   const brandVoice = getBrandVoice(client);
+  const pillarLine = pillar ? `\nCONTENT PILLAR (anchor this post to this theme from the client's social plan): ${pillar}` : "";
   const avoidRepeat = avoidRepetitionInstruction(recentTopics);
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
   const approvedBlock = approvedContentToPromptBlock(recentApproved);
@@ -520,7 +542,7 @@ ${clientContext}
 
 BRAND VOICE: ${brandVoice}
 PLATFORM: ${platform}
-CURRENT MONTH: ${month} (${season} season)
+CURRENT MONTH: ${month} (${season} season)${pillarLine}
 
 RULES:
 - Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
