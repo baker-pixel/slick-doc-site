@@ -4,6 +4,7 @@ import { checkAdminAuth } from "../_shared/auth.ts";
 import { callAIJson } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
+import { upsertSeoProject } from "../_shared/seoProject.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -235,8 +236,17 @@ serve(async (req) => {
     }).select("id").single();
     if (insErr) throw insErr;
 
-    console.log(`seo-audit ${client.business_name}: score=${overall_score} pages=${signals.length} findings=${findings.length} regressed=${results.diff.regressed} resolved=${resolvedCount}`);
-    return json({ status: "complete", audit_id: row.id, overall_score, pages: signals.length, findings: findings.length, regressed: results.diff.regressed, resolved: resolvedCount });
+    // Turn the audit into the client's SEO Project plan (best-effort: a
+    // project failure must not fail the audit that already saved).
+    let projectId: string | null = null;
+    try {
+      projectId = await upsertSeoProject(supabase, clientId, { id: row.id, score: overall_score, results });
+    } catch (e) {
+      console.error("upsertSeoProject failed:", e instanceof Error ? e.message : e);
+    }
+
+    console.log(`seo-audit ${client.business_name}: score=${overall_score} pages=${signals.length} findings=${findings.length} regressed=${results.diff.regressed} resolved=${resolvedCount} project=${projectId}`);
+    return json({ status: "complete", audit_id: row.id, project_id: projectId, overall_score, pages: signals.length, findings: findings.length, regressed: results.diff.regressed, resolved: resolvedCount });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("seo-audit error:", msg);
