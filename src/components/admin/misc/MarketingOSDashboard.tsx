@@ -71,14 +71,23 @@ export function MarketingOSDashboard() {
     queryKey: ["seo-analysis-os", selectedClientId],
     queryFn: async () => {
       if (!selectedClientId) return null;
+      // Canonical source: seo_audits (the seo-audit engine). Mapped into the
+      // existing display shape; sub-scores come from results.subscores.
       const { data, error } = await supabase
-        .from("seo_page_analysis")
-        .select("*")
+        .from("seo_audits")
+        .select("score, results, created_at")
         .eq("client_account_id", selectedClientId)
-        .order("analyzed_at", { ascending: false })
+        .eq("status", "complete")
+        .order("created_at", { ascending: false })
         .limit(5);
       if (error) throw error;
-      return data as SeoAnalysis[];
+      return (data ?? []).map((a: { score: number | null; results: { subscores?: Record<string, number | null> } | null; created_at: string }) => ({
+        overall_score: a.score,
+        technical_score: a.results?.subscores?.technical ?? null,
+        keyword_score: a.results?.subscores?.on_page ?? null,
+        url: "Full site audit",
+        analyzed_at: a.created_at,
+      })) as SeoAnalysis[];
     },
     enabled: !!selectedClientId,
   });
