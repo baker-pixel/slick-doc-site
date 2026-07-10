@@ -29,6 +29,7 @@ interface Finding {
   impact: number;
   effort: number;
   wp_applyable: boolean;
+  fix?: { type: string; payload?: { value?: string; post_url?: string }; expected_baseline?: unknown } | null;
 }
 interface AuditResults {
   status?: "complete" | "inconclusive";
@@ -79,6 +80,7 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
   const [clientId, setClientId] = useState(selectedClientId ?? "");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
 
   const loadClients = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("admin", {
@@ -151,6 +153,24 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
       toast({ title: "Audit failed", description: msg, variant: "destructive" });
     } finally {
       setRunning(false);
+    }
+  };
+
+  const applyFix = async (f: Finding) => {
+    if (!f.fix?.payload?.value) return;
+    setApplyingId(f.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("apply-fix-to-wordpress", {
+        body: { client_id: clientId, seo_fix: f.fix, password: adminPassword },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Applied to WordPress", description: `${f.title} — re-audit will confirm it resolved.` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Couldn't apply", description: msg, variant: "destructive" });
+    } finally {
+      setApplyingId(null);
     }
   };
 
@@ -267,7 +287,23 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
                         <span>· affects {f.pages.length} page{f.pages.length === 1 ? "" : "s"}</span>
                         <span>· impact {f.impact}/5 · effort {f.effort}/5</span>
                       </div>
+                      {f.fix?.payload?.value && (
+                        <div className="text-xs mt-1.5 rounded bg-muted/50 px-2 py-1 text-muted-foreground">
+                          Suggested: <span className="text-foreground">{f.fix.payload.value}</span>
+                        </div>
+                      )}
                     </div>
+                    {f.wp_applyable && f.fix?.payload?.value && (
+                      <Button
+                        size="sm" variant="outline"
+                        className="flex-shrink-0 gap-1 text-orange-700 border-orange-200 hover:bg-orange-50"
+                        disabled={applyingId === f.id}
+                        onClick={() => applyFix(f)}
+                      >
+                        {applyingId === f.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+                        Apply
+                      </Button>
+                    )}
                   </div>
                 ))}
                 {orderedFindings.length === 0 && (

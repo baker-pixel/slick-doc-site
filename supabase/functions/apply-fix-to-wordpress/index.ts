@@ -1,6 +1,27 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/activityLog.ts";
+
+// Baseline re-check (architecture v2 safety): the fix value was computed at
+// audit time; before writing, confirm the live value still matches what the
+// audit saw, so we never overwrite content the client changed since. Returns
+// null when the live value can't be read (then we proceed best-effort).
+async function currentFieldValue(fixType: string, payload: Record<string, unknown>): Promise<string | null> {
+  const postUrl = String(payload.post_url ?? "");
+  if (!postUrl) return null;
+  try {
+    const res = await fetch(postUrl, { headers: { "User-Agent": "OrangeDoorSEOBot/1.0" }, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const html = await res.text();
+    if (fixType === "wp_meta_title") return (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim();
+    if (fixType === "wp_meta_description") return (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim();
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -204,7 +225,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const body = (await req.json()) as ApplyRequest & { password?: string };
+    const body = (await req.json()) as ApplyRequest & {
+      password?: string;
+      client_id?: string;
+      seo_fix?: { type?: string; payload?: Record<string, unknown>; expected_baseline?: unknown };
+    };
 
     // This writes to a client's live WordPress site with server-held
     // credentials -- gate it. Accepts a server-to-server service-role call,
@@ -218,9 +243,69 @@ serve(async (req) => {
       });
     }
 
+    const jsonRes = (b: unknown, status = 200) =>
+      new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    // ── Direct SEO-fix mode ──
+    // Applies a fix straight from an SEO audit finding (not an ai_fixes row):
+    // { client_id, seo_fix: { type, payload, expected_baseline } }. Human-gated
+    // (this handler already required admin/service auth above), tier-gated, and
+    // baseline-checked before it touches the live site.
+    if (body.seo_fix) {
+      const { client_id, seo_fix } = body as { client_id?: string; seo_fix?: { type?: string; payload?: Record<string, unknown>; expected_baseline?: unknown } };
+      if (!client_id || !seo_fix?.type || !String(seo_fix.type).startsWith("wp_")) {
+        return jsonRes({ error: "client_id and a wp_* seo_fix are required" }, 400);
+      }
+
+      // Tier gate: advisory-only plans don't get auto-applied fixes.
+      const { data: client } = await supabase.from("client_accounts").select("tier").eq("id", client_id).maybeSingle();
+      if (tierPolicy(client?.tier).seo.applyMode === "off") {
+        return jsonRes({ error: "This client's plan is advisory-only — SEO fixes aren't applied automatically." }, 403);
+      }
+
+      const { data: creds } = await supabase
+        .from("client_credentials")
+        .select("wordpress_url, wordpress_username, wordpress_app_password, wordpress_plugin_api_key")
+        .eq("client_id", client_id).maybeSingle();
+      if (!creds?.wordpress_url) {
+        return jsonRes({ error: "No WordPress connection configured for this client." }, 422);
+      }
+
+      const wpBase = creds.wordpress_url.replace(/\/+$/, "");
+      const fixType = String(seo_fix.type);
+      const payload = (seo_fix.payload ?? {}) as Record<string, unknown>;
+
+      // Baseline re-check — abort if the page changed since the audit.
+      if (typeof seo_fix.expected_baseline === "string" && seo_fix.expected_baseline) {
+        const cur = await currentFieldValue(fixType, payload);
+        if (cur !== null && cur !== seo_fix.expected_baseline) {
+          return jsonRes({ error: "This page changed since the audit was run. Re-run the audit before applying so the fix targets the current content." }, 409);
+        }
+      }
+
+      let snapshots: { before: Record<string, unknown>; after: Record<string, unknown> };
+      if (creds.wordpress_plugin_api_key) {
+        snapshots = await applyViaPlugin(wpBase, creds.wordpress_plugin_api_key, fixType, payload);
+      } else if (creds.wordpress_username && creds.wordpress_app_password) {
+        snapshots = await applyViaBasicAuth(wpBase, creds.wordpress_username, creds.wordpress_app_password, fixType, payload);
+      } else {
+        return jsonRes({ error: "No WordPress credentials. Install the OrangeDoor plugin or add Basic Auth." }, 422);
+      }
+
+      await logActivity(supabase, client_id, {
+        type: "seo_fix_applied",
+        title: `Applied SEO fix: ${fixType.replace("wp_", "").replace(/_/g, " ")}`,
+        description: String(payload.post_url ?? wpBase),
+        icon: "wrench",
+        metadata: { fixType, page: payload.post_url ?? null },
+      });
+
+      return jsonRes({ success: true, before: snapshots.before, after: snapshots.after });
+    }
+
     fixId = body.fix_id;
     if (!fixId) {
-      return new Response(JSON.stringify({ error: "fix_id required" }), {
+      return new Response(JSON.stringify({ error: "fix_id or seo_fix required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
