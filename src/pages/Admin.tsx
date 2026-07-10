@@ -34,6 +34,7 @@ import { SOPManagementPanel } from "@/components/admin/workflow/SOPManagementPan
 import { AutomationJobsPanel } from "@/components/admin/workflow/AutomationJobsPanel";
 import { AutomationControlCenter } from "@/components/admin/workflow/AutomationControlCenter";
 import { ReportsReviewPanel } from "@/components/admin/content/ReportsReviewPanel";
+import SeoAnalysisPanel from "@/components/admin/content/SeoAnalysisPanel";
 import { EmailSequencesPanel } from "@/components/admin/email/EmailSequencesPanel";
 import { EmailTemplatesPanel } from "@/components/admin/email/EmailTemplatesPanel";
 import { CampaignSenderPanel } from "@/components/admin/email/CampaignSenderPanel";
@@ -1544,6 +1545,8 @@ const AdminInner = () => {
         return <TaskTemplatesPanel />;
       case "client-tasks":
         return <ClientTasksPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
+      case "seo-dashboard":
+        return <SeoAnalysisPanel selectedClientId={selectedClient?.id} selectedClientName={selectedClient?.business_name} />;
       case "onboarding":
         return <OnboardingAutomationPanel adminPassword={storedPassword} />;
       case "integrations":
@@ -1630,6 +1633,7 @@ const AdminInner = () => {
       "case-studies": "Case Study Builder",
       "website-personalization": "Website Personalization",
       "marketing-os": "Marketing OS",
+      "seo-dashboard": "SEO",
       "quality-assurance": "AI Quality Assurance",
       "prospect-engine": "Prospect Engine",
       "lead-scoring": "AI Lead Scoring",
@@ -1658,7 +1662,7 @@ const AdminInner = () => {
     "prospect-engine",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
     "automation-center", "sop-command-center", "client-health",
-    "onboarding", "social-posts", "marketing-os",
+    "onboarding", "social-posts", "marketing-os", "seo-dashboard",
     "review-engine", "case-studies", "before-after",
     "quality-assurance", "website-personalization",
     // Agent office sections — show all clients' work, no client selection required

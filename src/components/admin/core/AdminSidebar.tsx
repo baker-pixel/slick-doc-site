@@ -16,6 +16,7 @@ import {
   Palette,
   LogOut,
   HelpCircle,
+  Search,
   Send,
   Bot,
 } from "lucide-react";
@@ -51,6 +52,7 @@ export type AdminSection =
   | "emails"
   | "social-posts"
   | "sales-proposals"
+  | "seo-dashboard"
   | "automation"
   | "sops"
   | "onboarding"
@@ -112,6 +114,7 @@ interface NavItem {
 // AGENTS group
 const agentItems: NavItem[] = [
   { id: "ai-agent", label: "AI Agent", icon: Bot },
+  { id: "seo-dashboard", label: "SEO", icon: Search },
   { id: "content-review", label: "Content", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "emails", label: "Email", icon: Mail },
