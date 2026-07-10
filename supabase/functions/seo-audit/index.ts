@@ -7,6 +7,7 @@ import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory,
 import { upsertSeoProject } from "../_shared/seoProject.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
+import { recordOutcome } from "../_shared/outcomes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -261,6 +262,9 @@ serve(async (req) => {
       icon: "search",
       metadata: { audit_id: row.id, score: overall_score, findings: findings.length, resolved: resolvedCount, regressed: results.diff.regressed, project_id: projectId },
     });
+
+    // Outcome signal: the SEO score over time (feeds trend + reporting).
+    await recordOutcome(supabase, clientId, { source: "seo", metric: "seo_score", value: overall_score, metadata: { audit_id: row.id } });
 
     console.log(`seo-audit ${client.business_name}: score=${overall_score} pages=${signals.length} findings=${findings.length} regressed=${results.diff.regressed} resolved=${resolvedCount} project=${projectId}`);
     return json({ status: "complete", audit_id: row.id, project_id: projectId, overall_score, pages: signals.length, findings: findings.length, regressed: results.diff.regressed, resolved: resolvedCount });

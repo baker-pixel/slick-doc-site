@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/icp.ts";
+import { getConversionWins } from "../_shared/outcomes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -225,6 +226,7 @@ serve(async (req: Request) => {
 
       if (unscored && unscored.length > 0) {
         const icpCache = new Map<string, ClientICP | null>();
+        const winsCache = new Map<string, Awaited<ReturnType<typeof getConversionWins>>>();
         for (const p of unscored) {
           try {
             if (!icpCache.has(p.client_id)) {
@@ -234,11 +236,13 @@ serve(async (req: Request) => {
                 .eq("id", p.client_id)
                 .single();
               icpCache.set(p.client_id, client ? await ensureClientICP(supabase, client) : null);
+              // Feedback loop: this client's real conversions calibrate scoring.
+              winsCache.set(p.client_id, await getConversionWins(supabase, p.client_id));
             }
             const icp = icpCache.get(p.client_id);
             if (!icp) continue;
 
-            const fit = await scoreProspectFit(p, icp, p.client_id);
+            const fit = await scoreProspectFit(p, icp, p.client_id, winsCache.get(p.client_id) ?? []);
             if (fit) {
               await supabase
                 .from("prospects")

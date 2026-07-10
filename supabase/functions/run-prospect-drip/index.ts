@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson } from "../_shared/ai.ts";
+import { recordOutcome } from "../_shared/outcomes.ts";
 
 const RESEND_API_URL = "https://api.resend.com";
 
@@ -372,7 +373,15 @@ serve(async (req) => {
       const emailLower = prospect.email.toLowerCase();
 
       if (clientEmailSet.has(emailLower)) {
-        await supabase.from("prospects").update({ status: "converted" }).eq("id", prospect.id);
+        await supabase.from("prospects").update({ status: "converted", converted_at: new Date().toISOString() }).eq("id", prospect.id);
+        // Outcome signal + feedback input: a real conversion. getConversionWins
+        // reads these back to calibrate future fit scoring for this client.
+        if (prospect.client_id) {
+          await recordOutcome(supabase, prospect.client_id, {
+            source: "prospect", metric: "prospect_converted", value: 1,
+            metadata: { prospect_id: prospect.id, business_type: prospect.business_type },
+          });
+        }
         console.log(`Prospect ${prospect.email} is now a client — marked converted`);
         continue;
       }

@@ -148,10 +148,18 @@ Context: ${JSON.stringify(inputData || {})}`;
         ? (projects ?? []).map((p: any) => `"${p.name}" — ${p.progress_percentage}% complete`).join("; ")
         : "No active plans.";
 
+      // Real business outcomes recorded this period (Phase F).
+      const { data: outcomes } = await supabase.from("outcome_metrics")
+        .select("metric, value")
+        .eq("client_account_id", client.id)
+        .gte("captured_at", periodStart).lte("captured_at", periodEnd);
+      const conversions = (outcomes ?? []).filter((o: any) => o.metric === "prospect_converted").reduce((s: number, o: any) => s + Number(o.value), 0);
+
       const realData = [
         `Content pieces approved/published this period: ${contentCount ?? 0}`,
         `Automation tasks completed this period: ${tasksCount ?? 0}`,
         scoreTrend,
+        `New customers converted from prospecting this period: ${conversions}`,
         `Active plans (Projects): ${planLine}`,
         `Plan items completed this period: ${completedMilestones.length}${completedMilestones.length ? " — " + completedMilestones.map((m) => m.name).join(", ") : ""}`,
         `Logged activity this period: ${activityLine}`,

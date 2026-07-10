@@ -87,6 +87,8 @@ export interface FitResult {
  * Scores a single prospect 0-100 against the client's ICP with a one-line
  * reason. Uses the fast model -- this runs for every discovered prospect.
  */
+export interface ConversionWin { name: string; business_type: string | null; summary: string | null }
+
 export async function scoreProspectFit(
   prospect: {
     id: string;
@@ -98,8 +100,17 @@ export async function scoreProspectFit(
   },
   icp: ClientICP,
   clientId?: string,
+  wins: ConversionWin[] = [],
 ): Promise<FitResult | null> {
   const ctx = prospect.context_profile || {};
+
+  // Feedback loop: real conversions calibrate the scorer. Prospects that
+  // resemble businesses that actually became customers score higher than the
+  // static ICP alone would suggest.
+  const winsBlock = wins.length
+    ? `\nPROSPECTS THAT ACTUALLY CONVERTED for this client (weight fit toward resembling these):\n${wins.map((w) => `- ${w.business_type || "business"}${w.summary ? `: ${w.summary}` : ""}`).join("\n")}`
+    : "";
+
   const prompt = `Score how well this prospect matches the ideal customer profile, 0-100.
 
 IDEAL CUSTOMER PROFILE:
@@ -107,7 +118,7 @@ IDEAL CUSTOMER PROFILE:
 - Industries: ${icp.industries.join(", ")}
 - Company size: ${icp.company_size || "any"}
 - Geography: ${icp.geography}
-- Disqualifiers: ${(icp.disqualifiers || []).join("; ") || "none"}
+- Disqualifiers: ${(icp.disqualifiers || []).join("; ") || "none"}${winsBlock}
 
 PROSPECT:
 - Name: ${prospect.name}
@@ -117,7 +128,7 @@ PROSPECT:
 - Summary: ${typeof ctx.business_summary === "string" ? ctx.business_summary : "n/a"}
 - Audience: ${typeof ctx.target_audience === "string" ? ctx.target_audience : "unknown"}
 
-0-30 = wrong industry/geography or hits a disqualifier. 31-60 = partial match. 61-100 = solid to ideal fit.
+0-30 = wrong industry/geography or hits a disqualifier. 31-60 = partial match. 61-100 = solid to ideal fit${wins.length ? "; nudge up prospects that resemble the converted examples" : ""}.
 Return ONLY valid JSON: { "score": <int 0-100>, "reason": "<one short sentence>" }`;
 
   try {
