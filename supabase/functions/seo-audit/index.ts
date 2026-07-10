@@ -6,6 +6,7 @@ import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/s
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
 import { upsertSeoProject } from "../_shared/seoProject.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -249,6 +250,17 @@ serve(async (req) => {
     } catch (e) {
       console.error("upsertSeoProject failed:", e instanceof Error ? e.message : e);
     }
+
+    // Log the audit as work done, so reporting can narrate it truthfully.
+    await logActivity(supabase, clientId, {
+      type: "seo_audit",
+      title: `SEO audit completed — score ${overall_score}/100`,
+      description: `${signals.length} pages analyzed, ${findings.length} findings.` +
+        (resolvedCount > 0 ? ` ${resolvedCount} resolved since last audit.` : "") +
+        (results.diff.regressed > 0 ? ` ${results.diff.regressed} regressed.` : ""),
+      icon: "search",
+      metadata: { audit_id: row.id, score: overall_score, findings: findings.length, resolved: resolvedCount, regressed: results.diff.regressed, project_id: projectId },
+    });
 
     console.log(`seo-audit ${client.business_name}: score=${overall_score} pages=${signals.length} findings=${findings.length} regressed=${results.diff.regressed} resolved=${resolvedCount} project=${projectId}`);
     return json({ status: "complete", audit_id: row.id, project_id: projectId, overall_score, pages: signals.length, findings: findings.length, regressed: results.diff.regressed, resolved: resolvedCount });

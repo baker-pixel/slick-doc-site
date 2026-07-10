@@ -94,7 +94,14 @@ Context: ${JSON.stringify(inputData || {})}`;
       // traffic/ads/CRM analytics pipeline in this codebase to pull real
       // percentages from, so the honest fix is: report only what's
       // verifiably true, and never let the model invent a number.
-      const [{ count: contentCount }, { data: latestAudit }, { count: tasksCount }] = await Promise.all([
+      const [
+        { count: contentCount },
+        { data: latestAudit },
+        { count: tasksCount },
+        { data: startAudit },
+        { data: projects },
+        { data: periodActivity },
+      ] = await Promise.all([
         supabase.from("generated_content").select("id", { count: "exact", head: true })
           .eq("client_id", client.id).in("status", ["approved", "client_approved", "published"])
           .gte("updated_at", periodStart).lte("updated_at", periodEnd),
@@ -104,15 +111,53 @@ Context: ${JSON.stringify(inputData || {})}`;
         supabase.from("client_tasks").select("id", { count: "exact", head: true })
           .eq("client_account_id", client.id).eq("status", "completed")
           .gte("completed_at", periodStart).lte("completed_at", periodEnd),
+        // Earliest audit score in the period, to show a real trend (start → latest).
+        supabase.from("seo_audits").select("score, created_at")
+          .eq("client_account_id", client.id).not("score", "is", null)
+          .gte("created_at", periodStart).order("created_at", { ascending: true }).limit(1).maybeSingle(),
+        // The client's active plans and how far along they are.
+        supabase.from("client_projects").select("name, status, progress_percentage")
+          .eq("client_account_id", client.id).neq("status", "completed"),
+        // Everything the engines logged as done this period.
+        supabase.from("activity_feed").select("activity_type, title")
+          .eq("client_account_id", client.id).gte("created_at", periodStart).lte("created_at", periodEnd),
       ]);
+
+      // Milestones completed this period (the concrete "work done against the plan").
+      const { data: projectRows } = await supabase.from("client_projects").select("id, name").eq("client_account_id", client.id);
+      const projectIds = (projectRows ?? []).map((p: any) => p.id);
+      let completedMilestones: { name: string }[] = [];
+      if (projectIds.length > 0) {
+        const { data: ms } = await supabase.from("project_milestones").select("name, completed_at")
+          .in("project_id", projectIds).eq("status", "completed")
+          .gte("completed_at", periodStart).lte("completed_at", periodEnd);
+        completedMilestones = ms ?? [];
+      }
+
+      const scoreTrend = startAudit && latestAudit && startAudit.score !== latestAudit.score
+        ? `SEO score moved from ${startAudit.score} to ${latestAudit.score}/100 over the period.`
+        : latestAudit ? `SEO score: ${latestAudit.score}/100.` : "No SEO audit on file.";
+
+      const activityCounts: Record<string, number> = {};
+      for (const a of periodActivity ?? []) activityCounts[a.activity_type] = (activityCounts[a.activity_type] ?? 0) + 1;
+      const activityLine = Object.keys(activityCounts).length
+        ? Object.entries(activityCounts).map(([t, n]) => `${n}× ${t.replace(/_/g, " ")}`).join(", ")
+        : "No logged activity.";
+
+      const planLine = (projects ?? []).length
+        ? (projects ?? []).map((p: any) => `"${p.name}" — ${p.progress_percentage}% complete`).join("; ")
+        : "No active plans.";
 
       const realData = [
         `Content pieces approved/published this period: ${contentCount ?? 0}`,
         `Automation tasks completed this period: ${tasksCount ?? 0}`,
-        latestAudit ? `Most recent SEO audit score: ${latestAudit.score}/100 (as of ${latestAudit.created_at})` : "No SEO audit on file.",
+        scoreTrend,
+        `Active plans (Projects): ${planLine}`,
+        `Plan items completed this period: ${completedMilestones.length}${completedMilestones.length ? " — " + completedMilestones.map((m) => m.name).join(", ") : ""}`,
+        `Logged activity this period: ${activityLine}`,
       ].join("\n");
 
-      systemPrompt = `You are a marketing analytics expert. Generate an honest, grounded performance report using ONLY the real data provided -- never invent a specific number, percentage, or metric that isn't derivable from it. If you don't have enough real data for a metric, omit it from "metrics" rather than making one up; write the narrative around what actually happened (work completed, content shipped) instead of guessed traffic/conversion figures.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
+      systemPrompt = `You are a marketing analytics expert writing a client's performance report. Use ONLY the real data provided -- never invent a number, percentage, or metric not derivable from it. Frame the narrative as progress against the client's active plans (Projects): what was completed this period, how the plans advanced, and what's next. If a metric isn't in the data, omit it rather than guessing.\n\nOutput JSON: { "executive_summary": "string", "metrics": {}, "insights": ["string"], "recommendations": [{ "priority": "high|medium|low", "action": "string", "expected_impact": "string" }] }`;
       userPrompt = `Generate a performance report for ${client.business_name}. Period: ${periodStart} to ${periodEnd}.\n\nREAL DATA FOR THIS PERIOD:\n${realData}`;
       break;
     }
