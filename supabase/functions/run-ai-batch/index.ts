@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI as sharedCallAI } from "../_shared/ai.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { generateMonthlyReport } from "../run-automation/handlers/ai-automation.ts";
 import type { ClientData as AutomationClientData } from "../run-automation/types.ts";
 
@@ -321,11 +322,7 @@ serve(async (req) => {
 
         // 2. Generate content (weekly/monthly)
         if (config.generateContent) {
-          const contentTypes = client.tier === 'foundation' 
-            ? ['google_post']
-            : client.tier === 'growth'
-            ? ['google_post', 'social_post', 'email_newsletter']
-            : ['google_post', 'social_post', 'email_newsletter', 'blog_post'];
+          const contentTypes = tierPolicy(client.tier).social.contentTypes;
 
           for (const contentType of contentTypes) {
             try {

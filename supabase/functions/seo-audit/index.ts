@@ -5,15 +5,16 @@ import { callAIJson } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
 import { upsertSeoProject } from "../_shared/seoProject.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Bounded loop (architecture v2 §03): the agent never audits more than this,
-// so a run always converges in cost and time.
-const MAX_PAGES = 12;
+// Absolute safety ceiling so a run always converges in cost/time. The
+// per-client crawl depth comes from tier policy and is capped by this.
+const MAX_PAGES = 15;
 const MAX_REWRITE_CALLS = 8;
 
 interface Finding {
@@ -114,12 +115,16 @@ serve(async (req) => {
     if (!clientId) return json({ error: "clientId is required" }, 400);
 
     const { data: client, error: cErr } = await supabase
-      .from("client_accounts").select("id, business_name, website_url, context_profile").eq("id", clientId).single();
+      .from("client_accounts").select("id, business_name, website_url, context_profile, tier").eq("id", clientId).single();
     if (cErr || !client) return json({ error: "Client not found" }, 404);
     if (!client.website_url) return json({ error: "Client has no website_url configured" }, 422);
 
+    // Crawl depth is governed by the client's plan tier.
+    const policy = tierPolicy(client.tier);
+    const crawlCap = Math.min(policy.seo.crawlPages, MAX_PAGES);
+
     // ── Discover (robots-aware, bounded) ──
-    const { pages } = await discoverPages(client.website_url, MAX_PAGES);
+    const { pages } = await discoverPages(client.website_url, crawlCap);
     if (pages.length === 0) {
       // Inconclusive, NOT a low score.
       const { data: row } = await supabase.from("seo_audits").insert({
@@ -134,7 +139,7 @@ serve(async (req) => {
     // On-page parse is cheap and runs on every page; PageSpeed is slow, so it
     // runs only on the homepage as a site-wide performance sample. Pages are
     // fetched concurrently to stay well under the request timeout.
-    const targets = pages.slice(0, MAX_PAGES);
+    const targets = pages.slice(0, crawlCap);
     // Sample PageSpeed on a few pages (concurrently) so one slow/failed call
     // doesn't leave performance unmeasured for the whole audit.
     const PAGESPEED_PAGES = 3;
