@@ -56,7 +56,6 @@ import { TaskTemplatesPanel } from "@/components/admin/workflow/TaskTemplatesPan
 import { ClientTasksPanel } from "@/components/admin/clients/ClientTasksPanel";
 import { OnboardingAutomationPanel } from "@/components/admin/clients/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/misc/IntegrationConfigPanel";
-import { SeoHubPanel } from "@/components/admin/content/SeoHubPanel";
 import { WorkPanel } from "@/components/admin/content/WorkPanel";
 import { MarketingOSDashboard } from "@/components/admin/misc/MarketingOSDashboard";
 import { GoogleReviewEngine } from "@/components/admin/content/GoogleReviewEngine";
@@ -1545,9 +1544,6 @@ const AdminInner = () => {
         return <TaskTemplatesPanel />;
       case "client-tasks":
         return <ClientTasksPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
-      case "seo-dashboard":
-      case "wordpress-seo":
-        return <SeoHubPanel selectedClientId={selectedClient?.id} selectedClientName={selectedClient?.business_name} />;
       case "onboarding":
         return <OnboardingAutomationPanel adminPassword={storedPassword} />;
       case "integrations":
@@ -1606,8 +1602,6 @@ const AdminInner = () => {
       emails: "Email Centre",
       "social-posts": "Social Media Posts",
       "sales-proposals": "AI Sales Proposals",
-      "seo-dashboard": "SEO",
-      "wordpress-seo": "WordPress Plugin",
       automation: "Automation",
       sops: "SOPs",
       onboarding: "Client Onboarding",
@@ -1664,7 +1658,7 @@ const AdminInner = () => {
     "prospect-engine",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
     "automation-center", "sop-command-center", "client-health",
-    "onboarding", "social-posts", "seo-dashboard", "marketing-os",
+    "onboarding", "social-posts", "marketing-os",
     "review-engine", "case-studies", "before-after",
     "quality-assurance", "website-personalization",
     // Agent office sections — show all clients' work, no client selection required

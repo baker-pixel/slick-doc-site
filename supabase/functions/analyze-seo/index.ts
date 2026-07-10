@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson } from "../_shared/ai.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface AnalysisRequest {
   clientId: string;
@@ -476,7 +477,25 @@ serve(async (req) => {
   );
 
   try {
-    const { clientId, url, targetKeywords = [] }: AnalysisRequest = await req.json();
+    const body = await req.json() as AnalysisRequest & { password?: string };
+
+    // Crawls an arbitrary URL and spends on Groq -- don't leave it open.
+    // The only caller is run-automation's SEO-audit handler, server-to-
+    // server with the service-role key; also allow an admin session/
+    // password. verify_jwt stays false so the service-role call works.
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isServer) {
+      const auth = await checkAdminAuth(req, supabase, body.password);
+      if (!auth.authorized) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    const { clientId, url, targetKeywords = [] } = body;
     console.log(`Analyzing SEO for ${url}`);
 
     // Fetch rendered HTML and PageSpeed data in parallel

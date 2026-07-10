@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -203,7 +204,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const body = (await req.json()) as ApplyRequest;
+    const body = (await req.json()) as ApplyRequest & { password?: string };
+
+    // This writes to a client's live WordPress site with server-held
+    // credentials -- gate it. Accepts a server-to-server service-role call,
+    // an admin session (JWT the browser auto-attaches), or the shared
+    // password. verify_jwt stays false so service-role callers still work.
+    const auth = await checkAdminAuth(req, supabase, body.password);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     fixId = body.fix_id;
     if (!fixId) {
       return new Response(JSON.stringify({ error: "fix_id required" }), {
