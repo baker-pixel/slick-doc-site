@@ -159,6 +159,9 @@ verify_jwt = false
 [functions.seo-reaudit-scan]
 verify_jwt = false
 
+[functions.client-context-refresh]
+verify_jwt = false
+
 [functions.generate-social-strategy]
 verify_jwt = false
 

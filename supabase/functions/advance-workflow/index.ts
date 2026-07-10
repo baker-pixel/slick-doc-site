@@ -142,6 +142,10 @@ serve(async (req) => {
           .update({ status: "active" })
           .eq("client_account_id", resolvedClientId)
           .eq("status", "draft");
+
+        // Engines are pull-based, not triggered here: the cadence scans
+        // (seo-reaudit-scan, client-context-refresh) pick up a newly-onboarded
+        // client on their own. Nothing triggers anything from this point.
       }
     }
 

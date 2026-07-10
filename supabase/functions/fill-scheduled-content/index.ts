@@ -527,6 +527,13 @@ function buildPrompt(
   const clientContext = buildClientContext(client);
   const brandVoice = getBrandVoice(client);
   const pillarLine = pillar ? `\nCONTENT PILLAR (anchor this post to this theme from the client's social plan): ${pillar}` : "";
+  // The feedback loop, consumed: whats_working is refined from real outcomes
+  // (client-context-refresh) and pulled here so content leans into what has
+  // actually been resonating for this client.
+  const working = (client.context_profile as { whats_working?: string[] } | null)?.whats_working;
+  const workingLine = Array.isArray(working) && working.length
+    ? `\nWHAT'S BEEN WORKING for this client (lean into these angles): ${working.join("; ")}`
+    : "";
   const avoidRepeat = avoidRepetitionInstruction(recentTopics);
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
   const approvedBlock = approvedContentToPromptBlock(recentApproved);
@@ -542,7 +549,7 @@ ${clientContext}
 
 BRAND VOICE: ${brandVoice}
 PLATFORM: ${platform}
-CURRENT MONTH: ${month} (${season} season)${pillarLine}
+CURRENT MONTH: ${month} (${season} season)${pillarLine}${workingLine}
 
 RULES:
 - Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
