@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
 import { ensureClientICP } from "../_shared/icp.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,16 +120,22 @@ serve(async (req) => {
 
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("id, business_name, industry, icp, context_profile")
+      .select("id, business_name, industry, icp, context_profile, tier")
       .eq("id", body.client_id)
       .single();
 
     if (clientErr || !client) return json({ error: "Client not found" }, 404);
 
+    // Tier gate: prospecting is a plan feature; batch size from tier policy.
+    const prospectPolicy = tierPolicy((client as { tier?: string }).tier).prospect;
+    if (!prospectPolicy.enabled) {
+      return json({ error: "This client's plan tier does not include prospect discovery." }, 403);
+    }
+
     const icp = await ensureClientICP(supabase, client);
     if (!icp) return json({ error: "Could not derive an ICP for this client -- fill in its context profile first" }, 422);
 
-    const maxResults = Math.min(Math.max(body.max_results ?? 15, 1), 25);
+    const maxResults = Math.min(Math.max(body.max_results ?? 15, 1), prospectPolicy.discoveryBatch);
     const geography = body.geography?.trim() || icp.geography;
 
     const prompt = `Research real, currently-operating companies that match this ideal customer profile. Use web search to find them -- do not invent companies or URLs.
@@ -195,6 +203,14 @@ Respond with ONLY a JSON array, no prose:
         units: inserted.length,
         source_fn: "discover-prospects-web",
         metadata: { kind: "web_search_discovery", focus: body.focus || null, geography, found: companies.length, inserted: inserted.length },
+      });
+
+      await logActivity(supabase, body.client_id, {
+        type: "prospect_discovery",
+        title: `Discovered ${inserted.length} prospects via web research`,
+        description: `${icp.industries.join(", ")} — ${geography}`,
+        icon: "search",
+        metadata: { source: "web_search", geography, discovered: inserted.length },
       });
 
       // Same as the Maps path: enrich context + score fit before review.

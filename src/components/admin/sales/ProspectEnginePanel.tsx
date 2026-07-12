@@ -87,6 +87,8 @@ const STATUS_COLORS: Record<string, string> = {
   exhausted:    "bg-slate-100 text-slate-600 border-slate-200",
   unsubscribed: "bg-rose-100 text-rose-700 border-rose-200",
   bounced:      "bg-red-100 text-red-700 border-red-200",
+  replied:      "bg-emerald-100 text-emerald-700 border-emerald-200",
+  paused:       "bg-yellow-100 text-yellow-800 border-yellow-200",
 };
 
 const fitBadgeClass = (score: number | null) => {
@@ -217,7 +219,11 @@ export default function ProspectEnginePanel() {
     if (error || data?.error) {
       toast({ title: "Update failed", description: data?.error || error?.message, variant: "destructive" });
     } else {
-      toast({ title: status === "pending" ? `${ids.length} approved` : `${ids.length} rejected` });
+      const label: Record<string, string> = {
+        pending: "approved", rejected: "rejected", replied: "marked replied",
+        paused: "paused", nurture: "resumed",
+      };
+      toast({ title: `${ids.length} ${label[status] ?? "updated"}` });
       setSelected(new Set());
       setEmailDrafts({});
       loadProspects();
@@ -478,9 +484,44 @@ export default function ProspectEnginePanel() {
         </td>
         <td className="p-3">
           {!showActions && (
-            <Badge variant="outline" className={`text-xs ${STATUS_COLORS[p.status] ?? ""}`}>
-              {p.status}
-            </Badge>
+            <div className="flex items-center gap-1 justify-end">
+              <Badge variant="outline" className={`text-xs ${STATUS_COLORS[p.status] ?? ""}`}>
+                {p.status}
+              </Badge>
+              {(p.status === "nurture" || p.status === "pending") && (
+                <>
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-6 px-1.5 text-xs text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                    disabled={actionIds.has(p.id)}
+                    onClick={() => updateStatus([p.id], "replied")}
+                    title="They responded — stop the sequence"
+                  >
+                    Replied
+                  </Button>
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-6 px-1.5 text-xs text-yellow-600 hover:bg-yellow-50 hover:text-yellow-700"
+                    disabled={actionIds.has(p.id)}
+                    onClick={() => updateStatus([p.id], "paused")}
+                    title="Put outreach on hold"
+                  >
+                    Pause
+                  </Button>
+                </>
+              )}
+              {p.status === "paused" && (
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-6 px-1.5 text-xs text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                  disabled={actionIds.has(p.id)}
+                  onClick={() => updateStatus([p.id], "nurture")}
+                  title="Resume outreach where it left off"
+                >
+                  Resume
+                </Button>
+              )}
+            </div>
           )}
           {showActions && (
             <span className="text-xs text-muted-foreground">

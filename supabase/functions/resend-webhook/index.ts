@@ -30,6 +30,32 @@ interface ResendWebhookPayload {
   };
 }
 
+// Svix signature check (Resend signs webhooks via Svix). Enforced only when
+// RESEND_WEBHOOK_SECRET is configured; without it, events are accepted
+// unsigned as before (matching prior behavior, but alert-worthy for prod).
+async function verifySvixSignature(req: Request, rawBody: string): Promise<boolean> {
+  const secret = Deno.env.get("RESEND_WEBHOOK_SECRET");
+  if (!secret) {
+    console.warn("RESEND_WEBHOOK_SECRET not set — accepting webhook unsigned");
+    return true;
+  }
+  const svixId = req.headers.get("svix-id");
+  const svixTimestamp = req.headers.get("svix-timestamp");
+  const svixSignature = req.headers.get("svix-signature");
+  if (!svixId || !svixTimestamp || !svixSignature) return false;
+
+  // Reject stale timestamps (replay protection, 5 min window).
+  const ts = Number(svixTimestamp);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+
+  const secretBytes = Uint8Array.from(atob(secret.replace(/^whsec_/, "")), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey("raw", secretBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signed = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${svixId}.${svixTimestamp}.${rawBody}`));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(signed)));
+  // Header holds space-separated "v1,<base64sig>" entries.
+  return svixSignature.split(" ").some((part) => part.split(",")[1] === expected);
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -39,7 +65,14 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
   try {
-    const payload: ResendWebhookPayload = await req.json();
+    const rawBody = await req.text();
+    if (!(await verifySvixSignature(req, rawBody))) {
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const payload: ResendWebhookPayload = JSON.parse(rawBody);
     console.log("Received Resend webhook:", JSON.stringify(payload, null, 2));
 
     // Find the email log by resend_id
@@ -126,6 +159,25 @@ const handler = async (req: Request): Promise<Response> => {
         .from("email_logs")
         .update({ status: eventType })
         .eq("id", emailLog.id);
+    }
+
+    // Global suppression: a hard bounce or spam complaint opts the address
+    // out everywhere. email_preferences is the suppression source of truth —
+    // both the prospect drip and the email queue check it before sending.
+    if (["bounced", "complained"].includes(eventType)) {
+      const recipient = payload.data.to?.[0]?.toLowerCase();
+      if (recipient) {
+        const { error: suppressErr } = await supabase
+          .from("email_preferences")
+          .upsert({
+            email: recipient,
+            subscribed: false,
+            unsubscribed_at: new Date().toISOString(),
+            preferences: { marketing: false, transactional: true, sequences: false },
+          }, { onConflict: "email" });
+        if (suppressErr) console.error("Failed to suppress", recipient, suppressErr);
+        else console.log(`Suppressed ${recipient} after ${eventType}`);
+      }
     }
 
     return new Response(JSON.stringify({ received: true, recorded: true }), {

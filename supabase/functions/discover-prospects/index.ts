@@ -8,6 +8,8 @@ const corsHeaders = {
 };
 
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/activityLog.ts";
 
 interface DiscoverRequest {
   client_id: string;
@@ -65,7 +67,7 @@ serve(async (req) => {
     // Verify client exists
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("id, business_name, icp")
+      .select("id, business_name, icp, tier")
       .eq("id", client_id)
       .single();
 
@@ -75,6 +77,17 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    // Tier gate: prospecting is a plan feature. Volume comes from tier
+    // policy, capped by whatever the caller asked for.
+    const policy = tierPolicy((client as { tier?: string }).tier).prospect;
+    if (!policy.enabled) {
+      return new Response(
+        JSON.stringify({ error: "This client's plan tier does not include prospect discovery." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const batchCap = Math.min(max_results, policy.discoveryBatch);
 
     // Step 1: Text Search via Places API
     const searchUrl = new URL("https://maps.googleapis.com/maps/api/place/textsearch/json");
@@ -88,7 +101,7 @@ serve(async (req) => {
       throw new Error(`Google Maps error: ${searchData.status} — ${searchData.error_message ?? ""}`);
     }
 
-    const rawResults: PlacesResult[] = searchData.results?.slice(0, max_results) ?? [];
+    const rawResults: PlacesResult[] = searchData.results?.slice(0, batchCap) ?? [];
 
     // Step 2: Fetch place details (website + phone) for each result
     const enriched: PlacesResult[] = await Promise.all(
@@ -177,6 +190,14 @@ serve(async (req) => {
       units: rawResults.length,
       source_fn: "discover-prospects",
       metadata: { query, location, found: rawResults.length, inserted: inserted?.length ?? 0 },
+    });
+
+    await logActivity(supabase, client_id, {
+      type: "prospect_discovery",
+      title: `Discovered ${inserted?.length ?? 0} prospects near ${location}`,
+      description: query,
+      icon: "search",
+      metadata: { source: "maps", query, location, discovered: inserted?.length ?? 0 },
     });
 
     // Fire context enrichment immediately so prospects have context_profile before

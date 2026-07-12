@@ -229,7 +229,10 @@ Deno.serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        if (!["pending", "rejected", "discovered"].includes(status)) {
+        // pending/rejected/discovered = review actions; replied/paused stop
+        // an active drip (replied is manual until inbound ingestion exists);
+        // nurture = resume a paused prospect (drip_step is preserved).
+        if (!["pending", "rejected", "discovered", "replied", "paused", "nurture"].includes(status)) {
           return new Response(
             JSON.stringify({ error: `Status not allowed from review actions: ${status}` }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

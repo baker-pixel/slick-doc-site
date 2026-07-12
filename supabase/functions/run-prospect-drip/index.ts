@@ -3,8 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson } from "../_shared/ai.ts";
 import { recordOutcome } from "../_shared/outcomes.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/activityLog.ts";
 
 const RESEND_API_URL = "https://api.resend.com";
+
+// Hard ceiling on cold sends per hourly run — deliverability protection.
+// 25/hr ≈ 600/day worst case; plenty for the current client base and safe
+// for a single sending domain without warm-up.
+const MAX_SENDS_PER_RUN = 25;
 
 interface Prospect {
   id: string;
@@ -58,7 +65,9 @@ const wrapHtml = (body: string, unsubEmail: string = "") => `
     ${body}
   </div>
   <div style="background:#f5f5f5;padding:16px 40px;text-align:center;font-size:12px;color:#999;">
+    <p style="margin:0 0 6px;">You're receiving this one-time outreach because your business looked like a fit. Reply to opt out, or</p>
     <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}" style="color:#999;">Unsubscribe</a>
+    <p style="margin:6px 0 0;">Orange Door Marketing &bull; Knoxville, TN</p>
   </div>
 </div>
 </body></html>`;
@@ -311,13 +320,20 @@ serve(async (req) => {
     )];
 
     const clientMap = new Map<string, ClientAccount>();
+    const prospectingDisabled = new Set<string>();
     if (clientIds.length > 0) {
       const { data: clientRows } = await supabase
         .from("client_accounts")
-        .select("id, business_name, email, website_url, business_type, context_profile, brand_voice")
+        .select("id, business_name, email, website_url, business_type, context_profile, brand_voice, tier")
         .in("id", clientIds)
         .eq("status", "active");
       for (const c of (clientRows ?? [])) {
+        // Tier gate: plans without prospecting never send outreach, even if
+        // prospects were somehow discovered/approved for them.
+        if (!tierPolicy((c as { tier?: string }).tier).prospect.enabled) {
+          prospectingDisabled.add(c.id);
+          continue;
+        }
         clientMap.set(c.id, c as ClientAccount);
       }
     }
@@ -365,6 +381,14 @@ serve(async (req) => {
 
     // 5. Send drip emails
     for (const prospect of nurtureProspects as Prospect[]) {
+      if (emailsSent >= MAX_SENDS_PER_RUN) {
+        console.log(`Send cap ${MAX_SENDS_PER_RUN} reached — remaining prospects picked up next run`);
+        break;
+      }
+      if (prospect.client_id && prospectingDisabled.has(prospect.client_id)) {
+        console.log(`Skipping prospect ${prospect.id} — client's plan tier has prospecting disabled`);
+        continue;
+      }
       if (!prospect.email || !prospect.email.includes("@")) {
         console.log(`Skipping prospect ${prospect.id} — no valid email`);
         continue;
@@ -436,6 +460,10 @@ serve(async (req) => {
 
       try {
         const fromAddress = `${client.business_name} Team <hello@orangedoormarketing.com>`;
+        // RFC 8058 one-click unsubscribe — required by Gmail/Yahoo bulk-sender
+        // rules for cold mail. The unsubscribe fn acts on query params, so a
+        // provider POST with an empty body works.
+        const oneClickUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/unsubscribe?email=${encodeURIComponent(prospect.email)}&token=${btoa(prospect.email)}&action=unsubscribe`;
         const emailRes = await fetch(`${RESEND_API_URL}/emails`, {
           method: "POST",
           headers: {
@@ -448,6 +476,10 @@ serve(async (req) => {
             to: [prospect.email],
             subject: emailContent.subject,
             html: emailContent.html,
+            headers: {
+              "List-Unsubscribe": `<${oneClickUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
           }),
         });
 
@@ -483,6 +515,15 @@ serve(async (req) => {
           } catch (logErr) {
             console.error(`Failed to log drip send for ${prospect.email}:`, logErr);
           }
+
+          // Work-done trail: reporting narrates outreach from this.
+          await logActivity(supabase, prospect.client_id!, {
+            type: "prospect_outreach",
+            title: `Outreach email sent to ${prospect.name} (step ${nextStep}/4)`,
+            description: emailContent.subject,
+            icon: "mail",
+            metadata: { prospect_id: prospect.id, drip_step: nextStep },
+          });
 
           console.log(`Drip step ${nextStep} sent to ${prospect.email} from ${fromAddress}`);
         } else {

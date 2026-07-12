@@ -397,11 +397,19 @@ const handler = async (req: Request): Promise<Response> => {
         trackedHtml = wrapLinksWithTracking(trackedHtml, trackingId, supabaseUrl);
         trackedHtml = addUnsubscribeFooter(trackedHtml, email.recipient_email, supabaseUrl);
 
+        // RFC 8058 one-click unsubscribe headers (Gmail/Yahoo bulk-sender
+        // rules). The unsubscribe fn acts on query params, so an empty-body
+        // provider POST works.
+        const oneClickUrl = `${supabaseUrl}/functions/v1/unsubscribe?email=${encodeURIComponent(email.recipient_email)}&token=${btoa(email.recipient_email)}&action=unsubscribe`;
         const emailResponse = await resend.emails.send({
           from: Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>",
           to: [email.recipient_email],
           subject: email.subject,
           html: trackedHtml,
+          headers: {
+            "List-Unsubscribe": `<${oneClickUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
         });
 
         console.log("Email sent:", emailResponse);
