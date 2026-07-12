@@ -157,10 +157,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.seo-reaudit-scan]
-verify_jwt = false
+verify_jwt = true
 
 [functions.client-context-refresh]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-social-strategy]
 verify_jwt = false

@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/activityLog.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,6 +24,7 @@ interface Fix {
 interface ConnectedSite {
   site_url: string;
   token: string;
+  client_id: string | null;
 }
 
 async function applyFix(siteUrl: string, token: string, fix: Fix): Promise<void> {
@@ -130,12 +133,26 @@ serve(async (req) => {
     // Fetch site credentials
     const { data: site, error: siteErr } = await supabase
       .from("connected_sites")
-      .select("site_url, token")
+      .select("site_url, token, client_id")
       .eq("id", (fix as Fix).site_id)
       .single();
     if (siteErr || !site) throw new Error("Connected site not found");
 
-    const { site_url, token } = site as ConnectedSite;
+    const { site_url, token, client_id } = site as ConnectedSite;
+
+    // Tier gate: advisory-only plans don't get auto-applied fixes. Same rule
+    // as the admin path in apply-fix-to-wordpress — the client's one-click
+    // apply must not bypass it.
+    if (client_id) {
+      const { data: client } = await supabase
+        .from("client_accounts").select("tier").eq("id", client_id).maybeSingle();
+      if (tierPolicy(client?.tier).seo.applyMode === "off") {
+        return new Response(
+          JSON.stringify({ error: "Your plan is advisory-only — SEO fixes aren't applied automatically. Contact your Orange Door team to upgrade." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
 
     // Mark approved
     await supabase
@@ -164,6 +181,18 @@ serve(async (req) => {
         updated_at:    new Date().toISOString(),
       })
       .eq("id", fixId);
+
+    // Log as work done so reporting sees client-approved fixes too, not just
+    // admin-applied ones.
+    if (verified && client_id) {
+      await logActivity(supabase, client_id, {
+        type: "seo_fix_applied",
+        title: `Applied SEO fix: ${String((fix as Fix).field).replace(/_/g, " ")}`,
+        description: site_url,
+        icon: "wrench",
+        metadata: { fix_id: fixId, field: (fix as Fix).field, source: "client_approved" },
+      });
+    }
 
     return new Response(
       JSON.stringify({ success: verified, fix_id: fixId, status: finalStatus }),

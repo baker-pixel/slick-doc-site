@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Search, CheckCircle2, XCircle, Loader2, AlertTriangle,
   TrendingUp, Lightbulb, RefreshCw,
-  Globe, Wand2, Target, ShieldCheck, Info, Zap,
+  Globe, Wand2, ShieldCheck, Info, Zap,
   Plug,
 } from "lucide-react";
 import { ConnectSitePanel } from "@/components/admin/content/ConnectSitePanel";
@@ -26,66 +26,38 @@ interface Props {
 }
 
 // ── Plain-English tooltip copy for every score dimension ─────────────────────
-
-const SCORE_MAX: Record<string, number> = {
-  crawlability: 25,
-  on_page: 25,
-  content_quality: 20,
-  technical_performance: 15,
-  site_architecture: 15,
-};
+// Keys match the rubric categories the audit engine writes (seoRubric.ts).
 
 const SCORE_TOOLTIPS: Record<string, { label: string; explain: string }> = {
-  crawlability: {
-    label: "Crawlability",
+  technical: {
+    label: "Technical",
     explain:
-      "Whether Google can find and read all your pages. A low score means some of your content may be invisible to search engines — like having a sign for your shop but no door.",
+      "The behind-the-scenes setup Google relies on — mobile display tags, canonical links, and structured data. Problems here can make your site harder for Google to trust and understand.",
   },
   on_page: {
     label: "On-Page",
     explain:
       "How well each page is labelled for search engines — the title that appears in Google results, the short description underneath it, and the main heading on each page.",
   },
-  content_quality: {
-    label: "Content Quality",
-    explain:
-      "Whether your pages have enough useful detail. Google ranks pages that genuinely answer questions higher than pages with thin or sparse content.",
-  },
-  technical_performance: {
+  performance: {
     label: "Performance",
     explain:
       "How fast your site loads, especially on phones. Slow sites rank lower and lose visitors — Google uses speed as a direct ranking factor.",
   },
-  site_architecture: {
-    label: "Site Structure",
+  content: {
+    label: "Content",
     explain:
-      "How well your pages connect to each other. Good internal linking helps Google understand which pages are most important and makes it easier for visitors to find what they need.",
+      "Whether your pages have enough useful detail. Google ranks pages that genuinely answer questions higher than pages with thin or sparse content.",
+  },
+  off_page: {
+    label: "Off-Page",
+    explain:
+      "Signals from outside your website, like links from other sites. These build your site's reputation with Google over time.",
   },
 };
 
-// ── Translate raw technical issues into plain English ────────────────────────
-
-const ISSUE_TRANSLATIONS: Record<string, string> = {
-  "missing title tag": "Some pages don't have a title — the headline Google shows in search results.",
-  "missing meta description": "Some pages are missing a short description that appears under your link in Google.",
-  "missing h1 tag": "Some pages don't have a main heading, which makes it harder for Google to understand what the page is about.",
-  "multiple h1 tags": "Some pages have more than one main heading, which can confuse search engines.",
-  "missing canonical tag": "Some pages are missing a tag that tells Google which version of the page is the official one, which can split your rankings.",
-  "missing viewport meta": "Some pages aren't set up correctly for mobile visitors.",
-  "no structured data": "Your pages are missing extra labels that help Google show rich results — like star ratings or business hours.",
-  "missing open graph": "Your pages aren't fully set up for sharing on social media like Facebook or LinkedIn.",
-  "thin content": "Some pages don't have enough content for Google to consider them valuable.",
-  "not served over https": "Your site isn't fully secure — Google flags non-secure sites and they rank lower.",
-  "noindex detected": "Some pages are accidentally hidden from Google entirely.",
-};
-
-function toPlainEnglish(issue: string): string {
-  const lower = issue.toLowerCase();
-  for (const [key, translation] of Object.entries(ISSUE_TRANSLATIONS)) {
-    if (lower.includes(key)) return translation;
-  }
-  return issue;
-}
+// Findings that describe a measurement gap, not a problem with the site.
+const INFORMATIONAL_CHECKS = new Set(["perf_not_measured", "render_required"]);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -122,22 +94,36 @@ const WP_FIELD_LABELS: Record<string, string> = {
   canonical:     "Canonical URL",
 };
 
+// Canonical seo_audits shape written by the seo-audit engine.
+interface Finding {
+  id: string;
+  status: string;
+  check_id: string;
+  category: string;
+  severity: "critical" | "warning" | "good";
+  title: string;
+  pages: string[];
+  plain_english: string;
+  impact: number;
+  effort: number;
+  wp_applyable: boolean;
+}
+
 interface AuditResult {
-  seo_score: number;
-  score_breakdown?: Record<string, number>;
-  pages_crawled?: number;
-  errors?: { issue: string; affected_pages?: string[]; impact?: string }[];
-  warnings?: { issue: string; affected_pages?: string[]; impact?: string }[];
-  working_well?: string[];
-  quick_wins?: { action: string; effort: string; impact: string }[];
-  recommended_keywords?: string[];
-  executive_summary?: string;
-  action_priority_list?: { priority: number; action: string; category: string; estimated_effort: string }[];
+  status?: "complete" | "inconclusive";
+  reason?: string;
+  overall_score?: number;
+  subscores?: Record<string, number | null>;
+  pages_analyzed?: { url: string; reachable: boolean }[];
+  findings?: Finding[];
+  action_plan?: string[];
+  diff?: { previous_audit_id: string | null; regressed: number; resolved: number };
 }
 
 interface Audit {
   id: string;
   created_at: string;
+  status: string;
   score: number | null;
   results: AuditResult | null;
 }
@@ -182,12 +168,11 @@ function InfoTip({ text }: { text: string }) {
 
 interface IssueRowProps {
   issue: string;
-  impact?: string;
+  pageCount?: number;
   level: "error" | "warning";
 }
 
-function IssueRow({ issue, level }: IssueRowProps) {
-  const plain = toPlainEnglish(issue);
+function IssueRow({ issue, pageCount, level }: IssueRowProps) {
   const icon = level === "error"
     ? <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
     : <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />;
@@ -195,7 +180,12 @@ function IssueRow({ issue, level }: IssueRowProps) {
   return (
     <div className="flex items-start gap-2">
       {icon}
-      <p className="text-sm">{plain}</p>
+      <p className="text-sm">
+        {issue}
+        {pageCount !== undefined && pageCount > 1 && (
+          <span className="text-muted-foreground"> ({pageCount} pages)</span>
+        )}
+      </p>
     </div>
   );
 }
@@ -290,10 +280,13 @@ export function ClientSeoTab({ clientAccountId }: Props) {
 
   const loadAudit = useCallback(async () => {
     setLoadingAudit(true);
+    // Only canonical-engine audits (rubric_version set); legacy rows have a
+    // different results shape this view can't render.
     const { data } = await supabase
       .from("seo_audits")
-      .select("id, created_at, score, results")
+      .select("id, created_at, status, score, results")
       .eq("client_account_id", clientAccountId)
+      .not("rubric_version", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -413,14 +406,47 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   }
 
   const result = audit?.results;
-  const score = audit?.score ?? result?.seo_score ?? null;
+  const score = audit?.score ?? result?.overall_score ?? null;
   const wpConnected = wpSite?.status === "connected";
+  const inconclusive = audit?.status === "inconclusive" || result?.status === "inconclusive";
 
-  const allIssues = [
-    ...(result?.errors ?? []).map(e => ({ ...e, level: "error" as const })),
-    ...(result?.warnings ?? []).map(w => ({ ...w, level: "warning" as const })),
-  ];
+  // Findings are stored per page; group by check so each issue shows once
+  // with a page count instead of repeating for every affected page.
+  const grouped = new Map<string, { finding: Finding; pageCount: number }>();
+  for (const f of result?.findings ?? []) {
+    if (INFORMATIONAL_CHECKS.has(f.check_id)) continue;
+    const g = grouped.get(f.check_id);
+    if (g) g.pageCount += f.pages.length;
+    else grouped.set(f.check_id, { finding: f, pageCount: f.pages.length });
+  }
+  const groupedFindings = [...grouped.values()];
+
+  const allIssues = groupedFindings
+    .map(g => ({
+      issue: g.finding.plain_english,
+      pageCount: g.pageCount,
+      level: g.finding.severity === "critical" ? ("error" as const) : ("warning" as const),
+      impact: g.finding.impact,
+    }))
+    .sort((a, b) => (a.level === b.level ? b.impact - a.impact : a.level === "error" ? -1 : 1));
   const visibleIssues = showAllIssues ? allIssues : allIssues.slice(0, 4);
+
+  // Quick wins: low-effort fixes, highest impact-for-effort first.
+  const quickWins = groupedFindings
+    .filter(g => g.finding.effort <= 2)
+    .sort((a, b) => (b.finding.impact / b.finding.effort) - (a.finding.impact / a.finding.effort))
+    .slice(0, 5);
+
+  // What's working: score dimensions in good shape + progress since last audit.
+  const workingWell: string[] = [];
+  for (const [key, val] of Object.entries(result?.subscores ?? {})) {
+    const meta = SCORE_TOOLTIPS[key];
+    if (meta && val !== null && val >= 85) workingWell.push(`${meta.label} is in good shape (${val}/100)`);
+  }
+  const resolvedCount = result?.diff?.resolved ?? 0;
+  if (resolvedCount > 0) {
+    workingWell.push(`${resolvedCount} issue${resolvedCount !== 1 ? "s" : ""} fixed since your last audit`);
+  }
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -563,6 +589,14 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             <p className="font-medium">No audit run yet</p>
             <p className="text-sm mt-1">Your Orange Door team will run your first SEO audit soon.</p>
           </CardContent></Card>
+        ) : inconclusive ? (
+          <Card><CardContent className="py-12 text-center text-muted-foreground">
+            <Globe className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <p className="font-medium">We couldn't check your site this time</p>
+            <p className="text-sm mt-1">
+              {result?.reason ?? "Your website didn't respond when we tried to analyse it. We'll retry automatically."}
+            </p>
+          </CardContent></Card>
         ) : (
           <Card>
             <CardContent className="pt-6">
@@ -582,19 +616,17 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                 <div className="flex-1 space-y-3 w-full">
                   <div>
                     <p className="font-semibold text-lg">Overall SEO Score</p>
-                    {result?.pages_crawled && (
-                      <p className="text-xs text-muted-foreground">{result.pages_crawled} pages analysed</p>
+                    {(result?.pages_analyzed?.length ?? 0) > 0 && (
+                      <p className="text-xs text-muted-foreground">{result!.pages_analyzed!.length} pages analysed</p>
                     )}
                     <p className="text-xs text-muted-foreground/70 mt-0.5">General website audit — separate from WordPress plugin scan</p>
                   </div>
 
-                  {result?.score_breakdown && (
+                  {result?.subscores && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-                      {Object.entries(result.score_breakdown).map(([key, val]) => {
+                      {Object.entries(result.subscores).map(([key, val]) => {
                         const meta = SCORE_TOOLTIPS[key];
-                        if (val === undefined || !meta) return null;
-                        const max = SCORE_MAX[key] ?? 100;
-                        const pct = Math.round((val / max) * 100);
+                        if (val === null || val === undefined || !meta) return null;
                         return (
                           <div key={key} className="space-y-1">
                             <div className="flex items-center justify-between text-xs gap-1">
@@ -602,18 +634,18 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                                 {meta.label}
                                 <InfoTip text={meta.explain} />
                               </span>
-                              <span className={`font-semibold ${scoreColor(pct)}`}>{pct}</span>
+                              <span className={`font-semibold ${scoreColor(val)}`}>{val}</span>
                             </div>
-                            <Progress value={pct} className="h-1.5" />
+                            <Progress value={val} className="h-1.5" />
                           </div>
                         );
                       })}
                     </div>
                   )}
 
-                  {result?.executive_summary && (
+                  {(result?.diff?.regressed ?? 0) > 0 && (
                     <p className="text-sm text-muted-foreground border-t pt-3 leading-relaxed">
-                      {result.executive_summary}
+                      {result!.diff!.regressed} previously fixed issue{result!.diff!.regressed !== 1 ? "s have" : " has"} come back — we're on it.
                     </p>
                   )}
                 </div>
@@ -634,7 +666,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             </CardHeader>
             <CardContent className="space-y-3">
               {visibleIssues.map((item, i) => (
-                <IssueRow key={i} issue={item.issue} impact={item.impact} level={item.level} />
+                <IssueRow key={i} issue={item.issue} pageCount={item.pageCount} level={item.level} />
               ))}
               {allIssues.length > 4 && (
                 <button
@@ -651,9 +683,9 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         )}
 
         {/* ── What's working + Quick wins — shown only when no WP plugin connected ── */}
-        {!wpConnected && result && (
+        {!wpConnected && result && !inconclusive && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(result.working_well?.length ?? 0) > 0 && (
+            {workingWell.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -663,7 +695,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-1.5">
-                    {result.working_well!.map((item, i) => (
+                    {workingWell.map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm">
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
                         {item}
@@ -674,7 +706,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
               </Card>
             )}
 
-            {(result.quick_wins?.length ?? 0) > 0 && (
+            {quickWins.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -685,32 +717,18 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-1.5">
-                    {result.quick_wins!.slice(0, 5).map((w, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
+                    {quickWins.map((g) => (
+                      <li key={g.finding.check_id} className="flex items-start gap-2 text-sm">
                         <TrendingUp className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
-                        {w.action}
+                        <span>
+                          {g.finding.plain_english}
+                          {g.finding.wp_applyable && (
+                            <span className="text-muted-foreground text-xs"> — we can apply this for you</span>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {(result.recommended_keywords?.length ?? 0) > 0 && (
-              <Card className="md:col-span-2">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    Keywords to target
-                    <InfoTip text="Search terms your potential customers are typing into Google. Your site should use these naturally in page titles, headings, and content." />
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {result.recommended_keywords!.map((kw, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">{kw}</Badge>
-                    ))}
-                  </div>
                 </CardContent>
               </Card>
             )}

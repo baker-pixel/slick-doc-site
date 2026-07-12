@@ -125,16 +125,21 @@ serve(async (req) => {
     const policy = tierPolicy(client.tier);
     const crawlCap = Math.min(policy.seo.crawlPages, MAX_PAGES);
 
-    // ── Discover (robots-aware, bounded) ──
-    const { pages } = await discoverPages(client.website_url, crawlCap);
-    if (pages.length === 0) {
-      // Inconclusive, NOT a low score.
+    // Inconclusive, NOT a low score. Used whenever the crawl itself is too
+    // degraded for the resulting numbers to mean anything.
+    const saveInconclusive = async (reason: string) => {
       const { data: row } = await supabase.from("seo_audits").insert({
         client_account_id: clientId, audit_type: "full", status: "inconclusive",
         rubric_version: RUBRIC_VERSION, score: null,
-        results: { status: "inconclusive", reason: "Site could not be crawled (unreachable, blocked, or robots-disallowed).", pages_analyzed: [], findings: [], action_plan: [], subscores: {} },
+        results: { status: "inconclusive", reason, pages_analyzed: [], findings: [], action_plan: [], subscores: {} },
       }).select("id").single();
-      return json({ status: "inconclusive", audit_id: row?.id, message: "Site could not be crawled." });
+      return json({ status: "inconclusive", audit_id: row?.id, message: reason });
+    };
+
+    // ── Discover (robots-aware, bounded) ──
+    const { pages } = await discoverPages(client.website_url, crawlCap);
+    if (pages.length === 0) {
+      return await saveInconclusive("Site could not be crawled (unreachable, blocked, or robots-disallowed).");
     }
 
     // ── Gather signals (parallel; PageSpeed sampled, not per-page) ──
@@ -151,6 +156,18 @@ serve(async (req) => {
     const signals: PageSignals[] = settled
       .filter((r): r is PromiseFulfilledResult<PageSignals> => r.status === "fulfilled")
       .map((r) => r.value);
+
+    // ── Crawl-quality gate: sitemap discovery can list pages that no longer
+    // respond, and transient fetch failures can gut the signal set. Scoring a
+    // mostly-failed crawl produces garbage (false 100s or score crashes), so
+    // treat it as inconclusive rather than a real result.
+    const reachableSignals = signals.filter((s) => s.reachable);
+    if (reachableSignals.length === 0) {
+      return await saveInconclusive(`${pages.length} pages were discovered but none could be fetched (site down, blocking requests, or stale sitemap).`);
+    }
+    if (reachableSignals.length < targets.length / 2) {
+      return await saveInconclusive(`Only ${reachableSignals.length} of ${targets.length} pages could be fetched — partial crawl, results would be unreliable.`);
+    }
 
     // ── Deterministic findings + stable identity + diff scaffolding ──
     const performanceMeasured = signals.some((s) => s.performance !== null);
@@ -203,9 +220,19 @@ serve(async (req) => {
 
     // ── Diff vs previous audit → regressions + resolved count ──
     const { data: prev } = await supabase
-      .from("seo_audits").select("id, results")
+      .from("seo_audits").select("id, score, results")
       .eq("client_account_id", clientId).eq("status", "complete")
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+    // Score-crash guard: a wholesale collapse vs the previous audit is almost
+    // always crawl noise (failed fetches, unrendered SPA shells parsing as
+    // empty pages), not the site genuinely breaking overnight. Only trust a
+    // big drop when the crawl itself was clean.
+    const emptySpaCount = signals.filter((s) => s.looks_like_empty_spa).length;
+    const crawlDegraded = reachableSignals.length < targets.length || emptySpaCount > reachableSignals.length / 2;
+    if (typeof prev?.score === "number" && prev.score - overall_score >= 40 && crawlDegraded) {
+      return await saveInconclusive(`Score would have dropped ${prev.score}→${overall_score} but the crawl looks degraded (${reachableSignals.length}/${targets.length} pages fetched, ${emptySpaCount} unrendered) — not saving an unreliable result.`);
+    }
 
     let resolvedCount = 0;
     if (prev?.results) {
