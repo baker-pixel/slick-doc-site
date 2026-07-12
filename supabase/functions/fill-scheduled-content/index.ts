@@ -55,13 +55,16 @@ serve(async (req) => {
     const clientId: string | undefined = body.client_id;
     const limit: number = Math.min(body.limit || 10, 50);
 
-    // Fetch placeholder slots
+    // Fetch placeholder slots. Past-due slots are excluded — there's no
+    // point drafting content for a date that already passed; the daily
+    // cleanup-expired-draft-content cron deletes them after a 1-day grace.
     let query = supabase
       .from("content_calendar")
       .select("id, client_account_id, title, content_type, platform, scheduled_for, metadata")
       .like("content", "[Auto-generated placeholder%")
       .in("status", ["draft"])
       .eq("client_approved", false)
+      .gte("scheduled_for", new Date().toISOString().slice(0, 10))
       .order("scheduled_for", { ascending: true })
       .limit(limit);
 
