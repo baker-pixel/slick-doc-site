@@ -444,6 +444,23 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
     }
   };
 
+  /** Reopen the company-page picker for an already-connected LinkedIn token,
+      pre-selecting the page currently in use. */
+  const openLinkedInPagePicker = () => {
+    const token = tokens.find((t) => t.platform === "linkedin");
+    const organizations = parseLinkedInOrganizations(token?.token_metadata?.organization_options);
+    if (!token || organizations.length === 0) return;
+
+    const currentId = typeof token.token_metadata?.organization_id === "string"
+      ? token.token_metadata.organization_id
+      : "";
+    setLinkedInOrganizations(organizations);
+    setSelectedLinkedInOrganization(
+      organizations.some((org) => org.id === currentId) ? currentId : organizations[0].id,
+    );
+    setSelectingLinkedInPage(true);
+  };
+
   const handleLinkedInOrganizationSave = async () => {
     const token = tokens.find((t) => t.platform === "linkedin");
     const organization = linkedInOrganizations.find((org) => org.id === selectedLinkedInOrganization);
@@ -700,6 +717,11 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
           const pageName = pfmAccount?.username
             || (typeof token?.token_metadata?.page_name === "string" ? token.token_metadata.page_name : token?.page_id)
             || null;
+          // Direct-token LinkedIn connections keep the full page list in
+          // metadata, so the user can switch pages without reconnecting
+          const linkedInPageOptions = platform.id === "linkedin" && !pfmAccount
+            ? parseLinkedInOrganizations(token?.token_metadata?.organization_options)
+            : [];
 
           return (
             <Card
@@ -785,16 +807,29 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                 {/* Action Buttons */}
                 <div className="flex gap-2 pt-1">
                   {connected && !expired && !selectionRequired ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                      onClick={() => pfmAccount ? handleDisconnectPfm(platform.id) : handleDisconnect(platform.id)}
-                      disabled={disconnecting === platform.id}
-                    >
-                      <Unlink className="h-3.5 w-3.5" />
-                      {disconnecting === platform.id ? "Disconnecting..." : "Disconnect"}
-                    </Button>
+                    <>
+                      {linkedInPageOptions.length > 1 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 rounded-lg"
+                          onClick={openLinkedInPagePicker}
+                        >
+                          <Building2 className="h-3.5 w-3.5" />
+                          Change page
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
+                        onClick={() => pfmAccount ? handleDisconnectPfm(platform.id) : handleDisconnect(platform.id)}
+                        disabled={disconnecting === platform.id}
+                      >
+                        <Unlink className="h-3.5 w-3.5" />
+                        {disconnecting === platform.id ? "Disconnecting..." : "Disconnect"}
+                      </Button>
+                    </>
                   ) : expired ? (
                     <Button
                       size="sm"
