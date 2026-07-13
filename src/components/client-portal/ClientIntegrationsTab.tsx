@@ -23,8 +23,14 @@ import {
   Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface LinkedInOrganization {
   id: string;
@@ -603,35 +609,83 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
         </div>
       </div>
 
-      {selectingLinkedInPage && linkedInOrganizations.length > 0 && (
-        <Alert>
-          <Building2 className="h-4 w-4" />
-          <AlertTitle>Select your LinkedIn company page</AlertTitle>
-          <AlertDescription className="space-y-4">
-            <p>
-              We found {linkedInOrganizations.length} company page{linkedInOrganizations.length === 1 ? "" : "s"} on your LinkedIn account.
-              Choose which one this client should publish to.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Select value={selectedLinkedInOrganization} onValueChange={setSelectedLinkedInOrganization}>
-                <SelectTrigger className="sm:max-w-sm">
-                  <SelectValue placeholder="Choose a company page" />
-                </SelectTrigger>
-                <SelectContent>
-                  {linkedInOrganizations.map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={handleLinkedInOrganizationSave} disabled={savingLinkedInPage || !selectedLinkedInOrganization}>
-                {savingLinkedInPage ? "Saving..." : "Use this page"}
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* LinkedIn company page picker — pops up after OAuth when the account
+          manages more than one company page */}
+      <Dialog
+        open={selectingLinkedInPage && linkedInOrganizations.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !savingLinkedInPage) setSelectingLinkedInPage(false);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-[#0A66C2]/10">
+                <Linkedin className="h-5 w-5 text-[#0A66C2]" />
+              </div>
+              Which company page should we post to?
+            </DialogTitle>
+            <DialogDescription>
+              Your LinkedIn account manages {linkedInOrganizations.length} company page{linkedInOrganizations.length === 1 ? "" : "s"}.
+              Select the one you want connected — all approved posts will be published there.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto py-1" role="radiogroup" aria-label="LinkedIn company pages">
+            {linkedInOrganizations.map((org) => {
+              const selected = selectedLinkedInOrganization === org.id;
+              return (
+                <button
+                  key={org.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setSelectedLinkedInOrganization(org.id)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                    selected
+                      ? "border-[#0A66C2] bg-[#0A66C2]/5 ring-1 ring-[#0A66C2]/30"
+                      : "border-border/60 hover:border-border hover:bg-muted/50"
+                  )}
+                >
+                  <div className={cn("p-2 rounded-lg shrink-0", selected ? "bg-[#0A66C2]/10" : "bg-muted")}>
+                    <Building2 className={cn("h-4 w-4", selected ? "text-[#0A66C2]" : "text-muted-foreground")} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{org.name}</p>
+                    <p className="text-xs text-muted-foreground">Company page</p>
+                  </div>
+                  {selected && <CheckCircle2 className="h-4 w-4 text-[#0A66C2] shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => setSelectingLinkedInPage(false)}
+              disabled={savingLinkedInPage}
+            >
+              Decide later
+            </Button>
+            <Button
+              onClick={handleLinkedInOrganizationSave}
+              disabled={savingLinkedInPage || !selectedLinkedInOrganization}
+              className="gap-1.5"
+            >
+              {savingLinkedInPage ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Connect this page"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Platform Cards */}
       <div className="grid gap-4 sm:grid-cols-2">
