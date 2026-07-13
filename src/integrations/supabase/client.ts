@@ -17,3 +17,25 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// On a non-2xx response the SDK's FunctionsHttpError.message is the useless
+// "Edge Function returned a non-2xx status code" — the function's actual
+// `{ error: "..." }` body is only reachable via error.context. Most call
+// sites surface error.message directly, so rewrite it here, once, with the
+// real message. Reads a clone, so error.context stays consumable for call
+// sites that parse the body themselves (getEdgeErrorMessage).
+const originalInvoke = supabase.functions.invoke.bind(supabase.functions);
+supabase.functions.invoke = (async (name: string, options?: Parameters<typeof originalInvoke>[1]) => {
+  const result = await originalInvoke(name, options);
+  const ctx = (result.error as { context?: Response } | null)?.context;
+  if (result.error && ctx && typeof ctx.clone === "function") {
+    try {
+      const body = await ctx.clone().json();
+      const msg = body?.error ?? body?.message;
+      if (typeof msg === "string" && msg) result.error.message = msg;
+    } catch {
+      // body not JSON — keep the SDK's default message
+    }
+  }
+  return result;
+}) as typeof supabase.functions.invoke;

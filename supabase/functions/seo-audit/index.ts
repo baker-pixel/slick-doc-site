@@ -17,7 +17,10 @@ const corsHeaders = {
 // Absolute safety ceiling so a run always converges in cost/time. The
 // per-client crawl depth comes from tier policy and is capped by this.
 const MAX_PAGES = 15;
-const MAX_REWRITE_CALLS = 8;
+// Every wp-fixable title/meta finding needs a drafted value or the admin UI
+// can't offer Apply. 2 findings/page x MAX_PAGES = 30 covers a full crawl;
+// drafts run in parallel so the cap costs tokens, not wall-clock.
+const MAX_REWRITE_CALLS = 30;
 
 interface Finding {
   id: string;
@@ -188,11 +191,14 @@ serve(async (req) => {
     // The model only drafts fix copy for findings that ALREADY exist from the
     // rules -- it can't invent findings. Page content is passed as untrusted
     // data, never as instructions.
-    const rewritable = findings.filter((f) => f.fix && (f.fix.type === "wp_meta_title" || f.fix.type === "wp_meta_description")).slice(0, MAX_REWRITE_CALLS);
+    const rewritable = findings
+      .filter((f) => f.fix && (f.fix.type === "wp_meta_title" || f.fix.type === "wp_meta_description"))
+      .sort((a, b) => b.impact - a.impact)
+      .slice(0, MAX_REWRITE_CALLS);
     if (rewritable.length > 0 && Deno.env.get("GROQ_API_KEY")) {
-      for (const f of rewritable) {
+      await Promise.all(rewritable.map(async (f) => {
         const s = signals.find((x) => x.url === f.pages[0]);
-        if (!s) continue;
+        if (!s) return;
         try {
           const kind = f.fix!.type === "wp_meta_title" ? "page title (50-60 chars)" : "meta description (150-160 chars)";
           const draft = await callAIJson<{ value?: string }>({
@@ -206,7 +212,7 @@ serve(async (req) => {
           });
           if (draft?.value) f.fix!.payload = { value: draft.value, post_url: s.url };
         } catch (e) { console.error("rewrite failed", f.id, e); }
-      }
+      }));
     }
 
     // ── Score against the rubric (per-page average; renormalized) ──
