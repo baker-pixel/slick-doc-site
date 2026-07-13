@@ -81,6 +81,7 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [wpConnected, setWpConnected] = useState(false);
 
   const loadClients = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("admin", {
@@ -110,6 +111,15 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
 
   useEffect(() => { loadClients(); }, [loadClients]);
   useEffect(() => { loadAudits(); }, [loadAudits]);
+  useEffect(() => {
+    if (!clientId) { setWpConnected(false); return; }
+    supabase
+      .from("connected_sites")
+      .select("status")
+      .eq("client_id", clientId)
+      .maybeSingle()
+      .then(({ data }) => setWpConnected(data?.status === "connected"));
+  }, [clientId]);
   useEffect(() => { if (selectedClientId) setClientId(selectedClientId); }, [selectedClientId]);
 
   const clientAudits = useMemo(
@@ -263,6 +273,11 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Action plan · {orderedFindings.length} findings, highest impact first
               </CardTitle>
+              {!wpConnected && orderedFindings.some(f => f.wp_applyable) && (
+                <p className="text-xs text-amber-600">
+                  WordPress isn't connected for this client — connect it (Connect Site panel) to enable one-click Apply.
+                </p>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y">
@@ -297,7 +312,8 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
                       <Button
                         size="sm" variant="outline"
                         className="flex-shrink-0 gap-1 text-orange-700 border-orange-200 hover:bg-orange-50"
-                        disabled={applyingId === f.id}
+                        disabled={applyingId === f.id || !wpConnected}
+                        title={wpConnected ? undefined : "Connect WordPress to enable one-click fixes"}
                         onClick={() => applyFix(f)}
                       >
                         {applyingId === f.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}

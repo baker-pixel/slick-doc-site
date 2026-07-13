@@ -171,6 +171,12 @@ function throwForStatus(res: Response, bodyText: string, source: string): never 
   if (res.status >= 500) {
     throw new AIError(`AI provider error: ${res.status}`, res.status, true);
   }
+  // Groq returns 400 json_validate_failed when the model emits malformed
+  // JSON in jsonMode — a sampling flake, not a bad request. Retrying with
+  // the same prompt usually succeeds.
+  if (res.status === 400 && bodyText.includes("json_validate_failed")) {
+    throw new AIError("Model produced invalid JSON", 400, true);
+  }
   console.error(`[ai] ${source} non-retryable error ${res.status}: ${bodyText.slice(0, 500)}`);
   const providerMessage = extractProviderErrorMessage(bodyText);
   throw new AIError(
