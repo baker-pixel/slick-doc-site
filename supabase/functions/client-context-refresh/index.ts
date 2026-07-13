@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { refineClientContext } from "../_shared/contextRefine.ts";
-import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
+import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const corsHeaders = {
@@ -47,6 +47,11 @@ serve(async (req) => {
         if (!existing) {
           const res = await upsertSocialStrategy(supabase, c, tierPolicy(c.tier));
           social = res.projectId ? "created" : "failed";
+        } else {
+          // Existing plan: keep its progress honest on the weekly cadence
+          // (publish-time refreshes cover the common path; this catches
+          // month rollover, where progress resets to a new denominator).
+          await refreshSocialPlanProgress(supabase, c.id, tierPolicy(c.tier).social.postsPerMonth);
         }
       } catch (e) {
         console.error("social strategy ensure failed", c.id, e);

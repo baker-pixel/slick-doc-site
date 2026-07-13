@@ -95,6 +95,30 @@ export async function upsertSocialStrategy(
   return { projectId, pillars };
 }
 
+/**
+ * Recompute the Social Media Plan's progress (posts published this calendar
+ * month vs the tier target) without touching pillars or calling any LLM.
+ * Cheap enough to run after every publish. No-op if the client has no plan.
+ */
+export async function refreshSocialPlanProgress(
+  supabase: any,
+  clientId: string,
+  postsPerMonthTarget: number,
+): Promise<void> {
+  const { data: project } = await supabase
+    .from("client_projects").select("id").eq("client_account_id", clientId).eq("kind", "social").maybeSingle();
+  if (!project) return;
+
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const { count: published } = await supabase
+    .from("content_calendar").select("id", { count: "exact", head: true })
+    .eq("client_account_id", clientId).eq("status", "published").gte("scheduled_for", monthStart.toISOString());
+  const progress = postsPerMonthTarget > 0 ? Math.min(100, Math.round((100 * (published ?? 0)) / postsPerMonthTarget)) : 0;
+  await supabase.from("client_projects")
+    .update({ progress_percentage: progress, updated_at: new Date().toISOString() })
+    .eq("id", project.id);
+}
+
 /** Read the client's active content pillars (for on-strategy content generation). */
 export async function getSocialPillars(supabase: any, clientId: string): Promise<string[]> {
   const { data: project } = await supabase

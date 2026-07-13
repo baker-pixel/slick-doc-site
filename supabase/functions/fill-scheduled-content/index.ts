@@ -737,6 +737,25 @@ Requirements:
       };
     }
 
+    case "google_post": {
+      return {
+        system,
+        user: `Write a Google Business Profile post for ${biz}.
+
+Audience: ${targetAudience}${location ? ` in ${location}` : ""}
+Month context: ${month}
+Service focus: ${services[0] || industry}
+${differentiators.length ? `Differentiator to weave in: ${differentiators[0]}` : ""}
+
+Requirements:
+- 80–150 words (GBP truncates long posts)
+- Lead with something timely or locally relevant — ${month}, a seasonal need, or a common ${industry} question
+- One concrete tip, offer, or update — not generic promotion
+- End with a short call to action (call, visit, book)
+- No hashtags, no emojis beyond one at most${avoidRepeat}`,
+      };
+    }
+
     case "ad_copy": {
       return {
         system,

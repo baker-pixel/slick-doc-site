@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { logActivity } from "../_shared/activityLog.ts";
+import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +15,28 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Best-effort bookkeeping after a successful direct publish: activity trail
+// for reporting + keep the Social Media Plan progress current.
+async function recordPublish(
+  supabase: any,
+  item: { id: string; client_account_id: string; platform: string; title?: string | null; content?: string | null },
+): Promise<void> {
+  try {
+    await logActivity(supabase, item.client_account_id, {
+      type: "content_published",
+      title: `Published to ${item.platform}: ${item.title ?? "post"}`,
+      description: (item.content ?? "").slice(0, 140),
+      icon: "send",
+      metadata: { calendar_id: item.id, platform: item.platform },
+    });
+    const { data: tierRow } = await supabase
+      .from("client_accounts").select("tier").eq("id", item.client_account_id).maybeSingle();
+    await refreshSocialPlanProgress(supabase, item.client_account_id, tierPolicy(tierRow?.tier).social.postsPerMonth);
+  } catch (e) {
+    console.error("recordPublish bookkeeping failed:", e instanceof Error ? e.message : e);
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -120,6 +145,7 @@ serve(async (req) => {
                 await supabase.from("content_calendar")
                   .update({ status: "published", published_at: new Date().toISOString() })
                   .eq("id", item.id);
+                await recordPublish(supabase, item);
                 results.push({ id: item.id, platform: "email", success: true });
               }
             } else {
@@ -178,6 +204,7 @@ serve(async (req) => {
             await supabase.from("content_calendar")
               .update({ status: "published", published_at: new Date().toISOString() })
               .eq("id", item.id);
+            await recordPublish(supabase, item);
             results.push({ id: item.id, platform: "blog", success: true });
             break;
 

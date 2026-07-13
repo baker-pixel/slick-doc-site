@@ -85,11 +85,13 @@ serve(async (req) => {
     const submittedCutoff = new Date(now - 48 * 60 * 60 * 1000).toISOString();
     const reminderCutoff = new Date(now - 72 * 60 * 60 * 1000).toISOString();
 
-    // Drafts pending >48h, not reminded in the last 72h
+    // Drafts pending >48h, not reminded in the last 72h. "pending" is the
+    // canonical awaiting-client status the pipeline writes (the old
+    // "pending_review" filter matched nothing — reminders never fired).
     const { data: pending, error: fetchErr } = await supabase
       .from("content_approvals")
       .select("id, client_account_id, title, content_type, submitted_at, reminder_sent_at")
-      .eq("status", "pending_review")
+      .eq("status", "pending")
       .lt("submitted_at", submittedCutoff)
       .or(`reminder_sent_at.is.null,reminder_sent_at.lt.${reminderCutoff}`);
 

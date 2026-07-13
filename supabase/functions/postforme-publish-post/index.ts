@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
 import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
+import { logActivity } from "../_shared/activityLog.ts";
+import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,13 +62,26 @@ serve(async (req) => {
   // If an unexpected exception fires after claiming, the finally/catch resets it.
   let claimed = false;
   let contentCalendarId = "";
-  let existingMeta: object = {};
+  let existingMeta: Record<string, unknown> = {};
 
-  const markFailed = async (id: string, meta: object, errorMsg: string) => {
+  // Permanent failures (no account, content too long, 4xx) fail immediately.
+  // Transient ones (PfM 5xx, rate-limit exhaustion, network) go back to
+  // "scheduled" so the 15-min publish cron retries, up to MAX_PUBLISH_ATTEMPTS.
+  const MAX_PUBLISH_ATTEMPTS = 3;
+  const markFailed = async (id: string, meta: Record<string, unknown>, errorMsg: string, retryable = false) => {
     claimed = false; // we're handling it — no reset needed
+    const attempts = (Number(meta.publish_attempts) || 0) + 1;
+    if (retryable && attempts < MAX_PUBLISH_ATTEMPTS) {
+      console.warn(`Publish attempt ${attempts}/${MAX_PUBLISH_ATTEMPTS} failed for ${id}, will retry: ${errorMsg}`);
+      await supabase
+        .from("content_calendar")
+        .update({ status: "scheduled", metadata: { ...meta, publish_attempts: attempts, last_error: errorMsg } })
+        .eq("id", id);
+      return;
+    }
     await supabase
       .from("content_calendar")
-      .update({ status: "failed", metadata: { ...meta, error: errorMsg } })
+      .update({ status: "failed", metadata: { ...meta, publish_attempts: attempts, error: errorMsg } })
       .eq("id", id);
     await supabase.from("automation_alerts").insert({
       alert_type: "content_publish_failure",
@@ -119,7 +135,7 @@ serve(async (req) => {
       return json({ success: true, skipped: true, reason: "already_published" });
     }
 
-    existingMeta = (item.metadata as object) || {};
+    existingMeta = (item.metadata as Record<string, unknown>) || {};
 
     // Atomic claim: mark as processing only if not already published.
     // Returns the row count so we can detect races.
@@ -141,15 +157,32 @@ serve(async (req) => {
 
     claimed = true; // we now own this row
 
-    // Look up PfM account for this client + platform
-    const { data: pfmAccount } = await supabase
+    // Look up PfM account for this client + platform. A client can have
+    // several connected accounts on one platform (e.g. personal profile +
+    // multiple org pages), so pick deterministically: the account whose
+    // username matches the business name, else the earliest connected.
+    const { data: pfmCandidates } = await supabase
       .from("client_postforme_accounts")
-      .select("postforme_account_id, username, platform")
+      .select("postforme_account_id, username, platform, created_at")
       .eq("client_id", item.client_account_id)
       .eq("platform", item.platform)
       .eq("status", "connected")
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
+
+    let pfmAccount = pfmCandidates?.[0] ?? null;
+    if (pfmCandidates && pfmCandidates.length > 1) {
+      const { data: bizRow } = await supabase
+        .from("client_accounts").select("business_name").eq("id", item.client_account_id).single();
+      const biz = (bizRow?.business_name ?? "").toLowerCase().trim();
+      const match = biz
+        ? pfmCandidates.find((a) => {
+            const u = (a.username ?? "").toLowerCase();
+            return u.includes(biz) || biz.includes(u);
+          })
+        : null;
+      if (match) pfmAccount = match;
+      console.log(`Multiple ${item.platform} accounts (${pfmCandidates.length}) — using "${pfmAccount?.username}"`);
+    }
 
     if (!pfmAccount) {
       await markFailed(
@@ -224,12 +257,33 @@ serve(async (req) => {
       let friendlyErr = `PfM API error ${pfmRes.status}`;
       try { friendlyErr = JSON.parse(text)?.message || friendlyErr; } catch { /* ignore */ }
       console.error("PfM publish error:", pfmRes.status, text);
-      await markFailed(contentCalendarId, existingMeta, friendlyErr);
+      // 5xx and rate-limit exhaustion are transient; 4xx (bad content, auth,
+      // disconnected account) won't fix themselves on retry.
+      const retryable = pfmRes.status >= 500 || pfmRes.status === 429;
+      await markFailed(contentCalendarId, existingMeta, friendlyErr, retryable);
       return json({ error: friendlyErr, success: false }, 502);
     }
 
     const pfmPost = await pfmRes.json();
     await markPublished(contentCalendarId, existingMeta, pfmPost.id, caption.length);
+
+    // Work-done trail + keep the Social Media Plan's progress current.
+    // Both best-effort: a published post must never report as failed.
+    try {
+      await logActivity(supabase, item.client_account_id, {
+        type: "content_published",
+        title: `Published to ${item.platform}: ${item.title ?? "post"}`,
+        description: (item.content ?? "").slice(0, 140),
+        icon: "send",
+        metadata: { calendar_id: contentCalendarId, platform: item.platform, pfm_post_id: pfmPost.id },
+      });
+      const { data: tierRow } = await supabase
+        .from("client_accounts").select("tier").eq("id", item.client_account_id).maybeSingle();
+      await refreshSocialPlanProgress(supabase, item.client_account_id, tierPolicy(tierRow?.tier).social.postsPerMonth);
+    } catch (e) {
+      console.error("post-publish bookkeeping failed:", e instanceof Error ? e.message : e);
+    }
+
     console.log(`Published: pfm_post_id=${pfmPost.id}`);
     return json({ success: true, postforme_post_id: pfmPost.id });
 

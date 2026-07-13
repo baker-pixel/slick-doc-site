@@ -27,12 +27,15 @@ serve(async (req) => {
     const { client_id, workflow_id, step_id } = await req.json();
     if (!client_id) return json({ error: "client_id required" }, 400);
 
-    // Skip if a pending_review approval already exists for this client
+    // Skip if a pending approval already exists for this client.
+    // "pending" is the one canonical awaiting-client status across the
+    // pipeline — the client UI only renders Approve buttons for it and
+    // send-approval-reminders only nudges on it.
     const { data: existing } = await supabase
       .from("content_approvals")
       .select("id")
       .eq("client_account_id", client_id)
-      .eq("status", "pending_review")
+      .eq("status", "pending")
       .maybeSingle();
 
     if (existing) {
@@ -105,7 +108,7 @@ serve(async (req) => {
       content_type: "linkedin_post",
       content_preview: postPreview,
       full_content: postContent,
-      status: "pending_review",
+      status: "pending",
       submitted_at: new Date().toISOString(),
       publish_status: "draft",
     });

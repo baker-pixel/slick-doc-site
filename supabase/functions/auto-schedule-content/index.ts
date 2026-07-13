@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,53 +17,47 @@ type WeeklySlot = {
   weekFilter?: number[];
 };
 
-// ─── Tier-based weekly content schedules ────────────────────────────────────
-// Supported platforms: twitter, facebook, linkedin, instagram, email, blog
-// google_business is NOT included — it is not supported via Post for Me API.
+// ─── Schedule derived from tier policy ──────────────────────────────────────
+// tierPolicy.social is the single source of truth: contentTypes gates which
+// channels a plan gets, postsPerMonth is the volume budget. Candidates are
+// taken in order while they fit the budget, so scheduled volume never exceeds
+// what the tier is sold as (the old hardcoded table produced ~2x).
 //
-// Foundation  (~6 pieces/month)
-//   Facebook: every Wednesday
-//   Blog: 1st Monday
-//
-// Growth  (~16 pieces/month)
-//   LinkedIn: Tue + Fri
-//   Facebook: Thursday
-//   Email newsletter: Wednesday
-//   Blog: 2nd and 4th Monday
-//
-// Transformation  (~35 pieces/month)
-//   Facebook: Mon + Thu
-//   LinkedIn: Tue + Thu
-//   Instagram: Wed + Fri
-//   Twitter: Mon + Wed
-//   Email: Tuesday (weekly)
-//   Blog: every Monday
+// policyType maps to tierPolicy contentTypes; content_type on the slot is
+// what fill-scheduled-content's prompt switch expects (email_newsletter
+// slots use content_type "email_copy" for that reason).
+// google_business publishes via the n8n path in publish-scheduled-content,
+// not Post for Me. Social platforms are additionally filtered per client to
+// only those with a connected Post for Me account.
+const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: WeeklySlot }> = [
+  { policyType: "google_post",      perMonth: 4, slot: { dayOfWeek: 3, platform: "google_business", content_type: "google_post", titlePrefix: "Google Business Post" } },
+  { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" } },
+  { policyType: "email_newsletter", perMonth: 2, slot: { dayOfWeek: 3, platform: "email",     content_type: "email_copy",  titlePrefix: "Email Newsletter", weekFilter: [2, 4] } },
+  { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" } },
+  { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 5, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post", weekFilter: [1, 3] } },
+  { policyType: "blog_post",        perMonth: 2, slot: { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",   weekFilter: [2, 4] } },
+  { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post",   weekFilter: [1, 3] } },
+];
 
-const TIER_SCHEDULE: Record<string, WeeklySlot[]> = {
-  foundation: [
-    { dayOfWeek: 3, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
-    { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",  weekFilter: [1] },
-  ],
-  growth: [
-    { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 3, platform: "email",     content_type: "email_copy",  titlePrefix: "Email Newsletter" },
-    { dayOfWeek: 4, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
-    { dayOfWeek: 5, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",  weekFilter: [2, 4] },
-  ],
-  transformation: [
-    { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
-    { dayOfWeek: 1, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post" },
-    { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article" },
-    { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 2, platform: "email",     content_type: "email_copy",  titlePrefix: "Email Newsletter" },
-    { dayOfWeek: 3, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post" },
-    { dayOfWeek: 3, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post" },
-    { dayOfWeek: 4, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
-    { dayOfWeek: 4, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
-    { dayOfWeek: 5, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post" },
-  ],
-};
+// Platforms that require a connected Post for Me account to ever publish.
+const PFM_PLATFORMS = new Set(["facebook", "instagram", "twitter", "linkedin"]);
+
+function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Set<string>): WeeklySlot[] {
+  const social = tierPolicy(tier).social;
+  const allowed = new Set(social.contentTypes);
+  let budget = social.postsPerMonth;
+  const plan: WeeklySlot[] = [];
+  for (const c of SLOT_CANDIDATES) {
+    if (!allowed.has(c.policyType)) continue;
+    if (c.perMonth > budget) continue;
+    // Don't schedule social platforms the client can't publish to — an
+    // approved post that can only fail is worse than no slot.
+    if (PFM_PLATFORMS.has(c.slot.platform) && !connectedPlatforms.has(c.slot.platform)) continue;
+    plan.push(c.slot);
+    budget -= c.perMonth;
+  }
+  return plan;
+}
 
 // Return the Monday of the week containing `from`
 function getMondayOfWeek(from: Date): Date {
@@ -140,13 +135,24 @@ serve(async (req) => {
       occupied.add(`${slot.client_account_id}:${slot.platform}:${dateKey(new Date(slot.scheduled_for))}`);
     }
 
+    // Connected Post for Me accounts per client (one query, all clients).
+    const { data: pfmAccounts } = await supabase
+      .from("client_postforme_accounts")
+      .select("client_id, platform")
+      .in("client_id", clientIds)
+      .eq("status", "connected");
+    const connectedByClient = new Map<string, Set<string>>();
+    for (const a of pfmAccounts || []) {
+      if (!connectedByClient.has(a.client_id)) connectedByClient.set(a.client_id, new Set());
+      connectedByClient.get(a.client_id)!.add(a.platform);
+    }
+
     const allRows: any[] = [];
     const summary: { client: string; tier: string; created: number }[] = [];
 
     for (const client of clients) {
       const tier = (client.tier || "foundation").toLowerCase();
-      // Fall back to foundation if tier is unrecognised
-      const plan: WeeklySlot[] = TIER_SCHEDULE[tier] ?? TIER_SCHEDULE["foundation"];
+      const plan: WeeklySlot[] = buildWeeklyPlan(tier, connectedByClient.get(client.id) ?? new Set());
       const clientRows: any[] = [];
 
       for (let week = 0; week < 4; week++) {
