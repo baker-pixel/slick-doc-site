@@ -92,7 +92,7 @@ const onboardingSteps: OnboardingStep[] = [
       "Pipeline: Track content from draft to published"
     ],
     tip: "Batch your content creation for efficiency - plan a week at a time.",
-    targetSection: "calendar"
+    targetSection: "social-posts"
   },
   {
     id: "analytics",

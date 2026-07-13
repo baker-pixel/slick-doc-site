@@ -44,7 +44,7 @@ const taskCategoryToSection: Record<string, AdminSection> = {
   "advertising": "ad-generator",
   "ppc": "ad-generator",
   "email": "campaigns",
-  "social": "calendar",
+  "social": "social-posts",
   "reviews": "review-engine",
   "reputation": "review-engine",
   "analytics": "client-analytics",
@@ -109,7 +109,7 @@ const getTargetSectionForTask = (taskName: string, taskCategory: string): AdminS
   // Social Media tasks -> Calendar
   if (name.includes("social") || name.includes("instagram") || name.includes("facebook post") ||
       name.includes("linkedin") || name.includes("twitter") || name.includes("tiktok")) {
-    return "calendar";
+    return "social-posts";
   }
   
   // Analytics/Reporting tasks -> Reports Review

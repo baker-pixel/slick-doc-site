@@ -1751,8 +1751,10 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          kind: string
           name: string
           progress_percentage: number | null
+          source_audit_id: string | null
           start_date: string | null
           status: string
           target_end_date: string | null
@@ -1763,8 +1765,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          kind?: string
           name: string
           progress_percentage?: number | null
+          source_audit_id?: string | null
           start_date?: string | null
           status?: string
           target_end_date?: string | null
@@ -1775,8 +1779,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          kind?: string
           name?: string
           progress_percentage?: number | null
+          source_audit_id?: string | null
           start_date?: string | null
           status?: string
           target_end_date?: string | null
@@ -1788,6 +1794,13 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_projects_source_audit_id_fkey"
+            columns: ["source_audit_id"]
+            isOneToOne: false
+            referencedRelation: "seo_audits"
             referencedColumns: ["id"]
           },
         ]
@@ -3094,6 +3107,45 @@ export type Database = {
           },
         ]
       }
+      image_batch_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_file_id: string | null
+          id: string
+          input_file_id: string | null
+          item_count: number
+          openai_batch_id: string
+          output_file_id: string | null
+          resume_offsets: Json
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_file_id?: string | null
+          id?: string
+          input_file_id?: string | null
+          item_count?: number
+          openai_batch_id: string
+          output_file_id?: string | null
+          resume_offsets?: Json
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_file_id?: string | null
+          id?: string
+          input_file_id?: string | null
+          item_count?: number
+          openai_batch_id?: string
+          output_file_id?: string | null
+          resume_offsets?: Json
+          status?: string
+        }
+        Relationships: []
+      }
       integration_configs: {
         Row: {
           api_key_encrypted: string | null
@@ -3289,6 +3341,50 @@ export type Database = {
             columns: ["content_id"]
             isOneToOne: false
             referencedRelation: "learning_content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outcome_metrics: {
+        Row: {
+          captured_at: string
+          client_account_id: string
+          id: string
+          metadata: Json
+          metric: string
+          period_end: string | null
+          period_start: string | null
+          source: string
+          value: number
+        }
+        Insert: {
+          captured_at?: string
+          client_account_id: string
+          id?: string
+          metadata?: Json
+          metric: string
+          period_end?: string | null
+          period_start?: string | null
+          source: string
+          value: number
+        }
+        Update: {
+          captured_at?: string
+          client_account_id?: string
+          id?: string
+          metadata?: Json
+          metric?: string
+          period_end?: string | null
+          period_start?: string | null
+          source?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outcome_metrics_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -3572,6 +3668,7 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          metadata: Json
           name: string
           project_id: string
           sort_order: number | null
@@ -3583,6 +3680,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          metadata?: Json
           name: string
           project_id: string
           sort_order?: number | null
@@ -3594,6 +3692,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          metadata?: Json
           name?: string
           project_id?: string
           sort_order?: number | null
@@ -3673,6 +3772,7 @@ export type Database = {
           drip_step: number
           email: string
           gap_score: number | null
+          icp_fit_reason: string | null
           icp_fit_score: number | null
           id: string
           name: string
@@ -3699,6 +3799,7 @@ export type Database = {
           drip_step?: number
           email: string
           gap_score?: number | null
+          icp_fit_reason?: string | null
           icp_fit_score?: number | null
           id?: string
           name: string
@@ -3725,6 +3826,7 @@ export type Database = {
           drip_step?: number
           email?: string
           gap_score?: number | null
+          icp_fit_reason?: string | null
           icp_fit_score?: number | null
           id?: string
           name?: string
@@ -4033,24 +4135,33 @@ export type Database = {
           client_account_id: string
           created_at: string
           id: string
+          previous_audit_id: string | null
           results: Json
+          rubric_version: string | null
           score: number | null
+          status: string
         }
         Insert: {
           audit_type?: string
           client_account_id: string
           created_at?: string
           id?: string
+          previous_audit_id?: string | null
           results?: Json
+          rubric_version?: string | null
           score?: number | null
+          status?: string
         }
         Update: {
           audit_type?: string
           client_account_id?: string
           created_at?: string
           id?: string
+          previous_audit_id?: string | null
           results?: Json
+          rubric_version?: string | null
           score?: number | null
+          status?: string
         }
         Relationships: [
           {
@@ -4058,6 +4169,13 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seo_audits_previous_audit_id_fkey"
+            columns: ["previous_audit_id"]
+            isOneToOne: false
+            referencedRelation: "seo_audits"
             referencedColumns: ["id"]
           },
         ]

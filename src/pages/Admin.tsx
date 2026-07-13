@@ -1614,6 +1614,7 @@ const AdminInner = () => {
       "task-templates": "Task Templates",
       "brand-assets": "Brand Assets",
       "service-agreements": "Service Agreements",
+      "ai-agent": "AI Agent",
       settings: "Admin Settings",
       // Legacy titles for backward compatibility
       pipeline: "Pipeline Dashboard",
