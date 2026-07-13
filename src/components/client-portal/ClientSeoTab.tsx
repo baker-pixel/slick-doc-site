@@ -539,12 +539,14 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                   </div>
                 </div>
 
-                {/* Disconnect */}
-                {(wpSite.status === "connected" || wpSite.status === "unreachable") && (
+                {/* Disconnect / reset a stuck pending connection */}
+                {(wpSite.status === "connected" || wpSite.status === "unreachable" || wpSite.status === "pending") && (
                   <div className="shrink-0">
                     {showDisconnectConfirm ? (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Remove connection?</span>
+                        <span className="text-xs text-muted-foreground">
+                          {wpSite.status === "pending" ? "Start over?" : "Remove connection?"}
+                        </span>
                         <Button
                           size="sm" variant="destructive" className="h-7 text-xs"
                           onClick={handleDisconnect}
@@ -565,7 +567,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                         className="h-7 text-xs text-muted-foreground hover:text-destructive"
                         onClick={() => setShowDisconnectConfirm(true)}
                       >
-                        <XCircle className="h-3.5 w-3.5 mr-1" /> Disconnect
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        {wpSite.status === "pending" ? "Reset" : "Disconnect"}
                       </Button>
                     )}
                   </div>
