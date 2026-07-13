@@ -90,9 +90,6 @@ verify_jwt = false
 [functions.parse-sop]
 verify_jwt = false
 
-[functions.send-content-to-client]
-verify_jwt = false
-
 [functions.send-report-to-client]
 verify_jwt = false
 
@@ -172,9 +169,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.n8n-callback]
-verify_jwt = false
-
-[functions.trigger-task]
 verify_jwt = false
 
 [functions.prepare-connection]
