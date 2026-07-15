@@ -5,6 +5,7 @@ import { callAIJson } from "../_shared/ai.ts";
 import { recordOutcome } from "../_shared/outcomes.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
+import { refreshProspectProject } from "../_shared/prospectProject.ts";
 
 const RESEND_API_URL = "https://api.resend.com";
 
@@ -380,6 +381,7 @@ serve(async (req) => {
     }
 
     // 5. Send drip emails
+    const touchedClients = new Set<string>();
     for (const prospect of nurtureProspects as Prospect[]) {
       if (emailsSent >= MAX_SENDS_PER_RUN) {
         console.log(`Send cap ${MAX_SENDS_PER_RUN} reached — remaining prospects picked up next run`);
@@ -406,6 +408,7 @@ serve(async (req) => {
             metadata: { prospect_id: prospect.id, business_type: prospect.business_type },
           });
         }
+        if (prospect.client_id) touchedClients.add(prospect.client_id);
         console.log(`Prospect ${prospect.email} is now a client — marked converted`);
         continue;
       }
@@ -494,7 +497,10 @@ serve(async (req) => {
             .eq("id", prospect.id)
             .eq("drip_step", prospect.drip_step)
             .select("id", { count: "exact", head: true });
-          if (updated && updated > 0) emailsSent++;
+          if (updated && updated > 0) {
+            emailsSent++;
+            touchedClients.add(prospect.client_id!);
+          }
 
           // Log the send so resend-webhook can match delivery/bounce/
           // complaint events back to it (matches on resend_id).
@@ -532,6 +538,11 @@ serve(async (req) => {
       } catch (sendErr) {
         console.error(`Error sending drip to ${prospect.email}:`, sendErr);
       }
+    }
+
+    // Keep each touched client's Lead Generation Plan project current.
+    for (const cid of touchedClients) {
+      await refreshProspectProject(supabase, cid);
     }
 
     console.log(`Drip run complete: ${prospectsNurtured} nurtured, ${emailsSent} emails sent`);

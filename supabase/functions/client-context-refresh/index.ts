@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { refineClientContext } from "../_shared/contextRefine.ts";
 import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { refreshProspectProject } from "../_shared/prospectProject.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,6 +57,15 @@ serve(async (req) => {
       } catch (e) {
         console.error("social strategy ensure failed", c.id, e);
         social = "error";
+      }
+      try {
+        // Weekly catch-all for the prospect funnel project — covers status
+        // changes made outside discovery/drip (admin Replied/Pause buttons).
+        if (tierPolicy(c.tier).prospect.enabled) {
+          await refreshProspectProject(supabase, c.id);
+        }
+      } catch (e) {
+        console.error("prospect project refresh failed", c.id, e);
       }
       results.push({ client: c.business_name, refined, social });
     }

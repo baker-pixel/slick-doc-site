@@ -4,6 +4,7 @@ import { checkAdminAuth } from "../_shared/auth.ts";
 import { ensureClientICP } from "../_shared/icp.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
+import { refreshProspectProject } from "../_shared/prospectProject.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -212,6 +213,8 @@ Respond with ONLY a JSON array, no prose:
         icon: "search",
         metadata: { source: "web_search", geography, discovered: inserted.length },
       });
+
+      await refreshProspectProject(supabase, body.client_id);
 
       // Same as the Maps path: enrich context + score fit before review.
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

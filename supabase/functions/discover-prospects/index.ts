@@ -10,6 +10,7 @@ const corsHeaders = {
 import { checkAdminAuth } from "../_shared/auth.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
+import { refreshProspectProject } from "../_shared/prospectProject.ts";
 
 interface DiscoverRequest {
   client_id: string;
@@ -199,6 +200,8 @@ serve(async (req) => {
       icon: "search",
       metadata: { source: "maps", query, location, discovered: inserted?.length ?? 0 },
     });
+
+    await refreshProspectProject(supabase, client_id);
 
     // Fire context enrichment immediately so prospects have context_profile before
     // the admin reviews them — enables better personalized drip emails later.
