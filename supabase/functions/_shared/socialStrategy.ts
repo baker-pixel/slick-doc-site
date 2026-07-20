@@ -74,7 +74,11 @@ export async function upsertSocialStrategy(
   for (const p of pillars) {
     sort++;
     const existingId = byPillar.get(p.name);
-    const row = { name: p.name, description: p.description, sort_order: sort, status: "in_progress", metadata: { pillar: p.name } };
+    const row = {
+      name: p.name, description: p.description, sort_order: sort, status: "in_progress",
+      // See seoProject.ts for the source_engine/relevant_to pull-model contract.
+      metadata: { pillar: p.name, source_engine: "social", relevant_to: [] as string[] },
+    };
     if (existingId) await supabase.from("project_milestones").update(row).eq("id", existingId);
     else await supabase.from("project_milestones").insert({ project_id: projectId, ...row });
   }

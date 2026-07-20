@@ -833,6 +833,7 @@ export type Database = {
           intake_completed_at: string | null
           kickoff_scheduled_at: string | null
           last_name: string | null
+          lead_id: string | null
           level: number | null
           onboarded_at: string | null
           plan_tier: string | null
@@ -863,6 +864,7 @@ export type Database = {
           intake_completed_at?: string | null
           kickoff_scheduled_at?: string | null
           last_name?: string | null
+          lead_id?: string | null
           level?: number | null
           onboarded_at?: string | null
           plan_tier?: string | null
@@ -893,6 +895,7 @@ export type Database = {
           intake_completed_at?: string | null
           kickoff_scheduled_at?: string | null
           last_name?: string | null
+          lead_id?: string | null
           level?: number | null
           onboarded_at?: string | null
           plan_tier?: string | null
@@ -907,7 +910,15 @@ export type Database = {
           website_summary?: string | null
           website_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "client_accounts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "gap_analysis_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       client_analytics: {
         Row: {
@@ -1937,6 +1948,7 @@ export type Database = {
           due_date: string | null
           id: string
           instructions: string | null
+          milestone_id: string | null
           name: string
           notes: string | null
           order_index: number | null
@@ -1965,6 +1977,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           instructions?: string | null
+          milestone_id?: string | null
           name: string
           notes?: string | null
           order_index?: number | null
@@ -1993,6 +2006,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           instructions?: string | null
+          milestone_id?: string | null
           name?: string
           notes?: string | null
           order_index?: number | null
@@ -2019,6 +2033,13 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_tasks_milestone_id_fkey"
+            columns: ["milestone_id"]
+            isOneToOne: false
+            referencedRelation: "project_milestones"
             referencedColumns: ["id"]
           },
           {

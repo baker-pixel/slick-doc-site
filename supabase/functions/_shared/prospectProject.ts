@@ -59,7 +59,8 @@ export async function refreshProspectProject(supabase: any, clientId: string): P
       name: s.name(n), description: s.desc, sort_order: i + 1,
       status: achieved ? "completed" : "pending",
       completed_at: achieved ? new Date().toISOString() : null,
-      metadata: { stage: s.key, count: n },
+      // See seoProject.ts for the source_engine/relevant_to pull-model contract.
+      metadata: { stage: s.key, count: n, source_engine: "prospect", relevant_to: [] as string[] },
     };
     const ex = byStage.get(s.key);
     if (ex) {

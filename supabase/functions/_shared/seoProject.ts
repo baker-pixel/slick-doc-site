@@ -83,6 +83,12 @@ export async function upsertSeoProject(supabase: any, clientId: string, audit: A
     const metadata = {
       check_id: it.check_id, category: it.category, severity: it.severity,
       impact: it.impact, effort: it.effort, wp_applyable: it.wp_applyable, pages: [...it.pages],
+      // Pull-model contract shared across engine milestone writers (seoProject/
+      // socialStrategy/prospectProject): source_engine identifies the writer,
+      // relevant_to lists which other engines should treat this as their own
+      // work queue (e.g. thin_content tagged relevant_to:['social']). Left
+      // empty until a real cross-engine mapping is designed -- not fabricated here.
+      source_engine: "seo", relevant_to: [] as string[],
     };
     const ex = existingByCheck.get(it.check_id);
     if (ex) {

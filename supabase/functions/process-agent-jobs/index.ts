@@ -17,6 +17,7 @@ const TARGET_PATHS: Record<string, string> = {
   "trigger-n8n": "trigger-n8n",
   "run-automation": "run-automation",
   "generate-approval-draft": "generate-approval-draft",
+  "seo-audit": "seo-audit",
 };
 
 interface AgentJobMessage {

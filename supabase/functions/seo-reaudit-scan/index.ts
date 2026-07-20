@@ -45,25 +45,24 @@ serve(async (req) => {
       if (isDue) due.push({ id: c.id, name: c.business_name });
     }
 
-    // Run a bounded number this invocation; the rest are picked up next run.
+    // Enqueue a bounded number this invocation onto the agent_jobs durable
+    // queue (process-agent-jobs dispatches to seo-audit on its per-minute
+    // poll) instead of calling seo-audit directly -- gets safe claiming
+    // across overlapping invocations, retry, and dead-letter for free.
+    // Same-day idempotencyKey guards against double-enqueue if this scan
+    // itself overlaps (retry, manual trigger during the cron window).
     const toRun = due.slice(0, MAX_PER_RUN);
+    const today = new Date().toISOString().slice(0, 10);
     const results: { client: string; status: string }[] = [];
     for (const c of toRun) {
-      try {
-        const res = await fetch(`${supabaseUrl}/functions/v1/seo-audit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify({ clientId: c.id }),
-        });
-        const data = await res.json().catch(() => ({}));
-        results.push({ client: c.name, status: res.ok ? (data.status ?? "ok") : `error ${res.status}` });
-      } catch (e) {
-        results.push({ client: c.name, status: `error: ${e instanceof Error ? e.message : e}` });
-      }
+      const { error } = await supabase.rpc("agent_jobs_enqueue", {
+        msg: { target: "seo-audit", idempotencyKey: `seo-audit:${c.id}:${today}`, body: { clientId: c.id } },
+      });
+      results.push({ client: c.name, status: error ? `enqueue error: ${error.message}` : "enqueued" });
     }
 
-    console.log(`seo-reaudit-scan: ${due.length} due, ran ${toRun.length}`);
-    return json({ due: due.length, ran: toRun.length, results, remaining: Math.max(0, due.length - toRun.length) });
+    console.log(`seo-reaudit-scan: ${due.length} due, enqueued ${toRun.length}`);
+    return json({ due: due.length, enqueued: toRun.length, results, remaining: Math.max(0, due.length - toRun.length) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("seo-reaudit-scan error:", msg);
