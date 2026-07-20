@@ -107,6 +107,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   const [showComments, setShowComments] = useState<string | null>(null);
   const [deliverables, setDeliverables] = useState<Record<string, Deliverable[]>>({});
   const [showCompleted, setShowCompleted] = useState(false);
+  const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -134,6 +135,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   }, [clientAccountId]);
 
   const fetchProjects = async () => {
+    setFetchFailed(false);
     try {
       const { data: projectsData, error } = await supabase
         .from("client_projects")
@@ -189,6 +191,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
+      setFetchFailed(true);
     } finally {
       setLoading(false);
     }
@@ -214,6 +217,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
       }
     } catch (error) {
       console.error("Error fetching deliverables:", error);
+      toast.error("Couldn't load deliverables for this project — try refreshing.");
     }
   };
 
@@ -239,6 +243,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
       }
     } catch (error) {
       console.error("Error fetching comments:", error);
+      toast.error("Couldn't load comments — try refreshing.");
     }
   };
 
@@ -370,6 +375,22 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
           <p className="text-muted-foreground">Loading your projects...</p>
         </div>
       </div>
+    );
+  }
+
+  if (fetchFailed) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load your projects"
+        description="Something went wrong loading this page. Try again — if it keeps happening, let your team know."
+        action={
+          <Button onClick={fetchProjects}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        }
+      />
     );
   }
 

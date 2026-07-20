@@ -4,6 +4,7 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logAlert } from "../_shared/alerts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +37,34 @@ async function recordPublish(
   } catch (e) {
     console.error("recordPublish bookkeeping failed:", e instanceof Error ? e.message : e);
   }
+}
+
+// Every publish failure used to only write into metadata.error (invisible to
+// anything querying the real error_message column) and most paths never
+// alerted an admin at all -- 51/55 failed posts over 2.5 months went
+// unnoticed. Centralized so every platform branch fails the same visible way.
+async function markFailed(
+  supabase: any,
+  item: { id: string; platform: string; metadata?: unknown },
+  msg: string,
+): Promise<void> {
+  await supabase.from("content_calendar")
+    .update({
+      status: "failed",
+      error_message: msg,
+      metadata: { ...((item.metadata as object) || {}), error: msg },
+    })
+    .eq("id", item.id);
+
+  await logAlert(supabase, {
+    source: "publish-scheduled-content",
+    alertType: "content_publish_failure",
+    severity: "warning",
+    title: `Publish failed: ${item.platform}`,
+    message: msg,
+    sourceId: item.id,
+    metadata: { platform: item.platform },
+  });
 }
 
 serve(async (req) => {
@@ -104,12 +133,16 @@ serve(async (req) => {
             if (pfmRes.error) {
               const msg = pfmRes.error.message || "Invoke error";
               console.error(`PfM invoke error for ${item.id}:`, msg);
+              await markFailed(supabase, item, msg);
               results.push({ id: item.id, platform: item.platform, success: false, error: msg });
             } else if (pfmRes.data?.skipped) {
               // Already published by a concurrent run — treat as success
               console.log(`Post ${item.id} already handled (skipped)`);
               results.push({ id: item.id, platform: item.platform, success: true, skipped: true });
             } else if (!pfmRes.data?.success) {
+              // postforme-publish-post already wrote content_calendar + alerted
+              // for this failure (or requeued it as "scheduled" for retry) --
+              // don't double-write/double-alert here.
               const msg = pfmRes.data?.error || "Publish failed";
               console.error(`PfM publish failed for ${item.id}:`, msg);
               results.push({ id: item.id, platform: item.platform, success: false, error: msg });
@@ -137,9 +170,7 @@ serve(async (req) => {
               if (emailRes.error) {
                 const msg = emailRes.error.message;
                 console.error("Resend error:", msg);
-                await supabase.from("content_calendar")
-                  .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
-                  .eq("id", item.id);
+                await markFailed(supabase, item, msg);
                 results.push({ id: item.id, platform: "email", success: false, error: msg });
               } else {
                 await supabase.from("content_calendar")
@@ -160,9 +191,7 @@ serve(async (req) => {
               });
               if (n8nRes.error) {
                 const msg = `n8n trigger failed: ${n8nRes.error.message}`;
-                await supabase.from("content_calendar")
-                  .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
-                  .eq("id", item.id);
+                await markFailed(supabase, item, msg);
                 results.push({ id: item.id, platform: "email", success: false, error: msg });
               } else {
                 await supabase.from("content_calendar")
@@ -186,9 +215,7 @@ serve(async (req) => {
             });
             if (n8nRes.error) {
               const msg = `n8n trigger failed: ${n8nRes.error.message}`;
-              await supabase.from("content_calendar")
-                .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
-                .eq("id", item.id);
+              await markFailed(supabase, item, msg);
               results.push({ id: item.id, platform: item.platform, success: false, error: msg });
             } else {
               await supabase.from("content_calendar")
@@ -211,17 +238,7 @@ serve(async (req) => {
           default: {
             const msg = `Platform "${item.platform}" is not supported for automated publishing.`;
             console.warn(msg);
-            await supabase.from("content_calendar")
-              .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
-              .eq("id", item.id);
-            await supabase.from("automation_alerts").insert({
-              alert_type: "content_publish_failure",
-              severity: "warning",
-              title: "Unsupported Platform",
-              message: msg,
-              source: "publish-scheduled-content",
-              source_id: item.id,
-            });
+            await markFailed(supabase, item, msg);
             results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: msg });
           }
         }
@@ -229,8 +246,17 @@ serve(async (req) => {
         const msg = itemErr instanceof Error ? itemErr.message : "Unknown error";
         console.error(`Error processing item ${item.id}:`, msg);
         await supabase.from("content_calendar")
-          .update({ status: "failed", metadata: { ...((item.metadata as object) || {}), error: msg } })
+          .update({ status: "failed", error_message: msg, metadata: { ...((item.metadata as object) || {}), error: msg } })
           .eq("id", item.id).neq("status", "published");
+        await logAlert(supabase, {
+          source: "publish-scheduled-content",
+          alertType: "content_publish_failure",
+          severity: "warning",
+          title: `Publish failed: ${item.platform || "unknown"}`,
+          message: msg,
+          sourceId: item.id,
+          metadata: { platform: item.platform },
+        });
         results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: msg });
       }
     }

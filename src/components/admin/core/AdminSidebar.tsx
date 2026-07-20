@@ -19,7 +19,9 @@ import {
   Search,
   Send,
   Bot,
+  Bell,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar,
   SidebarContent,
@@ -132,6 +134,7 @@ const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
   { id: "client-projects", label: "Projects", icon: Layers },
   { id: "client-workflow", label: "Workflows", icon: Briefcase },
+  { id: "alerts", label: "Alerts", icon: Bell },
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -143,13 +146,14 @@ interface NavGroupProps {
   onSectionChange: (section: AdminSection) => void;
   defaultOpen?: boolean;
   collapsible?: boolean;
+  badges?: Partial<Record<AdminSection, number>>;
 }
 
 function isItemActive(item: NavItem, activeSection: AdminSection): boolean {
   return activeSection === item.id || !!item.matchIds?.includes(activeSection);
 }
 
-function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = false, collapsible = true }: NavGroupProps) {
+function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = false, collapsible = true, badges }: NavGroupProps) {
   const hasActiveItem = items.some(item => isItemActive(item, activeSection));
   const [open, setOpen] = useState(defaultOpen || hasActiveItem);
 
@@ -168,7 +172,12 @@ function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = 
               tooltip={item.label}
             >
               <item.icon className="h-4 w-4" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {!!badges?.[item.id] && (
+                <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-medium leading-none text-destructive-foreground group-data-[collapsible=icon]:hidden">
+                  {badges[item.id]! > 99 ? "99+" : badges[item.id]}
+                </span>
+              )}
             </SidebarMenuButton>
           </SidebarMenuItem>
         ))}
@@ -205,7 +214,38 @@ function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = 
   );
 }
 
+function useUnacknowledgedAlertCount(): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refresh = async () => {
+      const { count: c } = await supabase
+        .from("automation_alerts")
+        .select("id", { count: "exact", head: true })
+        .is("acknowledged_at", null);
+      if (!cancelled) setCount(c ?? 0);
+    };
+
+    refresh();
+
+    const channel = supabase
+      .channel("admin-sidebar-alerts")
+      .on("postgres_changes", { event: "*", schema: "public", table: "automation_alerts" }, refresh)
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  return count;
+}
+
 export function AdminSidebar({ activeSection, onSectionChange, onLogout }: AdminSidebarProps) {
+  const alertCount = useUnacknowledgedAlertCount();
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -234,7 +274,7 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
         </SidebarGroup>
         <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
-        <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
+        <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ alerts: alertCount }} />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">

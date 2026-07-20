@@ -39,6 +39,12 @@ export interface AutomationRequest {
   // Accept string here because callers may send legacy/slightly different slugs (e.g. hyphens)
   jobType: string;
   inputData?: Record<string, unknown>;
+  // Present when enqueued by advance-workflow for an onboarding-checklist
+  // automation step -- lets this function close the loop back to
+  // workflow_steps instead of leaving the step "in_progress" forever.
+  workflowId?: string;
+  stepId?: string;
+  stepNumber?: number;
 }
 
 export interface ClientData {

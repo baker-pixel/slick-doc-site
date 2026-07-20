@@ -81,7 +81,7 @@ serve(async (req) => {
     }
     await supabase
       .from("content_calendar")
-      .update({ status: "failed", metadata: { ...meta, publish_attempts: attempts, error: errorMsg } })
+      .update({ status: "failed", error_message: errorMsg, metadata: { ...meta, publish_attempts: attempts, error: errorMsg } })
       .eq("id", id);
     await supabase.from("automation_alerts").insert({
       alert_type: "content_publish_failure",

@@ -1,0 +1,169 @@
+// deno-lint-ignore-file no-explicit-any
+/**
+ * Shared onboarding-workflow unlock logic. Extracted out of advance-workflow
+ * so the exact same cascade can be re-run by check-stalled-workflows as a
+ * periodic reconciliation sweep (a step whose dependency is already
+ * "completed" in the DB but which itself is still "locked" -- e.g. a caller
+ * that updated the dependency but never invoked the cascade -- silently
+ * stalled the rest of the checklist forever with no path to self-heal).
+ */
+
+const ONBOARDING_SYNC: Record<string, string> = {
+  client_form: "intake_form_completed_at",
+  client_calendar: "kickoff_scheduled_at",
+};
+
+const CLIENT_STEP_TYPES = new Set([
+  "client_form",
+  "client_upload",
+  "client_oauth",
+  "client_calendar",
+  "client_approval",
+]);
+
+export interface UnlockResult {
+  unlocked: number;
+  all_done: boolean;
+}
+
+export async function unlockReadySteps(
+  supabase: any,
+  workflowId: string,
+  justCompletedStepNumber?: number | null,
+  explicitClientId?: string | null
+): Promise<UnlockResult> {
+  const { data: allSteps, error: stepsErr } = await supabase
+    .from("workflow_steps")
+    .select("id, step_number, task_type, status, depends_on, payload")
+    .eq("workflow_id", workflowId)
+    .order("step_number");
+
+  if (stepsErr) throw new Error(stepsErr.message);
+  if (!allSteps || allSteps.length === 0) return { unlocked: 0, all_done: false };
+
+  const stateMap = new Map(allSteps.map((s: any) => [s.step_number, { ...s }]));
+  const completedStepObj =
+    justCompletedStepNumber != null ? (stateMap.get(justCompletedStepNumber) as any) : undefined;
+  if (completedStepObj) completedStepObj.status = "completed";
+
+  const clientToUnlock: string[] = [];
+  const automationToUnlock: { id: string; step_number: number; task_type: string; payload: any }[] = [];
+
+  for (const [, step] of stateMap as any) {
+    if (step.status !== "locked") continue;
+    if (step.depends_on == null) continue;
+    const dep = stateMap.get(step.depends_on) as any;
+    if (dep && dep.status === "completed") {
+      if (CLIENT_STEP_TYPES.has(step.task_type)) {
+        step.status = "pending";
+        clientToUnlock.push(step.id);
+      } else {
+        step.status = "in_progress";
+        automationToUnlock.push({
+          id: step.id,
+          step_number: step.step_number,
+          task_type: step.task_type,
+          payload: step.payload,
+        });
+      }
+    }
+  }
+
+  if (clientToUnlock.length > 0) {
+    await supabase.from("workflow_steps").update({ status: "pending" }).in("id", clientToUnlock);
+  }
+  if (automationToUnlock.length > 0) {
+    await supabase
+      .from("workflow_steps")
+      .update({ status: "in_progress" })
+      .in("id", automationToUnlock.map((s) => s.id));
+  }
+
+  const toUnlock = [...clientToUnlock, ...automationToUnlock.map((s) => s.id)];
+
+  const sortedSteps = [...(stateMap as any).values()].sort(
+    (a: any, b: any) => a.step_number - b.step_number
+  );
+  const nextIncomplete = sortedSteps.find((s: any) => s.status !== "completed");
+  const allDone = !nextIncomplete;
+
+  await supabase
+    .from("client_workflows")
+    .update({
+      current_step: nextIncomplete?.step_number ?? sortedSteps[sortedSteps.length - 1].step_number,
+      ...(allDone ? { status: "completed" } : {}),
+    })
+    .eq("id", workflowId);
+
+  const resolvedClientId: string | null =
+    explicitClientId ??
+    (await supabase
+      .from("client_workflows")
+      .select("client_id")
+      .eq("id", workflowId)
+      .single()
+      .then(({ data }: any) => data?.client_id ?? null));
+
+  if (resolvedClientId && completedStepObj) {
+    const syncField = ONBOARDING_SYNC[completedStepObj.task_type];
+    if (syncField) {
+      await supabase
+        .from("client_onboarding")
+        .update({ [syncField]: new Date().toISOString() })
+        .eq("client_account_id", resolvedClientId);
+    }
+
+    const onboardingSteps = sortedSteps.filter((s: any) => CLIENT_STEP_TYPES.has(s.task_type));
+    const allOnboardingDone =
+      onboardingSteps.length > 0 && onboardingSteps.every((s: any) => s.status === "completed");
+
+    if (allOnboardingDone) {
+      await supabase
+        .from("client_onboarding")
+        .update({ onboarding_completed_at: new Date().toISOString() })
+        .eq("client_account_id", resolvedClientId);
+
+      await supabase
+        .from("client_projects")
+        .update({ status: "active" })
+        .eq("client_account_id", resolvedClientId)
+        .eq("status", "draft");
+    }
+  }
+
+  const enqueue = (target: string, idempotencyKey: string, body: Record<string, unknown>) =>
+    supabase
+      .rpc("agent_jobs_enqueue", { msg: { target, idempotencyKey, body } })
+      .then(({ error }: { error: unknown }) => {
+        if (error) console.error(`Failed to enqueue ${target} job (${idempotencyKey}):`, error);
+      });
+
+  if (resolvedClientId) {
+    const approvalStep = allSteps.find(
+      (s: any) => clientToUnlock.includes(s.id) && s.task_type === "client_approval"
+    );
+    if (approvalStep) {
+      await enqueue("generate-approval-draft", `approval-draft:${approvalStep.id}`, {
+        client_id: resolvedClientId,
+        workflow_id: workflowId,
+        step_id: approvalStep.id,
+      });
+    }
+  }
+
+  if (automationToUnlock.length > 0 && resolvedClientId) {
+    for (const step of automationToUnlock) {
+      await enqueue("run-automation", `automation-step:${step.id}`, {
+        clientId: resolvedClientId,
+        jobType: step.task_type,
+        workflowId,
+        stepId: step.id,
+        stepNumber: step.step_number,
+        inputData: step.payload || {},
+        _source: "advance-workflow",
+      });
+    }
+  }
+
+  return { unlocked: toUnlock.length, all_done: allDone };
+}

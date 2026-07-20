@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { logAlert, functionErrorAlert } from "../_shared/alerts.ts";
+import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 
 // How long an agent task may sit in "running" before we assume the edge
 // function died mid-job (crash/timeout) and reap it.
@@ -23,6 +24,9 @@ serve(async (req) => {
       stuck_tasks: 0,
       orphaned_steps: 0,
       stuck_client_tasks: 0,
+      reconciled_workflows: 0,
+      reconciled_steps: 0,
+      stale_draft_alert: 0,
     };
 
     // ── Sweep 1: n8n callback timeouts (original behavior) ──────────────
@@ -175,6 +179,87 @@ serve(async (req) => {
         metadata: { client_task_id: ct.id, client_account_id: ct.client_account_id },
       });
       summary.stuck_client_tasks++;
+    }
+
+    // ── Sweep 5: reconcile in-progress workflows ─────────────────────────
+    // A step can end up "locked" forever even though its dependency is
+    // already "completed" -- e.g. a caller updates the dependency step
+    // directly without invoking advance-workflow, or a previous
+    // advance-workflow call dropped before finishing its unlock pass.
+    // Re-running the same idempotent unlock cascade here catches those:
+    // it's a no-op for a workflow that's already consistent.
+    const { data: activeWorkflows, error: wfErr } = await supabase
+      .from("client_workflows")
+      .select("id")
+      .neq("status", "completed");
+
+    if (wfErr) throw wfErr;
+
+    for (const wf of activeWorkflows ?? []) {
+      try {
+        const result = await unlockReadySteps(supabase, wf.id);
+        if (result.unlocked > 0) {
+          summary.reconciled_workflows++;
+          summary.reconciled_steps += result.unlocked;
+          await logAlert(supabase, {
+            source: "check-stalled-workflows",
+            alertType: "workflow_reconciled",
+            severity: "warning",
+            title: `Stalled workflow step(s) unlocked`,
+            message: `Reconciliation sweep unlocked ${result.unlocked} step(s) on workflow ${wf.id} that were ready but never advanced.`,
+            sourceId: wf.id,
+          });
+        }
+      } catch (reconcileErr) {
+        console.error(`Reconciliation failed for workflow ${wf.id}:`, reconcileErr);
+      }
+    }
+
+    // ── Sweep 6: stale GBP/newsletter draft backlog ──────────────────────
+    // These two platforms deliberately require a manual admin "send for
+    // approval" click (unlike facebook/instagram/twitter/linkedin, which
+    // auto-forward -- see fill-scheduled-content's AUTO_FORWARD_PLATFORMS)
+    // and have no reminder today. A draft that never gets reviewed just
+    // silently never publishes -- surface it instead of leaving it invisible.
+    const STALE_DRAFT_HOURS = 48;
+    const staleDraftCutoff = new Date(now.getTime() - STALE_DRAFT_HOURS * 60 * 60_000).toISOString();
+    const { data: staleDrafts, error: draftErr } = await supabase
+      .from("content_calendar")
+      .select("id, client_account_id, platform, created_at")
+      .in("platform", ["google_business", "email"])
+      .eq("status", "draft")
+      .eq("client_approved", false)
+      .lt("created_at", staleDraftCutoff);
+
+    if (draftErr) throw draftErr;
+
+    if (staleDrafts && staleDrafts.length > 0) {
+      const { data: existingAlert } = await supabase
+        .from("automation_alerts")
+        .select("id")
+        .eq("alert_type", "stale_draft_backlog")
+        .is("acknowledged_at", null)
+        .maybeSingle();
+
+      // Only one open alert at a time -- re-alerting every 30 min while an
+      // admin hasn't acknowledged the last one yet would just be noise.
+      if (!existingAlert) {
+        const oldestCreatedAt = staleDrafts.reduce(
+          (min, d) => (d.created_at < min ? d.created_at : min),
+          staleDrafts[0].created_at
+        );
+        const clientCount = new Set(staleDrafts.map((d) => d.client_account_id)).size;
+
+        await logAlert(supabase, {
+          source: "check-stalled-workflows",
+          alertType: "stale_draft_backlog",
+          severity: "warning",
+          title: `${staleDrafts.length} Google Business/email draft(s) awaiting review`,
+          message: `${staleDrafts.length} Google Business Profile / newsletter draft(s) across ${clientCount} client(s) have sat unreviewed for over ${STALE_DRAFT_HOURS}h (oldest created ${oldestCreatedAt}). These platforms require a manual "send for approval" click and will never auto-publish.`,
+          metadata: { count: staleDrafts.length, client_count: clientCount, oldest_created_at: oldestCreatedAt },
+        });
+        summary.stale_draft_alert = 1;
+      }
     }
 
     return jsonResponse({ checked: true, ...summary });

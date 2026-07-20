@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 import type { AutomationType, AutomationRequest } from "./types.ts";
 
 import { sendIntakeForm } from "./handlers/send-intake-form.ts";
@@ -252,6 +253,8 @@ serve(async (req) => {
 
   let clientId: string | undefined;
   let taskId: string | undefined;
+  let workflowId: string | undefined;
+  let stepId: string | undefined;
   try {
     const body: AutomationRequest = await req.json();
 
@@ -274,6 +277,9 @@ serve(async (req) => {
 
     clientId = body.clientId;
     taskId = body.taskId;
+    workflowId = body.workflowId;
+    stepId = body.stepId;
+    const stepNumber = body.stepNumber;
     const inputData = body.inputData;
 
     const jobTypeRaw = body.jobType;
@@ -431,6 +437,22 @@ serve(async (req) => {
       })
       .eq("id", job.id);
 
+    // If this run was driven by the onboarding checklist (advance-workflow
+    // enqueued it against a workflow_steps row), close the loop: mark that
+    // step completed and cascade the unlock so the rest of the checklist
+    // actually advances. Previously nothing wrote back to workflow_steps
+    // here, so every automation-type step stayed "in_progress" forever
+    // once unlocked, wedging the whole chain behind it.
+    if (workflowId && stepId) {
+      await supabase
+        .from("workflow_steps")
+        .update({ status: "completed", completed_at: new Date().toISOString(), result })
+        .eq("id", stepId)
+        .eq("status", "in_progress");
+
+      await unlockReadySteps(supabase, workflowId, stepNumber ?? null, clientId ?? null);
+    }
+
     console.log(`Job ${job.id} completed successfully`);
 
     return new Response(
@@ -487,6 +509,14 @@ serve(async (req) => {
             notes: `Error: ${errorMessage}`,
           })
           .eq("id", taskId);
+      }
+
+      if (stepId) {
+        await supabase
+          .from("workflow_steps")
+          .update({ status: "failed", result: { error: errorMessage } })
+          .eq("id", stepId)
+          .eq("status", "in_progress");
       }
     } catch (cleanupErr) {
       console.error("Failed to update error status:", cleanupErr);
