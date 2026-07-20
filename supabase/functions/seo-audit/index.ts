@@ -64,11 +64,14 @@ function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">> {
   if (s.looks_like_empty_spa || (!s.reachable)) {
     out.push(mk(CHECKS.render_required, p,
       "This page needs JavaScript to show its content, so parts of the SEO check may be incomplete.",
-      `Fetched via ${s.fetched_via}; body text was near-empty with multiple scripts (likely an unrendered SPA shell).`,
+      `Fetched via ${s.fetched_via}; body text was near-empty (likely an unrendered SPA shell).`,
       { fetched_via: s.fetched_via, reachable: s.reachable }));
     if (!s.reachable) return out; // nothing else meaningful to check
   }
 
+  // <head> tags (title, meta description, canonical, schema, viewport, OG)
+  // are typically present even when the <body> is client-rendered, so these
+  // stay reliable regardless of looks_like_empty_spa.
   if (!s.title) out.push(mk(CHECKS.missing_title, p, "This page has no title — the headline Google shows in results.", "No <title> element found.", { title: s.title }, { type: "wp_meta_title", payload: {}, expected_baseline: "" }));
   else if (s.title.length < 30) out.push(mk(CHECKS.title_too_short, p, "The page title is very short and may not describe the page well.", `Title is ${s.title.length} chars (aim 50–60).`, { title: s.title, len: s.title.length }, { type: "wp_meta_title", payload: {}, expected_baseline: s.title }));
   else if (s.title.length > 60) out.push(mk(CHECKS.title_too_long, p, "The page title is long and Google may cut it off.", `Title is ${s.title.length} chars (aim under 60).`, { title: s.title, len: s.title.length }, { type: "wp_meta_title", payload: {}, expected_baseline: s.title }));
@@ -76,16 +79,25 @@ function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">> {
   if (!s.meta_description) out.push(mk(CHECKS.missing_meta_desc, p, "No meta description — the summary under your Google listing.", "No meta description tag found.", { meta: "" }, { type: "wp_meta_description", payload: {}, expected_baseline: "" }));
   else if (s.meta_description.length < 120 || s.meta_description.length > 160) out.push(mk(CHECKS.meta_desc_length, p, "The Google summary text is a bit off-length.", `Meta description is ${s.meta_description.length} chars (aim 150–160).`, { len: s.meta_description.length }, { type: "wp_meta_description", payload: {}, expected_baseline: s.meta_description }));
 
-  if (s.h1_count === 0) out.push(mk(CHECKS.missing_h1, p, "This page has no main heading (H1).", "No <h1> found.", { h1_count: 0 }));
-  else if (s.h1_count > 1) out.push(mk(CHECKS.multiple_h1, p, "This page has several main headings; there should be one.", `${s.h1_count} <h1> elements.`, { h1_count: s.h1_count }));
-
-  if (s.images_missing_alt > 0) out.push(mk(CHECKS.images_missing_alt, p, `${s.images_missing_alt} image(s) have no alt text, so search engines can't read them.`, `${s.images_missing_alt}/${s.image_count} images missing alt.`, { images_missing_alt: s.images_missing_alt, image_count: s.image_count }, { type: "wp_image_alt", payload: {}, expected_baseline: null }));
-
   if (!s.has_canonical) out.push(mk(CHECKS.missing_canonical, p, "No canonical tag, which can cause duplicate-content confusion.", "No rel=canonical link.", { has_canonical: false }, { type: "wp_canonical", payload: { value: s.url }, expected_baseline: null }));
   if (!s.has_schema) out.push(mk(CHECKS.missing_schema, p, "Missing structured data that helps Google show rich results.", "No JSON-LD / schema.org markup detected.", { has_schema: false }));
   if (!s.has_viewport) out.push(mk(CHECKS.missing_viewport, p, "No mobile viewport tag — the page may not display well on phones.", "No viewport meta tag.", { has_viewport: false }));
   if (!s.has_open_graph) out.push(mk(CHECKS.missing_open_graph, p, "No Open Graph tags, so shared links look plain on social media.", "No og: tags.", { has_open_graph: false }));
-  if (s.word_count < 300) out.push(mk(CHECKS.thin_content, p, "This page has little text, which search engines may see as thin.", `~${s.word_count} words (aim 500+).`, { word_count: s.word_count }));
+
+  // <body>-dependent checks -- an unrendered SPA shell parsing as "no H1" or
+  // "thin content" is a false positive from our own fetch limitation (we
+  // don't execute JS), not a real content problem on the site. The
+  // render_required finding above already tells the client/admin why these
+  // couldn't be checked, so don't also contradict it with a confident
+  // "missing H1" / "thin content" finding on the same page.
+  if (!s.looks_like_empty_spa) {
+    if (s.h1_count === 0) out.push(mk(CHECKS.missing_h1, p, "This page has no main heading (H1).", "No <h1> found.", { h1_count: 0 }));
+    else if (s.h1_count > 1) out.push(mk(CHECKS.multiple_h1, p, "This page has several main headings; there should be one.", `${s.h1_count} <h1> elements.`, { h1_count: s.h1_count }));
+
+    if (s.images_missing_alt > 0) out.push(mk(CHECKS.images_missing_alt, p, `${s.images_missing_alt} image(s) have no alt text, so search engines can't read them.`, `${s.images_missing_alt}/${s.image_count} images missing alt.`, { images_missing_alt: s.images_missing_alt, image_count: s.image_count }, { type: "wp_image_alt", payload: {}, expected_baseline: null }));
+
+    if (s.word_count < 300) out.push(mk(CHECKS.thin_content, p, "This page has little text, which search engines may see as thin.", `~${s.word_count} words (aim 500+).`, { word_count: s.word_count }));
+  }
 
   // Performance findings only where PageSpeed actually ran (sampled pages).
   // "Not measured" is emitted once at the site level by the caller, never

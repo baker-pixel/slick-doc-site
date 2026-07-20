@@ -101,7 +101,7 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
       if (url.origin !== origin) return;
       const path = url.pathname;
       if (!isAllowed(path, disallows)) return;
-      if (/\.(pdf|jpg|jpeg|png|gif|svg|zip|xml|css|js|ico|woff2?)$/i.test(path)) return;
+      if (/\.(pdf|jpg|jpeg|png|gif|svg|webp|zip|xml|css|js|mjs|ico|woff2?|json|webmanifest|txt|map)$/i.test(path)) return;
       found.set(path, (found.get(path) ?? 0) + w);
     } catch { /* skip bad urls */ }
   };
@@ -221,9 +221,15 @@ function parseOnPage(html: string, url: string) {
     has_canonical: low.includes('rel="canonical"') || low.includes("rel='canonical'"),
     has_schema: low.includes('"@type"') || low.includes("application/ld+json"),
     has_open_graph: low.includes('property="og:') || low.includes("property='og:"),
-    // A rendered page with almost no body text but lots of scripts is an
-    // un-rendered SPA shell -- flagged so it never silently scores low.
-    looks_like_empty_spa: body_word_count < 40 && (html.match(/<script/gi)?.length ?? 0) > 3,
+    // A rendered page with almost no body text is an un-rendered SPA shell --
+    // flagged so it never silently scores low. Historically this required
+    // >3 <script> tags as corroborating evidence, but a modern single-bundle
+    // app (Vite/CRA/Next/Gatsby) often ships just one <script type="module">
+    // and a near-empty mount div, which that threshold missed entirely.
+    looks_like_empty_spa: body_word_count < 40 && (
+      (html.match(/<script/gi)?.length ?? 0) > 3 ||
+      /id=["'](root|app|__next|___gatsby)["']/i.test(html)
+    ),
     text_sample: text.slice(0, 1500),
   };
 }
