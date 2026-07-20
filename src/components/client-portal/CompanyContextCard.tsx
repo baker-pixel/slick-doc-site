@@ -36,7 +36,7 @@ const TONE_OPTIONS = [
   { value: "expert", label: "Expert / Authoritative" },
 ];
 
-function TagEditor({
+export function TagEditor({
   label,
   values,
   onChange,
