@@ -10,6 +10,8 @@ export interface InviteLead {
   industry?: string | null;
   overall_score?: number | null;
   website_url?: string | null;
+  /** gap_analysis_submissions.id, when this lead came from that funnel. */
+  lead_id?: string | null;
 }
 
 export function tierFromScore(score: number | null | undefined): string {
@@ -62,6 +64,7 @@ export async function inviteLeadToPortal(
         status: "active",
         tier,
         plan_tier: tier,
+        lead_id: lead.lead_id || null,
       },
     });
     if (createErr) throw new Error(createErr);

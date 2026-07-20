@@ -14,6 +14,7 @@ import {
   Upload, Plus, Trash2, CheckCircle2, X, Info, MessageSquare, BookOpen, Volume2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 
 interface BrandAsset {
   id: string;
@@ -131,37 +132,17 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       if (error) throw error;
 
       try {
-        const { data: wf } = await supabase
-          .from("client_workflows")
-          .select("id")
-          .eq("client_id", clientAccountId)
-          .eq("status", "active")
-          .maybeSingle();
+        // The onboarding step requires a logo, not just any confirmed asset
+        // (payload.required = ["logo_primary"]) -- only complete it once a
+        // logo/icon is actually confirmed, whether that's the one just
+        // confirmed or one confirmed earlier.
+        const isLogo = asset?.asset_type === "logo" || asset?.asset_type === "icon";
+        const hasConfirmedLogo =
+          isLogo || assets.some((a) => a.id !== assetId && a.confirmed && (a.asset_type === "logo" || a.asset_type === "icon"));
 
-        if (wf) {
-          const { data: uploadStep } = await supabase
-            .from("workflow_steps")
-            .select("id, step_number, status")
-            .eq("workflow_id", wf.id)
-            .eq("task_type", "client_upload")
-            .maybeSingle();
-
-          if (uploadStep && uploadStep.status !== "completed") {
-            await supabase
-              .from("workflow_steps")
-              .update({ status: "completed", completed_at: new Date().toISOString() })
-              .eq("id", uploadStep.id);
-
-            supabase.functions
-              .invoke("advance-workflow", {
-                body: {
-                  workflow_id: wf.id,
-                  completed_step_number: uploadStep.step_number,
-                  client_id: clientAccountId,
-                },
-              })
-              .catch((e) => console.error("advance-workflow failed after confirm:", e));
-
+        if (hasConfirmedLogo) {
+          const completed = await completeWorkflowStep(clientAccountId, "client_upload");
+          if (completed) {
             queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
             queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
           }
@@ -244,44 +225,10 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       });
       if (insertError) throw insertError;
 
-      try {
-        const { data: wf } = await supabase
-          .from("client_workflows")
-          .select("id")
-          .eq("client_id", clientAccountId)
-          .eq("status", "active")
-          .maybeSingle();
-        if (wf) {
-          const { data: uploadStep } = await supabase
-            .from("workflow_steps")
-            .select("id, step_number, status")
-            .eq("workflow_id", wf.id)
-            .eq("task_type", "client_upload")
-            .maybeSingle();
-
-          if (uploadStep && uploadStep.status !== "completed") {
-            await supabase
-              .from("workflow_steps")
-              .update({ status: "completed", completed_at: new Date().toISOString() })
-              .eq("id", uploadStep.id);
-
-            supabase.functions
-              .invoke("advance-workflow", {
-                body: {
-                  workflow_id: wf.id,
-                  completed_step_number: uploadStep.step_number,
-                  client_id: clientAccountId,
-                },
-              })
-              .catch((e) => console.error("advance-workflow failed after upload:", e));
-          }
-
-          queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
-          queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
-        }
-      } catch (e) {
-        console.error("Workflow step update after brand upload failed:", e);
-      }
+      // Note: uploading doesn't complete the "Upload Brand Assets" onboarding
+      // step by itself -- the asset lands unconfirmed (same as a website-
+      // detected asset) and the step only completes once a logo/icon is
+      // actually confirmed, in handleConfirmAsset.
 
       toast({ title: "Asset uploaded successfully!" });
       setUploadDialogOpen(false);

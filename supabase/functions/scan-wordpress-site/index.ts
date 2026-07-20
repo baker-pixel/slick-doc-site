@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 import { callAIJson } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
+import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -300,6 +301,41 @@ serve(async (req) => {
       .from("connected_sites")
       .update({ last_scanned_at: new Date().toISOString(), status: "connected", updated_at: new Date().toISOString() })
       .eq("id", siteId);
+
+    // 8. Close the loop with the client portal's "Analyze current website
+    // performance" onboarding step -- a real WP scan already covers what
+    // that step promises, so a connected+scanned site should satisfy it
+    // instead of leaving the client staring at "In progress..." forever
+    // waiting on the unrelated PageSpeed automation.
+    if (clientId) {
+      const { data: activeWf } = await supabase
+        .from("client_workflows")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (activeWf) {
+        const { data: analysisStep } = await supabase
+          .from("workflow_steps")
+          .update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            result: { source: "wordpress_scan", scan_id: scanRecord?.id, total_issues: totalIssues },
+          })
+          .eq("workflow_id", activeWf.id)
+          .eq("task_type", "website_analysis")
+          .eq("status", "in_progress")
+          .select("step_number")
+          .maybeSingle();
+
+        if (analysisStep) {
+          await unlockReadySteps(supabase, activeWf.id, analysisStep.step_number, clientId).catch((e) =>
+            console.error("unlockReadySteps failed after wp scan:", e),
+          );
+        }
+      }
+    }
 
     return new Response(
       JSON.stringify({ scan_id: scanRecord?.id, total_issues: totalIssues, fixes_generated: fixesGenerated }),

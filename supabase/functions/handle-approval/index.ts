@@ -236,17 +236,14 @@ serve(async (req) => {
         if (wf) {
           const { data: approvalStep } = await supabase
             .from("workflow_steps")
-            .select("id, step_number, status")
+            .update({ status: "completed", completed_at: new Date().toISOString() })
             .eq("workflow_id", wf.id)
             .eq("task_type", "client_approval")
+            .eq("status", "pending")
+            .select("id, step_number")
             .maybeSingle();
 
-          if (approvalStep && approvalStep.status !== "completed") {
-            await supabase
-              .from("workflow_steps")
-              .update({ status: "completed", completed_at: new Date().toISOString() })
-              .eq("id", approvalStep.id);
-
+          if (approvalStep) {
             const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
             const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
             fetch(`${supabaseUrl}/functions/v1/advance-workflow`, {

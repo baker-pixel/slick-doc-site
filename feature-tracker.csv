@@ -1,0 +1,69 @@
+Feature,Category,Functionality / Description,Status,Notes
+Admin Home Dashboard,Admin,Landing page with overview stats and quick client picker,Completed,Live in nav
+Unified Client View,Admin,Per-client workspace: overview/tasks/deliverables/messages/projects tabs,Completed,Live in nav
+Client Management,Admin,Add/edit clients; onboarding phase tracker and new-client checklist,Completed,Live in nav
+Client Projects (Admin),Admin,Track project scopes and milestones per client,Completed,Live in nav
+Client Workflows,Admin,View/manage onboarding and automation workflow steps per client,Completed,Live in nav
+SEO Hub,Admin,Cross-client SEO score dashboard plus per-client WordPress plugin scan/fix flow,Completed,Live in nav; merges SEO + WordPress Plugin views
+Content Review & Deliverables,Admin,Approve/reject AI-drafted content; separate queue for uploaded deliverables,Completed,Live in nav
+Social Media Posts (Admin),Admin,Compose/schedule/publish posts to LinkedIn/Facebook/Instagram/Twitter via Post for Me,Completed,Live in nav
+Email Centre,Admin,Send/manage client emails; AI email template generation; queue processing,Completed,Live in nav
+Reports Review,Admin,Review and send AI-generated client reports,Completed,Live in nav
+Leads Hub - Inbound,Admin,Contact form + Gap Analysis + PDF-download leads; invite lead to client portal,Completed,Live in nav
+Leads Hub - Outbound (Prospect Engine),Admin,AI-discovered outbound prospect list with admin approval queue before outreach,Completed,Live in nav
+Leads Hub - Pipeline,Admin,Sales pipeline dashboard showing leads by stage,Completed,Live in nav
+Leads Hub - Lead Scoring,Admin,AI-generated lead quality/insight scoring,Completed,Live in nav
+Sales Hub - Proposals,Admin,Build/send AI sales proposals with industry analysis and ROI projections,Completed,Live in nav
+Sales Hub - Case Studies,Admin,AI-generated case study builder from client results,Completed,Live in nav
+Sales Hub - Before/After Showcase,Admin,Before/after website screenshots and score comparisons for sales use,Completed,Live in nav
+Brand Assets (Admin),Admin,Extract and store client brand guidelines: logo, colors, voice,Completed,Live in nav
+Admin Settings,Admin,Platform/admin configuration panel,Completed,Live in nav
+AI Copilot,Admin,Always-visible AI assistant that can navigate admin to relevant sections,Completed,Live on every screen
+Feature Guide / Help,Admin,In-app help and tour system for admin users,Completed,Live in nav
+Integrations Config,Admin,Configure and test third-party API keys (social platforms etc.),Pending,Built and functional but not linked from current sidebar nav - needs relinking decision
+AI Quality Assurance,Admin,Automated site scan for broken links/spelling/accessibility/mobile issues with AI auto-fix,Pending,Fully built incl. AI auto-fix but no sidebar entry point - orphaned
+Website Personalization,Admin,Rules engine intended to show different headlines/CTAs per visitor segment,Pending,Admin CRUD works but no marketing-site code reads the rules table - has zero effect on the live site today
+AI Ad Generator,Admin,Generate ad copy/creative for paid campaigns,Pending,Built and functional but orphaned from sidebar nav
+Google Review Engine,Admin,AI-drafted responses to Google reviews,Pending,Built and functional but orphaned from sidebar nav
+Client Health Dashboard,Admin,At-a-glance client health/risk scoring across all accounts,Pending,Built and functional but orphaned from sidebar nav
+Marketing OS Dashboard,Admin,Cross-functional marketing metrics dashboard,Pending,Built and functional but orphaned from sidebar nav
+Win Notifications,Admin,Surfaces client milestone "wins" for internal visibility,Pending,Built and functional but orphaned from sidebar nav
+Assorted Ops/Automation Admin Tools (18 modules),Admin,"Automation Control Center, SOP Command Center, Daily Digest, Team Performance, Workload Balancer, Smart Task Queue, Task Notifications, Review Workflow, Quick Actions, Activity Feed, admin Content Calendar, Analytics, Email Templates/Sequences/Campaigns, SOPs, Task Templates, Team Directory, Service Agreements, Onboarding Automation",Pending,All render against real data but none are wired into current sidebar - reachable only via legacy deep-link
+Automation Engine (backend),Backend,"28-handler engine powering CRM sync, SEO tools, lead-gen tooling, review workflows, analytics dashboards, retention sequences, sales enablement, and scheduling",Completed,Refactored from a 3589-line god function into modular handlers; all 33 original cases verified
+Durable Job Queue,Backend,pgmq-backed queue replacing fire-and-forget workflow dispatch; retries + dead-lettering,Completed,Deployed and verified live 2026-07-07
+Multi-Provider AI Tiering,Backend,Routes content generation to Claude for quality tier with automatic Groq fallback,In Pipeline,Code is wired in but ANTHROPIC_API_KEY is not yet set in Supabase secrets - currently running on Groq fallback only
+Self-QA Content Gate,Backend,Cheap AI critique pass flags brand-fit/quality issues after every draft for admin triage,Completed,Best-effort, non-blocking
+Content Feedback Loop,Backend,Client rejection reasons feed back into future AI content drafts,Completed,Shipped
+Stuck-Job Reaper & Observability,Backend,Detects and recovers stalled workflows/tasks; agent_runs table for run history,Completed,4-sweep reaper covers n8n timeouts, stuck workflow/client tasks
+Agent-Loop-With-Tools Redesign,Backend,Next-gen agent architecture giving AI agents tool-calling loops instead of single-shot generation,Pending,Not started - needs a scoping conversation
+Per-Client AI Memory/Feedback Loop,Backend,Persistent per-client memory so AI agents learn client preferences over time,Pending,Not started - needs a scoping conversation
+Auth Hardening,Backend,Remove shared admin password in favor of per-user auth; enable JWT verification on edge functions,Pending,Not started - security follow-up item
+Online Payment Processing,Platform-wide,Real payment processor (e.g. Stripe) integration for client invoices,Pending,Fake "Pay Now" removed; replaced with mailto-to-arrange-payment placeholder until a processor + credentials are chosen
+Client Activity / Home,Client Portal,Workflow progress feed and 4-step onboarding tour,Completed,Live
+Client Projects,Client Portal,Client-facing view of their project list,Completed,Live
+Client Messages,Client Portal,Real messaging with badge counts,Completed,Live
+Client Content Approvals,Client Portal,Approve/reject AI-drafted content; reasons feed the AI feedback loop,Completed,Tier-gated: Growth and above
+Client Deliverables,Client Portal,View completed/delivered assets,Completed,Live
+Client Content Calendar,Client Portal,Calendar view of scheduled/published content,Completed,Bug fixed 2026-07-07 - was reading from an unused table and always showed empty
+Client Brand Assets,Client Portal,View/manage uploaded brand kit,Completed,Tier-gated: Growth and above
+Client Social Media,Client Portal,Connect social accounts (Post for Me OAuth) and publish posts,Completed,Tier-gated: Growth and above; includes DALL-E 3 auto image generation
+Client Lead Outreach,Client Portal,Read-only view of AI prospect-engine outbound outreach pipeline,Completed,Live
+Client SEO Health,Client Portal,WordPress plugin scan results, AI fix queue, and SEO score card,Completed,Live
+Client Learning Hub,Client Portal,Educational resource area for clients,Completed,Tier-gated: Growth and above
+Client Analytics,Client Portal,Client-facing analytics view,Completed,Live
+Client Agreements,Client Portal,View service agreements,Completed,Tier-gated: Transformation
+Client Team Directory,Client Portal,View assigned Orange Door team members,Completed,Tier-gated: Transformation
+Client Notifications/Updates,Client Portal,Update feed and notification center,Completed,Live
+Client Meetings,Client Portal,View/schedule meetings,Completed,Live
+Client Requests,Client Portal,Submit requests to the Orange Door team,Completed,Live
+Client Documents,Client Portal,Shared document repository,Completed,Live
+Client Help & Settings,Client Portal,Support contact, account settings; dead buttons fixed,Completed,Fixed 2026-07-07
+Client Invoices,Client Portal,View invoices and download PDF,Completed,Real PDF export via jsPDF; online payment itself is Pending (see Online Payment Processing)
+Tier Gating System,Client Portal,Foundation/Growth/Transformation plan gating across 6 client tabs,Completed,Was fully dead code, wired live 2026-07-07
+11-Step Gap Analysis Form,Marketing,Lead-gen form generating an AI scorecard/report and triggering email nurture sequences,Completed,Core lead-gen flow
+Quick Analysis / Quick Assessment,Marketing,Lighter-weight variants of the gap analysis flow,Completed,Live pages
+Pricing Page,Marketing,Static pricing/plan comparison page,Completed,Live
+Portfolio / Case Studies,Marketing,Public-facing case study and portfolio content,Completed,Live
+AR Business Card / AR Presentation,Marketing,Augmented-reality business card and presentation pages,In Pipeline,Pages exist; completeness not fully verified in this audit - recommend a follow-up check
+WordPress SEO Plugin,Cross-Platform,Downloadable WP plugin that connects a client site for automated scan/fix flow,Completed,Shipped May 2026, still verified working
+Social Publishing (Post for Me),Cross-Platform,OAuth connect + publish + auto image gen across LinkedIn/Facebook/Instagram/Twitter,Completed,Admin and client sides both live

@@ -1133,6 +1133,7 @@ const AdminInner = () => {
                           industry: gap.industry,
                           overall_score: gap.overall_score,
                           website_url: gap.website_url,
+                          lead_id: gap.id,
                         })}
                       >
                         <UserPlus className="w-4 h-4 mr-1" />

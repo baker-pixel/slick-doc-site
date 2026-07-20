@@ -28,6 +28,7 @@ serve(async (req) => {
       reconciled_steps: 0,
       stale_draft_alert: 0,
       stale_prospect_alert: 0,
+      stale_automation_step_alert: 0,
     };
 
     // ── Sweep 1: n8n callback timeouts (original behavior) ──────────────
@@ -306,6 +307,60 @@ serve(async (req) => {
           metadata: { count: staleProspects.length, avg_icp_fit: avgFit, oldest_created_at: oldestCreatedAt },
         });
         summary.stale_prospect_alert = 1;
+      }
+    }
+
+    // ── Sweep 8: automation steps stuck in_progress past their due date ──
+    // An automation step (website_analysis, seo_audit, report, ...) flips
+    // to in_progress when unlockReadySteps enqueues its job -- but nothing
+    // reconciles the case where that enqueue silently failed, or the queued
+    // job never dispatched for some other reason. There's no updated_at on
+    // workflow_steps, so estimated_completion (already computed per-step at
+    // seed time) doubles as the staleness clock: well past due and still
+    // in_progress means it never actually ran.
+    const STALE_AUTOMATION_STEP_DAYS = 3;
+    const staleStepCutoff = new Date(now.getTime() - STALE_AUTOMATION_STEP_DAYS * 24 * 60 * 60_000)
+      .toISOString()
+      .split("T")[0];
+    const { data: staleAutomationSteps, error: stepErr } = await supabase
+      .from("workflow_steps")
+      .select("id, workflow_id, client_id, step_number, step_name, task_type, estimated_completion")
+      .eq("status", "in_progress")
+      .not("task_type", "like", "client_%")
+      .not("estimated_completion", "is", null)
+      .lt("estimated_completion", staleStepCutoff);
+
+    if (stepErr) throw stepErr;
+
+    if (staleAutomationSteps && staleAutomationSteps.length > 0) {
+      const { data: existingStepAlert } = await supabase
+        .from("automation_alerts")
+        .select("id")
+        .eq("alert_type", "stale_automation_step")
+        .is("acknowledged_at", null)
+        .maybeSingle();
+
+      if (!existingStepAlert) {
+        await logAlert(supabase, {
+          source: "check-stalled-workflows",
+          alertType: "stale_automation_step",
+          severity: "high",
+          title: `${staleAutomationSteps.length} automation step(s) stuck in_progress`,
+          message: `${staleAutomationSteps.length} workflow step(s) have been "in_progress" for over ${STALE_AUTOMATION_STEP_DAYS} days past their estimated completion, with no result recorded. Likely an agent_jobs_enqueue failure or dropped dispatch — check automation_jobs for these clients.`,
+          metadata: {
+            count: staleAutomationSteps.length,
+            steps: staleAutomationSteps.map((s) => ({
+              step_id: s.id,
+              workflow_id: s.workflow_id,
+              client_id: s.client_id,
+              step_number: s.step_number,
+              step_name: s.step_name,
+              task_type: s.task_type,
+              estimated_completion: s.estimated_completion,
+            })),
+          },
+        });
+        summary.stale_automation_step_alert = 1;
       }
     }
 

@@ -8,6 +8,8 @@
  * stalled the rest of the checklist forever with no path to self-heal).
  */
 
+import { logAlert } from "./alerts.ts";
+
 const ONBOARDING_SYNC: Record<string, string> = {
   client_form: "intake_form_completed_at",
   client_calendar: "kickoff_scheduled_at",
@@ -131,11 +133,29 @@ export async function unlockReadySteps(
     }
   }
 
+  // If the enqueue RPC itself fails, the workflow_steps row is already
+  // flipped to in_progress but no job ever enters the queue -- unlike a
+  // dispatch failure (which process-agent-jobs retries and eventually
+  // dead-letters with an alert), this failure mode never reaches that
+  // safety net at all, so it must alert here or the step is stuck silently
+  // forever.
   const enqueue = (target: string, idempotencyKey: string, body: Record<string, unknown>) =>
     supabase
       .rpc("agent_jobs_enqueue", { msg: { target, idempotencyKey, body } })
       .then(({ error }: { error: unknown }) => {
-        if (error) console.error(`Failed to enqueue ${target} job (${idempotencyKey}):`, error);
+        if (error) {
+          console.error(`Failed to enqueue ${target} job (${idempotencyKey}):`, error);
+          return logAlert(supabase, {
+            source: "workflowUnlock",
+            alertType: "agent_job_enqueue_failed",
+            severity: "high",
+            title: `Failed to enqueue ${target} job`,
+            message: `agent_jobs_enqueue RPC failed for idempotencyKey "${idempotencyKey}" (target "${target}"): ${
+              (error as { message?: string })?.message ?? error
+            }. The workflow_steps row this was meant to advance is now stuck in_progress with no queued job behind it.`,
+            metadata: { target, idempotencyKey, body },
+          });
+        }
       });
 
   if (resolvedClientId) {

@@ -227,6 +227,7 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
           first_name: selectedLead.first_name,
           last_name: selectedLead.last_name,
           business_name: selectedLead.business_name,
+          lead_id: selectedLead.source === "gap_analysis" ? selectedLead.id : null,
         },
         adminPassword,
         selectedTier,

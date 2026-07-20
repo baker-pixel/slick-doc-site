@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 import { format } from "date-fns";
 
 interface ContentApproval {
@@ -640,46 +641,14 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
       setFeedback("");
 
       // Complete the client_approval workflow step — first real approval unlocks automation
-      (async () => {
-        try {
-          const { data: wf } = await supabase
-            .from("client_workflows")
-            .select("id")
-            .eq("client_id", clientAccountId)
-            .eq("status", "active")
-            .maybeSingle();
-          if (!wf) return;
-
-          const { data: approvalStep } = await supabase
-            .from("workflow_steps")
-            .select("id, step_number, status")
-            .eq("workflow_id", wf.id)
-            .eq("task_type", "client_approval")
-            .maybeSingle();
-
-          if (approvalStep && approvalStep.status !== "completed") {
-            await supabase
-              .from("workflow_steps")
-              .update({ status: "completed", completed_at: new Date().toISOString() })
-              .eq("id", approvalStep.id);
-
-            supabase.functions
-              .invoke("advance-workflow", {
-                body: {
-                  workflow_id: wf.id,
-                  completed_step_number: approvalStep.step_number,
-                  client_id: clientAccountId,
-                },
-              })
-              .catch((e) => console.error("advance-workflow after approval:", e));
-
+      completeWorkflowStep(clientAccountId, "client_approval")
+        .then((completed) => {
+          if (completed) {
             queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
             queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
           }
-        } catch (e) {
-          console.error("Failed to complete approval workflow step:", e);
-        }
-      })();
+        })
+        .catch((e) => console.error("Failed to complete approval workflow step:", e));
     } catch (error) {
       console.error("Error approving content:", error);
       toast({
