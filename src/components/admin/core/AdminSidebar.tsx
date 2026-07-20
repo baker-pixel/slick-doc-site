@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   Users,
   Settings,
-  Briefcase,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -37,10 +36,9 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
-export type AdminSection = 
+export type AdminSection =
   | "home"
   | "clients"
-  | "client-workflow"
   | "client-tasks"
   | "client-projects"
   | "deliverables"
@@ -133,7 +131,6 @@ const growthItems: NavItem[] = [
 const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
   { id: "client-projects", label: "Projects", icon: Layers },
-  { id: "client-workflow", label: "Workflows", icon: Briefcase },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
   { id: "settings", label: "Settings", icon: Settings },

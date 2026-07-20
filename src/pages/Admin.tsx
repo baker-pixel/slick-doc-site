@@ -74,7 +74,6 @@ import SocialMediaPostsPanel from "@/components/admin/content/SocialMediaPostsPa
 import FeatureGuidePanel from "@/components/admin/core/FeatureGuidePanel";
 import { ClientPhaseTracker } from "@/components/admin/clients/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/clients/ClientProgressTracker";
-import { ClientWorkflowPanel } from "@/components/admin/clients/ClientWorkflowPanel";
 import { AICopilotPanel } from "@/components/admin/core/AICopilotPanel";
 import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelector";
 import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientHeader";
@@ -1411,11 +1410,9 @@ const AdminInner = () => {
     </div>
   );
 
-  // Case Studies, Sales Proposals, and Before/After Showcase were all fixed
-  // (real generate functions, no more wrong/missing edge-function calls) but
-  // were only ever reachable through ClientWorkflowPanel's task-name-guessing
-  // router, never as a real nav destination. Same "activeSection IS the
-  // tab state" composition pattern as the Leads hub above.
+  // Case Studies, Sales Proposals, and Before/After Showcase share one nav
+  // destination -- same "activeSection IS the tab state" composition
+  // pattern as the Leads hub above.
   const salesHubMode: "proposals" | "case-studies" | "before-after" =
     activeSection === "case-studies" ? "case-studies" :
     activeSection === "before-after" ? "before-after" :
@@ -1455,14 +1452,6 @@ const AdminInner = () => {
         return <TeamPerformanceMetrics adminPassword={storedPassword} />;
       case "workload-balancer":
         return <WorkloadBalancer adminPassword={storedPassword} />;
-      case "client-workflow":
-        return <ClientWorkflowPanel 
-          adminPassword={storedPassword} 
-          onNavigateToSection={(section, context) => {
-            setActiveSection(section);
-            // context.clientId available for pre-selecting client in future
-          }}
-        />;
       case "task-notifications":
         return <TaskNotificationsPanel />;
       case "pipeline":
@@ -1526,7 +1515,7 @@ const AdminInner = () => {
       case "client-messages":
         return <ClientMessagesAdminPanel clientId={selectedClient?.id} />;
       case "client-meetings":
-        return <ClientMeetingsAdminPanel onNavigate={setActiveSection} clientId={selectedClient?.id} />;
+        return <ClientMeetingsAdminPanel clientId={selectedClient?.id} />;
       case "client-requests":
         return <ClientRequestsAdminPanel clientId={selectedClient?.id} />;
       case "brand-assets":
@@ -1590,7 +1579,6 @@ const AdminInner = () => {
     const titles: Record<AdminSection, string> = {
       home: "Dashboard",
       clients: "Client Management",
-      "client-workflow": "Workflows",
       "client-tasks": "Client Tasks",
       "client-projects": "Client Projects",
       deliverables: "Deliverables",
@@ -1659,7 +1647,7 @@ const AdminInner = () => {
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",
     "integrations",
-    "quick-actions", "activity-feed", "client-workflow",
+    "quick-actions", "activity-feed",
     "prospect-engine",
     "lead-scoring", "ad-generator", "sales-proposals", "automation",
     "automation-center", "sop-command-center", "client-health",
