@@ -27,6 +27,7 @@ serve(async (req) => {
       reconciled_workflows: 0,
       reconciled_steps: 0,
       stale_draft_alert: 0,
+      stale_prospect_alert: 0,
     };
 
     // ── Sweep 1: n8n callback timeouts (original behavior) ──────────────
@@ -259,6 +260,52 @@ serve(async (req) => {
           metadata: { count: staleDrafts.length, client_count: clientCount, oldest_created_at: oldestCreatedAt },
         });
         summary.stale_draft_alert = 1;
+      }
+    }
+
+    // ── Sweep 7: stale unapproved prospects ──────────────────────────────
+    // discover-prospects finds and scores leads, but nothing sends the
+    // first outreach email until an admin approves them (compliance gate).
+    // Nothing ever reminded anyone to approve -- found live: 28 discovered
+    // prospects (several ICP-fit 90-100) sitting untouched for a week.
+    const STALE_PROSPECT_HOURS = 48;
+    const staleProspectCutoff = new Date(now.getTime() - STALE_PROSPECT_HOURS * 60 * 60_000).toISOString();
+    const { data: staleProspects, error: prospectErr } = await supabase
+      .from("prospects")
+      .select("id, client_id, icp_fit_score, created_at")
+      .eq("status", "discovered")
+      .is("approved_at", null)
+      .lt("created_at", staleProspectCutoff);
+
+    if (prospectErr) throw prospectErr;
+
+    if (staleProspects && staleProspects.length > 0) {
+      const { data: existingProspectAlert } = await supabase
+        .from("automation_alerts")
+        .select("id")
+        .eq("alert_type", "stale_prospect_backlog")
+        .is("acknowledged_at", null)
+        .maybeSingle();
+
+      if (!existingProspectAlert) {
+        const oldestCreatedAt = staleProspects.reduce(
+          (min, p) => (p.created_at < min ? p.created_at : min),
+          staleProspects[0].created_at
+        );
+        const scored = staleProspects.filter((p) => typeof p.icp_fit_score === "number");
+        const avgFit = scored.length > 0
+          ? Math.round(scored.reduce((sum, p) => sum + (p.icp_fit_score as number), 0) / scored.length)
+          : null;
+
+        await logAlert(supabase, {
+          source: "check-stalled-workflows",
+          alertType: "stale_prospect_backlog",
+          severity: "warning",
+          title: `${staleProspects.length} discovered prospect(s) awaiting approval`,
+          message: `${staleProspects.length} prospect(s)${avgFit != null ? ` (avg ICP fit ${avgFit})` : ""} have sat "discovered" and unapproved for over ${STALE_PROSPECT_HOURS}h (oldest found ${oldestCreatedAt}). No outreach goes out until an admin approves them.`,
+          metadata: { count: staleProspects.length, avg_icp_fit: avgFit, oldest_created_at: oldestCreatedAt },
+        });
+        summary.stale_prospect_alert = 1;
       }
     }
 
