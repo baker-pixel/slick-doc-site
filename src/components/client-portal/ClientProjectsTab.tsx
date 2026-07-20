@@ -22,7 +22,19 @@ interface Project {
   start_date: string | null;
   target_end_date: string | null;
   progress_percentage: number;
+  kind: string;
 }
+
+// Milestones mean something different per engine: an SEO checklist item
+// completes once and stays done; a content pillar is a recurring theme that's
+// always "in use," never finished; a funnel stage locks in once reached. One
+// generic "Project Milestones" list reads as a stuck checklist either way, so
+// label + explain each kind instead of leaving the client to guess.
+const kindMeta: Record<string, { sectionLabel: string; hint: string }> = {
+  seo: { sectionLabel: "Fix Checklist", hint: "Each item is an SEO issue found on your site. It checks off once the fix is applied and confirmed on the next scan." },
+  social: { sectionLabel: "Content Pillars", hint: "These are the recurring themes your posts rotate through, not tasks to finish. The progress bar above tracks posts published this month against your plan." },
+  prospect: { sectionLabel: "Outreach Funnel", hint: "Each stage locks in once prospects reach it — discovered, contacted, replied, converted. The count updates automatically as outreach runs." },
+};
 
 interface Milestone {
   id: string;
@@ -295,7 +307,11 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
     return "from-gray-400 to-gray-300";
   };
 
-  const getMilestoneIcon = (status: string) => {
+  const getMilestoneIcon = (status: string, kind?: string) => {
+    // Content pillars are always "in_progress" by design (a theme is in use,
+    // never finished) — the clock icon would read as stuck. Use a neutral
+    // marker for that kind instead.
+    if (kind === "social") return <Target className="h-5 w-5 text-primary" />;
     switch (status) {
       case "completed": return <CheckCircle className="h-5 w-5 text-emerald-500" />;
       case "in_progress": return <Clock className="h-5 w-5 text-blue-500" />;
@@ -662,10 +678,13 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                     >
                       <div className="px-6 pb-6 border-t border-border/50">
                         <div className="pt-6">
-                          <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                          <h4 className="font-semibold text-foreground mb-1 flex items-center gap-2">
                             <Target className="h-4 w-4 text-primary" />
-                            Project Milestones
+                            {kindMeta[project.kind]?.sectionLabel || "Project Milestones"}
                           </h4>
+                          {kindMeta[project.kind]?.hint && (
+                            <p className="text-xs text-muted-foreground mb-4">{kindMeta[project.kind].hint}</p>
+                          )}
                           <div className="relative">
                             <div className="absolute left-[11px] top-4 bottom-4 w-0.5 bg-border/50" />
                             <div className="space-y-4">
@@ -682,7 +701,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                                     transition={{ duration: 0.3, delay: idx * 0.1 }}
                                     className="flex gap-4 relative"
                                   >
-                                    <div className="relative z-10 bg-background">{getMilestoneIcon(milestone.status)}</div>
+                                    <div className="relative z-10 bg-background">{getMilestoneIcon(milestone.status, project.kind)}</div>
                                     <div className={cn(
                                       "flex-1 p-4 rounded-xl border transition-all",
                                       milestone.status === 'completed' && "bg-emerald-500/5 border-emerald-500/20",
@@ -701,8 +720,8 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                                           )}
                                         </h5>
                                         <StatusBadge
-                                          status={statusConfig[milestone.status]?.label || milestone.status}
-                                          variant={statusConfig[milestone.status]?.variant || "default"}
+                                          status={project.kind === "social" ? "Active" : (statusConfig[milestone.status]?.label || milestone.status)}
+                                          variant={project.kind === "social" ? "info" : (statusConfig[milestone.status]?.variant || "default")}
                                         />
                                       </div>
                                       {milestone.description && (

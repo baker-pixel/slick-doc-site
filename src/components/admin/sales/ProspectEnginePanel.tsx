@@ -827,16 +827,39 @@ export default function ProspectEnginePanel() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {filteredQueue.length} awaiting review
               </CardTitle>
-              {selected.size > 0 && (
+              {selected.size > 0 && (() => {
+                const selectedProspects = filteredQueue.filter(p => selected.has(p.id));
+                const approvable = selectedProspects.filter(p =>
+                  (p.email && p.email.includes("@")) || (emailDrafts[p.id] ?? "").includes("@")
+                );
+                const skipped = selectedProspects.length - approvable.length;
+                return (
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="gap-1 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => updateStatus(Array.from(selected), "pending")}
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Approve {selected.size}
-                  </Button>
+                  <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          size="sm"
+                          className="gap-1 bg-green-600 hover:bg-green-700 text-white"
+                          disabled={approvable.length === 0}
+                          onClick={() => {
+                            updateStatus(approvable.map(p => p.id), "pending");
+                            if (skipped > 0) {
+                              toast({ title: `${skipped} skipped — add an email before approving`, variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Approve {approvable.length}{skipped > 0 ? ` (${skipped} need email)` : ""}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {approvable.length === 0 && (
+                      <TooltipContent>Add an email address before approving</TooltipContent>
+                    )}
+                  </Tooltip>
+                  </TooltipProvider>
                   <Button
                     size="sm"
                     variant="outline"
@@ -847,7 +870,8 @@ export default function ProspectEnginePanel() {
                     Reject {selected.size}
                   </Button>
                 </div>
-              )}
+                );
+              })()}
               {selected.size === 0 && filteredQueue.length > 0 && (() => {
                 const approvable = filteredQueue.filter(p =>
                   (p.email && p.email.includes("@")) || (emailDrafts[p.id] ?? "").includes("@")

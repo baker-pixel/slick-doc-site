@@ -248,20 +248,38 @@ Deno.serve(async (req) => {
         }
 
         const patch: Record<string, unknown> = { status };
+        let approveIds = ids;
+        let skipped = 0;
         if (status === "pending") {
+          // Root-cause guard: approving into the drip funnel without an email
+          // means the prospect sits in "nurture" forever, silently skipped by
+          // run-prospect-drip on every run with no admin-visible signal. Any
+          // caller (this bulk action, a future button, a direct API call)
+          // goes through here, so enforce it once, in the one place all of
+          // them route through, instead of relying on every UI to pre-filter.
+          const { data: rows } = await supabase.from("prospects").select("id, email").in("id", ids);
+          approveIds = (rows ?? []).filter((p: { email: string | null }) => p.email && p.email.includes("@")).map((p: { id: string }) => p.id);
+          skipped = ids.length - approveIds.length;
           patch.approved_at = new Date().toISOString();
           patch.approved_by = authorizedUserId ?? "admin";
+        }
+
+        if (approveIds.length === 0) {
+          return new Response(
+            JSON.stringify({ updated: 0, skipped, error: skipped > 0 ? "All selected prospects are missing an email" : undefined }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
         const { data: updatedRows, error } = await supabase
           .from("prospects")
           .update(patch)
-          .in("id", ids)
+          .in("id", approveIds)
           .select("id");
         if (error) throw error;
 
         return new Response(
-          JSON.stringify({ updated: (updatedRows ?? []).length }),
+          JSON.stringify({ updated: (updatedRows ?? []).length, skipped }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
