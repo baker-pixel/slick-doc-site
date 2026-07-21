@@ -204,9 +204,9 @@ export function ClientPortalSidebar({
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="p-4 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+      <SidebarHeader className="p-4 pb-6 group-data-[collapsible=icon]:p-2">
+        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
             <Sparkles className="h-4 w-4" />
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
@@ -217,7 +217,7 @@ export function ClientPortalSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3">
+      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-2">
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>My Portal</SidebarGroupLabel>
           <SidebarGroupContent>
