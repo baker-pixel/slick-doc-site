@@ -487,7 +487,7 @@ export default function ClientPortal() {
           {/* Clean Header */}
           <header className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-xl">
             <div className="flex h-14 items-center gap-4 px-6">
-              <SidebarTrigger className="md:hidden" />
+              <SidebarTrigger />
               <h1 className="text-lg font-bold tracking-tight flex-1">{tabTitles[activeTab]}</h1>
             </div>
           </header>
