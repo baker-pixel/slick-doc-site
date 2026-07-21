@@ -5,12 +5,13 @@ import { Check, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import { pricingData } from "@/lib/pricingData";
 
 const tiers = [
   {
     name: "SYSTEM Foundation",
     level: "Level I",
-    price: "249",
+    price: pricingData.foundation.price,
     description: "We optimize your existing digital presence. You do nothing—we handle it all.",
     scoreRange: "65-100",
     features: [
@@ -28,8 +29,8 @@ const tiers = [
   {
     name: "SYSTEM Growth",
     level: "Level II",
-    price: "449",
-    priceSuffix: "–549",
+    price: pricingData.growth.price,
+    priceSuffix: pricingData.growth.priceSuffix,
     description: "We build and run multi-channel campaigns. You approve—we execute everything.",
     scoreRange: "40-64",
     features: [
@@ -47,8 +48,8 @@ const tiers = [
   {
     name: "SYSTEM Transformation",
     level: "Level III",
-    price: "799",
-    priceSuffix: "–999",
+    price: pricingData.transformation.price,
+    priceSuffix: pricingData.transformation.priceSuffix,
     description: "We rebuild your entire digital infrastructure from scratch. Total hands-off for you.",
     scoreRange: "0-39",
     features: [

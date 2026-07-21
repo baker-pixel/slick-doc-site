@@ -20,6 +20,7 @@ const ScheduleCall = lazy(() => import("@/pages/ScheduleCall"));
 const System = lazy(() => import("@/pages/System"));
 const Report = lazy(() => import("@/pages/Report"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
+const Signup = lazy(() => import("@/pages/Signup"));
 const TierFoundation = lazy(() => import("@/pages/TierFoundation"));
 const TierGrowth = lazy(() => import("@/pages/TierGrowth"));
 const TierTransformation = lazy(() => import("@/pages/TierTransformation"));
@@ -57,6 +58,7 @@ function AnimatedRoutes() {
           <Route path="/schedule" element={<PageTransition><ScheduleCall /></PageTransition>} />
           <Route path="/system" element={<PageTransition><System /></PageTransition>} />
           <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />
+          <Route path="/signup" element={<PageTransition><Signup /></PageTransition>} />
           <Route path="/pricing/foundation" element={<PageTransition><TierFoundation /></PageTransition>} />
           <Route path="/pricing/growth" element={<PageTransition><TierGrowth /></PageTransition>} />
           <Route path="/pricing/transformation" element={<PageTransition><TierTransformation /></PageTransition>} />

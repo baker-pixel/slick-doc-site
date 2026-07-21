@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { PricingTierModal } from "@/components/PricingTierModal";
 import { TierInterestForm } from "@/components/TierInterestForm";
+import { pricingData, formatPriceRange } from "@/lib/pricingData";
 import {
   Table,
   TableBody,
@@ -59,8 +60,8 @@ const plans = [
     name: "SYSTEM Foundation",
     level: "Level I",
     description: "For businesses with light-to-moderate gaps that need structure and optimization.",
-    price: 249,
-    priceSuffix: "",
+    price: pricingData.foundation.price,
+    priceSuffix: pricingData.foundation.priceSuffix,
     period: "/month",
     scoreRange: "65-100",
     icon: Zap,
@@ -81,8 +82,8 @@ const plans = [
     name: "SYSTEM Growth",
     level: "Level II",
     description: "For SMBs with moderate gaps who need activation across multiple channels.",
-    price: 449,
-    priceSuffix: "–549",
+    price: pricingData.growth.price,
+    priceSuffix: pricingData.growth.priceSuffix,
     period: "/month",
     scoreRange: "40-64",
     icon: Star,
@@ -103,8 +104,8 @@ const plans = [
     name: "SYSTEM Transformation",
     level: "Level III",
     description: "For businesses requiring a full rebuild of their digital infrastructure.",
-    price: 799,
-    priceSuffix: "–999",
+    price: pricingData.transformation.price,
+    priceSuffix: pricingData.transformation.priceSuffix,
     period: "/month",
     scoreRange: "0-39",
     icon: Crown,
@@ -335,7 +336,7 @@ export default function Pricing() {
                           <Zap className="h-5 w-5 text-primary" />
                         </div>
                         <span className="text-foreground font-semibold">Foundation</span>
-                        <span className="text-xs text-muted-foreground">$249/mo</span>
+                        <span className="text-xs text-muted-foreground">{formatPriceRange("foundation")}/mo</span>
                       </div>
                     </TableHead>
                     <TableHead className="text-center min-w-[140px] bg-primary/5">
@@ -345,7 +346,7 @@ export default function Pricing() {
                           <Star className="h-5 w-5 text-primary-foreground" />
                         </div>
                         <span className="text-foreground font-semibold">Growth</span>
-                        <span className="text-xs text-muted-foreground">$449–549/mo</span>
+                        <span className="text-xs text-muted-foreground">{formatPriceRange("growth")}/mo</span>
                       </div>
                     </TableHead>
                     <TableHead className="text-center min-w-[140px]">
@@ -355,7 +356,7 @@ export default function Pricing() {
                           <Crown className="h-5 w-5 text-white" />
                         </div>
                         <span className="text-foreground font-semibold">Transformation</span>
-                        <span className="text-xs text-muted-foreground">$799–999/mo</span>
+                        <span className="text-xs text-muted-foreground">{formatPriceRange("transformation")}/mo</span>
                       </div>
                     </TableHead>
                   </TableRow>

@@ -8,13 +8,25 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Play, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, ExternalLink, Trash2, Clock, CheckCircle2, RefreshCw } from "lucide-react";
+import { Plus, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban } from "lucide-react";
 import { format } from "date-fns";
 import { TierBadge } from "../core/TierBadge";
 import { callAdminApi } from "@/lib/admin-api";
+import { approveSignup } from "@/lib/approveSignup";
 
 interface ClientAccount {
   id: string;
@@ -25,6 +37,7 @@ interface ClientAccount {
   tier: string;
   plan_tier: string | null;
   status: string;
+  website_url: string | null;
   onboarded_at: string | null;
   created_at: string;
 }
@@ -66,6 +79,8 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const [selectedClientForInvite, setSelectedClientForInvite] = useState<ClientAccount | null>(null);
   const [runningJobs, setRunningJobs] = useState<Set<string>>(new Set());
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
+  const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
   
   const [newClient, setNewClient] = useState({
     email: "",
@@ -151,26 +166,20 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       return;
     }
 
-    // Check for duplicate email or business name in parallel
-    const [emailCheck, nameCheck] = await Promise.all([
-      supabase
-        .from("client_accounts")
-        .select("id")
-        .ilike("email", newClient.email)
-        .limit(1),
-      supabase
-        .from("client_accounts")
-        .select("id")
-        .ilike("business_name", newClient.business_name)
-        .limit(1),
-    ]);
+    // Reuse an existing client_accounts row by email instead of duplicating it,
+    // matching inviteLeadToPortal.ts's behavior.
+    const { data: existingByEmail } = await supabase
+      .from("client_accounts")
+      .select("id")
+      .ilike("email", newClient.email)
+      .limit(1)
+      .maybeSingle();
 
-    if (emailCheck.data && emailCheck.data.length > 0) {
-      toast.error("A client with this email already exists.");
-      return;
-    }
-    if (nameCheck.data && nameCheck.data.length > 0) {
-      toast.error("A client with this business name already exists.");
+    if (existingByEmail) {
+      toast.info("A client with this email already exists — reusing that account.");
+      setAddDialogOpen(false);
+      setNewClient({ email: "", business_name: "", first_name: "", last_name: "", tier: "foundation", plan_tier: "foundation", website_url: "", industry: "" });
+      fetchClients();
       return;
     }
 
@@ -419,11 +428,64 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     }
   };
 
+  const approveClient = async (client: ClientAccount) => {
+    setApprovingIds((prev) => new Set([...prev, client.id]));
+    try {
+      await approveSignup(
+        {
+          id: client.id,
+          email: client.email,
+          business_name: client.business_name,
+          first_name: client.first_name,
+          last_name: client.last_name,
+          website_url: client.website_url,
+          tier: client.plan_tier || client.tier,
+        },
+        adminPassword,
+      );
+      toast.success(`${client.business_name} approved — onboarding and invite are on their way.`);
+      fetchData();
+    } catch (err) {
+      toast.error(`Failed to approve: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setApprovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(client.id);
+        return next;
+      });
+    }
+  };
+
+  const rejectClient = async (client: ClientAccount) => {
+    setRejectingIds((prev) => new Set([...prev, client.id]));
+    try {
+      const { error } = await callAdminApi(adminPassword, {
+        action: "update",
+        table: "client_accounts",
+        id: client.id,
+        data: { status: "cancelled" },
+      });
+      if (error) throw new Error(error);
+
+      toast.success(`${client.business_name} rejected.`);
+      fetchData();
+    } catch (err) {
+      toast.error(`Failed to reject: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setRejectingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(client.id);
+        return next;
+      });
+    }
+  };
+
   // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active": return "bg-green-500";
+      case "pending": return "bg-blue-500";
       case "paused": return "bg-yellow-500";
       case "cancelled": return "bg-red-500";
       default: return "bg-gray-500";
@@ -438,6 +500,8 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const isInviteExpired = (expiresAt: string) => {
     return new Date(expiresAt) < new Date();
   };
+
+  const pendingSignups = clients.filter((c) => c.status === "pending");
 
   return (
     <Card>
@@ -540,9 +604,98 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
         <Tabs defaultValue="clients">
           <TabsList className="mb-4">
             <TabsTrigger value="clients">Clients ({clients.length})</TabsTrigger>
+            <TabsTrigger value="pending-signups">Pending Signups ({pendingSignups.length})</TabsTrigger>
             <TabsTrigger value="invitations">Invitations ({invitations.filter(i => !i.accepted_at).length})</TabsTrigger>
             <TabsTrigger value="portal-users">Portal Users ({portalUsers.length})</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="pending-signups">
+            {pendingSignups.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No pending signups. Self-serve signups awaiting approval will show up here.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Business</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Tier</TableHead>
+                    <TableHead>Signed Up</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingSignups.map((client) => (
+                    <TableRow key={client.id}>
+                      <TableCell className="font-medium">{client.business_name}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {client.first_name} {client.last_name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{client.email}</div>
+                      </TableCell>
+                      <TableCell>
+                        <TierBadge tier={client.plan_tier || client.tier} />
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {format(new Date(client.created_at), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => approveClient(client)}
+                            disabled={approvingIds.has(client.id) || rejectingIds.has(client.id)}
+                          >
+                            {approvingIds.has(client.id) ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="h-4 w-4 mr-2" />
+                            )}
+                            Approve
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive hover:text-destructive"
+                                disabled={approvingIds.has(client.id) || rejectingIds.has(client.id)}
+                              >
+                                {rejectingIds.has(client.id) ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Ban className="h-4 w-4 mr-2" />
+                                )}
+                                Reject
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Reject Signup</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to reject {client.business_name}'s signup? This sets
+                                  their account to cancelled and cannot be undone from here — no onboarding
+                                  or invite will ever be sent for this signup.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => rejectClient(client)}>
+                                  Reject
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
 
           <TabsContent value="clients">
             {loading ? (

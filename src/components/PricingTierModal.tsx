@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowRight, Check, Zap, Star, Crown } from "lucide-react";
+import { pricingData } from "@/lib/pricingData";
 
 
 interface FeatureDetail {
@@ -26,7 +27,7 @@ const planDetails: Record<string, PlanDetails> = {
   "SYSTEM Foundation": {
     name: "SYSTEM Foundation",
     level: "Level I",
-    price: 249,
+    price: pricingData.foundation.price,
     description: "For businesses with light-to-moderate gaps that need structure and optimization.",
     scoreRange: "65-100",
     icon: Zap,
@@ -69,8 +70,8 @@ const planDetails: Record<string, PlanDetails> = {
   "SYSTEM Growth": {
     name: "SYSTEM Growth",
     level: "Level II",
-    price: 449,
-    priceSuffix: "–549",
+    price: pricingData.growth.price,
+    priceSuffix: pricingData.growth.priceSuffix,
     description: "For SMBs with moderate gaps who need activation across multiple channels.",
     scoreRange: "40-64",
     icon: Star,
@@ -113,8 +114,8 @@ const planDetails: Record<string, PlanDetails> = {
   "SYSTEM Transformation": {
     name: "SYSTEM Transformation",
     level: "Level III",
-    price: 799,
-    priceSuffix: "–999",
+    price: pricingData.transformation.price,
+    priceSuffix: pricingData.transformation.priceSuffix,
     description: "For businesses requiring a full rebuild of their digital infrastructure.",
     scoreRange: "0-39",
     icon: Crown,
