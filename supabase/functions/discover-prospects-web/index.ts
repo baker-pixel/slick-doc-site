@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { ensureClientICP } from "../_shared/icp.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
+import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
+import { insertNewProspects } from "../_shared/prospectInsert.ts";
+
+// See discover-prospects.ts for why this only applies to client callers.
+const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -111,10 +116,14 @@ serve(async (req) => {
   try {
     const body: RequestBody = await req.json();
 
-    const auth = await checkAdminAuth(req, supabase, body.password);
+    if (!body.client_id) return json({ error: "client_id is required" }, 400);
+
+    const auth = await checkClientOrAdminAuth(req, supabase, body.client_id, body.password);
     if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
-    if (!body.client_id) return json({ error: "client_id is required" }, 400);
+    if (auth.role === "client" && await recentDiscoveryRun(supabase, body.client_id, CLIENT_COOLDOWN_MS)) {
+      return json({ error: "Discovery already ran recently for this account -- try again later." }, 429);
+    }
 
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiKey) return json({ error: "OPENAI_API_KEY not configured" }, 503);
@@ -191,12 +200,7 @@ Respond with ONLY a JSON array, no prose:
         research_snapshot: { via: "web_search", why_fit: c.why_fit || null, focus: body.focus || null, geography },
       }));
 
-      const { data: insertedRows, error: insertErr } = await supabase
-        .from("prospects")
-        .insert(rows)
-        .select("id, name, website_url, city");
-      if (insertErr) throw insertErr;
-      inserted = insertedRows ?? [];
+      inserted = await insertNewProspects(supabase, body.client_id, rows);
 
       await supabase.from("client_usage").insert({
         client_id: body.client_id,

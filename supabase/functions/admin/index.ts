@@ -433,7 +433,20 @@ Deno.serve(async (req) => {
             const seedResult = await seedRes.json();
             console.log(`Seeded workflow for new client ${created.id}:`, seedResult);
           } catch (seedErr) {
+            // Edge-to-edge call itself failed (network/timeout) — seed-tier-workflow's
+            // own internal errors already self-alert, but this path never reaches it.
             console.error("Failed to seed workflow for new client:", seedErr);
+            await supabase.from("automation_alerts").insert({
+              alert_type: "function_error",
+              severity: "error",
+              title: "Failed to trigger seed-tier-workflow for new client",
+              message: seedErr instanceof Error ? seedErr.message : "Unknown error",
+              source: "admin/create-client_accounts",
+              source_id: created.id,
+              metadata: { client_id: created.id, timestamp: new Date().toISOString() },
+            }).then(({ error }) => {
+              if (error) console.error("Failed to log alert:", error.message);
+            });
             // Non-fatal — client is still created
           }
         }

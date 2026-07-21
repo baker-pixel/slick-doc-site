@@ -7,15 +7,26 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
+import { ensureClientICP, suggestDiscoveryQueries } from "../_shared/icp.ts";
+import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
+import { insertNewProspects } from "../_shared/prospectInsert.ts";
+
+// Client-portal callers can self-serve discovery ("Find leads now"), but
+// with no per-click cost control that's an open tap on billed Maps/OpenAI
+// calls. Admins get no cooldown -- they're trusted to run manual searches
+// back-to-back while refining a query.
+const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
 
 interface DiscoverRequest {
   client_id: string;
-  query: string;      // e.g. "HVAC companies"
-  location: string;   // e.g. "Toronto, ON"
+  // Omit both to let the ICP drive discovery: queries are generated from the
+  // client's ideal customer profile and searched automatically.
+  query?: string;      // e.g. "HVAC companies"
+  location?: string;   // e.g. "Toronto, ON"
   max_results?: number; // default 20, max 60
   password?: string;
 }
@@ -42,7 +53,7 @@ serve(async (req) => {
     const body: DiscoverRequest = await req.json();
     const { client_id, query, location, max_results = 20, password } = body;
 
-    const auth = await checkAdminAuth(req, supabase, password);
+    const auth = await checkClientOrAdminAuth(req, supabase, client_id, password);
     if (!auth.authorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -50,10 +61,23 @@ serve(async (req) => {
       });
     }
 
-    if (!client_id || !query || !location) {
+    if (!client_id) {
       return new Response(
-        JSON.stringify({ error: "client_id, query, and location are required" }),
+        JSON.stringify({ error: "client_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if ((query && !location) || (!query && location)) {
+      return new Response(
+        JSON.stringify({ error: "query and location must be given together, or both omitted to auto-derive from the ICP" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (auth.role === "client" && await recentDiscoveryRun(supabase, client_id, CLIENT_COOLDOWN_MS)) {
+      return new Response(
+        JSON.stringify({ error: "Discovery already ran recently for this account -- try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -68,7 +92,7 @@ serve(async (req) => {
     // Verify client exists
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("id, business_name, icp, tier")
+      .select("id, business_name, industry, icp, context_profile, tier")
       .eq("id", client_id)
       .single();
 
@@ -90,19 +114,62 @@ serve(async (req) => {
     }
     const batchCap = Math.min(max_results, policy.discoveryBatch);
 
-    // Step 1: Text Search via Places API
-    const searchUrl = new URL("https://maps.googleapis.com/maps/api/place/textsearch/json");
-    searchUrl.searchParams.set("query", `${query} in ${location}`);
-    searchUrl.searchParams.set("key", mapsKey);
-
-    const searchResp = await fetch(searchUrl.toString());
-    const searchData = await searchResp.json();
-
-    if (searchData.status !== "OK" && searchData.status !== "ZERO_RESULTS") {
-      throw new Error(`Google Maps error: ${searchData.status} — ${searchData.error_message ?? ""}`);
+    // No query/location given -> the ICP drives discovery: derive a handful
+    // of Maps searches from it and run all of them, splitting the batch cap
+    // across them. This is the smart/automatic path used by the client
+    // portal and the discovery cron; admins can still type a manual query.
+    let searchPairs: { query: string; location: string }[];
+    if (query && location) {
+      searchPairs = [{ query, location }];
+    } else {
+      const icp = await ensureClientICP(supabase, client);
+      if (!icp) {
+        return new Response(
+          JSON.stringify({ error: "Could not derive an ideal customer profile yet -- fill in the company context first" }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const suggestions = await suggestDiscoveryQueries(client_id, icp);
+      if (suggestions.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Could not generate discovery queries from the ICP" }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      searchPairs = suggestions;
     }
 
-    const rawResults: PlacesResult[] = searchData.results?.slice(0, batchCap) ?? [];
+    // Step 1: Text Search via Places API, one call per query/location pair,
+    // splitting the batch cap evenly across them.
+    const perQueryCap = Math.max(1, Math.ceil(batchCap / searchPairs.length));
+    const searchResults = await Promise.all(
+      searchPairs.map(async ({ query: q, location: loc }) => {
+        const searchUrl = new URL("https://maps.googleapis.com/maps/api/place/textsearch/json");
+        searchUrl.searchParams.set("query", `${q} in ${loc}`);
+        searchUrl.searchParams.set("key", mapsKey);
+
+        const searchResp = await fetch(searchUrl.toString());
+        const searchData = await searchResp.json();
+
+        if (searchData.status !== "OK" && searchData.status !== "ZERO_RESULTS") {
+          console.error(`Google Maps error for "${q} in ${loc}": ${searchData.status} — ${searchData.error_message ?? ""}`);
+          return { ok: false, results: [] as PlacesResult[] };
+        }
+        return { ok: true, results: (searchData.results?.slice(0, perQueryCap) ?? []) as PlacesResult[] };
+      }),
+    );
+
+    // Every query erroring out (quota exhausted, bad key, Maps outage) looks
+    // identical to "the ICP genuinely matched nothing" unless called out
+    // explicitly -- surface it as a failure instead of a quiet zero.
+    if (searchResults.every((r) => !r.ok)) {
+      return new Response(
+        JSON.stringify({ error: "Google Maps search failed for every query -- check function logs for the underlying status." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const rawResults: PlacesResult[] = searchResults.flatMap((r) => r.results).slice(0, batchCap);
 
     // Step 2: Fetch place details (website + phone) for each result
     const enriched: PlacesResult[] = await Promise.all(
@@ -177,28 +244,24 @@ serve(async (req) => {
       business_type: extractBusinessType(p.types ?? []),
     }));
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from("prospects")
-      .insert(rows)
-      .select("id, name, website_url, city");
-
-    if (insertErr) throw insertErr;
+    const inserted = await insertNewProspects(supabase, client_id, rows);
 
     // Track Maps API usage
+    const queriesRun = searchPairs.map((p) => `${p.query} in ${p.location}`);
     await supabase.from("client_usage").insert({
       client_id,
       event_type: "maps_api_call",
       units: rawResults.length,
       source_fn: "discover-prospects",
-      metadata: { query, location, found: rawResults.length, inserted: inserted?.length ?? 0 },
+      metadata: { queries: queriesRun, auto: !query, found: rawResults.length, inserted: inserted?.length ?? 0 },
     });
 
     await logActivity(supabase, client_id, {
       type: "prospect_discovery",
-      title: `Discovered ${inserted?.length ?? 0} prospects near ${location}`,
-      description: query,
+      title: `Discovered ${inserted?.length ?? 0} prospects${query ? ` near ${location}` : " via ICP-driven search"}`,
+      description: queriesRun.join("; "),
       icon: "search",
-      metadata: { source: "maps", query, location, discovered: inserted?.length ?? 0 },
+      metadata: { source: "maps", queries: queriesRun, auto: !query, discovered: inserted?.length ?? 0 },
     });
 
     await refreshProspectProject(supabase, client_id);

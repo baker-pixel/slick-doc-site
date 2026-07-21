@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, ExternalLink, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getMarketingOrigin } from "@/lib/getPortalUrl";
 import { toast } from "@/hooks/use-toast";
 
 interface ClientCalendarTabProps {
@@ -148,8 +149,8 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
   }
 
   const intakeUrl = clientEmail
-    ? `/gap-analysis?email=${encodeURIComponent(clientEmail)}`
-    : "/gap-analysis";
+    ? `${getMarketingOrigin()}/gap-analysis?email=${encodeURIComponent(clientEmail)}`
+    : `${getMarketingOrigin()}/gap-analysis`;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { markProspectEngagement } from "../_shared/prospectEngagement.ts";
 
 // 1x1 transparent GIF
 const TRACKING_PIXEL = new Uint8Array([
@@ -76,6 +77,7 @@ const handler = async (req: Request): Promise<Response> => {
         console.error("Error recording open event:", insertError);
       } else {
         console.log("Recorded open event for email:", emailLog.id);
+        await markProspectEngagement(supabase, emailLog.id, "open");
       }
     } else {
       console.log("Duplicate open detected, skipping");

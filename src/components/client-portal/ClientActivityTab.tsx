@@ -36,6 +36,7 @@ import {
   Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getMarketingOrigin } from "@/lib/getPortalUrl";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
@@ -634,8 +635,8 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       "Approve Your First Content Draft",
     ];
     const intakeUrl = clientEmail
-      ? `/gap-analysis?email=${encodeURIComponent(clientEmail)}`
-      : "/gap-analysis";
+      ? `${getMarketingOrigin()}/gap-analysis?email=${encodeURIComponent(clientEmail)}`
+      : `${getMarketingOrigin()}/gap-analysis`;
 
     return (
       <div className="max-w-2xl mx-auto space-y-6">
@@ -782,8 +783,8 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
 
     // No gap analysis found — prompt the client to fill out the intake form
     const intakeUrl = clientEmail
-      ? `/gap-analysis?email=${encodeURIComponent(clientEmail)}`
-      : "/gap-analysis";
+      ? `${getMarketingOrigin()}/gap-analysis?email=${encodeURIComponent(clientEmail)}`
+      : `${getMarketingOrigin()}/gap-analysis`;
 
     return (
       <Alert className="border-orange-400/40 bg-orange-500/5">

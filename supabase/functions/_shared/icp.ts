@@ -78,6 +78,42 @@ Return ONLY valid JSON:
   }
 }
 
+export interface DiscoveryQuery {
+  query: string;
+  location: string;
+}
+
+/**
+ * Turns a client's ICP into concrete Google Maps search queries. Shared by
+ * prospect-icp (admin "Suggest" button) and discover-prospects' auto mode
+ * (no query/location given -> derive them from the ICP directly).
+ */
+export async function suggestDiscoveryQueries(
+  clientId: string,
+  icp: ClientICP,
+): Promise<DiscoveryQuery[]> {
+  const res = await callAIJson<{ suggestions?: DiscoveryQuery[] }>({
+    source: "prospect-icp",
+    clientId,
+    model: MODELS.default,
+    jsonMode: true,
+    maxTokens: 400,
+    promptId: "icp-query-suggest.v1",
+    prompt: `Generate Google Maps text-search queries to find prospects matching this ideal customer profile.
+
+IDEAL CUSTOMER PROFILE:
+- Summary: ${icp.summary}
+- Industries: ${icp.industries.join(", ")}
+- Geography: ${icp.geography}
+- Local businesses: ${icp.local ? "yes" : "no -- customers are national/global, Maps is a poor fit, still suggest the closest plausible local proxies"}
+
+Each query must name a concrete business type findable on Google Maps (e.g. "HR consulting firms", not "companies that value people"). Location must be a real city/region string Maps understands${icp.local ? `, within: ${icp.geography}` : ""}.
+
+Return ONLY valid JSON: { "suggestions": [ { "query": "...", "location": "..." }, ... ] } with 3-5 entries.`,
+  });
+  return (res.suggestions || []).slice(0, 5);
+}
+
 export interface FitResult {
   score: number;
   reason: string;

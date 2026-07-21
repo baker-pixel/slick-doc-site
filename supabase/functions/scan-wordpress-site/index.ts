@@ -350,7 +350,7 @@ serve(async (req) => {
         .from("connected_sites")
         .update({ status: "unreachable", updated_at: new Date().toISOString() })
         .eq("id", siteId)
-        .catch(() => {});
+        .then(undefined, () => {});
     }
 
     return new Response(JSON.stringify({ error: msg }), {

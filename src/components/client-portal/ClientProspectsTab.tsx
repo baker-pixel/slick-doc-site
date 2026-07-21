@@ -3,8 +3,10 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick } from "lucide-react";
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
 
@@ -23,6 +25,8 @@ interface Prospect {
   personalization_hook: string | null;
   top_weaknesses: string[] | null;
   drip_step: number;
+  opened_at: string | null;
+  clicked_at: string | null;
 }
 
 interface ProspectEmail {
@@ -56,21 +60,49 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [selected, setSelected] = useState<Prospect | null>(null);
   const [emails, setEmails] = useState<ProspectEmail[] | null>(null);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  const [icpLocal, setIcpLocal] = useState(true);
+  const [findingLeads, setFindingLeads] = useState(false);
+
+  const loadProspects = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("prospects")
+      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at")
+      .eq("client_id", clientAccountId)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    setAllProspects(data ?? []);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from("prospects")
-        .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step")
-        .eq("client_id", clientAccountId)
-        .order("created_at", { ascending: false })
-        .limit(200);
-      setAllProspects(data ?? []);
-      setLoading(false);
-    };
-    load();
+    loadProspects();
+    supabase.from("client_accounts").select("icp").eq("id", clientAccountId).single()
+      .then(({ data }) => {
+        const icp = data?.icp as { local?: boolean } | null;
+        if (icp && typeof icp.local === "boolean") setIcpLocal(icp.local);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientAccountId]);
+
+  const findLeadsNow = async () => {
+    setFindingLeads(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        icpLocal ? "discover-prospects" : "discover-prospects-web",
+        { body: { client_id: clientAccountId } },
+      );
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: `${data.discovered ?? 0} new leads found`, description: "They'll be reviewed and added to your outreach queue shortly." });
+      if ((data.discovered ?? 0) > 0) loadProspects();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Couldn't find new leads", description: msg, variant: "destructive" });
+    } finally {
+      setFindingLeads(false);
+    }
+  };
 
   const openDetail = async (p: Prospect) => {
     setSelected(p);
@@ -115,10 +147,14 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
 
       <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary/60" />
-        <span>
+        <span className="flex-1">
           Orange Door is running outreach on your behalf, based on the ideal customer profile above. Click a lead
           below to see why it was matched and what's been sent.
         </span>
+        <Button size="sm" variant="outline" className="gap-2 shrink-0" onClick={findLeadsNow} disabled={findingLeads}>
+          {findingLeads ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {findingLeads ? "Searching..." : "Find leads now"}
+        </Button>
       </div>
 
       <Card>
@@ -161,9 +197,16 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                       {p.icp_fit_score != null ? `${p.icp_fit_score}/100` : "—"}
                     </td>
                     <td className="p-3">
-                      <Badge variant="outline" className={`text-xs ${STATUS_STYLES[p.status] ?? ""}`}>
-                        {STATUS_LABELS[p.status] ?? p.status}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        {p.clicked_at ? (
+                          <MousePointerClick className="w-3.5 h-3.5 text-emerald-600"><title>Clicked a link</title></MousePointerClick>
+                        ) : p.opened_at ? (
+                          <Eye className="w-3.5 h-3.5 text-blue-500"><title>Opened an email</title></Eye>
+                        ) : null}
+                        <Badge variant="outline" className={`text-xs ${STATUS_STYLES[p.status] ?? ""}`}>
+                          {STATUS_LABELS[p.status] ?? p.status}
+                        </Badge>
+                      </div>
                     </td>
                     <td className="p-3 text-xs text-muted-foreground">
                       {format(new Date(p.created_at), "MMM d, yyyy")}
@@ -199,6 +242,22 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                     </a>
                   )}
                 </div>
+
+                {(selected.opened_at || selected.clicked_at) && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {selected.clicked_at ? (
+                      <>
+                        <MousePointerClick className="w-3.5 h-3.5 text-emerald-600" />
+                        Clicked a link {format(new Date(selected.clicked_at), "MMM d, yyyy")}
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-blue-500" />
+                        Opened an email {format(new Date(selected.opened_at!), "MMM d, yyyy")}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {selected.icp_fit_score != null && (
                   <div className="rounded-lg border bg-muted/30 p-3 space-y-1">

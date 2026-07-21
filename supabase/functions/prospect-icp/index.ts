@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
 import { callAIJson, MODELS } from "../_shared/ai.ts";
-import { ensureClientICP } from "../_shared/icp.ts";
+import { ensureClientICP, suggestDiscoveryQueries } from "../_shared/icp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,30 +78,12 @@ Return ONLY valid JSON: { "fit": true|false, "reason": "<one short sentence>" }`
     }
 
     // action === "suggest"
-    const suggestions = await callAIJson<{ suggestions?: Array<{ query: string; location: string }> }>({
-      source: "prospect-icp",
-      clientId: client.id,
-      model: MODELS.default,
-      jsonMode: true,
-      maxTokens: 400,
-      promptId: "icp-query-suggest.v1",
-      prompt: `Generate Google Maps text-search queries to find prospects matching this ideal customer profile.
-
-IDEAL CUSTOMER PROFILE:
-- Summary: ${icp.summary}
-- Industries: ${icp.industries.join(", ")}
-- Geography: ${icp.geography}
-- Local businesses: ${icp.local ? "yes" : "no -- customers are national/global, Maps is a poor fit, still suggest the closest plausible local proxies"}
-
-Each query must name a concrete business type findable on Google Maps (e.g. "HR consulting firms", not "companies that value people"). Location must be a real city/region string Maps understands${icp.local ? `, within: ${icp.geography}` : ""}.
-
-Return ONLY valid JSON: { "suggestions": [ { "query": "...", "location": "..." }, ... ] } with 3-5 entries.`,
-    });
+    const suggestions = await suggestDiscoveryQueries(client.id, icp);
 
     return json({
       icp,
       maps_suitable: icp.local,
-      suggestions: (suggestions.suggestions || []).slice(0, 5),
+      suggestions,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

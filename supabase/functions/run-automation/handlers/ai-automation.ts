@@ -226,7 +226,7 @@ Context: ${JSON.stringify(inputData || {})}`;
           .join(" | "),
         icon: "alert-triangle",
         metadata: { qa_flagged: flagged.map(({ piece, qa }) => ({ title: piece.title, qa })) },
-      }).catch(() => {});
+      }).then(undefined, () => {});
     }
 
     await createDeliverable(
@@ -283,7 +283,7 @@ ${p.content.substring(0, 300)}${p.content.length > 300 ? '...' : ''}`).join('\n\
           .join(" | "),
         icon: "alert-triangle",
         metadata: { qa_flagged: flagged.map(({ email, qa }: { email: any; qa: QaVerdict | null }) => ({ subject: email.subject, qa })) },
-      }).catch(() => {});
+      }).then(undefined, () => {});
     }
 
     await createDeliverable(

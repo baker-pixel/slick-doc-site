@@ -9,6 +9,7 @@
  */
 
 import { logAlert } from "./alerts.ts";
+import { seedContextFromLead } from "./onboardingContext.ts";
 
 const ONBOARDING_SYNC: Record<string, string> = {
   client_form: "intake_form_completed_at",
@@ -106,6 +107,28 @@ export async function unlockReadySteps(
       .single()
       .then(({ data }: any) => data?.client_id ?? null));
 
+  // Defined here (not at its previous call site further down) so the
+  // onboarding-completion branch below can also use it -- same durable,
+  // idempotent job-queue path either way, never a direct function call.
+  const enqueue = (target: string, idempotencyKey: string, body: Record<string, unknown>) =>
+    supabase
+      .rpc("agent_jobs_enqueue", { msg: { target, idempotencyKey, body } })
+      .then(({ error }: { error: unknown }) => {
+        if (error) {
+          console.error(`Failed to enqueue ${target} job (${idempotencyKey}):`, error);
+          return logAlert(supabase, {
+            source: "workflowUnlock",
+            alertType: "agent_job_enqueue_failed",
+            severity: "high",
+            title: `Failed to enqueue ${target} job`,
+            message: `agent_jobs_enqueue RPC failed for idempotencyKey "${idempotencyKey}" (target "${target}"): ${
+              (error as { message?: string })?.message ?? error
+            }. The workflow_steps row this was meant to advance is now stuck in_progress with no queued job behind it.`,
+            metadata: { target, idempotencyKey, body },
+          });
+        }
+      });
+
   if (resolvedClientId && completedStepObj) {
     const syncField = ONBOARDING_SYNC[completedStepObj.task_type];
     if (syncField) {
@@ -130,6 +153,29 @@ export async function unlockReadySteps(
         .update({ status: "active" })
         .eq("client_account_id", resolvedClientId)
         .eq("status", "draft");
+
+      // The moment onboarding completes does exactly one more thing: seed
+      // the shared context (brand/ICP/voice, from the original lead's
+      // gap-analysis data) so engines have something real to pull. It does
+      // NOT call any engine directly -- seo-reaudit-scan's own due-scan
+      // already treats "active client, website_url set, no audit on file"
+      // as due, so this just nudges that pickup sooner instead of leaving a
+      // brand-new client waiting for the next cron pass. Same idempotency
+      // key as the cron uses, so the two can never double-run.
+      await seedContextFromLead(supabase, resolvedClientId).catch((e: unknown) =>
+        console.error("seedContextFromLead failed:", e)
+      );
+
+      const { data: activatedClient } = await supabase
+        .from("client_accounts")
+        .select("website_url")
+        .eq("id", resolvedClientId)
+        .maybeSingle();
+
+      if (activatedClient?.website_url) {
+        const today = new Date().toISOString().slice(0, 10);
+        await enqueue("seo-audit", `seo-audit:${resolvedClientId}:${today}`, { clientId: resolvedClientId });
+      }
     }
   }
 
@@ -139,25 +185,6 @@ export async function unlockReadySteps(
   // dead-letters with an alert), this failure mode never reaches that
   // safety net at all, so it must alert here or the step is stuck silently
   // forever.
-  const enqueue = (target: string, idempotencyKey: string, body: Record<string, unknown>) =>
-    supabase
-      .rpc("agent_jobs_enqueue", { msg: { target, idempotencyKey, body } })
-      .then(({ error }: { error: unknown }) => {
-        if (error) {
-          console.error(`Failed to enqueue ${target} job (${idempotencyKey}):`, error);
-          return logAlert(supabase, {
-            source: "workflowUnlock",
-            alertType: "agent_job_enqueue_failed",
-            severity: "high",
-            title: `Failed to enqueue ${target} job`,
-            message: `agent_jobs_enqueue RPC failed for idempotencyKey "${idempotencyKey}" (target "${target}"): ${
-              (error as { message?: string })?.message ?? error
-            }. The workflow_steps row this was meant to advance is now stuck in_progress with no queued job behind it.`,
-            metadata: { target, idempotencyKey, body },
-          });
-        }
-      });
-
   if (resolvedClientId) {
     const approvalStep = allSteps.find(
       (s: any) => clientToUnlock.includes(s.id) && s.task_type === "client_approval"

@@ -211,7 +211,7 @@ serve(async (req) => {
         .from("wp_fix_queue")
         .update({ status: "failed", error_message: msg, updated_at: new Date().toISOString() })
         .eq("id", fixId)
-        .catch(() => {});
+        .then(undefined, () => {});
     }
 
     return new Response(JSON.stringify({ error: msg }), {

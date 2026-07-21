@@ -127,7 +127,7 @@ serve(async (req) => {
       source: "generate-approval-draft",
       source_id: client_id,
       metadata: { client_id, workflow_id, step_id },
-    }).catch(() => {});
+    }).then(undefined, () => {});
 
     return json({ success: true });
   } catch (err: any) {

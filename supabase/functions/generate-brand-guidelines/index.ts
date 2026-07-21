@@ -147,7 +147,7 @@ Keep it concise and actionable. Write for a marketing team that has never worked
       description: "Brand guidelines document created from confirmed brand assets.",
       icon: "book-open",
       metadata: { content_id: contentRow?.id, deliverable_id: deliverableRow?.id },
-    }).catch(() => {});
+    }).then(undefined, () => {});
 
     return json({
       success: true,

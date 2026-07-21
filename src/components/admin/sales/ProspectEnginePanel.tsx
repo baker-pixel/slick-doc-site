@@ -39,6 +39,8 @@ import {
   Users,
   Clock,
   TrendingUp,
+  Eye,
+  MousePointerClick,
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
@@ -63,6 +65,8 @@ interface Prospect {
   client_id: string | null;
   created_at: string;
   approved_at: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
 }
 
 interface IcpSuggestion {
@@ -485,6 +489,25 @@ export default function ProspectEnginePanel() {
         <td className="p-3">
           {!showActions && (
             <div className="flex items-center gap-1 justify-end">
+              {p.clicked_at ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <MousePointerClick className="w-3.5 h-3.5 text-emerald-600" />
+                    </TooltipTrigger>
+                    <TooltipContent>Clicked a link {format(new Date(p.clicked_at), "MMM d")}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : p.opened_at ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Eye className="w-3.5 h-3.5 text-blue-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>Opened an email {format(new Date(p.opened_at), "MMM d")}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : null}
               <Badge variant="outline" className={`text-xs ${STATUS_COLORS[p.status] ?? ""}`}>
                 {p.status}
               </Badge>

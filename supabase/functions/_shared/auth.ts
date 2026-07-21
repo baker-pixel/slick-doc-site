@@ -8,6 +8,8 @@ export interface AdminAuthResult {
   authorized: boolean;
   userId: string | null;
   via: "session" | "password" | null;
+  /** "admin" for admin-panel callers, "client" for a portal user authorized only via checkClientOrAdminAuth's ownership check. */
+  role?: "admin" | "client";
 }
 
 export async function checkAdminAuth(
@@ -38,13 +40,13 @@ export async function checkAdminAuth(
   }
 
   if (authorizedUserId) {
-    return { authorized: true, userId: authorizedUserId, via: "session" };
+    return { authorized: true, userId: authorizedUserId, via: "session", role: "admin" };
   }
 
   const adminPassword = Deno.env.get("ADMIN_PASSWORD");
   const passwordValid = !!password && !!adminPassword && password === adminPassword;
   if (passwordValid) {
-    return { authorized: true, userId: null, via: "password" };
+    return { authorized: true, userId: null, via: "password", role: "admin" };
   }
 
   return { authorized: false, userId: null, via: null };
@@ -82,7 +84,7 @@ export async function checkClientOrAdminAuth(
       .eq("client_account_id", clientAccountId)
       .maybeSingle();
 
-    if (portalUser) return { authorized: true, userId: userData.user.id, via: "session" };
+    if (portalUser) return { authorized: true, userId: userData.user.id, via: "session", role: "client" };
   } catch (e) {
     console.error("Client ownership auth check failed:", e);
   }
