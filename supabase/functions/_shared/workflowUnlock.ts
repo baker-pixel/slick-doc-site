@@ -169,17 +169,20 @@ export async function unlockReadySteps(
 
       const { data: activatedClient } = await supabase
         .from("client_accounts")
-        .select("website_url, plan_tier")
+        .select("website_url, tier")
         .eq("id", resolvedClientId)
         .maybeSingle();
 
       // Empty shells so the portal shows what's coming instead of a blank
       // Projects tab until each engine's own cron/scan gets around to it.
       // Tier-gating (prospect) is decided here in TS via tierPolicy, not in SQL.
+      // `tier` (NOT NULL), not `plan_tier` -- every other tierPolicy() call
+      // site in this codebase reads client.tier; plan_tier is a separate,
+      // apparently-unused nullable column nothing else consults.
       await supabase
         .rpc("bootstrap_client_projects", {
           p_client_account_id: resolvedClientId,
-          p_include_prospect: tierPolicy(activatedClient?.plan_tier).prospect.enabled,
+          p_include_prospect: tierPolicy(activatedClient?.tier).prospect.enabled,
         })
         .then(({ error }: { error: unknown }) => {
           if (error) console.error("bootstrap_client_projects failed:", error);
