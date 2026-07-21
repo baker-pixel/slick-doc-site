@@ -94,7 +94,11 @@ export async function upsertSocialStrategy(
     .from("content_calendar").select("id", { count: "exact", head: true })
     .eq("client_account_id", client.id).eq("status", "published").gte("scheduled_for", monthStart.toISOString());
   const progress = policy.social.postsPerMonth > 0 ? Math.min(100, Math.round((100 * (published ?? 0)) / policy.social.postsPerMonth)) : 0;
-  await supabase.from("client_projects").update({ progress_percentage: progress, updated_at: new Date().toISOString() }).eq("id", projectId);
+  // Unlike seoProject.ts/prospectProject.ts, this used to never touch status --
+  // a bootstrap-created 'awaiting_setup' shell would stay stuck at that status
+  // forever even after real pillars/progress exist. Always in_progress here:
+  // a social plan has no terminal "completed" state (pillars are ongoing themes).
+  await supabase.from("client_projects").update({ progress_percentage: progress, status: "in_progress", updated_at: new Date().toISOString() }).eq("id", projectId);
 
   return { projectId, pillars };
 }
@@ -119,7 +123,7 @@ export async function refreshSocialPlanProgress(
     .eq("client_account_id", clientId).eq("status", "published").gte("scheduled_for", monthStart.toISOString());
   const progress = postsPerMonthTarget > 0 ? Math.min(100, Math.round((100 * (published ?? 0)) / postsPerMonthTarget)) : 0;
   await supabase.from("client_projects")
-    .update({ progress_percentage: progress, updated_at: new Date().toISOString() })
+    .update({ progress_percentage: progress, status: "in_progress", updated_at: new Date().toISOString() })
     .eq("id", project.id);
 }
 

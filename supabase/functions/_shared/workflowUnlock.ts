@@ -10,6 +10,7 @@
 
 import { logAlert } from "./alerts.ts";
 import { seedContextFromLead } from "./onboardingContext.ts";
+import { tierPolicy } from "./tierPolicy.ts";
 
 const ONBOARDING_SYNC: Record<string, string> = {
   client_form: "intake_form_completed_at",
@@ -168,9 +169,21 @@ export async function unlockReadySteps(
 
       const { data: activatedClient } = await supabase
         .from("client_accounts")
-        .select("website_url")
+        .select("website_url, plan_tier")
         .eq("id", resolvedClientId)
         .maybeSingle();
+
+      // Empty shells so the portal shows what's coming instead of a blank
+      // Projects tab until each engine's own cron/scan gets around to it.
+      // Tier-gating (prospect) is decided here in TS via tierPolicy, not in SQL.
+      await supabase
+        .rpc("bootstrap_client_projects", {
+          p_client_account_id: resolvedClientId,
+          p_include_prospect: tierPolicy(activatedClient?.plan_tier).prospect.enabled,
+        })
+        .then(({ error }: { error: unknown }) => {
+          if (error) console.error("bootstrap_client_projects failed:", error);
+        });
 
       if (activatedClient?.website_url) {
         const today = new Date().toISOString().slice(0, 10);

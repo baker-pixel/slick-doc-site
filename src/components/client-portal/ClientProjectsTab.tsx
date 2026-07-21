@@ -88,6 +88,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "succes
   in_progress: { label: "In Progress", variant: "info" },
   on_hold: { label: "On Hold", variant: "warning" },
   pending: { label: "Pending", variant: "default" },
+  awaiting_setup: { label: "Setting Up", variant: "default" },
 };
 
 export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTabProps) {
@@ -333,7 +334,9 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   };
 
   const getProjectHealth = (project: Project, milestoneList: Milestone[]) => {
-    if (project.status === 'completed' || project.status === 'pending') return null;
+    // Shells with no engine work yet have no target/milestones to be "on track"
+    // or "delayed" against -- an On Track badge here would just be noise.
+    if (project.status === 'completed' || project.status === 'pending' || project.status === 'awaiting_setup') return null;
     const today = new Date();
     if (project.target_end_date && new Date(project.target_end_date) < today) {
       return { label: 'Delayed', cls: 'bg-red-100 text-red-700' };
@@ -400,6 +403,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
 
   const completedCount = projects.filter(p => p.status === 'completed').length;
   const inProgressCount = projects.filter(p => p.status === 'in_progress').length;
+  const settingUpCount = projects.filter(p => p.status === 'awaiting_setup').length;
   const visibleProjects = showCompleted ? projects : projects.filter(p => p.status !== 'completed');
 
   return (
@@ -427,10 +431,13 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={cn("grid grid-cols-1 sm:grid-cols-3 gap-4", settingUpCount > 0 && "lg:grid-cols-4")}>
         <StatCard label="Total Projects" value={projects.length} icon={Target} index={0} />
         <StatCard label="In Progress" value={inProgressCount} icon={Rocket} index={1} />
         <StatCard label="Completed" value={completedCount} icon={CheckCircle} index={2} />
+        {settingUpCount > 0 && (
+          <StatCard label="Setting Up" value={settingUpCount} icon={Clock} index={3} />
+        )}
       </div>
 
       {/* Request Update Dialog */}
