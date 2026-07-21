@@ -138,6 +138,9 @@ verify_jwt = true
 [functions.auto-discover-prospects]
 verify_jwt = true
 
+[functions.sync-intake-context]
+verify_jwt = false
+
 [functions.fill-scheduled-content]
 verify_jwt = true
 

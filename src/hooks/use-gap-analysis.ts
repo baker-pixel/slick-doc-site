@@ -464,15 +464,15 @@ export function useGapAnalysis({ resumeToken, prefillEmail, totalSteps }: UseGap
       setSubmissionResumeToken(insertedData?.resume_token || null);
       setIsComplete(true);
 
-      // Mark intake complete on client_accounts (no-op if already set or no matching account)
+      // Tie this submission back to an existing client_accounts row (context_profile +
+      // intake_completed_at). Must run server-side: the marketing site has no client
+      // session, and RLS blocks anon browser writes to client_accounts.
       try {
-        await supabase
-          .from("client_accounts")
-          .update({ intake_completed_at: new Date().toISOString() })
-          .ilike("email", formData.email)
-          .is("intake_completed_at", null);
+        await supabase.functions.invoke("sync-intake-context", {
+          body: { submission_id: insertedData.id },
+        });
       } catch (err) {
-        console.error("Failed to update client intake_completed_at:", err);
+        console.error("Failed to sync intake context to client_accounts:", err);
       }
 
       try {
