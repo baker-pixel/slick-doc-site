@@ -90,6 +90,7 @@ export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {
       toast.success("Notification sent to client");
     } catch (error) {
       console.error("Failed to send notification:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to send notification");
     }
   };
 
@@ -118,7 +119,7 @@ export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {
     },
     onError: (error) => {
       console.error('Create error:', error);
-      toast.error("Failed to create invoice");
+      toast.error(error instanceof Error ? error.message : "Failed to create invoice");
     },
   });
 
@@ -146,7 +147,7 @@ export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {
     },
     onError: (error) => {
       console.error('Update error:', error);
-      toast.error("Failed to update invoice");
+      toast.error(error instanceof Error ? error.message : "Failed to update invoice");
     },
   });
 
@@ -165,7 +166,7 @@ export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {
     },
     onError: (error) => {
       console.error('Delete error:', error);
-      toast.error("Failed to delete invoice");
+      toast.error(error instanceof Error ? error.message : "Failed to delete invoice");
     },
   });
 
@@ -184,7 +185,7 @@ export function ClientInvoicesAdminPanel({ clientId }: { clientId?: string } = {
     },
     onError: (error) => {
       console.error('Mark paid error:', error);
-      toast.error("Failed to update invoice");
+      toast.error(error instanceof Error ? error.message : "Failed to update invoice");
     },
   });
 

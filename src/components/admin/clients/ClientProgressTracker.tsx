@@ -83,7 +83,7 @@ export default function ClientProgressTracker({ adminPassword }: ClientProgressT
   const [selectedTier, setSelectedTier] = useState("all");
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
 
-  const { data: clients, isLoading: clientsLoading } = useQuery({
+  const { data: clients, isLoading: clientsLoading, isError: clientsError } = useQuery({
     queryKey: ["admin-clients-progress"],
     queryFn: async () => {
       const response = await supabase.functions.invoke("admin", {
@@ -94,7 +94,7 @@ export default function ClientProgressTracker({ adminPassword }: ClientProgressT
     },
   });
 
-  const { data: allTasks } = useQuery({
+  const { data: allTasks, isError: tasksError } = useQuery({
     queryKey: ["admin-all-tasks"],
     queryFn: async () => {
       const response = await supabase.functions.invoke("admin", {
@@ -105,7 +105,7 @@ export default function ClientProgressTracker({ adminPassword }: ClientProgressT
     },
   });
 
-  const { data: allDeliverables } = useQuery({
+  const { data: allDeliverables, isError: deliverablesError } = useQuery({
     queryKey: ["admin-all-deliverables"],
     queryFn: async () => {
       const response = await supabase.functions.invoke("admin", {
@@ -183,6 +183,10 @@ export default function ClientProgressTracker({ adminPassword }: ClientProgressT
           </SelectContent>
         </Select>
       </div>
+
+      {(clientsError || tasksError || deliverablesError) && (
+        <p className="text-sm text-destructive">Failed to load some data — figures below may be incomplete.</p>
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">

@@ -21,6 +21,7 @@ import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
 import { EmailDeliverabilityDashboard } from "./EmailDeliverabilityDashboard";
 import { EmailListCleaningPanel } from "./EmailListCleaningPanel";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 // Timezone options
 const TIMEZONES = [
@@ -268,7 +269,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
         },
       });
 
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to schedule email");
+      }
 
       toast({ title: "Success", description: "Email scheduled successfully" });
       setIsScheduleDialogOpen(false);
@@ -286,7 +290,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       fetchEmailData();
     } catch (error) {
       console.error("Error scheduling email:", error);
-      toast({ title: "Error", description: "Failed to schedule email", variant: "destructive" });
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to schedule email", variant: "destructive" });
     } finally {
       setIsScheduling(false);
     }
@@ -298,6 +302,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       const response = await supabase.functions.invoke("admin", {
         body: { action: "list", table: "email_queue", password },
       });
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch email data");
+      }
       if (response.data?.data) {
         setEmailQueue(response.data.data);
       }
@@ -305,6 +313,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       const logsResponse = await supabase.functions.invoke("admin", {
         body: { action: "list", table: "email_logs", password },
       });
+      if (logsResponse.error) {
+        const msg = await getEdgeErrorMessage(logsResponse.error, logsResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch email data");
+      }
       if (logsResponse.data?.data) {
         setEmailLogs(logsResponse.data.data);
       }
@@ -312,6 +324,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       const seqResponse = await supabase.functions.invoke("admin", {
         body: { action: "list", table: "email_sequences", password },
       });
+      if (seqResponse.error) {
+        const msg = await getEdgeErrorMessage(seqResponse.error, seqResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch email data");
+      }
       if (seqResponse.data?.data) {
         setSequences(seqResponse.data.data);
       }
@@ -320,6 +336,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       const trackingResponse = await supabase.functions.invoke("admin", {
         body: { action: "list_tracking_events", password },
       });
+      if (trackingResponse.error) {
+        const msg = await getEdgeErrorMessage(trackingResponse.error, trackingResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch email data");
+      }
       if (trackingResponse.data?.data) {
         setTrackingEvents(trackingResponse.data.data);
       }
@@ -328,6 +348,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       const statsResponse = await supabase.functions.invoke("admin", {
         body: { action: "get_tracking_stats", password },
       });
+      if (statsResponse.error) {
+        const msg = await getEdgeErrorMessage(statsResponse.error, statsResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch email data");
+      }
       if (statsResponse.data?.data) {
         setTrackingStats(statsResponse.data.data);
       }
@@ -335,7 +359,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       console.error("Error fetching email data:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch email data",
+        description: error instanceof Error ? error.message : "Failed to fetch email data",
         variant: "destructive",
       });
     } finally {
@@ -387,7 +411,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
 
   const handleToggleSequence = async (sequence: EmailSequence) => {
     try {
-      await supabase.functions.invoke("admin", {
+      const response = await supabase.functions.invoke("admin", {
         body: {
           action: "update",
           table: "email_sequences",
@@ -396,6 +420,10 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
           password,
         },
       });
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to update sequence");
+      }
       toast({
         title: "Success",
         description: `Sequence ${sequence.is_active ? "disabled" : "enabled"}`,
@@ -404,7 +432,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update sequence",
+        description: error instanceof Error ? error.message : "Failed to update sequence",
         variant: "destructive",
       });
     }
@@ -412,15 +440,19 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
 
   const handleDeleteQueueItem = async (id: string) => {
     try {
-      await supabase.functions.invoke("admin", {
+      const response = await supabase.functions.invoke("admin", {
         body: { action: "delete", table: "email_queue", id, password },
       });
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to delete email");
+      }
       toast({ title: "Success", description: "Email removed from queue" });
       fetchEmailData();
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to delete email",
+        description: error instanceof Error ? error.message : "Failed to delete email",
         variant: "destructive",
       });
     }
@@ -429,13 +461,17 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   const handleProcessQueue = async () => {
     try {
       setIsLoading(true);
-      await supabase.functions.invoke("process-email-queue");
+      const response = await supabase.functions.invoke("process-email-queue");
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to process queue");
+      }
       toast({ title: "Success", description: "Email queue processed" });
       fetchEmailData();
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to process queue",
+        description: error instanceof Error ? error.message : "Failed to process queue",
         variant: "destructive",
       });
     } finally {

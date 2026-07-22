@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { RefreshCw, TrendingUp, Users, MousePointerClick, Eye, Mail, Clock, Calendar, Link2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
@@ -55,11 +56,20 @@ export const EmailAnalyticsDashboard = ({ password }: EmailAnalyticsDashboardPro
         }),
       ]);
 
+      if (logsResponse.error) {
+        const msg = await getEdgeErrorMessage(logsResponse.error, logsResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch analytics data");
+      }
+      if (trackingResponse.error) {
+        const msg = await getEdgeErrorMessage(trackingResponse.error, trackingResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch analytics data");
+      }
+
       if (logsResponse.data?.data) setEmailLogs(logsResponse.data.data);
       if (trackingResponse.data?.data) setTrackingEvents(trackingResponse.data.data);
     } catch (error) {
       console.error("Error fetching analytics data:", error);
-      toast({ title: "Error", description: "Failed to fetch analytics data", variant: "destructive" });
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to fetch analytics data", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }

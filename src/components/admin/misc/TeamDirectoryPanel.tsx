@@ -54,7 +54,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const { data: teamMembers, isLoading } = useQuery({
+  const { data: teamMembers, isLoading, isError } = useQuery({
     queryKey: ["admin-team-members"],
     queryFn: async () => {
       const response = await supabase.functions.invoke("admin", {
@@ -358,6 +358,12 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
+          </CardContent>
+        </Card>
+      ) : isError ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-sm text-destructive text-center py-8">Failed to load team members.</p>
           </CardContent>
         </Card>
       ) : !teamMembers || teamMembers.length === 0 ? (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,7 +113,10 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       const { data: res, error } = await supabase.functions.invoke('admin', {
         body: { action: 'list', table: 'client_projects', password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, res);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to load projects");
+      }
       // Fetch milestones and client names separately
       const projectRows = res?.data || [];
       if (projectRows.length === 0) return [];
@@ -163,7 +167,10 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
       const { data: res, error } = await supabase.functions.invoke('admin', {
         body: { action: 'list', table: 'client_accounts', password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, res);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to load client accounts");
+      }
       return (res?.data || []) as ClientAccountWithTier[];
     },
   });
@@ -171,7 +178,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: string } & typeof formData) => {
-      const { error } = await supabase.functions.invoke('admin', {
+      const { data: res, error } = await supabase.functions.invoke('admin', {
         body: {
           action: 'update',
           table: 'client_projects',
@@ -188,7 +195,10 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, res);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to update project");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
@@ -197,16 +207,19 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     },
     onError: (error) => {
       console.error('Update error:', error);
-      toast.error("Failed to update project");
+      toast.error(error.message);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.functions.invoke('admin', {
+      const { data: res, error } = await supabase.functions.invoke('admin', {
         body: { action: 'delete', table: 'client_projects', id, password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, res);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to delete project");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
@@ -214,7 +227,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     },
     onError: (error) => {
       console.error('Delete error:', error);
-      toast.error("Failed to delete project");
+      toast.error(error.message);
     },
   });
 
@@ -227,7 +240,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
         ? Math.max(...existingMilestones.map(m => m.sort_order)) + 1 
         : 1;
 
-      const { error } = await supabase.functions.invoke('admin', {
+      const { data: res, error } = await supabase.functions.invoke('admin', {
         body: {
           action: 'create',
           table: 'project_milestones',
@@ -242,7 +255,10 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, res);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to add milestone");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
@@ -252,16 +268,19 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     },
     onError: (error) => {
       console.error('Create milestone error:', error);
-      toast.error("Failed to add milestone");
+      toast.error(error.message);
     },
   });
 
   const deleteMilestoneMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.functions.invoke('admin', {
+      const { data: res, error } = await supabase.functions.invoke('admin', {
         body: { action: 'delete', table: 'project_milestones', id, password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, res);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to delete milestone");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] });
@@ -269,7 +288,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     },
     onError: (error) => {
       console.error('Delete milestone error:', error);
-      toast.error("Failed to delete milestone");
+      toast.error(error.message);
     },
   });
 

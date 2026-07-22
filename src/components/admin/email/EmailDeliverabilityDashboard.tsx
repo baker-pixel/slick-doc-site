@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { 
   RefreshCw, AlertTriangle, CheckCircle, XCircle, Shield, 
   TrendingDown, TrendingUp, Mail, AlertCircle, Activity,
@@ -60,11 +61,20 @@ export const EmailDeliverabilityDashboard = ({ password }: EmailDeliverabilityDa
         }),
       ]);
 
+      if (logsResponse.error) {
+        const msg = await getEdgeErrorMessage(logsResponse.error, logsResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch deliverability data");
+      }
+      if (trackingResponse.error) {
+        const msg = await getEdgeErrorMessage(trackingResponse.error, trackingResponse.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch deliverability data");
+      }
+
       if (logsResponse.data?.data) setEmailLogs(logsResponse.data.data);
       if (trackingResponse.data?.data) setTrackingEvents(trackingResponse.data.data);
     } catch (error) {
       console.error("Error fetching deliverability data:", error);
-      toast({ title: "Error", description: "Failed to fetch deliverability data", variant: "destructive" });
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to fetch deliverability data", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }

@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import {
   CheckCircle2,
   Circle,
@@ -148,6 +149,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
     if (!res.error) {
       const rows = (res.data?.data || []) as Task[];
       setTasks(rows.filter((t) => (t as any).client_account_id === client.id));
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load tasks", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
@@ -163,6 +167,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
         .filter((d) => d.client_account_id === client.id)
         .sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
       setDeliverables(filtered);
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load deliverables", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
@@ -175,6 +182,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       const rows = (res.data?.data || []) as Message[];
       // API returns ascending; store as newest first
       setMessages(rows.slice().reverse());
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load messages", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
@@ -195,6 +205,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       if (inProgress) {
         setExpandedProject(inProgress.id);
       }
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load projects", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
@@ -206,6 +219,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
     if (!res.error) {
       const rows = (res.data?.data || []) as any[];
       setMilestones(rows.sort((a, b) => a.sort_order - b.sort_order));
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load milestones", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
@@ -227,11 +243,14 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
         .slice(0, 5);
 
       setMeetings(upcoming);
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load meetings", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
   const completeTask = async (taskId: string) => {
-    await supabase.functions.invoke("admin", {
+    const res = await supabase.functions.invoke("admin", {
       body: {
         action: "update",
         table: "client_tasks",
@@ -241,12 +260,17 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       },
     });
 
-    toast({ title: "Task completed!" });
-    fetchTasks();
+    if (!res.error) {
+      toast({ title: "Task completed!" });
+      fetchTasks();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to complete task", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
   };
 
   const reopenTask = async (taskId: string) => {
-    await supabase.functions.invoke("admin", {
+    const res = await supabase.functions.invoke("admin", {
       body: {
         action: "update",
         table: "client_tasks",
@@ -256,12 +280,17 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       },
     });
 
-    toast({ title: "Task reopened" });
-    fetchTasks();
+    if (!res.error) {
+      toast({ title: "Task reopened" });
+      fetchTasks();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to reopen task", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
   };
 
   const updateDeliverable = async (deliverableId: string, status: string) => {
-    await supabase.functions.invoke("admin", {
+    const res = await supabase.functions.invoke("admin", {
       body: {
         action: "update",
         table: "deliverables",
@@ -271,8 +300,13 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       },
     });
 
-    toast({ title: status === "approved" ? "Deliverable approved!" : "Revision requested" });
-    fetchDeliverables();
+    if (!res.error) {
+      toast({ title: status === "approved" ? "Deliverable approved!" : "Revision requested" });
+      fetchDeliverables();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: status === "approved" ? "Failed to approve deliverable" : "Failed to request revision", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
   };
 
   const markMessageRead = async (messageId: string) => {
@@ -289,12 +323,12 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
   };
 
   const updateProjectProgress = async (projectId: string, progress: number) => {
-    await supabase.functions.invoke("admin", {
+    const res = await supabase.functions.invoke("admin", {
       body: {
         action: "update",
         table: "client_projects",
         id: projectId,
-        data: { 
+        data: {
           progress_percentage: progress,
           status: progress >= 100 ? "completed" : "in_progress"
         },
@@ -302,8 +336,13 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       },
     });
 
-    toast({ title: progress >= 100 ? "Project completed!" : "Progress updated" });
-    fetchProjects();
+    if (!res.error) {
+      toast({ title: progress >= 100 ? "Project completed!" : "Progress updated" });
+      fetchProjects();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to update progress", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
   };
 
   const sendMessage = async () => {
@@ -326,6 +365,9 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       setNewMessage("");
       fetchMessages();
       toast({ title: "Message sent!" });
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to send message", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
 
     setSendingMessage(false);

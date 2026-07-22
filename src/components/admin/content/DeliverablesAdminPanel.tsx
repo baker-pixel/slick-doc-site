@@ -79,7 +79,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
   });
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const { data: deliverables, isLoading } = useQuery({
+  const { data: deliverables, isLoading, isError } = useQuery({
     queryKey: ["admin-deliverables"],
     queryFn: async () => {
       const response = await supabase.functions.invoke("admin", {
@@ -90,7 +90,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
     },
   });
 
-  const { data: clients } = useQuery({
+  const { data: clients, isError: isClientsError } = useQuery({
     queryKey: ["admin-clients-list"],
     queryFn: async () => {
       const response = await supabase.functions.invoke("admin", {
@@ -363,12 +363,22 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
         </div>
       </div>
 
+      {isClientsError && (
+        <p className="text-sm text-destructive">Failed to load clients — the client picker may be incomplete.</p>
+      )}
+
       {isLoading ? (
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
+          </CardContent>
+        </Card>
+      ) : isError ? (
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-sm text-destructive text-center py-8">Failed to load deliverables.</p>
           </CardContent>
         </Card>
       ) : !filteredDeliverables || filteredDeliverables.length === 0 ? (

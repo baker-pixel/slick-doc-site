@@ -94,6 +94,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
       toast.success("Notification sent to client");
     } catch (error) {
       console.error("Failed to send notification:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to send notification");
     }
   };
 
@@ -130,7 +131,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
     },
     onError: (error) => {
       console.error('Create error:', error);
-      toast.error("Failed to create analytics");
+      toast.error(error instanceof Error ? error.message : "Failed to create analytics");
     },
   });
 
@@ -166,7 +167,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
     },
     onError: (error) => {
       console.error('Update error:', error);
-      toast.error("Failed to update analytics");
+      toast.error(error instanceof Error ? error.message : "Failed to update analytics");
     },
   });
 
@@ -185,7 +186,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
     },
     onError: (error) => {
       console.error('Delete error:', error);
-      toast.error("Failed to delete analytics");
+      toast.error(error instanceof Error ? error.message : "Failed to delete analytics");
     },
   });
 

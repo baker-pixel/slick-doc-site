@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Trash2, AlertTriangle, CheckCircle2, RefreshCw, Users, Mail, TrendingDown, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { format } from "date-fns";
 
 interface CleanupCandidate {
@@ -60,12 +61,16 @@ export function EmailListCleaningPanel({ adminPassword }: EmailListCleaningPanel
         body: { action: "get_list_health", password: adminPassword },
       });
 
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch list health stats");
+      }
       if (response.data?.data) {
         setStats(response.data.data);
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to fetch list health stats");
     }
   };
 
@@ -75,10 +80,14 @@ export function EmailListCleaningPanel({ adminPassword }: EmailListCleaningPanel
         body: { action: "list", table: "email_cleanup_log", password: adminPassword },
       });
 
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to fetch cleanup history");
+      }
       setCleanupHistory(response.data?.data || []);
     } catch (error) {
       console.error("Error fetching cleanup history:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to fetch cleanup history");
     }
   };
 
@@ -96,11 +105,14 @@ export function EmailListCleaningPanel({ adminPassword }: EmailListCleaningPanel
         },
       });
 
-      if (response.error) throw response.error;
-      
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to scan for cleanup candidates");
+      }
+
       const foundCandidates = response.data?.data || [];
       setCandidates(foundCandidates);
-      
+
       if (foundCandidates.length === 0) {
         toast.success("No cleanup candidates found - your list is healthy!");
       } else {
@@ -108,7 +120,7 @@ export function EmailListCleaningPanel({ adminPassword }: EmailListCleaningPanel
       }
     } catch (error) {
       console.error("Error scanning:", error);
-      toast.error("Failed to scan for cleanup candidates");
+      toast.error(error instanceof Error ? error.message : "Failed to scan for cleanup candidates");
     } finally {
       setIsScanning(false);
     }
@@ -152,8 +164,11 @@ export function EmailListCleaningPanel({ adminPassword }: EmailListCleaningPanel
         },
       });
 
-      if (response.error) throw response.error;
-      
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to clean emails");
+      }
+
       toast.success(`Successfully cleaned ${selectedEmails.size} emails from the list`);
       setCandidates(candidates.filter(c => !selectedEmails.has(c.email)));
       setSelectedEmails(new Set());
@@ -161,7 +176,7 @@ export function EmailListCleaningPanel({ adminPassword }: EmailListCleaningPanel
       fetchStats();
     } catch (error) {
       console.error("Error cleaning emails:", error);
-      toast.error("Failed to clean emails");
+      toast.error(error instanceof Error ? error.message : "Failed to clean emails");
     } finally {
       setIsCleaning(false);
     }
