@@ -159,11 +159,12 @@ serve(async (req) => {
 
     // Look up PfM account for this client + platform. A client can have
     // several connected accounts on one platform (e.g. personal profile +
-    // multiple org pages), so pick deterministically: the account whose
-    // username matches the business name, else the earliest connected.
+    // multiple org pages), so pick deterministically: the client's explicit
+    // choice (is_primary, set via the "Change page" picker) wins; otherwise
+    // fall back to a business-name match, else the earliest connected.
     const { data: pfmCandidates } = await supabase
       .from("client_postforme_accounts")
-      .select("postforme_account_id, username, platform, created_at")
+      .select("postforme_account_id, username, platform, created_at, is_primary")
       .eq("client_id", item.client_account_id)
       .eq("platform", item.platform)
       .eq("status", "connected")
@@ -171,16 +172,21 @@ serve(async (req) => {
 
     let pfmAccount = pfmCandidates?.[0] ?? null;
     if (pfmCandidates && pfmCandidates.length > 1) {
-      const { data: bizRow } = await supabase
-        .from("client_accounts").select("business_name").eq("id", item.client_account_id).single();
-      const biz = (bizRow?.business_name ?? "").toLowerCase().trim();
-      const match = biz
-        ? pfmCandidates.find((a) => {
-            const u = (a.username ?? "").toLowerCase();
-            return u.includes(biz) || biz.includes(u);
-          })
-        : null;
-      if (match) pfmAccount = match;
+      const primary = pfmCandidates.find((a) => a.is_primary);
+      if (primary) {
+        pfmAccount = primary;
+      } else {
+        const { data: bizRow } = await supabase
+          .from("client_accounts").select("business_name").eq("id", item.client_account_id).single();
+        const biz = (bizRow?.business_name ?? "").toLowerCase().trim();
+        const match = biz
+          ? pfmCandidates.find((a) => {
+              const u = (a.username ?? "").toLowerCase();
+              return u.includes(biz) || biz.includes(u);
+            })
+          : null;
+        if (match) pfmAccount = match;
+      }
       console.log(`Multiple ${item.platform} accounts (${pfmCandidates.length}) — using "${pfmAccount?.username}"`);
     }
 

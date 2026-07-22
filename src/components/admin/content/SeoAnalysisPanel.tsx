@@ -307,9 +307,24 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
                       <p className="text-sm text-muted-foreground mt-0.5">{f.plain_english}</p>
                       <div className="text-xs text-muted-foreground/70 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                         <span>{f.technical_detail}</span>
-                        <span>· affects {f.pages.length} page{f.pages.length === 1 ? "" : "s"}</span>
                         <span>· impact {f.impact}/5 · effort {f.effort}/5</span>
                       </div>
+                      {f.pages.length > 0 && (
+                        <details className="text-xs text-muted-foreground/70 mt-1">
+                          <summary className="cursor-pointer hover:text-foreground">
+                            affects {f.pages.length} page{f.pages.length === 1 ? "" : "s"}
+                          </summary>
+                          <ul className="mt-1 ml-4 list-disc space-y-0.5">
+                            {f.pages.map(url => (
+                              <li key={url}>
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground break-all">
+                                  {url}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
                       {f.fix?.payload?.value && (
                         <div className="text-xs mt-1.5 rounded bg-muted/50 px-2 py-1 text-muted-foreground">
                           Suggested: <span className="text-foreground">{f.fix.payload.value}</span>

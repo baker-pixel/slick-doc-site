@@ -205,7 +205,19 @@ function WpFixCard({ fix, applying, onApply, onDismiss }: WpFixCardProps) {
     <div className="p-4 space-y-3 border-b last:border-0">
       <div>
         <p className="text-xs text-muted-foreground mb-0.5">
-          {fix.page_title ?? "Page"} · {label}
+          {fix.page_url ? (
+            <a
+              href={fix.page_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              {fix.page_title ?? fix.page_url}
+            </a>
+          ) : (
+            fix.page_title ?? "Page"
+          )}{" "}
+          · {label}
         </p>
         <p className="text-sm font-medium">
           {fix.current_value
@@ -340,7 +352,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         body: { fix_id: fix.id },
       });
       if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Failed");
-      toast.success("Fix applied to your website!");
+      toast.success(`Fix applied to ${fix.page_title ?? fix.page_url ?? "your page"}`);
       setWpFixes(prev => prev.filter(f => f.id !== fix.id));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not apply fix");

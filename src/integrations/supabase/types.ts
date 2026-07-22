@@ -1717,6 +1717,7 @@ export type Database = {
           client_id: string
           created_at: string | null
           id: string
+          is_primary: boolean
           platform: string
           postforme_account_id: string
           profile_photo_url: string | null
@@ -1728,6 +1729,7 @@ export type Database = {
           client_id: string
           created_at?: string | null
           id?: string
+          is_primary?: boolean
           platform: string
           postforme_account_id: string
           profile_photo_url?: string | null
@@ -1739,6 +1741,7 @@ export type Database = {
           client_id?: string
           created_at?: string | null
           id?: string
+          is_primary?: boolean
           platform?: string
           postforme_account_id?: string
           profile_photo_url?: string | null
@@ -3786,6 +3789,7 @@ export type Database = {
           approved_by: string | null
           business_type: string | null
           city: string | null
+          clicked_at: string | null
           client_id: string | null
           context_profile: Json | null
           converted_at: string | null
@@ -3797,6 +3801,7 @@ export type Database = {
           icp_fit_score: number | null
           id: string
           name: string
+          opened_at: string | null
           pdf_report_url: string | null
           personalization_hook: string | null
           phone: string | null
@@ -3813,6 +3818,7 @@ export type Database = {
           approved_by?: string | null
           business_type?: string | null
           city?: string | null
+          clicked_at?: string | null
           client_id?: string | null
           context_profile?: Json | null
           converted_at?: string | null
@@ -3824,6 +3830,7 @@ export type Database = {
           icp_fit_score?: number | null
           id?: string
           name: string
+          opened_at?: string | null
           pdf_report_url?: string | null
           personalization_hook?: string | null
           phone?: string | null
@@ -3840,6 +3847,7 @@ export type Database = {
           approved_by?: string | null
           business_type?: string | null
           city?: string | null
+          clicked_at?: string | null
           client_id?: string | null
           context_profile?: Json | null
           converted_at?: string | null
@@ -3851,6 +3859,7 @@ export type Database = {
           icp_fit_score?: number | null
           id?: string
           name?: string
+          opened_at?: string | null
           pdf_report_url?: string | null
           personalization_hook?: string | null
           phone?: string | null
@@ -4404,6 +4413,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      signup_rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          ip_address: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          ip_address: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          ip_address?: string
+        }
+        Relationships: []
       }
       sla_configurations: {
         Row: {
@@ -5007,6 +5037,19 @@ export type Database = {
           read_ct: number
         }[]
       }
+      bootstrap_client_projects: {
+        Args: { p_client_account_id: string; p_include_prospect?: boolean }
+        Returns: undefined
+      }
+      client_get_prospect_emails: {
+        Args: { p_client_account_id: string; p_prospect_id: string }
+        Returns: {
+          drip_step: number
+          sent_at: string
+          status: string
+          subject: string
+        }[]
+      }
       client_update_company_context: {
         Args: {
           p_client_account_id: string
@@ -5016,6 +5059,10 @@ export type Database = {
           p_website_summary: string
           p_website_url: string
         }
+        Returns: undefined
+      }
+      client_update_icp: {
+        Args: { p_client_account_id: string; p_icp: Json }
         Returns: undefined
       }
       create_project_with_milestones: {

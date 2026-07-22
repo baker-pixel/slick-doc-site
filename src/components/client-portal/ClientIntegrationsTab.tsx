@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,6 +85,7 @@ interface PfmAccount {
   username: string | null;
   profile_photo_url: string | null;
   status: string;
+  is_primary: boolean;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -197,6 +198,18 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
   const [selectedLinkedInOrganization, setSelectedLinkedInOrganization] = useState<string>("");
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // PfM multi-account page picker (e.g. LinkedIn personal profile + several
+  // company pages, all connected as separate rows with no inherent "the one").
+  const [pfmPickerPlatform, setPfmPickerPlatform] = useState<string | null>(null);
+  const [selectedPfmAccountId, setSelectedPfmAccountId] = useState<string>("");
+  const [savingPfmPrimary, setSavingPfmPrimary] = useState(false);
+
+  // Tracks the platform + popup window of an in-progress connect attempt so
+  // we can tell the user plainly when it silently failed (e.g. Instagram
+  // OAuth completing but no linked Business account existing to attach).
+  const attemptedPlatformRef = useRef<string | null>(null);
+  const connectPopupRef = useRef<Window | null>(null);
+
   useEffect(() => {
     // Handle OAuth callback return
     const connected = searchParams.get("connected");
@@ -266,14 +279,35 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       lastFocusAt = now;
 
       // Pull fresh data from DB first (fast)
-      await fetchPfmAccounts();
+      let accounts = await fetchPfmAccounts();
       // Then do a full PfM sync in the background so newly connected accounts appear
       try {
         await supabase.functions.invoke("postforme-sync-accounts", {
           body: { clientId: clientAccountId },
         });
-        await fetchPfmAccounts();
+        accounts = await fetchPfmAccounts();
       } catch { /* silent — user can click Sync manually */ }
+
+      // Only judge an in-progress connect attempt once its popup/tab has
+      // actually closed — a stray focus event while it's still open would
+      // otherwise report a false "didn't connect".
+      const attempted = attemptedPlatformRef.current;
+      const popup = connectPopupRef.current;
+      if (attempted && (!popup || popup.closed)) {
+        attemptedPlatformRef.current = null;
+        connectPopupRef.current = null;
+        const connected = accounts.some((a) => a.platform === attempted && a.status === "connected");
+        if (!connected) {
+          const platform = PLATFORMS.find((p) => p.id === attempted);
+          toast({
+            title: `${platform?.name ?? attempted} didn't connect`,
+            description: platform?.note
+              ? `The connection didn't finish. ${platform.note}`
+              : "The connection didn't finish. Please try again.",
+            variant: "destructive",
+          });
+        }
+      }
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -309,14 +343,56 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
   const fetchPfmAccounts = async () => {
     const { data } = await supabase
       .from("client_postforme_accounts")
-      .select("id, platform, postforme_account_id, username, profile_photo_url, status")
+      .select("id, platform, postforme_account_id, username, profile_photo_url, status, is_primary")
       .eq("client_id", clientAccountId)
-      .eq("status", "connected");
-    setPfmAccounts(data as PfmAccount[] || []);
+      .eq("status", "connected")
+      .order("created_at", { ascending: true });
+    const accounts = (data as PfmAccount[]) || [];
+    setPfmAccounts(accounts);
+    return accounts;
   };
 
-  const getPfmAccount = (platformId: string) =>
-    pfmAccounts.find((a) => a.platform === platformId) ?? null;
+  const getPfmAccountsForPlatform = (platformId: string) =>
+    pfmAccounts.filter((a) => a.platform === platformId);
+
+  // The one used for publishing: the client's explicit pick if they've made
+  // one, else the first connected (stable — query is ordered by created_at).
+  const getPfmAccount = (platformId: string) => {
+    const accounts = getPfmAccountsForPlatform(platformId);
+    return accounts.find((a) => a.is_primary) ?? accounts[0] ?? null;
+  };
+
+  const openPfmPagePicker = (platformId: string) => {
+    const current = getPfmAccount(platformId);
+    setSelectedPfmAccountId(current?.postforme_account_id ?? "");
+    setPfmPickerPlatform(platformId);
+  };
+
+  const handlePfmPrimarySave = async () => {
+    if (!pfmPickerPlatform || !selectedPfmAccountId) return;
+    setSavingPfmPrimary(true);
+    try {
+      const { error } = await supabase.functions.invoke("postforme-set-primary-account", {
+        body: { clientId: clientAccountId, platform: pfmPickerPlatform, pfmAccountId: selectedPfmAccountId },
+      });
+      if (error) throw error;
+      await fetchPfmAccounts();
+      const account = getPfmAccountsForPlatform(pfmPickerPlatform).find((a) => a.postforme_account_id === selectedPfmAccountId);
+      toast({
+        title: "Page selected",
+        description: `${account?.username ?? "That page"} is now used for publishing.`,
+      });
+      setPfmPickerPlatform(null);
+    } catch (err) {
+      toast({
+        title: "Could not save selection",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPfmPrimary(false);
+    }
+  };
 
   const handleConnect = async (platform: (typeof PLATFORMS)[number]) => {
     setConnecting(platform.id);
@@ -348,9 +424,10 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
         `width=${popupWidth},height=${popupHeight},left=${left},top=${top},scrollbars=yes,resizable=yes`
       );
 
+      let handle = popup;
       if (!popup || popup.closed) {
         // Browser blocked the popup — fall back to new tab with a warning
-        window.open(data.url, "_blank");
+        handle = window.open(data.url, "_blank");
         toast({
           title: `${platform.name} — complete in the new tab`,
           description: "Allow popups for this site to improve the connect experience. After connecting, come back here.",
@@ -361,6 +438,11 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
           title: `${platform.name} — authorize in the popup`,
           description: "Complete the connection in the popup. This page will update automatically when done.",
         });
+      }
+
+      if (handle) {
+        attemptedPlatformRef.current = platform.id;
+        connectPopupRef.current = handle;
       }
     } catch (err: unknown) {
       toast({
@@ -671,6 +753,74 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
         </DialogContent>
       </Dialog>
 
+      {/* PfM multi-account page picker — a platform (usually LinkedIn) can have
+          several connected pages/profiles with no inherent "the one"; this
+          lets the client say explicitly which page gets published to. */}
+      <Dialog
+        open={pfmPickerPlatform !== null}
+        onOpenChange={(open) => { if (!open && !savingPfmPrimary) setPfmPickerPlatform(null); }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Which page should we post to?
+            </DialogTitle>
+            <DialogDescription>
+              {pfmPickerPlatform && (
+                <>Your {PLATFORMS.find((p) => p.id === pfmPickerPlatform)?.name} account has {getPfmAccountsForPlatform(pfmPickerPlatform).length} connected pages/profiles.
+                Select the one you want used for publishing.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto py-1" role="radiogroup" aria-label="Connected pages">
+            {pfmPickerPlatform && getPfmAccountsForPlatform(pfmPickerPlatform).map((account) => {
+              const selected = selectedPfmAccountId === account.postforme_account_id;
+              return (
+                <button
+                  key={account.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setSelectedPfmAccountId(account.postforme_account_id)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                    selected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border/60 hover:border-border hover:bg-muted/50"
+                  )}
+                >
+                  <div className={cn("p-2 rounded-lg shrink-0", selected ? "bg-primary/10" : "bg-muted")}>
+                    <Building2 className={cn("h-4 w-4", selected ? "text-primary" : "text-muted-foreground")} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{account.username ?? "Untitled page"}</p>
+                  </div>
+                  {selected && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setPfmPickerPlatform(null)} disabled={savingPfmPrimary}>
+              Cancel
+            </Button>
+            <Button onClick={handlePfmPrimarySave} disabled={savingPfmPrimary || !selectedPfmAccountId} className="gap-1.5">
+              {savingPfmPrimary ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Use this page"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Platform Cards */}
       <div className="grid gap-4 sm:grid-cols-2">
         {PLATFORMS.map((platform) => {
@@ -689,6 +839,7 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
           const linkedInPageOptions = platform.id === "linkedin" && !pfmAccount
             ? parseLinkedInOrganizations(token?.token_metadata?.organization_options)
             : [];
+          const pfmAccountsForThisPlatform = getPfmAccountsForPlatform(platform.id);
 
           return (
             <Card
@@ -752,6 +903,11 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                     <span className="text-muted-foreground">Page:</span>
                     <span className="font-medium truncate">{pageName}</span>
+                    {pfmAccountsForThisPlatform.length > 1 && (
+                      <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                        1 of {pfmAccountsForThisPlatform.length} connected
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -781,6 +937,17 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
                           size="sm"
                           className="gap-1.5 rounded-lg"
                           onClick={openLinkedInPagePicker}
+                        >
+                          <Building2 className="h-3.5 w-3.5" />
+                          Change page
+                        </Button>
+                      )}
+                      {pfmAccountsForThisPlatform.length > 1 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 rounded-lg"
+                          onClick={() => openPfmPagePicker(platform.id)}
                         >
                           <Building2 className="h-3.5 w-3.5" />
                           Change page
