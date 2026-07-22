@@ -1,19 +1,19 @@
 import { imageQualityForPlatform, imageSizeForPlatform } from "./socialImagePrompt.ts";
 
 export interface GptImageRequestBody {
-  model: "gpt-image-1";
+  model: "gpt-image-2";
   prompt: string;
   n: 1;
   size: string;
   quality: "medium" | "high";
 }
 
-// Shared by every gpt-image-1 caller (generate-social-image,
+// Shared by every gpt-image-2 caller (generate-social-image,
 // sync-fill-missing-images, generate-social-images-batch) so size/quality
 // selection can't silently drift between them.
 export function buildGptImageRequestBody(prompt: string, platform: string): GptImageRequestBody {
   return {
-    model: "gpt-image-1",
+    model: "gpt-image-2",
     prompt,
     n: 1,
     size: imageSizeForPlatform(platform),
@@ -21,7 +21,7 @@ export function buildGptImageRequestBody(prompt: string, platform: string): GptI
   };
 }
 
-// Calls gpt-image-1 synchronously and returns the raw base64 image data.
+// Calls gpt-image-2 synchronously and returns the raw base64 image data.
 // For callers that submit via the OpenAI Batch API instead (generate-social-
 // images-batch), use buildGptImageRequestBody() directly as a JSONL line
 // rather than calling this.
@@ -41,11 +41,11 @@ export async function generateGptImage(openaiKey: string, prompt: string, platfo
 
   const data = await res.json();
   const b64: string | undefined = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error("No image data returned from gpt-image-1");
+  if (!b64) throw new Error("No image data returned from gpt-image-2");
   return b64;
 }
 
-// Decodes a gpt-image-1 base64 result and uploads it to the generated-images
+// Decodes a gpt-image-2 base64 result and uploads it to the generated-images
 // bucket, returning its public URL.
 export async function persistGeneratedImage(supabase: any, base64: string, fileName: string): Promise<string> {
   const imageBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));

@@ -354,7 +354,7 @@ serve(async (req) => {
 
     // Kick off image generation for any freshly-drafted slots that need one
     // (currently Instagram). Using sync-fill-missing-images (a few
-    // synchronous gpt-image-1 calls) rather than the OpenAI Batch API path
+    // synchronous gpt-image-2 calls) rather than the OpenAI Batch API path
     // (generate-social-images-batch + check-image-batches): the batch
     // approach is ~50% cheaper when it works, but repeatedly hit
     // WORKER_RESOURCE_LIMIT crashes downloading/applying batch output files

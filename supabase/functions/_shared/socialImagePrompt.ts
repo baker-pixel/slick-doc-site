@@ -24,7 +24,7 @@ const TONE_MOOD: Record<string, string> = {
   expert: "precise, focused, authoritative",
 };
 
-// gpt-image-1 canvas per platform. The prompt itself stays silent about
+// gpt-image-2 canvas per platform. The prompt itself stays silent about
 // aspect ratio -- the canvas decides it, and a ratio instruction that
 // contradicts the canvas (the old hardcoded-square bug) just confuses the
 // model.
@@ -74,7 +74,7 @@ const VAGUE_LOCATIONS = new Set(["global", "worldwide", "online", "remote", "int
  * - Abstract offerings (assessments, AI, software, consulting): depict the
  *   offering itself -- report mockups, charts, product UI, conceptual 3D
  *   renders -- and explicitly steer away from the generic-office-people
- *   imagery gpt-image-1 defaults to for "business photography".
+ *   imagery gpt-image-2 defaults to for "business photography".
  * - Physical services (remodeling, landscaping, restaurants...): keep
  *   photorealistic editorial photography of the work itself.
  */
