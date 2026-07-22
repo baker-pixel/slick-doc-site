@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { 
   Users, 
   MapPin, 
@@ -137,7 +138,10 @@ export default function WebsitePersonalizationPanel() {
           priority: rule.priority,
           conditions: rule.conditions
         } as any);
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, undefined);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to create rule");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['personalization-rules'] });
@@ -152,7 +156,7 @@ export default function WebsitePersonalizationPanel() {
       });
     },
     onError: (error) => {
-      toast.error('Failed to create rule: ' + error.message);
+      toast.error(error.message);
     }
   });
 

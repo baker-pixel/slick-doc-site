@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { 
   Image, 
   Plus, 
@@ -122,7 +123,10 @@ export default function BeforeAfterShowcasePanel() {
           improvements: showcase.improvements,
           is_public: showcase.is_public
         } as any);
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, undefined);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to create showcase");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['before-after-showcases'] });
@@ -131,7 +135,7 @@ export default function BeforeAfterShowcasePanel() {
       resetForm();
     },
     onError: (error) => {
-      toast.error('Failed to create showcase: ' + error.message);
+      toast.error(error.message);
     }
   });
 

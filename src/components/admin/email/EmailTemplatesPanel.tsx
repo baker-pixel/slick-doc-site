@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter, Sparkles, Loader2, Wand2, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -315,7 +316,11 @@ export function EmailTemplatesPanel() {
         body: { ...aiForm, password: adminPassword },
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        toast({ title: "Generation failed", description: msg ? friendlyEdgeMessage(msg) : "Failed to generate template", variant: "destructive" });
+        return;
+      }
       if (!data?.success || !data?.template) {
         throw new Error(data?.error || "Failed to generate template");
       }

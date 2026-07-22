@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { Loader2, Rocket, CheckCircle, Circle, BarChart3, RefreshCw, Lock, Zap } from "lucide-react";
 import { format } from "date-fns";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface WorkflowStep {
   id: string;
@@ -89,7 +90,7 @@ export function OnboardingAutomationPanel({ adminPassword }: { adminPassword?: s
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", step.id);
 
-      const { error } = await supabase.functions.invoke("advance-workflow", {
+      const { data, error } = await supabase.functions.invoke("advance-workflow", {
         body: {
           workflow_id: workflow.id,
           completed_step_number: step.step_number,
@@ -97,7 +98,10 @@ export function OnboardingAutomationPanel({ adminPassword }: { adminPassword?: s
           password: adminPassword,
         },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to advance workflow step");
+      }
 
       toast.success(`Step "${step.step_name}" advanced`);
       await fetchAll();
@@ -114,7 +118,7 @@ export function OnboardingAutomationPanel({ adminPassword }: { adminPassword?: s
         });
       }
     } catch (err) {
-      toast.error(`Failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      toast.error(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setAdvancingStep(null);
     }

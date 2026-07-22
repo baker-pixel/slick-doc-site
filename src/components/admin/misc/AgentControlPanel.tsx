@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Bot, Check, X, Loader2, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -107,13 +108,16 @@ export default function AgentControlPanel() {
       const { data, error } = await supabase.functions.invoke("run-agent", {
         body: { clientId: selectedClient, goal: goal.trim(), password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Agent run failed");
+      }
       if (data?.error) throw new Error(data.error);
       toast.success(`Agent run ${data.trace?.status ?? "finished"} — ${data.trace?.step_count ?? 0} step(s)`);
       setGoal("");
       await loadData();
     } catch (err) {
-      toast.error(`Agent run failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      toast.error(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setRunning(false);
     }
@@ -125,12 +129,15 @@ export default function AgentControlPanel() {
       const { data, error } = await supabase.functions.invoke("run-agent", {
         body: { action: "resolve_action", pendingActionId: id, decision, password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to resolve");
+      }
       if (data?.error) throw new Error(data.error);
       toast.success(decision === "approved" ? "Action approved and executed" : "Action rejected");
       await loadData();
     } catch (err) {
-      toast.error(`Failed to resolve: ${err instanceof Error ? err.message : "Unknown error"}`);
+      toast.error(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setResolvingId(null);
     }

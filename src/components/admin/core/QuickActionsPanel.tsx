@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface EmailTemplate {
   id: string;
@@ -155,11 +156,14 @@ export function QuickActionsPanel() {
     
     setIsSendingAll(true);
     try {
-      const { error } = await supabase.functions.invoke("process-email-queue");
-      if (error) throw error;
-      
-      toast({ 
-        title: "Emails sent!", 
+      const { data, error } = await supabase.functions.invoke("process-email-queue");
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
+
+      toast({
+        title: "Emails sent!",
         description: `Processed ${stats.pendingEmails} pending emails`
       });
       fetchData();
@@ -362,7 +366,10 @@ export function QuickActionsPanel() {
           },
         },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
 
       setGeneratedContent("Content generation completed. Refresh to see results.");
       
@@ -400,7 +407,10 @@ export function QuickActionsPanel() {
         }
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
 
       const content = data?.response || data?.message || "Social post generated!";
       setGeneratedSocial(content);

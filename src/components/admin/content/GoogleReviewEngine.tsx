@@ -12,6 +12,7 @@ import { Star, Sparkles, Copy, QrCode, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface ClientAccount {
   id: string;
@@ -94,7 +95,10 @@ export function GoogleReviewEngine() {
           password: adminPassword,
         },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate reply");
+      }
       if (data?.error) throw new Error(data.error);
       setDraftedResponse(data.response);
     } catch (error: unknown) {

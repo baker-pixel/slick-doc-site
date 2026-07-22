@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import {
   Plus, Edit, Trash2, Loader2, Link2, CheckCircle, XCircle,
   Database, Mail, BarChart3, Target, MessageSquare, Search, Eye, EyeOff
@@ -149,7 +150,10 @@ export function IntegrationConfigPanel() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Test failed");
+      }
 
       if (data?.success) {
         toast.success("Connection successful!");
@@ -157,7 +161,7 @@ export function IntegrationConfigPanel() {
         toast.error(data?.error || "Connection failed");
       }
     } catch (err) {
-      toast.error(`Test failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      toast.error(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setTestingId(null);
     }

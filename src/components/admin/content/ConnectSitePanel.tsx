@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import {
   CheckCircle2, XCircle, Loader2, Plug, Download, RefreshCw,
   AlertTriangle, Clock, ExternalLink,
@@ -82,7 +83,10 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
       const { data, error } = await supabase.functions.invoke("scan-wordpress-site", {
         body: { site_id: site.id, password: adminPassword },
       });
-      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Scan failed");
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Scan failed");
+      }
       toast.success(
         `Scan complete — ${data.total_issues} issues, ${data.fixes_generated} fixes queued`,
       );

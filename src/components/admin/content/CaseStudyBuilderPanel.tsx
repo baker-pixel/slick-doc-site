@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { FileText, Plus, Trash2, Eye, Download, Sparkles, Image, BarChart3 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
@@ -141,7 +142,10 @@ export default function CaseStudyBuilderPanel() {
         body: { clientAccountId: selectedClient, password: adminPassword },
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate with AI");
+      }
       if (data?.error) throw new Error(data.error);
 
       const outline = data?.outline;

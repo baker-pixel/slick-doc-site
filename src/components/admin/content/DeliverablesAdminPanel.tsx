@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Plus, Pencil, Trash2, Package, Star, Eye, Download } from "lucide-react";
 import { format } from "date-fns";
 
@@ -123,7 +124,10 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       const response = await supabase.functions.invoke("admin", {
         body: { action: "create_deliverable", password: adminPassword, data },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
       return { response: response.data, data };
     },
     onSuccess: ({ data }) => {
@@ -133,7 +137,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error creating deliverable", description: String(error), variant: "destructive" });
+      toast({ title: "Error creating deliverable", description: error.message, variant: "destructive" });
     },
   });
 
@@ -142,7 +146,10 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       const response = await supabase.functions.invoke("admin", {
         body: { action: "update_deliverable", password: adminPassword, id, data },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
       return response.data;
     },
     onSuccess: () => {
@@ -151,7 +158,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error updating deliverable", description: String(error), variant: "destructive" });
+      toast({ title: "Error updating deliverable", description: error.message, variant: "destructive" });
     },
   });
 
@@ -160,7 +167,10 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       const response = await supabase.functions.invoke("admin", {
         body: { action: "delete_deliverable", password: adminPassword, id },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
       return response.data;
     },
     onSuccess: () => {
@@ -168,7 +178,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       toast({ title: "Deliverable deleted" });
     },
     onError: (error) => {
-      toast({ title: "Error deleting deliverable", description: String(error), variant: "destructive" });
+      toast({ title: "Error deleting deliverable", description: error.message, variant: "destructive" });
     },
   });
 

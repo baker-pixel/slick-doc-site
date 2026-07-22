@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Plus, Pencil, Trash2, Users, Upload, X } from "lucide-react";
 
 interface TeamMember {
@@ -76,7 +77,10 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
           },
         },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
       return response.data;
     },
     onSuccess: () => {
@@ -85,7 +89,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error adding team member", description: String(error), variant: "destructive" });
+      toast({ title: "Error adding team member", description: error.message, variant: "destructive" });
     },
   });
 
@@ -102,7 +106,10 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
           },
         },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
       return response.data;
     },
     onSuccess: () => {
@@ -111,7 +118,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error updating team member", description: String(error), variant: "destructive" });
+      toast({ title: "Error updating team member", description: error.message, variant: "destructive" });
     },
   });
 
@@ -120,7 +127,10 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       const response = await supabase.functions.invoke("admin", {
         body: { action: "delete_team_member", password: adminPassword, id },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
       return response.data;
     },
     onSuccess: () => {
@@ -128,7 +138,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       toast({ title: "Team member deleted" });
     },
     onError: (error) => {
-      toast({ title: "Error deleting team member", description: String(error), variant: "destructive" });
+      toast({ title: "Error deleting team member", description: error.message, variant: "destructive" });
     },
   });
 

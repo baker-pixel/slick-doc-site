@@ -32,6 +32,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface ClientWithPhase {
   id: string;
@@ -172,7 +173,10 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
         },
       });
 
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate tasks");
+      }
       const result = response.data;
       if (result?.error) throw new Error(result.error);
 

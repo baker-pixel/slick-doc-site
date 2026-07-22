@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { format } from "date-fns";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { 
@@ -151,7 +152,10 @@ export default function SalesProposalPanel() {
           contact_submission_id: proposal.contact_submission_id,
           status: 'draft'
         } as any);
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, undefined);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to create proposal");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-proposals'] });
@@ -160,17 +164,20 @@ export default function SalesProposalPanel() {
       resetForm();
     },
     onError: (error) => {
-      toast.error('Failed to create proposal: ' + error.message);
+      toast.error(error.message);
     }
   });
 
   const sendProposalMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.functions.invoke('send-sales-proposal', {
+      const { data, error } = await supabase.functions.invoke('send-sales-proposal', {
         body: { proposalId: id, password: adminPassword }
       });
-      if (error) throw error;
-      
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send proposal");
+      }
+
       await supabase
         .from('sales_proposals' as any)
         .update({ status: 'sent', sent_at: new Date().toISOString() } as any)
@@ -181,7 +188,7 @@ export default function SalesProposalPanel() {
       toast.success('Proposal sent');
     },
     onError: (error) => {
-      toast.error('Failed to send proposal: ' + error.message);
+      toast.error(error.message);
     }
   });
 

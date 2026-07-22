@@ -17,6 +17,7 @@ import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loade
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 // Variable descriptions for tooltips
 const VARIABLE_DESCRIPTIONS: Record<string, string> = {
@@ -394,7 +395,10 @@ export function CampaignSenderPanel() {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate email");
+      }
 
       if (data?.subject && data?.htmlContent) {
         setCustomSubject(data.subject);

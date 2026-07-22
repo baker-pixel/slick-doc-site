@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Plus, Upload, Brain, FileText, Loader2, Trash2 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
@@ -137,12 +138,15 @@ export function SOPManagementPanel() {
         body: { sopId: sop.id, documentText: sop.description, password: adminPassword },
       });
 
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to parse SOP");
+      }
 
       toast.success("SOP parsed successfully");
       fetchSOPs();
     } catch (err) {
-      toast.error("Failed to parse SOP: " + (err instanceof Error ? err.message : "Unknown error"));
+      toast.error(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setParsingIds((prev) => {
         const next = new Set(prev);

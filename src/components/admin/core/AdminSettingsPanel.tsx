@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Save, Plus, Trash2, RefreshCw, Settings2 } from "lucide-react";
 import {
   AlertDialog,
@@ -59,8 +60,10 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
         body: { action: "fetch_settings", password: adminPassword },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
 
       setSettings(data.settings || []);
       
@@ -101,8 +104,10 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
 
       toast({ title: "Setting updated successfully" });
       fetchSettings();
@@ -137,8 +142,10 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
 
       toast({ title: "Setting added successfully" });
       setNewSetting({ key: "", value: "", description: "" });
@@ -165,8 +172,10 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong");
+      }
 
       toast({ title: "Setting deleted successfully" });
       fetchSettings();

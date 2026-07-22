@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { 
   Shield, 
   Link2, 
@@ -94,7 +95,10 @@ export default function QualityAssurancePanel() {
       const { data, error } = await supabase.functions.invoke('run-qa-scan', {
         body: { clientId: selectedClient, url, password: adminPassword }
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Scan failed");
+      }
       return data;
     },
     onSuccess: () => {
@@ -103,7 +107,7 @@ export default function QualityAssurancePanel() {
       setUrlToScan("");
     },
     onError: (error) => {
-      toast.error('Scan failed: ' + error.message);
+      toast.error(error.message);
     },
     onSettled: () => {
       setIsScanning(false);
@@ -115,7 +119,10 @@ export default function QualityAssurancePanel() {
       const { data, error } = await supabase.functions.invoke('apply-qa-fix', {
         body: { reportId, fixType, password: adminPassword }
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to apply fix");
+      }
       return data;
     },
     onSuccess: () => {
@@ -123,7 +130,7 @@ export default function QualityAssurancePanel() {
       toast.success('Fix applied successfully');
     },
     onError: (error) => {
-      toast.error('Failed to apply fix: ' + error.message);
+      toast.error(error.message);
     }
   });
 

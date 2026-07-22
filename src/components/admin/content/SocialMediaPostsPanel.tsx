@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   Send,
@@ -301,8 +302,10 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
         body: { clientId: selectedClient, platform, permissions: ["posts", "feeds"], password: adminPassword },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to connect account");
+      }
       return data as { url: string; platform: string };
     },
     onSuccess: (data) => {
@@ -322,8 +325,10 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("postforme-sync-accounts", {
         body: { clientId: selectedClient, password: adminPassword },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to sync accounts");
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -369,8 +374,10 @@ export default function SocialMediaPostsPanel() {
           },
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to create post");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
@@ -432,7 +439,10 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
         body: {},
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to trigger publish");
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -453,7 +463,10 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
         body: {},
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to test pipeline");
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -485,8 +498,10 @@ export default function SocialMediaPostsPanel() {
           },
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to update post");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
@@ -546,8 +561,10 @@ export default function SocialMediaPostsPanel() {
           password: adminPassword,
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate content");
+      }
       setNewPost((prev) => ({ ...prev, content: data.content || "" }));
       toast({ title: "Content generated!" });
     } catch (error: unknown) {
@@ -571,8 +588,10 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("generate-social-image", {
         body: { prompt, platform: newPost.platform, count: 4, password: adminPassword },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate images");
+      }
       if (data?.images?.length > 0) {
         setGeneratedImages(data.images);
         toast({ title: `${data.images.length} images generated! Pick your favorite.` });

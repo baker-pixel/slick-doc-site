@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Json } from "@/integrations/supabase/types";
 import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3, Send, Loader2, Play } from "lucide-react";
 import { format } from "date-fns";
@@ -298,7 +299,11 @@ export function EmailSequencesPanel() {
       const { data, error } = await supabase.functions.invoke("send-test-email", {
         body: { template, previewOnly: true },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        toast({ title: "Error loading preview", description: msg ? friendlyEdgeMessage(msg) : "Failed to load preview", variant: "destructive" });
+        return;
+      }
       setPreviewHtml(data.html);
       setPreviewSubject(data.subject);
     } catch (error: any) {
@@ -318,7 +323,11 @@ export function EmailSequencesPanel() {
       const { data, error } = await supabase.functions.invoke("send-test-email", {
         body: { template: testTemplate, testEmail },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        toast({ title: "Error sending test email", description: msg ? friendlyEdgeMessage(msg) : "Failed to send test email", variant: "destructive" });
+        return;
+      }
       toast({ title: "Test email sent!", description: `Sent to ${testEmail}` });
     } catch (error: any) {
       toast({ title: "Error sending test email", description: error.message, variant: "destructive" });
@@ -350,9 +359,13 @@ export function EmailSequencesPanel() {
           businessName: triggerBusiness || "Test Business",
         },
       });
-      if (error) throw error;
-      toast({ 
-        title: "Sequence triggered!", 
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        toast({ title: "Error triggering sequence", description: msg ? friendlyEdgeMessage(msg) : "Failed to trigger sequence", variant: "destructive" });
+        return;
+      }
+      toast({
+        title: "Sequence triggered!",
         description: `Queued ${data?.queued || 0} emails for ${triggerEmail}` 
       });
       setIsTriggerModalOpen(false);

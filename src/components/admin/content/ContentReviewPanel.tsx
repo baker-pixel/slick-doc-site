@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Share2, ImageIcon, CalendarClock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { callAdminApi } from "@/lib/admin-api";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface GeneratedContent {
   id: string;
@@ -433,7 +434,10 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate content");
+      }
 
       toast({ title: "Content generated!", description: "New content has been created and is ready for review." });
       setGenerateModalOpen(false);

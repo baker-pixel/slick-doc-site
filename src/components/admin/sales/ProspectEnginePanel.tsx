@@ -43,6 +43,7 @@ import {
   MousePointerClick,
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface ClientOption {
   id: string;
@@ -149,7 +150,8 @@ export default function ProspectEnginePanel() {
       body: { action: "list", table: "client_accounts", password: adminPassword },
     });
     if (error || data?.error) {
-      toast({ title: "Error loading clients", description: data?.error || error?.message, variant: "destructive" });
+      const msg = await getEdgeErrorMessage(error, data);
+      toast({ title: "Error loading clients", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
       return;
     }
     const rows = (data?.data ?? [])
@@ -165,7 +167,8 @@ export default function ProspectEnginePanel() {
       body: { action: "list", table: "prospects", password: adminPassword },
     });
     if (error || data?.error) {
-      toast({ title: "Error loading prospects", description: data?.error || error?.message, variant: "destructive" });
+      const msg = await getEdgeErrorMessage(error, data);
+      toast({ title: "Error loading prospects", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
       setProspects([]);
       setLoading(false);
       return;
@@ -221,7 +224,8 @@ export default function ProspectEnginePanel() {
     });
     ids.forEach(id => markAction(id, false));
     if (error || data?.error) {
-      toast({ title: "Update failed", description: data?.error || error?.message, variant: "destructive" });
+      const msg = await getEdgeErrorMessage(error, data);
+      toast({ title: "Update failed", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     } else {
       const label: Record<string, string> = {
         pending: "approved", rejected: "rejected", replied: "marked replied",

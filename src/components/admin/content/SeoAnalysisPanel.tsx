@@ -12,6 +12,7 @@ import {
   Search, RefreshCw, AlertTriangle, AlertCircle, Info, CheckCircle2, TrendingUp, Wrench,
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface ClientOption { id: string; business_name: string; }
 
@@ -101,7 +102,8 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
       body: { action: "list", table: "seo_audits", password: adminPassword },
     });
     if (error || data?.error) {
-      toast({ title: "Error loading SEO audits", description: data?.error || error?.message, variant: "destructive" });
+      const msg = await getEdgeErrorMessage(error, data);
+      toast({ title: "Error loading SEO audits", description: msg ? friendlyEdgeMessage(msg) : "Failed to load SEO audits", variant: "destructive" });
       setAudits([]);
     } else {
       setAudits((data?.data ?? []) as SeoAudit[]);
@@ -150,7 +152,10 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
       const { data, error } = await supabase.functions.invoke("seo-audit", {
         body: { clientId, password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Audit failed");
+      }
       if (data?.error) throw new Error(data.error);
       if (data?.status === "inconclusive") {
         toast({ title: "Audit inconclusive", description: "The site couldn't be crawled (unreachable, blocked, or robots-disallowed)." });
@@ -173,7 +178,10 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
       const { data, error } = await supabase.functions.invoke("apply-fix-to-wordpress", {
         body: { client_id: clientId, seo_fix: f.fix, password: adminPassword },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Couldn't apply fix");
+      }
       if (data?.error) throw new Error(data.error);
       toast({ title: "Applied to WordPress", description: `${f.title} — re-audit will confirm it resolved.` });
     } catch (err: unknown) {

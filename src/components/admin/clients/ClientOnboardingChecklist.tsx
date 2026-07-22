@@ -43,6 +43,7 @@ import { format } from "date-fns";
 import { ProjectSetupWizard } from "../misc/ProjectSetupWizard";
 import type { Json } from "@/integrations/supabase/types";
 import { callAdminApi } from "@/lib/admin-api";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface OnboardingStep {
   id: string;
@@ -189,7 +190,10 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
         },
       });
 
-      if (resp.error) throw resp.error;
+      if (resp.error) {
+        const msg = await getEdgeErrorMessage(resp.error, resp.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to schedule meeting");
+      }
       if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
 
       toast.success("Kickoff meeting scheduled!");
@@ -221,7 +225,10 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           },
         },
       });
-      if (resp.error) throw resp.error;
+      if (resp.error) {
+        const msg = await getEdgeErrorMessage(resp.error, resp.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send request");
+      }
       if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
       toast.success("Brand assets request sent!");
       await fetchOnboardingData(selectedClient.id);
@@ -248,7 +255,10 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           },
         },
       });
-      if (resp.error) throw resp.error;
+      if (resp.error) {
+        const msg = await getEdgeErrorMessage(resp.error, resp.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send message");
+      }
       if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
       toast.success("Welcome message sent!");
       setMessageModalOpen(false);
@@ -278,10 +288,13 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           },
         },
       });
-      if (resp.error) throw resp.error;
+      if (resp.error) {
+        const msg = await getEdgeErrorMessage(resp.error, resp.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send intake form");
+      }
       if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
-      
-      await supabase.functions.invoke("admin", {
+
+      const updateResp = await supabase.functions.invoke("admin", {
         body: {
           action: "update",
           password: adminPassword,
@@ -290,7 +303,11 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           data: { intake_form_sent_at: new Date().toISOString() },
         },
       });
-      
+      if (updateResp.error) {
+        const msg = await getEdgeErrorMessage(updateResp.error, updateResp.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send intake form");
+      }
+
       toast.success("Intake form request sent!");
       await fetchOnboardingData(selectedClient.id);
     } catch (err: any) {
@@ -314,7 +331,10 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           data: { dashboard_created_at: new Date().toISOString() },
         },
       });
-      if (resp.error) throw resp.error;
+      if (resp.error) {
+        const msg = await getEdgeErrorMessage(resp.error, resp.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to configure dashboard");
+      }
       if ((resp.data as any)?.error) throw new Error((resp.data as any).error);
 
       toast.success("Dashboard configured!");
@@ -343,14 +363,17 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
           },
         },
       });
-      if (response.error) throw response.error;
+      if (response.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to add deliverable");
+      }
       const result = response.data;
       if (result?.error) throw new Error(result.error);
       toast.success("Deliverable added!");
       await fetchOnboardingData(selectedClient.id);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to add deliverable");
+      toast.error(err instanceof Error ? err.message : "Failed to add deliverable");
     } finally {
       setActionLoading(null);
     }
@@ -367,7 +390,10 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
       const { data, error } = await supabase.functions.invoke("analyze-website", {
         body: { url: selectedClient.website_url },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Website scan failed");
+      }
       const contextProfile = data?.analysis?.context_profile;
       if (!contextProfile) throw new Error("No context profile returned from scan");
 
