@@ -40,6 +40,7 @@ import { getMarketingOrigin } from "@/lib/getPortalUrl";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
+import { tierFromScore } from "@/lib/inviteLeadToPortal";
 
 interface ClientActivityTabProps {
   clientAccountId: string;
@@ -697,12 +698,6 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     );
   }
 
-  const tierFromScore = (score: number): string => {
-    if (score >= 70) return 'Transformation';
-    if (score >= 45) return 'Growth';
-    return 'Foundation';
-  };
-
   const scoreColor = (score: number): string => {
     if (score >= 70) return 'text-emerald-500';
     if (score >= 45) return 'text-amber-500';
@@ -746,7 +741,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
                   </div>
                 </div>
                 <Badge variant="outline" className="text-xs">
-                  Recommended: {tierFromScore(score)} Plan
+                  Recommended: {tierFromScore(score).replace(/^./, (c) => c.toUpperCase())} Plan
                 </Badge>
               </div>
 

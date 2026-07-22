@@ -270,7 +270,11 @@ serve(async (req) => {
       console.error("Failed to seed client_onboarding:", onboardingErr.message);
     }
 
-    // Fire project generation + brand extraction in background (non-blocking)
+    // Fire brand extraction in background (non-blocking). Project generation is
+    // no longer auto-triggered here -- bootstrap_client_projects (seeded via
+    // workflowUnlock.ts at onboarding completion) owns automatic seo/social/
+    // prospect shells; custom/LLM projects are admin-triggered only
+    // (ProjectSetupWizard.tsx).
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const bgHeaders = {
       "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
@@ -278,17 +282,6 @@ serve(async (req) => {
     };
 
     const bgTasks: Record<string, string> = {};
-
-    fetch(`${supabaseUrl}/functions/v1/generate-client-projects`, {
-      method: "POST",
-      headers: bgHeaders,
-      body: JSON.stringify({ clientAccountId: client_id, returnOnly: false }),
-    })
-      .then((r) => { bgTasks.projects = r.ok ? "queued" : `http_${r.status}`; })
-      .catch((e) => {
-        bgTasks.projects = "failed";
-        console.error("Background project generation failed:", e);
-      });
 
     if (client.website_url) {
       fetch(`${supabaseUrl}/functions/v1/extract-brand-assets`, {
