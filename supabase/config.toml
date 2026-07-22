@@ -39,6 +39,9 @@ verify_jwt = true
 [functions.generate-brand-guidelines]
 verify_jwt = false
 
+[functions.regenerate-social-strategy]
+verify_jwt = false
+
 [functions.publish-scheduled-content]
 verify_jwt = true
 

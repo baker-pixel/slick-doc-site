@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { filterEngagedClients } from "../_shared/engagedClients.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -110,11 +111,15 @@ serve(async (req) => {
       byClient.set(a.client_account_id, list);
     }
 
-    const { data: clients } = await supabase
+    const { data: rawClients } = await supabase
       .from("client_accounts")
       .select("id, business_name, email, first_name")
       .in("id", [...byClient.keys()])
       .eq("status", "active");
+
+    // Skip clients whose portal invite was never accepted -- the reminder
+    // links straight to portal login, which they can't use yet.
+    const clients = await filterEngagedClients(supabase, rawClients ?? []);
 
     let remindersSent = 0;
 

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { filterEngagedClients } from "../_shared/engagedClients.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,12 +23,17 @@ serve(async (req) => {
   const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const { data: clients } = await supabase
+    const { data: rawClients } = await supabase
       .from("client_accounts")
       .select("id, business_name, tier, website_url")
       .eq("status", "active")
       .not("website_url", "is", null)
       .neq("website_url", "");
+
+    // Skip clients whose portal invite was never accepted -- they can't see
+    // audit results in the portal, so re-auditing them just burns PageSpeed
+    // quota and crawl time for nobody.
+    const clients = await filterEngagedClients(supabase, rawClients ?? []);
 
     const now = Date.now();
     const due: { id: string; name: string }[] = [];

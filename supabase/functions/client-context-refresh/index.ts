@@ -4,6 +4,7 @@ import { refineClientContext } from "../_shared/contextRefine.ts";
 import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
+import { filterEngagedClients } from "../_shared/engagedClients.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,12 +26,16 @@ serve(async (req) => {
   const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const { data: clients } = await supabase
+    const { data: rawClients } = await supabase
       .from("client_accounts")
       .select("id, business_name, industry, tier, context_profile")
       .eq("status", "active")
       .not("context_profile", "is", null)
       .limit(MAX_PER_RUN);
+
+    // Skip clients whose portal invite was never accepted -- refined context
+    // and plan progress only matter once someone can log in to see them.
+    const clients = await filterEngagedClients(supabase, rawClients ?? []);
 
     const results: { client: string; refined: boolean; social: string }[] = [];
     for (const c of clients ?? []) {

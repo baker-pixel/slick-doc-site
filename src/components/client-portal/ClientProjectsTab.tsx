@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, Calendar, Target, CheckCircle, Clock, ChevronDown, Circle,
-  LayoutDashboard, Rocket, Flag, MessageCircle, Send, RefreshCw,
-  HelpCircle, MessageSquare, Bell, AlertTriangle, FileDown, Paperclip
+  LayoutDashboard, Rocket, Flag, Send, RefreshCw,
+  MessageSquare, Bell, AlertTriangle, FileDown, Paperclip, Sparkles
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -98,9 +98,6 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   const [updateRequests, setUpdateRequests] = useState<Record<string, UpdateRequest[]>>({});
   const [loading, setLoading] = useState(true);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
-  const [commentingMilestone, setCommentingMilestone] = useState<string | null>(null);
-  const [commentingProject, setCommentingProject] = useState<string | null>(null);
-  const [newComment, setNewComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [requestUpdateOpen, setRequestUpdateOpen] = useState(false);
   const [selectedProjectForUpdate, setSelectedProjectForUpdate] = useState<Project | null>(null);
@@ -109,6 +106,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   const [deliverables, setDeliverables] = useState<Record<string, Deliverable[]>>({});
   const [showCompleted, setShowCompleted] = useState(false);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [regeneratingProject, setRegeneratingProject] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -248,33 +246,23 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
     }
   };
 
-  const handleSubmitComment = async (projectId: string, milestoneId?: string) => {
-    if (!newComment.trim()) return;
-    setSubmitting(true);
-
+  const handleRegenerateStrategy = async (projectId: string) => {
+    setRegeneratingProject(projectId);
     try {
-      const { error } = await supabase
-        .from("project_comments")
-        .insert({
-          project_id: projectId,
-          milestone_id: milestoneId || null,
-          client_account_id: clientAccountId,
-          sender_type: "client",
-          message: newComment.trim(),
-        });
+      const { data, error } = await supabase.functions.invoke("regenerate-social-strategy", {
+        body: { client_id: clientAccountId },
+      });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      toast.success("Question submitted! Your team will respond soon.");
-      setNewComment("");
-      setCommentingMilestone(null);
-      setCommentingProject(null);
-      await fetchComments();
+      toast.success("New content topics generated!");
+      await fetchProjects();
     } catch (error) {
-      console.error("Error submitting comment:", error);
-      toast.error("Failed to submit question");
+      console.error("Error regenerating strategy:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to regenerate topics");
     } finally {
-      setSubmitting(false);
+      setRegeneratingProject(null);
     }
   };
 
@@ -561,17 +549,6 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Request Update
                         </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCommentingProject(commentingProject === project.id ? null : project.id);
-                          }}
-                        >
-                          <HelpCircle className="h-4 w-4 mr-2" />
-                          Ask Question
-                        </Button>
                         {projectCommentsList.length > 0 && (
                           <Button 
                             variant="ghost" 
@@ -619,40 +596,6 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                       </motion.div>
                     </button>
                   </div>
-
-                  {/* Project Question Form */}
-                  <AnimatePresence>
-                    {commentingProject === project.id && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="mt-4 pt-4 border-t border-border/50"
-                      >
-                        <div className="space-y-3">
-                          <Textarea
-                            placeholder="Ask a question about this project..."
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            rows={3}
-                          />
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => setCommentingProject(null)}>
-                              Cancel
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleSubmitComment(project.id)}
-                              disabled={!newComment.trim() || submitting}
-                            >
-                              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                              Send
-                            </Button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
 
                   {/* Project Comments */}
                   <AnimatePresence>
@@ -706,10 +649,30 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                     >
                       <div className="px-6 pb-6 border-t border-border/50">
                         <div className="pt-6">
-                          <h4 className="font-semibold text-foreground mb-1 flex items-center gap-2">
-                            <Target className="h-4 w-4 text-primary" />
-                            {kindMeta[project.kind]?.sectionLabel || "Project Milestones"}
-                          </h4>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <h4 className="font-semibold text-foreground flex items-center gap-2">
+                              <Target className="h-4 w-4 text-primary" />
+                              {kindMeta[project.kind]?.sectionLabel || "Project Milestones"}
+                            </h4>
+                            {project.kind === "social" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRegenerateStrategy(project.id);
+                                }}
+                                disabled={regeneratingProject === project.id}
+                              >
+                                {regeneratingProject === project.id ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                )}
+                                Change Topics
+                              </Button>
+                            )}
+                          </div>
                           {kindMeta[project.kind]?.hint && (
                             <p className="text-xs text-muted-foreground mb-4">{kindMeta[project.kind].hint}</p>
                           )}
@@ -718,7 +681,6 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                             <div className="space-y-4">
                               {projectMilestones.map((milestone, idx) => {
                                 const milestoneComments = getMilestoneComments(milestone.id);
-                                const isCommenting = commentingMilestone === milestone.id;
                                 const overdue = isMilestoneOverdue(milestone);
 
                                 return (
@@ -766,24 +728,14 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                                         )}
                                       </div>
 
-                                      {/* Milestone Actions */}
-                                      <div className="flex items-center gap-2">
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          className="h-8 text-xs"
-                                          onClick={() => setCommentingMilestone(isCommenting ? null : milestone.id)}
-                                        >
-                                          <MessageCircle className="h-3 w-3 mr-1" />
-                                          Ask Question
-                                        </Button>
-                                        {milestoneComments.length > 0 && (
+                                      {milestoneComments.length > 0 && (
+                                        <div className="flex items-center gap-2 mb-2">
                                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                                             <MessageSquare className="h-3 w-3" />
-                                            {milestoneComments.length}
+                                            {milestoneComments.length} comment{milestoneComments.length === 1 ? "" : "s"}
                                           </span>
-                                        )}
-                                      </div>
+                                        </div>
+                                      )}
 
                                       {/* Milestone Comments */}
                                       {milestoneComments.length > 0 && (
@@ -811,45 +763,6 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                                           ))}
                                         </div>
                                       )}
-
-                                      {/* Comment Form */}
-                                      <AnimatePresence>
-                                        {isCommenting && (
-                                          <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: "auto", opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            className="mt-3 space-y-2"
-                                          >
-                                            <Textarea
-                                              placeholder="Ask a question about this milestone..."
-                                              value={newComment}
-                                              onChange={(e) => setNewComment(e.target.value)}
-                                              rows={2}
-                                              className="text-sm"
-                                            />
-                                            <div className="flex justify-end gap-2">
-                                              <Button 
-                                                variant="ghost" 
-                                                size="sm"
-                                                className="h-7 text-xs"
-                                                onClick={() => setCommentingMilestone(null)}
-                                              >
-                                                Cancel
-                                              </Button>
-                                              <Button 
-                                                size="sm"
-                                                className="h-7 text-xs"
-                                                onClick={() => handleSubmitComment(project.id, milestone.id)}
-                                                disabled={!newComment.trim() || submitting}
-                                              >
-                                                {submitting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-                                                Send
-                                              </Button>
-                                            </div>
-                                          </motion.div>
-                                        )}
-                                      </AnimatePresence>
                                     </div>
                                   </motion.div>
                                 );

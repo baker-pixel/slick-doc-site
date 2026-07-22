@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { filterEngagedClients } from "../_shared/engagedClients.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,11 +106,15 @@ serve(async (req) => {
       clientQuery = clientQuery.eq("id", specificClientId);
     }
 
-    const { data: clients, error: clientsErr } = await clientQuery;
+    const { data: rawClients, error: clientsErr } = await clientQuery;
     if (clientsErr) throw new Error(`Failed to fetch clients: ${clientsErr.message}`);
+    // Skip clients whose portal invite was never accepted -- nobody could
+    // review the drafts, so scheduling for them just burns spend on content
+    // that auto-deletes unseen.
+    const clients = await filterEngagedClients(supabase, rawClients ?? []);
     if (!clients || clients.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "No active clients found" }),
+        JSON.stringify({ success: true, message: "No active clients with accepted portal access found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

@@ -5,6 +5,7 @@ import { callAI, MODELS } from "../_shared/ai.ts";
 import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
 import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { getSocialPillars } from "../_shared/socialStrategy.ts";
+import { filterEngagedClients } from "../_shared/engagedClients.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -86,10 +87,16 @@ serve(async (req) => {
 
     // Fetch client info — including context_profile and intake status
     const clientIds = [...new Set(slots.map((s: any) => s.client_account_id))];
-    const { data: clients } = await supabase
+    const { data: rawClients } = await supabase
       .from("client_accounts")
       .select("id, business_name, tier, industry, website_url, context_profile, intake_completed_at")
       .in("id", clientIds);
+
+    // Skip clients whose portal invite was never accepted -- these slots
+    // (e.g. from before this gate existed, or created manually) have nobody
+    // to review them, so filling them just burns spend on drafts that
+    // auto-delete unseen via cleanup-expired-draft-content.
+    const clients = await filterEngagedClients(supabase, rawClients ?? []);
 
     // Alert for any clients missing context_profile — content generation is blocked for them
     const clientsWithoutContext = (clients || []).filter((c: any) => !c.context_profile);
