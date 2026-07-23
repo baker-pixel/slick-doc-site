@@ -67,7 +67,6 @@ import CaseStudyBuilderPanel from "@/components/admin/content/CaseStudyBuilderPa
 import ClientHealthDashboard from "@/components/admin/clients/ClientHealthDashboard";
 import WebsitePersonalizationPanel from "@/components/admin/misc/WebsitePersonalizationPanel";
 import QualityAssurancePanel from "@/components/admin/misc/QualityAssurancePanel";
-import AgentControlPanel from "@/components/admin/misc/AgentControlPanel";
 import BeforeAfterShowcasePanel from "@/components/admin/content/BeforeAfterShowcasePanel";
 import SalesProposalPanel from "@/components/admin/sales/SalesProposalPanel";
 import SocialMediaPostsPanel from "@/components/admin/content/SocialMediaPostsPanel";
@@ -1565,8 +1564,6 @@ const AdminInner = () => {
         return <WebsitePersonalizationPanel />;
       case "quality-assurance":
         return <QualityAssurancePanel />;
-      case "ai-agent":
-        return <AgentControlPanel />;
       case "social-posts":
         return <SocialMediaPostsPanel />;
       case "settings":
@@ -1603,7 +1600,6 @@ const AdminInner = () => {
       "task-templates": "Task Templates",
       "brand-assets": "Brand Assets",
       "service-agreements": "Service Agreements",
-      "ai-agent": "AI Agent",
       settings: "Admin Settings",
       // Legacy titles for backward compatibility
       pipeline: "Pipeline Dashboard",

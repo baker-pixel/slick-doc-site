@@ -47,7 +47,6 @@ Deno.serve(async (req) => {
       "email_cleanup_log", "email_logs", "email_queue", "email_sequences",
       "pipeline_stages", "project_milestones", "automation_alerts",
       "workflow_steps", "client_oauth_tokens",
-      "agent_traces", "agent_pending_actions",
       "generated_content", "client_reports", "sop_documents",
       "client_documents", "client_notifications", "case_studies",
       "team_members", "ai_fixes", "wp_fix_queue", "prospects", "seo_audits",

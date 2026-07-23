@@ -17,7 +17,6 @@ import {
   HelpCircle,
   Search,
   Send,
-  Bot,
   Bell,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,7 +61,6 @@ export type AdminSection =
   | "task-templates"
   | "brand-assets"
   | "service-agreements"
-  | "ai-agent"
   | "settings"
   // Legacy sections kept for routing compatibility
   | "pipeline"
@@ -113,7 +111,6 @@ interface NavItem {
 
 // AGENTS group
 const agentItems: NavItem[] = [
-  { id: "ai-agent", label: "AI Agent", icon: Bot },
   { id: "seo-dashboard", label: "SEO", icon: Search },
   { id: "content-review", label: "Content", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "social-posts", label: "Social", icon: Share2 },

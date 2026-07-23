@@ -4,8 +4,8 @@ import type { ClientData } from "../types.ts";
 // PageSpeed, rubric-scored evidence-backed findings. It writes the canonical
 // seo_audits shape, upserts the client's SEO Action Plan project, records the
 // score outcome, and logs activity. This replaces the old fixed 3-page
-// analyze-seo pipeline so every trigger (onboarding workflow, agent tool, SEO
-// task aliases) produces one consistent audit.
+// analyze-seo pipeline so every trigger (onboarding workflow, SEO task
+// aliases) produces one consistent audit.
 export async function runSeoAudit(_supabase: any, client: ClientData) {
   const baseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

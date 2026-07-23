@@ -300,66 +300,6 @@ export type Database = {
         }
         Relationships: []
       }
-      agent_pending_actions: {
-        Row: {
-          client_id: string | null
-          created_at: string
-          decided_at: string | null
-          decided_by: string | null
-          error_message: string | null
-          id: string
-          reasoning: string | null
-          result: Json | null
-          status: string
-          tool_input: Json
-          tool_name: string
-          trace_id: string
-        }
-        Insert: {
-          client_id?: string | null
-          created_at?: string
-          decided_at?: string | null
-          decided_by?: string | null
-          error_message?: string | null
-          id?: string
-          reasoning?: string | null
-          result?: Json | null
-          status?: string
-          tool_input?: Json
-          tool_name: string
-          trace_id: string
-        }
-        Update: {
-          client_id?: string | null
-          created_at?: string
-          decided_at?: string | null
-          decided_by?: string | null
-          error_message?: string | null
-          id?: string
-          reasoning?: string | null
-          result?: Json | null
-          status?: string
-          tool_input?: Json
-          tool_name?: string
-          trace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_pending_actions_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_pending_actions_trace_id_fkey"
-            columns: ["trace_id"]
-            isOneToOne: false
-            referencedRelation: "agent_traces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       agent_runs: {
         Row: {
           attempt_count: number
@@ -412,59 +352,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "agent_runs_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      agent_traces: {
-        Row: {
-          client_id: string | null
-          created_at: string
-          error_message: string | null
-          final_summary: string | null
-          finished_at: string | null
-          goal: string
-          id: string
-          started_at: string
-          status: string
-          step_count: number
-          steps: Json
-          stop_reason: string | null
-        }
-        Insert: {
-          client_id?: string | null
-          created_at?: string
-          error_message?: string | null
-          final_summary?: string | null
-          finished_at?: string | null
-          goal: string
-          id?: string
-          started_at?: string
-          status?: string
-          step_count?: number
-          steps?: Json
-          stop_reason?: string | null
-        }
-        Update: {
-          client_id?: string | null
-          created_at?: string
-          error_message?: string | null
-          final_summary?: string | null
-          finished_at?: string | null
-          goal?: string
-          id?: string
-          started_at?: string
-          status?: string
-          step_count?: number
-          steps?: Json
-          stop_reason?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_traces_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
