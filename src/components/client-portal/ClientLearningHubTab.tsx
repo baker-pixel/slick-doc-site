@@ -333,6 +333,7 @@ export function ClientLearningHubTab({ clientAccountId }: ClientLearningHubTabPr
             size="icon"
             className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"
             onClick={(e) => toggleBookmark(selectedContent.id, e)}
+            aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
           >
             {isBookmarked ? (
               <BookmarkCheck className="h-5 w-5 fill-current" />
@@ -823,6 +824,7 @@ function ContentCard({ item, progress, onClick, onBookmark, getImage, featured, 
               size="icon"
               className="absolute top-3 right-3 h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/50"
               onClick={onBookmark}
+              aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
             >
               {isBookmarked ? (
                 <BookmarkCheck className="h-4 w-4 fill-current" />

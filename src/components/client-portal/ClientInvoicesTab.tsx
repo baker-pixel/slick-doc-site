@@ -279,7 +279,7 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
                             }}
                           >
                             <CreditCard className="h-4 w-4 mr-2" />
-                            Pay Now
+                            Request Payment Instructions
                           </Button>
                         </div>
                       </div>
@@ -388,7 +388,7 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
                   {selectedInvoice.status === "pending" && (
                     <Button className="flex-1" onClick={() => handlePayNow(selectedInvoice)}>
                       <CreditCard className="h-4 w-4 mr-2" />
-                      Pay Now
+                      Request Payment Instructions
                     </Button>
                   )}
                   <Button variant="outline" className="flex-1" onClick={() => handleDownloadPdf(selectedInvoice)}>

@@ -8,6 +8,8 @@ import { toast } from "@/hooks/use-toast";
 import { format, isToday, isYesterday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { ModernCard, EmptyState } from "./PortalUI";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ClientRequestsTab from "./ClientRequestsTab";
 
 interface Message {
   id: string;
@@ -29,6 +31,7 @@ export default function ClientMessagesTab({ clientAccountId, clientName }: Clien
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [newMessage, setNewMessage] = useState("");
+  const [view, setView] = useState<"chat" | "requests">("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -152,17 +155,31 @@ export default function ClientMessagesTab({ clientAccountId, clientName }: Clien
     <ModernCard className="flex flex-col h-[650px]" padding="none" hover={false}>
       {/* Header */}
       <div className="shrink-0 p-6 border-b border-border/50">
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/20">
-            <MessageCircle className="h-6 w-6 text-primary-foreground" />
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/20">
+              <MessageCircle className="h-6 w-6 text-primary-foreground" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Messages</h2>
+              <p className="text-sm text-muted-foreground">Chat with your agency team, or file a formal request</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Messages</h2>
-            <p className="text-sm text-muted-foreground">Chat with your agency team</p>
-          </div>
+          <Tabs value={view} onValueChange={(v) => setView(v as "chat" | "requests")}>
+            <TabsList>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
+              <TabsTrigger value="requests">Formal Requests</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </div>
 
+      {view === "requests" ? (
+        <div className="flex-1 overflow-y-auto p-6">
+          <ClientRequestsTab clientAccountId={clientAccountId} />
+        </div>
+      ) : (
+      <>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6">
         {messages.length === 0 ? (
@@ -245,12 +262,15 @@ export default function ClientMessagesTab({ clientAccountId, clientName }: Clien
             disabled={sending || !newMessage.trim()}
             size="icon"
             className="shrink-0 h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all"
+            aria-label="Send message"
           >
             {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-2 text-center">Press Enter to send, Shift+Enter for new line</p>
       </div>
+      </>
+      )}
     </ModernCard>
   );
 }

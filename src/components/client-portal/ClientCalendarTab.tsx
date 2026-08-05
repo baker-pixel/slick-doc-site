@@ -200,11 +200,11 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
 
       {/* Month nav */}
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
+        <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} aria-label="Previous month">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <h2 className="text-lg font-bold">{format(currentMonth, "MMMM yyyy")}</h2>
-        <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+        <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} aria-label="Next month">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -292,7 +292,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
                     </Badge>
                   ) : selectedItem.status === "draft" && selectedItem.client_approved === false ? (
                     <Badge variant="outline" className="border-muted-foreground/40 text-muted-foreground">
-                      In production — not yet ready for review
+                      Still being drafted — not ready for review yet
                     </Badge>
                   ) : null}
                 </div>

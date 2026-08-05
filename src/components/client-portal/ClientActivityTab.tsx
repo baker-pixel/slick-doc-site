@@ -839,7 +839,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
                     : currentStep.step_name
                 : wfAllDone
                   ? "All steps complete! 🎉"
-                  : `Your marketing project — ${wfProgress}% complete`}
+                  : `Your agents are on it — ${wfProgress}% complete`}
             </h2>
           </div>
           <Progress value={displayProgress} className="h-3" />

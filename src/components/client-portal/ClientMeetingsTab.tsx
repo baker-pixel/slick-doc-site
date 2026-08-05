@@ -302,7 +302,7 @@ export default function ClientMeetingsTab({ clientAccountId, clientName }: Clien
                           )}
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleCancelMeeting(meeting.id)} className="text-destructive hover:bg-destructive/10 rounded-xl">
+                      <Button variant="ghost" size="icon" onClick={() => handleCancelMeeting(meeting.id)} className="text-destructive hover:bg-destructive/10 rounded-xl" aria-label="Cancel meeting">
                         <X className="h-4 w-4" />
                       </Button>
                     </div>

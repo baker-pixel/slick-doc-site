@@ -171,11 +171,6 @@ export function ClientAgreementsTab({ clientAccountId }: ClientAgreementsTabProp
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Service Agreements</h2>
-        <p className="text-muted-foreground">View, download, and sign your service agreements.</p>
-      </div>
-
       {!agreements || agreements.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">

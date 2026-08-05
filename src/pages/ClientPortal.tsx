@@ -19,12 +19,10 @@ import ClientInvoicesTab from "@/components/client-portal/ClientInvoicesTab";
 import ClientDocumentsTab from "@/components/client-portal/ClientDocumentsTab";
 import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
 import ClientMeetingsTab from "@/components/client-portal/ClientMeetingsTab";
-import ClientRequestsTab from "@/components/client-portal/ClientRequestsTab";
 import ClientBrandAssetsTab from "@/components/client-portal/ClientBrandAssetsTab";
 import { ClientActivityTab } from "@/components/client-portal/ClientActivityTab";
 import { ClientTeamTab } from "@/components/client-portal/ClientTeamTab";
 import { ClientDeliverablesTab } from "@/components/client-portal/ClientDeliverablesTab";
-import { ClientAgreementsTab } from "@/components/client-portal/ClientAgreementsTab";
 import ClientNotificationsTab from "@/components/client-portal/ClientNotificationsTab";
 import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
 import { ClientSettingsTab } from "@/components/client-portal/ClientSettingsTab";
@@ -34,7 +32,6 @@ import { ClientCalendarTab } from "@/components/client-portal/ClientCalendarTab"
 import { ClientSeoTab } from "@/components/client-portal/ClientSeoTab";
 import ClientProspectsTab from "@/components/client-portal/ClientProspectsTab";
 import { TierGate } from "@/components/client-portal/TierGate";
-import { WelcomeModal } from "@/components/client-portal/WelcomeModal";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
 
 interface ClientPortalUser {
@@ -55,18 +52,15 @@ interface ClientAccount {
 const tabTitles: Record<PortalTab, string> = {
   activity: "Home",
   notifications: "Wins & Updates",
-  projects: "Projects",
+  projects: "Your Agents",
   messages: "Messages",
   meetings: "Meetings",
-  requests: "Requests",
   approvals: "Content Approvals",
   deliverables: "Deliverables",
   documents: "Documents",
-  agreements: "Agreements",
   brand: "Brand Assets",
   social: "Social & Accounts",
   prospects: "Lead Outreach",
-  team: "Your Team",
   analytics: "Analytics",
   invoices: "Invoices",
   help: "Help & Guide",
@@ -79,18 +73,15 @@ const tabTitles: Record<PortalTab, string> = {
 const tabDescriptions: Record<PortalTab, string> = {
   activity: "See recent activity on your account",
   notifications: "Celebrate your wins and stay updated",
-  projects: "Track your active projects and milestones",
-  messages: "Communicate with your marketing team",
+  projects: "Meet the agents working on your marketing",
+  messages: "Chat with your marketing team, or file a formal request",
   meetings: "Schedule and manage your meetings",
-  requests: "Submit and track your requests",
   approvals: "Review and approve content",
   deliverables: "Access your completed deliverables",
-  documents: "View and download your documents",
-  agreements: "Manage your service agreements",
+  documents: "View, download, and sign your documents",
   brand: "Access your brand assets and guidelines",
   social: "Create, schedule, and manage social media posts with AI",
   prospects: "View the outreach pipeline Orange Door is running for your business",
-  team: "Meet your dedicated team",
   analytics: "View your performance metrics",
   invoices: "Manage billing and payments",
   help: "Learn how to use your portal",
@@ -110,7 +101,6 @@ export default function ClientPortal() {
   const [clientAccount, setClientAccount] = useState<ClientAccount | null>(null);
   
   const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({ notifications: 0, messages: 0, approvals: 0 });
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [showTour, setShowTour] = useState(false);
   
   // Portal preferences hook
@@ -309,7 +299,7 @@ export default function ClientPortal() {
       const welcomeKey = `portal_welcome_seen_${portalUserData.user_id}`;
       const hasSeenWelcome = localStorage.getItem(welcomeKey);
       if (!hasSeenWelcome) {
-        setShowWelcomeModal(true);
+        setShowTour(true);
         localStorage.setItem(welcomeKey, "true");
       }
     } catch (error) {
@@ -341,10 +331,10 @@ export default function ClientPortal() {
 
   /**
    * Tier-to-feature mapping for soft gating:
-   * Foundation: activity, projects, messages, deliverables, analytics, calendar,
-   *             notifications, meetings, requests, documents, invoices, help, settings
+   * Foundation: activity, projects, messages (incl. formal requests), deliverables,
+   *             analytics, calendar, notifications, meetings, documents, invoices, help, settings
    * Growth:     + approvals, brand, access, social, integrations, learning
-   * Transformation: + agreements, team
+   * Transformation: + agreements (shown inline inside Documents)
    */
   const gate = (
     requiredTier: ClientTier,
@@ -367,23 +357,24 @@ export default function ClientPortal() {
 
     switch (activeTab) {
       case "activity":
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
+        return (
+          <div className="space-y-6">
+            <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />
+            {tier === "transformation" && <ClientTeamTab clientAccountId={portalUser.client_account_id} />}
+          </div>
+        );
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
       case "projects":
-        return <ClientProjectsTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientProjectsTab clientAccountId={portalUser.client_account_id} onNavigateToTab={handleTabChange} />;
       case "messages":
         return <ClientMessagesTab clientAccountId={portalUser.client_account_id} clientName={clientName} />;
       case "meetings":
         return <ClientMeetingsTab clientAccountId={portalUser.client_account_id} clientName={clientName} />;
-      case "requests":
-        return <ClientRequestsTab clientAccountId={portalUser.client_account_id} />;
       case "deliverables":
         return <ClientDeliverablesTab clientAccountId={portalUser.client_account_id} />;
       case "documents":
-        return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} />;
-      case "agreements":
-        return gate("transformation", "Agreements", "Manage your service agreements online.", <ClientAgreementsTab clientAccountId={portalUser.client_account_id} />);
+        return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} clientTier={tier} />;
       case "brand":
         return gate("growth", "Brand Assets", "Store and access your logo, colors, fonts, and brand guidelines.", <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />);
       case "social":
@@ -392,8 +383,6 @@ export default function ClientPortal() {
         return <ClientProspectsTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
         return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} clientEmail={clientAccount?.email} />;
-      case "team":
-        return gate("transformation", "Your Team", "Meet your dedicated account team.", <ClientTeamTab clientAccountId={portalUser.client_account_id} />);
       case "analytics":
         return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
       case "seo":
@@ -453,16 +442,7 @@ export default function ClientPortal() {
 
   return (
     <>
-      {/* Welcome Modal for first-time users */}
-      <WelcomeModal
-        open={showWelcomeModal}
-        onClose={() => { setShowWelcomeModal(false); setActiveTab("activity"); }}
-        onStartTour={handleStartTour}
-        clientName={clientName}
-        businessName={clientAccount?.business_name}
-      />
-
-      {/* Interactive Onboarding Tour */}
+      {/* Interactive Onboarding Tour (shown automatically on first visit) */}
       <OnboardingTour
         active={showTour}
         onClose={handleCloseTour}

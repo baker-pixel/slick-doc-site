@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PortalTab } from "./ClientPortalSidebar";
 import { CompanyContextCard } from "./CompanyContextCard";
+import { CollapsibleSection } from "./PortalUI";
 
 interface ClientSettingsTabProps {
   userId: string;
@@ -78,7 +79,7 @@ const accentColors = [
 
 const landingPageOptions: { id: PortalTab; label: string }[] = [
   { id: "activity", label: "Activity Feed" },
-  { id: "projects", label: "Projects" },
+  { id: "projects", label: "Your Agents" },
   { id: "messages", label: "Messages" },
   { id: "analytics", label: "Analytics" },
   { id: "notifications", label: "Wins & Updates" },
@@ -86,10 +87,9 @@ const landingPageOptions: { id: PortalTab; label: string }[] = [
 
 const tabOptions = [
   { id: "notifications", label: "Wins & Updates" },
-  { id: "projects", label: "Projects" },
+  { id: "projects", label: "Your Agents" },
   { id: "messages", label: "Messages" },
   { id: "meetings", label: "Meetings" },
-  { id: "requests", label: "Requests" },
   { id: "approvals", label: "Approvals" },
   { id: "deliverables", label: "Deliverables" },
   { id: "documents", label: "Documents" },
@@ -101,10 +101,9 @@ const tabOptions = [
 const widgetOptions = [
   { id: "messages", label: "Recent Messages" },
   { id: "approvals", label: "Pending Approvals" },
-  { id: "projects", label: "Project Updates" },
+  { id: "projects", label: "Agent Updates" },
   { id: "deliverables", label: "New Deliverables" },
   { id: "meetings", label: "Upcoming Meetings" },
-  { id: "requests", label: "Request Status" },
 ];
 
 export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange }: ClientSettingsTabProps) {
@@ -237,154 +236,36 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
         </div>
       )}
 
-      {/* Visual Customization */}
-      <Card className="border-0 bg-muted/30">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Palette className="h-5 w-5 text-primary" />
-            Visual Customization
-          </CardTitle>
-          <CardDescription>Personalize how your portal looks</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Theme Selection */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Theme</Label>
-            <RadioGroup
-              value={preferences.theme}
-              onValueChange={(value) => updatePreference("theme", value as PortalPreferences["theme"])}
-              className="grid grid-cols-3 gap-3"
-            >
-              {[
-                { value: "light", label: "Light", icon: Sun },
-                { value: "dark", label: "Dark", icon: Moon },
-                { value: "system", label: "System", icon: Monitor },
-              ].map(({ value, label, icon: Icon }) => (
-                <Label
-                  key={value}
-                  className={cn(
-                    "flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all",
-                    preferences.theme === value
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent bg-muted/50 hover:bg-muted"
-                  )}
-                >
-                  <RadioGroupItem value={value} className="sr-only" />
-                  <Icon className={cn("h-5 w-5", preferences.theme === value && "text-primary")} />
-                  <span className="text-sm font-medium">{label}</span>
-                </Label>
-              ))}
-            </RadioGroup>
-          </div>
-
-          {/* Accent Color */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Accent Color</Label>
-            <div className="flex flex-wrap gap-3">
-              {accentColors.map(({ id, label, color }) => (
-                <button
-                  key={id}
-                  onClick={() => updatePreference("accent_color", id)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all",
-                    preferences.accent_color === id
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent bg-muted/50 hover:bg-muted"
-                  )}
-                >
-                  <div className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
-                  <span className="text-sm">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Layout Density */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Layout Density</Label>
-            <RadioGroup
-              value={preferences.layout_density}
-              onValueChange={(value) => updatePreference("layout_density", value as PortalPreferences["layout_density"])}
-              className="flex gap-3"
-            >
-              {["compact", "comfortable", "spacious"].map((density) => (
-                <Label
-                  key={density}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer capitalize transition-all",
-                    preferences.layout_density === density
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent bg-muted/50 hover:bg-muted"
-                  )}
-                >
-                  <RadioGroupItem value={density} className="sr-only" />
-                  <span className="text-sm font-medium">{density}</span>
-                </Label>
-              ))}
-            </RadioGroup>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Layout & Navigation */}
+      {/* Default Landing Page */}
       <Card className="border-0 bg-muted/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Layout className="h-5 w-5 text-primary" />
-            Layout & Navigation
+            Home Screen
           </CardTitle>
-          <CardDescription>Customize your navigation experience</CardDescription>
+          <CardDescription>Choose what you see first when you log in</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Default Landing Page */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Default Landing Page</Label>
-            <RadioGroup
-              value={preferences.default_landing_page}
-              onValueChange={(value) => updatePreference("default_landing_page", value as PortalTab)}
-              className="grid grid-cols-2 sm:grid-cols-3 gap-2"
-            >
-              {landingPageOptions.map(({ id, label }) => (
-                <Label
-                  key={id}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm",
-                    preferences.default_landing_page === id
-                      ? "border-primary bg-primary/5"
-                      : "border-transparent bg-muted/50 hover:bg-muted"
-                  )}
-                >
-                  <RadioGroupItem value={id} className="sr-only" />
-                  {label}
-                </Label>
-              ))}
-            </RadioGroup>
-          </div>
-
-          {/* Hidden Tabs */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Hide Sections</Label>
-            <p className="text-xs text-muted-foreground">Select sections you don't use to hide them from the sidebar</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {tabOptions.map(({ id, label }) => (
-                <Label
-                  key={id}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all text-sm",
-                    preferences.hidden_tabs.includes(id)
-                      ? "bg-destructive/10 text-destructive"
-                      : "bg-muted/50 hover:bg-muted"
-                  )}
-                >
-                  <Checkbox
-                    checked={preferences.hidden_tabs.includes(id)}
-                    onCheckedChange={() => toggleArrayItem("hidden_tabs", id)}
-                  />
-                  {label}
-                </Label>
-              ))}
-            </div>
-          </div>
+        <CardContent>
+          <RadioGroup
+            value={preferences.default_landing_page}
+            onValueChange={(value) => updatePreference("default_landing_page", value as PortalTab)}
+            className="grid grid-cols-2 sm:grid-cols-3 gap-2"
+          >
+            {landingPageOptions.map(({ id, label }) => (
+              <Label
+                key={id}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg border-2 cursor-pointer transition-all text-sm",
+                  preferences.default_landing_page === id
+                    ? "border-primary bg-primary/5"
+                    : "border-transparent bg-muted/50 hover:bg-muted"
+                )}
+              >
+                <RadioGroupItem value={id} className="sr-only" />
+                {label}
+              </Label>
+            ))}
+          </RadioGroup>
         </CardContent>
       </Card>
 
@@ -467,16 +348,132 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
         </CardContent>
       </Card>
 
-      {/* Dashboard Widgets */}
-      <Card className="border-0 bg-muted/30">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <LayoutGrid className="h-5 w-5 text-primary" />
-            Dashboard Widgets
-          </CardTitle>
-          <CardDescription>Choose what appears on your Activity feed</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      {/* Advanced: appearance, hidden sections, dashboard widgets — most clients never touch these */}
+      <CollapsibleSection
+        title="Advanced"
+        subtitle="Appearance, hidden sections, and dashboard widgets"
+        icon={Sparkles}
+        defaultOpen={false}
+      >
+        <div className="space-y-8">
+          {/* Appearance */}
+          <div className="space-y-6">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Palette className="h-4 w-4 text-primary" />
+              Appearance
+            </h4>
+            {/* Theme Selection */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Theme</Label>
+              <RadioGroup
+                value={preferences.theme}
+                onValueChange={(value) => updatePreference("theme", value as PortalPreferences["theme"])}
+                className="grid grid-cols-3 gap-3"
+              >
+                {[
+                  { value: "light", label: "Light", icon: Sun },
+                  { value: "dark", label: "Dark", icon: Moon },
+                  { value: "system", label: "System", icon: Monitor },
+                ].map(({ value, label, icon: Icon }) => (
+                  <Label
+                    key={value}
+                    className={cn(
+                      "flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all",
+                      preferences.theme === value
+                        ? "border-primary bg-primary/5"
+                        : "border-transparent bg-muted/50 hover:bg-muted"
+                    )}
+                  >
+                    <RadioGroupItem value={value} className="sr-only" />
+                    <Icon className={cn("h-5 w-5", preferences.theme === value && "text-primary")} />
+                    <span className="text-sm font-medium">{label}</span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            {/* Accent Color */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Accent Color</Label>
+              <div className="flex flex-wrap gap-3">
+                {accentColors.map(({ id, label, color }) => (
+                  <button
+                    key={id}
+                    onClick={() => updatePreference("accent_color", id)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all",
+                      preferences.accent_color === id
+                        ? "border-primary bg-primary/5"
+                        : "border-transparent bg-muted/50 hover:bg-muted"
+                    )}
+                  >
+                    <div className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
+                    <span className="text-sm">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Layout Density */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Layout Density</Label>
+              <RadioGroup
+                value={preferences.layout_density}
+                onValueChange={(value) => updatePreference("layout_density", value as PortalPreferences["layout_density"])}
+                className="flex gap-3"
+              >
+                {["compact", "comfortable", "spacious"].map((density) => (
+                  <Label
+                    key={density}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer capitalize transition-all",
+                      preferences.layout_density === density
+                        ? "border-primary bg-primary/5"
+                        : "border-transparent bg-muted/50 hover:bg-muted"
+                    )}
+                  >
+                    <RadioGroupItem value={density} className="sr-only" />
+                    <span className="text-sm font-medium">{density}</span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+          </div>
+
+          {/* Hidden Tabs */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Layout className="h-4 w-4 text-primary" />
+              Hide Sections
+            </h4>
+            <p className="text-xs text-muted-foreground">Select sections you don't use to hide them from the sidebar</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {tabOptions.map(({ id, label }) => (
+                <Label
+                  key={id}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all text-sm",
+                    preferences.hidden_tabs.includes(id)
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-muted/50 hover:bg-muted"
+                  )}
+                >
+                  <Checkbox
+                    checked={preferences.hidden_tabs.includes(id)}
+                    onCheckedChange={() => toggleArrayItem("hidden_tabs", id)}
+                  />
+                  {label}
+                </Label>
+              ))}
+            </div>
+          </div>
+
+          {/* Dashboard Widgets */}
+          <div className="space-y-6">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-primary" />
+              Dashboard Widgets
+            </h4>
           {/* Quick Actions & Analytics Summary */}
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
@@ -524,8 +521,9 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
               ))}
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </CollapsibleSection>
 
       {/* Save Button - Bottom */}
       {hasChanges && (

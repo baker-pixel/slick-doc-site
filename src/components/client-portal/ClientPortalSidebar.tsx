@@ -2,6 +2,7 @@ import {
   Activity,
   Bell,
   LayoutDashboard,
+  Bot,
   FileCheck,
   BarChart3,
   MessageCircle,
@@ -15,10 +16,7 @@ import {
   CreditCard,
   HelpCircle,
   Palette,
-  Users,
-  FileSignature,
   GraduationCap,
-  Send,
   Share2,
   Search,
   Radar,
@@ -45,15 +43,12 @@ export type PortalTab =
   | "projects"
   | "messages"
   | "meetings"
-  | "requests"
   | "approvals"
   | "deliverables"
   | "documents"
-  | "agreements"
   | "brand"
   | "social"
   | "prospects"
-  | "team"
   | "analytics"
   | "seo"
   | "invoices"
@@ -94,7 +89,7 @@ interface NavItemDef {
 
 const myPortalItems: NavItemDef[] = [
   { id: "activity", label: "Home", icon: Activity },
-  { id: "projects", label: "Projects", icon: LayoutDashboard },
+  { id: "projects", label: "Your Agents", icon: Bot },
   { id: "messages", label: "Messages", icon: MessageCircle, badgeKey: "messages" },
   { id: "approvals", label: "Approvals", icon: FileCheck, badgeKey: "approvals" },
   { id: "deliverables", label: "Deliverables", icon: Package },
@@ -106,21 +101,15 @@ const brandToolsItems: NavItemDef[] = [
   { id: "social", label: "Social Media", icon: Share2 },
   { id: "prospects", label: "Lead Outreach", icon: Radar },
   { id: "seo", label: "SEO Health", icon: Search },
-  { id: "learning", label: "Learning Hub", icon: GraduationCap },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
-];
-
-const accountItems: NavItemDef[] = [
-  { id: "agreements", label: "Agreements", icon: FileSignature },
-  { id: "team", label: "Your Team", icon: Users },
 ];
 
 const supportItems: NavItemDef[] = [
   { id: "notifications", label: "Updates", icon: Bell, badgeKey: "notifications" },
   { id: "meetings", label: "Meetings", icon: Calendar },
-  { id: "requests", label: "Requests", icon: Send },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "invoices", label: "Invoices", icon: CreditCard },
+  { id: "learning", label: "Learning Hub", icon: GraduationCap },
   { id: "help", label: "Help", icon: HelpCircle },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -232,13 +221,6 @@ export function ClientPortalSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className={labelClass}>Account</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">{renderItems(accountItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
         <div className="mx-3 my-4 border-t border-border/40" />
 
         <SidebarGroup>
@@ -265,6 +247,7 @@ export function ClientPortalSidebar({
               size="icon"
               onClick={onSignOut}
               className="h-7 w-7 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:hidden"
+              aria-label="Sign out"
             >
               <LogOut className="h-3.5 w-3.5" />
             </Button>

@@ -385,14 +385,14 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
                           <div className="flex items-center gap-2">
                             {deliverable.preview_url && (
                               <Button variant="outline" size="icon" asChild>
-                                <a href={deliverable.preview_url} target="_blank" rel="noopener noreferrer">
+                                <a href={deliverable.preview_url} target="_blank" rel="noopener noreferrer" aria-label={`Preview ${deliverable.title}`}>
                                   <Eye className="h-4 w-4" />
                                 </a>
                               </Button>
                             )}
                             {deliverable.file_url && (
                               <Button variant="outline" size="icon" asChild>
-                                <a href={deliverable.file_url} download={deliverable.file_name}>
+                                <a href={deliverable.file_url} download={deliverable.file_name} aria-label={`Download ${deliverable.title}`}>
                                   <Download className="h-4 w-4" />
                                 </a>
                               </Button>

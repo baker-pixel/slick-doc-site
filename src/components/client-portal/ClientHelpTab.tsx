@@ -8,13 +8,10 @@ import {
   LayoutDashboard, 
   MessageCircle, 
   Calendar,
-  ClipboardList,
   FileCheck,
   Package,
   FolderOpen,
-  FileSignature,
   Palette,
-  Users,
   BarChart3,
   Receipt,
   HelpCircle,
@@ -34,16 +31,15 @@ const sections = [
     items: [
       { id: "activity", label: "Activity Feed", icon: Activity, description: "See recent activity on your account" },
       { id: "notifications", label: "Wins & Updates", icon: Bell, description: "Celebrate wins and important updates" },
-      { id: "projects", label: "Projects", icon: LayoutDashboard, description: "Track project progress and milestones" },
+      { id: "projects", label: "Your Agents", icon: LayoutDashboard, description: "See what each agent is working on" },
       { id: "analytics", label: "Analytics", icon: BarChart3, description: "View performance metrics and reports" },
     ],
   },
   {
     title: "Communication",
     items: [
-      { id: "messages", label: "Messages", icon: MessageCircle, description: "Chat with your marketing team" },
+      { id: "messages", label: "Messages", icon: MessageCircle, description: "Chat with your marketing team, or switch to Formal Requests to submit a tracked request" },
       { id: "meetings", label: "Meetings", icon: Calendar, description: "Schedule and manage meetings" },
-      { id: "requests", label: "Requests", icon: ClipboardList, description: "Submit and track requests" },
     ],
   },
   {
@@ -51,15 +47,13 @@ const sections = [
     items: [
       { id: "approvals", label: "Approvals", icon: FileCheck, description: "Review and approve content" },
       { id: "deliverables", label: "Deliverables", icon: Package, description: "Access completed work" },
-      { id: "documents", label: "Documents", icon: FolderOpen, description: "View and download files" },
+      { id: "documents", label: "Documents", icon: FolderOpen, description: "View, download, and sign your files and agreements" },
     ],
   },
   {
     title: "Account",
     items: [
-      { id: "agreements", label: "Agreements", icon: FileSignature, description: "Manage service agreements" },
       { id: "brand", label: "Brand Assets", icon: Palette, description: "Access brand guidelines" },
-      { id: "team", label: "Team", icon: Users, description: "Meet your dedicated team" },
       { id: "invoices", label: "Invoices", icon: Receipt, description: "View billing and payments" },
     ],
   },
@@ -101,7 +95,7 @@ export function ClientHelpTab({ onStartTour, onNavigate }: ClientHelpTabProps) {
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl mb-4">
             Your client portal is your central hub for collaborating with your marketing team. 
-            Track projects, approve content, view analytics, and communicate - all in one convenient location.
+            Check in on your agents, approve content, view analytics, and communicate - all in one convenient location.
           </p>
           <Button onClick={onStartTour} className="gap-2 rounded-xl">
             <PlayCircle className="h-4 w-4" />

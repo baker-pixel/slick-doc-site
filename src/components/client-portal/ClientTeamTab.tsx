@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Mail, Phone } from "lucide-react";
@@ -14,8 +13,6 @@ interface TeamMember {
   email: string | null;
   phone: string | null;
   photo_url: string | null;
-  bio: string | null;
-  specialties: string[] | null;
   is_active: boolean;
   display_order: number;
 }
@@ -24,6 +21,8 @@ interface ClientTeamTabProps {
   clientAccountId: string;
 }
 
+// Compact "who's my rep" card embedded on the Home tab — a client looks this
+// up once, so it doesn't need its own permanent nav destination.
 export function ClientTeamTab({ clientAccountId }: ClientTeamTabProps) {
   const { data: teamMembers, isLoading } = useQuery({
     queryKey: ["team-members"],
@@ -39,155 +38,91 @@ export function ClientTeamTab({ clientAccountId }: ClientTeamTabProps) {
     },
   });
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const formatPhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, "");
-    if (cleaned.length === 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-    }
-    return phone;
-  };
+  const getInitials = (name: string) =>
+    name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Your Team</h2>
-          <p className="text-muted-foreground">Meet your dedicated marketing team</p>
-        </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="overflow-hidden">
-              <CardHeader className="pb-4">
-                <div className="flex items-start gap-4">
-                  <Skeleton className="h-14 w-14 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-4 w-24" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-20 w-full" />
-              </CardContent>
-            </Card>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="h-4 w-4 text-primary" />
+            Your Team
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
           ))}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!teamMembers || teamMembers.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="h-4 w-4 text-primary" />
+            Your Team
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No team members assigned yet — they'll appear here once assigned.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Your Team</h2>
-        <p className="text-muted-foreground">Meet your dedicated marketing team</p>
-      </div>
-
-      {!teamMembers || teamMembers.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="p-12 text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <Users className="h-8 w-8 text-primary" />
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          Your Team
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {teamMembers.map((member) => (
+          <div key={member.id} className="flex items-center gap-3">
+            <Avatar className="h-10 w-10 ring-2 ring-primary/20 shrink-0">
+              {member.photo_url ? <AvatarImage src={member.photo_url} alt={member.name} /> : null}
+              <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-sm font-bold">
+                {getInitials(member.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{member.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{member.role}</p>
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">Team coming soon</h3>
-            <p className="text-sm text-muted-foreground">
-              Your dedicated team members will appear here once assigned.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {teamMembers.map((member) => (
-            <Card key={member.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-4">
-                <div className="flex items-start gap-4">
-                  <Avatar className="h-14 w-14 ring-2 ring-primary/20">
-                    {member.photo_url ? (
-                      <AvatarImage src={member.photo_url} alt={member.name} />
-                    ) : null}
-                    <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-lg font-bold">
-                      {getInitials(member.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-lg">{member.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{member.role}</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {member.bio && (
-                  <p className="text-sm text-muted-foreground">{member.bio}</p>
-                )}
-
-                {member.specialties && member.specialties.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {member.specialties.map((specialty, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {specialty}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                <div className="pt-2 space-y-2">
-                  {member.email && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start"
-                      asChild
-                    >
-                      <a href={`mailto:${member.email}`}>
-                        <Mail className="h-4 w-4 mr-2" />
-                        {member.email}
-                      </a>
-                    </Button>
-                  )}
-                  {member.phone && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start"
-                      asChild
-                    >
-                      <a href={`tel:${member.phone}`}>
-                        <Phone className="h-4 w-4 mr-2" />
-                        {formatPhone(member.phone)}
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
-              <Users className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-foreground">Need to schedule a call?</h3>
-              <p className="text-sm text-muted-foreground">
-                Head to the Meetings tab to book time with your team.
-              </p>
+            <div className="flex gap-1 shrink-0">
+              {member.email && (
+                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                  <a href={`mailto:${member.email}`} aria-label={`Email ${member.name}`}>
+                    <Mail className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
+              {member.phone && (
+                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                  <a href={`tel:${member.phone}`} aria-label={`Call ${member.name}`}>
+                    <Phone className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

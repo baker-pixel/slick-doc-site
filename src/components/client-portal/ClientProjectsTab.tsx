@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2, Calendar, Target, CheckCircle, Clock, ChevronDown, Circle,
-  LayoutDashboard, Rocket, Flag, Send, RefreshCw,
+  Bot, Rocket, Flag, Send, RefreshCw, Search, Share2, Users, ExternalLink,
   MessageSquare, Bell, AlertTriangle, FileDown, Paperclip, Sparkles
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -35,6 +35,16 @@ const kindMeta: Record<string, { sectionLabel: string; hint: string }> = {
   social: { sectionLabel: "Content Pillars", hint: "These are the recurring themes your posts rotate through, not tasks to finish. The progress bar above tracks posts published this month against your plan." },
   prospect: { sectionLabel: "Outreach Funnel", hint: "Each stage locks in once prospects reach it — discovered, contacted, replied, converted. The count updates automatically as outreach runs." },
 };
+
+// Client-facing framing: each "project kind" is presented as a named agent
+// working on the client's behalf, rather than a generic project row.
+const agentMeta: Record<string, { name: string; tagline: string; icon: typeof Bot; iconBg: string }> = {
+  seo: { name: "SEO Agent", tagline: "Finds and fixes what's holding your search rankings back", icon: Search, iconBg: "from-blue-500 to-cyan-400" },
+  social: { name: "Social Agent", tagline: "Plans and grows your content across social channels", icon: Share2, iconBg: "from-purple-500 to-fuchsia-400" },
+  prospect: { name: "Prospect Agent", tagline: "Finds new leads and runs outreach on your behalf", icon: Users, iconBg: "from-emerald-500 to-teal-400" },
+};
+const defaultAgentMeta = { name: "Agent", tagline: "", icon: Bot, iconBg: "from-primary to-primary/80" };
+const getAgentMeta = (kind: string) => agentMeta[kind] || defaultAgentMeta;
 
 interface Milestone {
   id: string;
@@ -81,7 +91,12 @@ interface Deliverable {
 
 interface ClientProjectsTabProps {
   clientAccountId: string;
+  onNavigateToTab?: (tab: string) => void;
 }
+
+// Maps an agent's project kind to its dedicated detail tab elsewhere in the
+// sidebar, so a client can jump from the summary card to the full picture.
+const agentDetailTab: Record<string, string> = { seo: "seo", social: "social", prospect: "prospects" };
 
 const statusConfig: Record<string, { label: string; variant: "default" | "success" | "warning" | "error" | "info" }> = {
   completed: { label: "Completed", variant: "success" },
@@ -91,7 +106,7 @@ const statusConfig: Record<string, { label: string; variant: "default" | "succes
   awaiting_setup: { label: "Setting Up", variant: "default" },
 };
 
-export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTabProps) {
+export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: ClientProjectsTabProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({});
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
@@ -363,7 +378,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
               <Loader2 className="h-7 w-7 text-primary-foreground animate-spin" />
             </div>
           </div>
-          <p className="text-muted-foreground">Loading your projects...</p>
+          <p className="text-muted-foreground">Loading your agents...</p>
         </div>
       </div>
     );
@@ -373,7 +388,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
     return (
       <EmptyState
         icon={AlertTriangle}
-        title="Couldn't load your projects"
+        title="Couldn't load your agents"
         description="Something went wrong loading this page. Try again — if it keeps happening, let your team know."
         action={
           <Button onClick={fetchProjects}>
@@ -386,7 +401,7 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
   }
 
   if (projects.length === 0) {
-    return <EmptyState icon={Target} title="No Projects Yet" description="Your projects will appear here once they're set up by your team." />;
+    return <EmptyState icon={Bot} title="No Agents Yet" description="Your agents will appear here once they're set up by your team." />;
   }
 
   const completedCount = projects.filter(p => p.status === 'completed').length;
@@ -398,10 +413,10 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <PageHeader
-          title="Your Projects"
-          description="Track progress, ask questions, and request updates on your projects"
-          icon={LayoutDashboard}
-          badge={`${projects.length} Projects`}
+          title="Your Agents"
+          description="Track what each agent is doing, ask questions, and request updates"
+          icon={Bot}
+          badge={`${projects.length} Agent${projects.length === 1 ? "" : "s"}`}
         />
         {completedCount > 0 && (
           <button
@@ -420,8 +435,8 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
 
       {/* Stats Grid */}
       <div className={cn("grid grid-cols-1 sm:grid-cols-3 gap-4", settingUpCount > 0 && "lg:grid-cols-4")}>
-        <StatCard label="Total Projects" value={projects.length} icon={Target} index={0} />
-        <StatCard label="In Progress" value={inProgressCount} icon={Rocket} index={1} />
+        <StatCard label="Active Agents" value={projects.length} icon={Bot} index={0} />
+        <StatCard label="Working Now" value={inProgressCount} icon={Rocket} index={1} />
         <StatCard label="Completed" value={completedCount} icon={CheckCircle} index={2} />
         {settingUpCount > 0 && (
           <StatCard label="Setting Up" value={settingUpCount} icon={Clock} index={3} />
@@ -434,13 +449,13 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <RefreshCw className="h-5 w-5 text-primary" />
-              Request Project Update
+              Request Agent Update
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             {selectedProjectForUpdate && (
               <p className="text-sm text-muted-foreground">
-                Request an update on <span className="font-medium text-foreground">{selectedProjectForUpdate.name}</span>
+                Request an update from your <span className="font-medium text-foreground">{getAgentMeta(selectedProjectForUpdate.kind).name}</span>
               </p>
             )}
             <Textarea
@@ -472,6 +487,8 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
           const latestUpdate = getLatestUpdateRequest(project.id);
           const projectCommentsList = getProjectComments(project.id);
           const health = getProjectHealth(project, projectMilestones);
+          const agent = getAgentMeta(project.kind);
+          const AgentIcon = agent.icon;
 
           return (
             <motion.div
@@ -484,19 +501,27 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                 <div className="p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap mb-2">
-                        <h3 className="text-lg font-semibold text-foreground">{project.name}</h3>
-                        <StatusBadge status={config.label} variant={config.variant} />
-                        {health && (
-                          <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", health.cls)}>
-                            {health.label}
-                          </span>
-                        )}
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className={cn("shrink-0 p-2.5 rounded-xl bg-gradient-to-br shadow-sm", agent.iconBg)}>
+                          <AgentIcon className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <h3 className="text-lg font-semibold text-foreground">{agent.name}</h3>
+                            <StatusBadge status={config.label} variant={config.variant} />
+                            {health && (
+                              <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", health.cls)}>
+                                {health.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{project.name}</p>
+                        </div>
                       </div>
-                      {project.description && (
-                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{project.description}</p>
+                      {(project.description || agent.tagline) && (
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{project.description || agent.tagline}</p>
                       )}
-                      
+
                       {/* Progress Bar */}
                       <div className="space-y-2 mb-4">
                         <div className="flex justify-between text-sm">
@@ -549,6 +574,19 @@ export default function ClientProjectsTab({ clientAccountId }: ClientProjectsTab
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Request Update
                         </Button>
+                        {onNavigateToTab && agentDetailTab[project.kind] && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigateToTab(agentDetailTab[project.kind]);
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            View Full Detail
+                          </Button>
+                        )}
                         {projectCommentsList.length > 0 && (
                           <Button 
                             variant="ghost" 

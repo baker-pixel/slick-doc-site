@@ -3,9 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, Download, FolderOpen, File, FileImage, FileSpreadsheet, FileArchive } from "lucide-react";
+import { Loader2, FileText, Download, FolderOpen, File, FileImage, FileSpreadsheet, FileArchive, FileSignature } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { CollapsibleSection } from "./PortalUI";
+import { ClientAgreementsTab } from "./ClientAgreementsTab";
 
 interface Document {
   id: string;
@@ -21,6 +23,7 @@ interface Document {
 
 interface ClientDocumentsTabProps {
   clientAccountId: string;
+  clientTier?: string;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -41,7 +44,7 @@ const categoryColors: Record<string, string> = {
   report: "bg-cyan-500/10 text-cyan-600",
 };
 
-export default function ClientDocumentsTab({ clientAccountId }: ClientDocumentsTabProps) {
+export default function ClientDocumentsTab({ clientAccountId, clientTier }: ClientDocumentsTabProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -160,22 +163,38 @@ export default function ClientDocumentsTab({ clientAccountId }: ClientDocumentsT
     );
   }
 
+  const agreementsSection = clientTier === "transformation" && (
+    <CollapsibleSection
+      title="Agreements"
+      subtitle="Service agreements and contracts — sign online when needed"
+      icon={FileSignature}
+      defaultOpen
+    >
+      <ClientAgreementsTab clientAccountId={clientAccountId} />
+    </CollapsibleSection>
+  );
+
   if (documents.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium text-foreground mb-2">No Documents Yet</h3>
-          <p className="text-sm text-muted-foreground text-center">
-            Documents shared by your agency team will appear here.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {agreementsSection}
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">No Documents Yet</h3>
+            <p className="text-sm text-muted-foreground text-center">
+              Documents shared by your agency team will appear here.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {agreementsSection}
+
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

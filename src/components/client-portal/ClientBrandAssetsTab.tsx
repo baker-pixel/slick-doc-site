@@ -564,7 +564,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                           <p className="text-xs font-medium truncate flex-1">{asset.name}</p>
                           <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
                             {url && (
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDownload(asset)}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDownload(asset)} aria-label={`Download ${asset.name}`}>
                                 <Download className="h-3 w-3" />
                               </Button>
                             )}
@@ -605,6 +605,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
                             className="h-7 w-7"
                             onClick={() => handleCopyColor(colorValue, asset.id)}
                             title="Copy hex"
+                            aria-label={`Copy hex code for ${asset.name}`}
                           >
                             {copiedId === asset.id ? (
                               <Check className="h-3.5 w-3.5 text-green-600" />

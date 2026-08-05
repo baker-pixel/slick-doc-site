@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target, Download, Sparkles } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target, Download, Sparkles, AlertTriangle, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { toast } from "@/hooks/use-toast";
@@ -41,6 +41,7 @@ interface ClientAnalyticsTabProps {
 export default function ClientAnalyticsTab({ clientAccountId, businessName }: ClientAnalyticsTabProps) {
   const [analytics, setAnalytics] = useState<AnalyticsSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     fetchAnalytics();
@@ -52,6 +53,7 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
   }, [clientAccountId]);
 
   const fetchAnalytics = async () => {
+    setFetchFailed(false);
     try {
       const { data, error } = await supabase
         .from("client_analytics")
@@ -68,6 +70,7 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
       })));
     } catch (error) {
       console.error("Error fetching analytics:", error);
+      setFetchFailed(true);
     } finally {
       setLoading(false);
     }
@@ -157,6 +160,22 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
           <p className="text-muted-foreground">Loading analytics...</p>
         </div>
       </div>
+    );
+  }
+
+  if (fetchFailed) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load your analytics"
+        description="Something went wrong loading this page. Try again — if it keeps happening, let your team know."
+        action={
+          <Button onClick={fetchAnalytics}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        }
+      />
     );
   }
 

@@ -125,7 +125,7 @@ export function OnboardingTour({ active, onClose, onTabChange }: OnboardingTourP
                 <h3 className="font-bold text-lg">{step.title}</h3>
               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleSkip} className="h-8 w-8 -mr-2 -mt-1">
+            <Button variant="ghost" size="icon" onClick={handleSkip} className="h-8 w-8 -mr-2 -mt-1" aria-label="Skip tour">
               <X className="h-4 w-4" />
             </Button>
           </div>

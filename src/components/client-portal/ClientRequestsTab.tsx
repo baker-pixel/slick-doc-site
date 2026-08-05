@@ -149,10 +149,9 @@ export default function ClientRequestsTab({ clientAccountId }: ClientRequestsTab
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Requests</h2>
-          <p className="text-muted-foreground">Submit and track your work requests</p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Formal requests are tracked with a status and priority, separate from the chat.
+        </p>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>
