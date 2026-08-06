@@ -70,11 +70,11 @@ const FOUNDATION_STEPS = [
   { step_number: 3, step_name: "Generate marketing gap report", task_type: "gap_report", depends_on: 2 },
   { step_number: 4, step_name: "Create Google Business Profile post", task_type: "content", depends_on: 3, payload: { content_type: "gbp_post" } },
   { step_number: 6, step_name: "Write blog article", task_type: "content", depends_on: 3, payload: { content_type: "blog" } },
-  { step_number: 8, step_name: "Generate quarterly SEO report", task_type: "report", depends_on: 6 },
+  { step_number: 8, step_name: "Generate quarterly SEO report", task_type: "report", depends_on: 6, payload: { report_type: "quarterly" } },
 ];
 
 const GROWTH_EXTRA = [
-  { step_number: 9, step_name: "Create email nurture sequence", task_type: "email_template", depends_on: 3 },
+  { step_number: 9, step_name: "Create email nurture sequence", task_type: "email_template", depends_on: 3, payload: { content_type: "nurture" } },
   { step_number: 10, step_name: "Generate retargeting ad copy", task_type: "ad_copy", depends_on: 3 },
   { step_number: 11, step_name: "Create social media content batch", task_type: "social_content", depends_on: 3, payload: { content_type: "social_batch" } },
 ];
@@ -83,7 +83,7 @@ const TRANSFORMATION_EXTRA = [
   { step_number: 13, step_name: "Write second blog article", task_type: "content", depends_on: 8, payload: { content_type: "blog" } },
   { step_number: 15, step_name: "Create retention email sequence", task_type: "email_template", depends_on: 8, payload: { content_type: "retention" } },
   { step_number: 16, step_name: "Scrape and compile analytics report", task_type: "analytics", depends_on: 13 },
-  { step_number: 17, step_name: "Generate full monthly report", task_type: "report", depends_on: 16 },
+  { step_number: 17, step_name: "Generate full monthly report", task_type: "report", depends_on: 16, payload: { report_type: "monthly" } },
 ];
 
 function renumberAutomationSteps(steps: any[]) {

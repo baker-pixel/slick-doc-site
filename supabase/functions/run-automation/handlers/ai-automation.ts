@@ -57,10 +57,12 @@ export async function runAiAutomation(supabase: any, client: ClientData, jobType
   let userPrompt = "";
 
   switch (jobType) {
-    case "email_sequence":
-      systemPrompt = `You are an expert email marketing specialist. Create a personalized email sequence.\n\n${brandContextBlock}\n\nSOPs:\n${sopContent}\n\nOutput JSON: { "sequence_name": "string", "emails": [{ "subject": "string", "body": "string (HTML)", "send_delay_days": number, "purpose": "string" }] }`;
-      userPrompt = `Create a ${client.tier}-tier email sequence for ${client.business_name}. Additional context: ${JSON.stringify(inputData || {})}`;
+    case "email_sequence": {
+      const sequencePurpose = (inputData as any)?.content_type || "nurture";
+      systemPrompt = `You are an expert email marketing specialist. Create a personalized email sequence.\n\n${brandContextBlock}\n\nSOPs:\n${sopContent}\n\nName the sequence after its funnel purpose (e.g. "New Lead Nurture", "Win-Back", "Post-Purchase Retention") -- never after the client's tier or business name, those aren't purposes.\n\nOutput JSON: { "sequence_name": "string", "emails": [{ "subject": "string", "body": "string (HTML)", "send_delay_days": number, "purpose": "string" }] }`;
+      userPrompt = `Create a ${sequencePurpose} email sequence for ${client.business_name}, a ${client.tier}-tier client. Additional context: ${JSON.stringify(inputData || {})}`;
       break;
+    }
     case "content_generation":
       const industryContext = client.industry ? `The business is in the ${client.industry} industry.` : "";
       systemPrompt = `You are a digital marketing content expert specializing in creating industry-specific, engaging content. Create content that speaks directly to the target audience and incorporates industry best practices and terminology.\n\n${industryContext}\n\n${brandContextBlock}\n\nOutput JSON: { "content_pieces": [{ "type": "blog_post | social_post | ad_copy", "title": "string", "content": "string", "platform": "string", "target_audience": "string", "key_message": "string" }] }`;
@@ -192,6 +194,26 @@ Context: ${JSON.stringify(inputData || {})}`;
   if (jobType === "content_generation" && parsedOutput.content_pieces) {
     const pieces = parsedOutput.content_pieces as Array<{ type: string; title: string; content: string; platform?: string }>;
 
+    // Every onboarding content step (GBP post, blog, ad copy, social batch)
+    // funnels through this same handler and previously got the identical
+    // generic "Content Generation - {date}" deliverable title, making them
+    // indistinguishable in the activity feed. Label it with what was
+    // actually asked for.
+    const CONTENT_TYPE_LABELS: Record<string, string> = {
+      gbp_post: "Google Business Profile Post",
+      blog: "Blog Article",
+      social_batch: "Social Media Content Batch",
+    };
+    const PIECE_TYPE_LABELS: Record<string, string> = {
+      blog_post: "Blog Article",
+      social_post: "Social Media Post",
+      ad_copy: "Ad Copy",
+    };
+    const contentLabel =
+      CONTENT_TYPE_LABELS[(inputData as any)?.content_type as string] ??
+      PIECE_TYPE_LABELS[pieces[0]?.type] ??
+      "Content";
+
     // Self-QA: cheap second-model critique, best-effort, one call for the
     // whole batch of pieces rather than one call per piece. Never blocks a
     // piece from reaching admin review -- only flags it.
@@ -232,7 +254,7 @@ Context: ${JSON.stringify(inputData || {})}`;
     await createDeliverable(
       supabase,
       client.id,
-      `Content Generation - ${reportDate}`,
+      `Content Generation: ${contentLabel} - ${reportDate}`,
       `# Generated Content
 
 ## Summary
@@ -328,6 +350,19 @@ Preview:
     const periodStart = (inputData as any)?.periodStart || fallbackStart.toISOString().split("T")[0];
     const periodEnd = (inputData as any)?.periodEnd || new Date().toISOString().split("T")[0];
 
+    // Two distinct onboarding steps (quarterly SEO report, full monthly
+    // report) both dispatch here as jobType "report" with nothing else to
+    // tell them apart -- they produced identical "Monthly Performance
+    // Report" deliverables even when the step was actually the quarterly
+    // one. report_type (client_reports' check constraint allows weekly/
+    // monthly/quarterly/custom) is the one thing that does distinguish them.
+    const reportType = ((inputData as any)?.report_type as string | undefined) || "monthly";
+    const reportLabel = reportType === "quarterly"
+      ? "Quarterly SEO Report"
+      : reportType === "weekly"
+        ? "Weekly Performance Report"
+        : "Monthly Performance Report";
+
     // client_reports has no dedicated executive_summary column -- fold it in
     // as the lead item so it isn't silently dropped when this report is
     // previewed or emailed.
@@ -339,7 +374,7 @@ Preview:
 
     await supabase.from("client_reports").insert({
       client_id: client.id,
-      report_type: "monthly",
+      report_type: reportType,
       report_period_start: periodStart,
       report_period_end: periodEnd,
       metrics: parsedOutput.metrics || {},
@@ -353,8 +388,8 @@ Preview:
     await createDeliverable(
       supabase,
       client.id,
-      `Monthly Performance Report - ${reportDate}`,
-      `# Monthly Performance Report
+      `${reportLabel} - ${reportDate}`,
+      `# ${reportLabel}
 
 ## Period: ${periodStart} to ${periodEnd}
 
