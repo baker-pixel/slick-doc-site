@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick } from "lucide-react";
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
   id: string;
@@ -92,8 +93,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         icpLocal ? "discover-prospects" : "discover-prospects-web",
         { body: { client_id: clientAccountId } },
       );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const errMsg = await getEdgeErrorMessage(error, data);
+      if (errMsg) throw new Error(friendlyEdgeMessage(errMsg));
       toast({ title: `${data.discovered ?? 0} new leads found`, description: "They'll be reviewed and added to your outreach queue shortly." });
       if ((data.discovered ?? 0) > 0) loadProspects();
     } catch (err: unknown) {

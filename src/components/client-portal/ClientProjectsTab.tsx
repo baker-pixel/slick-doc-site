@@ -13,6 +13,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PageHeader, StatCard, ModernCard, EmptyState, StatusBadge } from "./PortalUI";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Project {
   id: string;
@@ -122,6 +123,23 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
   const [showCompleted, setShowCompleted] = useState(false);
   const [fetchFailed, setFetchFailed] = useState(false);
   const [regeneratingProject, setRegeneratingProject] = useState<string | null>(null);
+  // Same substance check as the backend hasBusinessContext gate -- lets an
+  // "awaiting_setup" social/prospect agent explain *why* (waiting on you)
+  // instead of a generic "check back soon" that reads identically whether
+  // the client is blocking it or an engine just hasn't run yet.
+  const [hasBusinessInfo, setHasBusinessInfo] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from("client_accounts")
+      .select("industry, context_profile")
+      .eq("id", clientAccountId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const audience = (data?.context_profile as Record<string, unknown> | null)?.target_audience;
+        setHasBusinessInfo(!!data?.industry?.trim() && typeof audience === "string" && audience.trim().length > 0);
+      });
+  }, [clientAccountId]);
 
   useEffect(() => {
     fetchProjects();
@@ -268,8 +286,8 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
         body: { client_id: clientAccountId },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const errMsg = await getEdgeErrorMessage(error, data);
+      if (errMsg) throw new Error(friendlyEdgeMessage(errMsg));
 
       toast.success("New content topics generated!");
       await fetchProjects();
@@ -518,9 +536,21 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
                           <p className="text-xs text-muted-foreground mt-0.5">{project.name}</p>
                         </div>
                       </div>
-                      {(project.description || agent.tagline) && (
-                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{project.description || agent.tagline}</p>
-                      )}
+                      {(() => {
+                        // SEO isn't gated on business info (it crawls the real
+                        // site regardless), so only social/prospect get the
+                        // "waiting on you" framing here.
+                        const blockedOnBusinessInfo =
+                          project.status === "awaiting_setup" && !hasBusinessInfo && (project.kind === "social" || project.kind === "prospect");
+                        const description = blockedOnBusinessInfo
+                          ? "Waiting on you: complete \"Confirm Business Information\" on Home (or Settings → Company Context) to get this started."
+                          : project.description || agent.tagline;
+                        return description ? (
+                          <p className={cn("text-sm mb-4 line-clamp-2", blockedOnBusinessInfo ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                            {description}
+                          </p>
+                        ) : null;
+                      })()}
 
                       {/* Progress Bar */}
                       <div className="space-y-2 mb-4">
