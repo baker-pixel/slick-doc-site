@@ -18,6 +18,7 @@ import {
   Search,
   Send,
   Bell,
+  UserCog,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -129,6 +130,7 @@ const operationsItems: NavItem[] = [
   { id: "client-projects", label: "Projects", icon: Layers },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
+  { id: "team-directory", label: "Team", icon: UserCog },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
