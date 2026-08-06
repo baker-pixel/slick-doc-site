@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-import { callAIJson } from "../_shared/ai.ts";
+import { callAIJson, MODELS } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 import { fetchHtml, parseOnPage } from "../_shared/seoSignals.ts";
@@ -146,7 +146,6 @@ async function generateFixes(
   page: WpPage,
   brandBlock: string,
   industry: string,
-  groqKey: string,
   // Fields the canonical seo-audit already has an open, applyable finding
   // for on this page -- skip asking the AI for them at all, not just
   // discarding the result, since it's the same underlying suggestion twice.
@@ -157,20 +156,32 @@ async function generateFixes(
     ? `Images missing alt text (image IDs): ${missingAltImages.map(i => i.id).join(", ")}`
     : "";
 
+  // meta_title/meta_desc/focus_keyword are graded as ONE coherent set by SEO
+  // plugins like Yoast (keyword-in-title, keyword-in-description, length
+  // bounds) -- generating them as three independent fields with no minimum
+  // length and no requirement that they agree with each other produced
+  // exactly what a real client hit: technically-valid-length copy that Yoast
+  // still flagged red because the title/description didn't actually contain
+  // the keyword they were supposedly built around.
+  const wantsTitle = !skipFields.has("meta_title");
+  const wantsDesc = !skipFields.has("meta_desc");
+  const wantsKeyword = !skipFields.has("focus_keyword");
+  const existingKeyword = page.focus_keyword?.trim();
+
   const wantedFields = [
-    !skipFields.has("meta_title") && `  "meta_title": "string under 60 chars — only if missing or needs improvement",`,
-    !skipFields.has("meta_desc") && `  "meta_desc": "string under 155 chars — only if missing or needs improvement",`,
-    !skipFields.has("focus_keyword") && `  "focus_keyword": "1-3 word phrase — only if missing",`,
+    wantsTitle && `  "meta_title": "50-60 chars, keyword at or near the start",`,
+    wantsDesc && `  "meta_desc": "120-155 chars, reads as a natural sentence and includes the keyword once, ends with a reason to click",`,
+    wantsKeyword && !existingKeyword && `  "focus_keyword": "the 1-3 word phrase this page should rank for -- pick ONE real phrase a customer would search, not a generic industry term",`,
     !skipFields.has("alt_text") && `  "alt_text": { "<image_id>": "descriptive alt text" }`,
   ].filter(Boolean);
   if (wantedFields.length === 0) return null;
 
-  const systemPrompt = `You are an SEO expert. Generate optimized fixes for WordPress pages.
+  const systemPrompt = `You are an SEO copywriter optimizing WordPress pages to score well in on-page SEO tools (Yoast, RankMath). Those tools grade meta_title, meta_desc, and the focus keyword as ONE set, not independently: they check the keyword appears in the title (ideally near the start), appears again in the description, and that both fall within length bounds. A title/description that ignores the keyword will score red even if the length is correct -- write for that grading, not just for humans.
 Return ONLY a valid JSON object — no markdown, no explanation.
 
 ${brandBlock}`;
 
-  const userPrompt = `Generate SEO fixes for this page.
+  const userPrompt = `Write SEO fixes for this page. ${existingKeyword ? `The focus keyword is already set to "${existingKeyword}" -- build the title and description around exactly this phrase, do not pick a different one.` : "No focus keyword is set yet -- choose one real phrase and use it consistently across every field you return."}
 
 Page title: ${page.title || "(none)"}
 Page URL: ${page.url}
@@ -189,11 +200,13 @@ Return a JSON object with ONLY the fields that need fixing:
 {
 ${wantedFields.join("\n")}
 }
-Omit any field that does not need a fix.`;
+Omit any field that does not need a fix. The keyword used in meta_title and meta_desc must be identical to focus_keyword (the existing one if already set, or the one you chose).`;
 
   try {
     const result = await callAIJson<AiFixResult>({
       source: "scan-wordpress-site",
+      model: MODELS.quality,
+      fallbackModels: [MODELS.default],
       system: systemPrompt,
       prompt: userPrompt,
       maxTokens: 512,
@@ -322,11 +335,13 @@ serve(async (req) => {
       .eq("site_id", siteId)
       .in("status", ["pending", "failed"]);
 
-    // 6. Generate AI fixes for pages with issues
-    const groqKey = Deno.env.get("GROQ_API_KEY");
+    // 6. Generate AI fixes for pages with issues. MODELS.quality (Claude)
+    // needs ANTHROPIC_API_KEY; it falls back to the Groq default automatically
+    // if that's not set, so either key unlocks this.
+    const hasLlmKey = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("GROQ_API_KEY");
     let fixesGenerated = 0;
 
-    if (groqKey && clientId && scanRecord) {
+    if (hasLlmKey && clientId && scanRecord) {
       const brandKit = await getClientBrandKit(supabase, clientId, false);
       const brandBlock = brandKitToPromptBlock(brandKit);
       const industry = brandKit.business.industry ?? "General";
@@ -345,7 +360,7 @@ serve(async (req) => {
 
       for (const page of pagesWithIssues) {
         const pageCovered = canonicallyCovered.get(normalizeUrl(page.url)) ?? new Set<string>();
-        const fixes = await generateFixes(page, brandBlock, industry, groqKey, pageCovered);
+        const fixes = await generateFixes(page, brandBlock, industry, pageCovered);
         if (!fixes) continue;
 
         const rows: Record<string, unknown>[] = [];
