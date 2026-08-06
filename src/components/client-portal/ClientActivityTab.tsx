@@ -193,11 +193,18 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   const { data: workflowData, isLoading: wfLoading } = useQuery({
     queryKey: ["client-workflow", clientAccountId],
     queryFn: async () => {
+      // Must also match "completed" -- not just "active" -- or a client
+      // whose onboarding just finished (workflowUnlock.ts flips status to
+      // "completed" the moment the last step is done) loses their workflow
+      // here and falls through to the "never started" empty state below,
+      // even though everything is actually done.
       const { data: wf } = await supabase
         .from("client_workflows")
         .select("id, created_at")
         .eq("client_id", clientAccountId)
-        .eq("status", "active")
+        .in("status", ["active", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (!wf) return { workflow: null, steps: [] };
