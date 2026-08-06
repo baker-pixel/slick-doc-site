@@ -297,8 +297,8 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
         attemptedPlatformRef.current = null;
         connectPopupRef.current = null;
         const connected = accounts.some((a) => a.platform === attempted && a.status === "connected");
+        const platform = PLATFORMS.find((p) => p.id === attempted);
         if (!connected) {
-          const platform = PLATFORMS.find((p) => p.id === attempted);
           toast({
             title: `${platform?.name ?? attempted} didn't connect`,
             description: platform?.note
@@ -306,6 +306,21 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
               : "The connection didn't finish. Please try again.",
             variant: "destructive",
           });
+        } else {
+          // This is the ONLY place a successful PfM connection is ever
+          // detected -- PfM's own post-connect redirect (configured in
+          // their dashboard, not in this codebase) doesn't land back on a
+          // route that reads its isSuccess/accountIds params, so nothing
+          // upstream of this focus-based DB check ever fires. Completing
+          // the workflow step here, not there, is what actually advances
+          // onboarding past "connect a social account".
+          toast({
+            title: `${platform?.name ?? attempted} connected`,
+            description: "Your account is now connected and ready for automated posting.",
+          });
+          completeWorkflowStep(clientAccountId, "client_oauth").catch((e) =>
+            console.error("Failed to complete OAuth workflow step:", e),
+          );
         }
       }
     };
