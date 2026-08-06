@@ -64,56 +64,61 @@ serve(async (req) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Client Portal Invitation</title>
 </head>
-<body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
-  <div style="background: linear-gradient(135deg, #F97316 0%, #EA580C 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-    <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Orange Door Marketing</h1>
-    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">Client Portal</p>
-  </div>
-  
-  <div style="background: white; padding: 40px 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <h2 style="color: #1a1a1a; margin-top: 0;">${greeting},</h2>
-    
-    <p style="font-size: 16px; color: #4a4a4a;">
-      You've been invited to access <strong>${businessName}</strong>'s client portal at Orange Door Marketing.
-    </p>
-    
-    <p style="font-size: 16px; color: #4a4a4a;">
-      Through your portal, you'll be able to:
-    </p>
-    
-    <ul style="color: #4a4a4a; font-size: 15px; padding-left: 20px;">
-      <li style="margin-bottom: 8px;">📊 View project progress and milestones</li>
-      <li style="margin-bottom: 8px;">✅ Review and approve content</li>
-      <li style="margin-bottom: 8px;">📈 Access performance analytics</li>
-      <li style="margin-bottom: 8px;">💳 View invoices and payment history</li>
-    </ul>
-    
-    <div style="text-align: center; margin: 35px 0;">
-      <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
-        <tr>
-          <td align="center" bgcolor="#F97316" style="border-radius: 8px;">
-            <a href="${inviteLink}"
-               style="display: inline-block; padding: 16px 40px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius: 8px; background-color: #F97316; mso-padding-alt: 16px 40px;">
-              Accept Invitation
-            </a>
-          </td>
-        </tr>
-      </table>
-    </div>
-    
-    <p style="font-size: 14px; color: #666; margin-top: 30px;">
-      This invitation expires in 7 days. If you didn't expect this invitation, you can safely ignore this email.
-    </p>
-    
-    <p style="font-size: 13px; color: #999; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
-      Can't click the button? Copy and paste this link into your browser:<br>
-      <a href="${inviteLink}" style="color: #F97316; word-break: break-all;">${inviteLink}</a>
-    </p>
-  </div>
-  
-  <div style="text-align: center; padding: 20px; color: #888; font-size: 12px;">
-    <p style="margin: 0;">© ${new Date().getFullYear()} Orange Door Marketing. All rights reserved.</p>
-  </div>
+<body style="font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.6; color: #1a1a1a; margin: 0; padding: 40px 20px; background-color: #f4f4f5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto;">
+    <tr>
+      <td style="padding-bottom: 28px;">
+        <span style="font-size: 15px; font-weight: 700; letter-spacing: 0.02em; color: #1a1a1a;">ORANGE DOOR</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="background: #ffffff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 40px;">
+        <p style="font-size: 15px; color: #1a1a1a; margin: 0 0 20px 0;">${greeting},</p>
+
+        <p style="font-size: 15px; color: #3f3f46; margin: 0 0 20px 0;">
+          You've been added as a collaborator on <strong>${businessName}</strong>'s account. Your portal gives you a
+          direct line into the work in progress:
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 28px 0;">
+          <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #3f3f46;">Project progress and milestones</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #3f3f46;">Content review and approvals</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #3f3f46;">Performance analytics and reporting</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; font-size: 14px; color: #3f3f46;">Invoices and payment history</td>
+          </tr>
+        </table>
+
+        <table role="presentation" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" bgcolor="#F97316" style="border-radius: 6px;">
+              <a href="${inviteLink}"
+                 style="display: inline-block; padding: 13px 28px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 15px; font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; border-radius: 6px; background-color: #F97316; mso-padding-alt: 13px 28px;">
+                Set up your account
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <p style="font-size: 13px; color: #71717a; margin: 28px 0 0 0;">
+          This link expires in 7 days. If you weren't expecting this, you can ignore this email.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 24px 4px 0 4px; font-size: 12px; color: #a1a1aa;">
+        <p style="margin: 0 0 4px 0;">Trouble with the button? Paste this link into your browser:</p>
+        <p style="margin: 0; word-break: break-all;"><a href="${inviteLink}" style="color: #a1a1aa;">${inviteLink}</a></p>
+        <p style="margin: 16px 0 0 0;">© ${new Date().getFullYear()} Orange Door Marketing</p>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
     `;
