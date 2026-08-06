@@ -148,12 +148,18 @@ ${wantedFields.join("\n")}
 Omit any field that does not need a fix.`;
 
   try {
-    return await callAIJson<AiFixResult>({
+    const result = await callAIJson<AiFixResult>({
       source: "scan-wordpress-site",
       system: systemPrompt,
       prompt: userPrompt,
       maxTokens: 512,
     });
+    // Trimming the requested schema above is a prompt, not a contract --
+    // strip skipped fields here too rather than trusting the model to have
+    // actually left them out (confirmed live: it didn't, for meta_title
+    // specifically, while meta_desc was fine on the same request shape).
+    for (const field of skipFields) delete (result as Record<string, unknown>)[field];
+    return result;
   } catch (e) {
     console.error("generateFixes error:", e);
     return null;
