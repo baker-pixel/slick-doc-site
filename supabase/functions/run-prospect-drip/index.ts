@@ -6,6 +6,7 @@ import { recordOutcome } from "../_shared/outcomes.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
+import { logAlert } from "../_shared/alerts.ts";
 
 const RESEND_API_URL = "https://api.resend.com";
 
@@ -36,7 +37,7 @@ interface ClientAccount {
   business_name: string;
   email: string;
   website_url?: string | null;
-  business_type?: string | null;
+  industry?: string | null;
   context_profile?: Record<string, unknown> | null;
   brand_voice?: Record<string, unknown> | null;
 }
@@ -174,7 +175,7 @@ async function buildPersonalizedOutreachEmail(
   // ── Client signals ────────────────────────────────────────────
   const clientServices = clientCtx && Array.isArray(clientCtx.services) && (clientCtx.services as string[]).length > 0
     ? (clientCtx.services as string[]).join(", ")
-    : client.business_type || null;
+    : client.industry || null;
 
   const clientDifferentiators = clientCtx && Array.isArray(clientCtx.differentiators) && (clientCtx.differentiators as string[]).length > 0
     ? (clientCtx.differentiators as string[]).join("; ")
@@ -323,11 +324,29 @@ serve(async (req) => {
     const clientMap = new Map<string, ClientAccount>();
     const prospectingDisabled = new Set<string>();
     if (clientIds.length > 0) {
-      const { data: clientRows } = await supabase
+      const { data: clientRows, error: clientRowsErr } = await supabase
         .from("client_accounts")
-        .select("id, business_name, email, website_url, business_type, context_profile, brand_voice, tier")
+        .select("id, business_name, email, website_url, industry, context_profile, brand_voice, tier")
         .in("id", clientIds)
         .eq("status", "active");
+      if (clientRowsErr) {
+        // This exact silent failure (destructuring only `data`, never
+        // `error`) is why the whole drip system sent zero emails for an
+        // unknown length of time: the select referenced a column that
+        // doesn't exist on client_accounts (business_type -- prospects has
+        // that column, client_accounts never did), PostgREST rejected the
+        // query, and clientRows silently fell through to an empty array via
+        // `?? []`, so every prospect's client lookup missed and got skipped
+        // with no error, no alert, nothing.
+        await logAlert(supabase, {
+          source: "run-prospect-drip",
+          alertType: "function_error",
+          severity: "error",
+          title: "Failed to fetch client_accounts for drip",
+          message: clientRowsErr.message,
+          metadata: { clientIds },
+        });
+      }
       for (const c of (clientRows ?? [])) {
         // Tier gate: plans without prospecting never send outreach, even if
         // prospects were somehow discovered/approved for them.
@@ -491,13 +510,18 @@ serve(async (req) => {
           // status instead of leaving it "nurture" forever (which both
           // reprocessed it every run and misreported it as active).
           const isFinalStep = nextStep >= Math.max(...Object.keys(DRIP_SCHEDULE).map(Number));
-          const { count: updated } = await supabase
+          // count+head on an update().select() chain doesn't reliably come
+          // back on this SDK version -- confirmed live: the update itself
+          // worked every time (drip_step actually advanced), but this always
+          // read as falsy, so emailsSent silently stayed 0 while real emails
+          // were going out. Check the returned row itself instead of count.
+          const { data: updatedRows } = await supabase
             .from("prospects")
             .update({ drip_step: nextStep, ...(isFinalStep ? { status: "exhausted" } : {}) })
             .eq("id", prospect.id)
             .eq("drip_step", prospect.drip_step)
-            .select("id", { count: "exact", head: true });
-          if (updated && updated > 0) {
+            .select("id");
+          if (updatedRows && updatedRows.length > 0) {
             emailsSent++;
             touchedClients.add(prospect.client_id!);
           }
@@ -533,10 +557,34 @@ serve(async (req) => {
 
           console.log(`Drip step ${nextStep} sent to ${prospect.email} from ${fromAddress}`);
         } else {
-          console.error(`Failed drip ${nextStep} to ${prospect.email}:`, await emailRes.text());
+          const errBody = await emailRes.text();
+          console.error(`Failed drip ${nextStep} to ${prospect.email}:`, errBody);
+          // This was a silent console.error with no persisted record --
+          // confirmed live: 8 real prospects sat overdue by 12+ days with
+          // zero emails sent and zero visibility into why, because nothing
+          // here ever wrote to automation_alerts.
+          await logAlert(supabase, {
+            source: "run-prospect-drip",
+            alertType: "drip_send_failed",
+            severity: "error",
+            title: `Drip step ${nextStep} failed for ${prospect.email}`,
+            message: `Resend returned ${emailRes.status}: ${errBody.slice(0, 500)}`,
+            sourceId: prospect.client_id ?? undefined,
+            metadata: { prospect_id: prospect.id, client_id: prospect.client_id, drip_step: nextStep, resend_status: emailRes.status },
+          });
         }
       } catch (sendErr) {
+        const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
         console.error(`Error sending drip to ${prospect.email}:`, sendErr);
+        await logAlert(supabase, {
+          source: "run-prospect-drip",
+          alertType: "drip_send_failed",
+          severity: "error",
+          title: `Drip step ${nextStep} failed for ${prospect.email}`,
+          message: msg,
+          sourceId: prospect.client_id ?? undefined,
+          metadata: { prospect_id: prospect.id, client_id: prospect.client_id, drip_step: nextStep },
+        });
       }
     }
 
