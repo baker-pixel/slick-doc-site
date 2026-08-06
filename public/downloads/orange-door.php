@@ -427,6 +427,24 @@ function od_verify( WP_REST_Request $request ) {
         $canonical  = get_post_meta( $post_id, '_yoast_wpseo_canonical', true ) ?: '';
     }
 
+    // 'saved' used to be hardcoded true regardless of what was actually in
+    // the DB -- callers were trusting it as confirmation a write landed,
+    // when it confirmed nothing. Now it only reports true when the caller
+    // tells us which field + value to expect and that field actually
+    // matches; with no expected value given, we can't claim to have
+    // verified anything, so it's false rather than a meaningless default.
+    $expected_field = $request->get_param( 'field' );
+    $expected_value = $request->get_param( 'expected' );
+    $current_by_field = [
+        'meta_title'    => $meta_title,
+        'meta_desc'     => $meta_desc,
+        'focus_keyword' => $focus_kw,
+        'canonical'     => $canonical,
+    ];
+    $saved = $expected_field && isset( $current_by_field[ $expected_field ] )
+        ? trim( $current_by_field[ $expected_field ] ) === trim( (string) $expected_value )
+        : false;
+
     return rest_ensure_response([
         'post_id'       => $post_id,
         'title'         => $post->post_title,
@@ -435,7 +453,7 @@ function od_verify( WP_REST_Request $request ) {
         'meta_desc'     => $meta_desc,
         'focus_keyword' => $focus_kw,
         'canonical'     => $canonical,
-        'saved'         => true,
+        'saved'         => $saved,
     ]);
 }
 

@@ -99,7 +99,7 @@ serve(async (req) => {
       // when we resolved a postId and have the plugin token (Basic Auth has
       // no equivalent read-back endpoint).
       if (creds.wordpress_plugin_api_key && result.postId) {
-        const verified = await verifyWpFix(wpBase, creds.wordpress_plugin_api_key, result.postId);
+        const verified = await verifyWpFix(wpBase, creds.wordpress_plugin_api_key, result.postId, fixType, String(payload.value ?? ""));
         if (!verified) {
           return jsonRes({ error: "Fix was sent but WordPress didn't confirm it saved. Try again or check the page directly." }, 502);
         }
@@ -158,7 +158,7 @@ serve(async (req) => {
     );
 
     if (creds.wordpress_plugin_api_key && result.postId) {
-      const verified = await verifyWpFix(wpBase, creds.wordpress_plugin_api_key, result.postId);
+      const verified = await verifyWpFix(wpBase, creds.wordpress_plugin_api_key, result.postId, fixType, String(payload.value ?? ""));
       if (!verified) {
         await supabase.from("ai_fixes").update({ status: "failed", error_message: "Applied but WordPress didn't confirm it saved" }).eq("id", fixId);
         return new Response(

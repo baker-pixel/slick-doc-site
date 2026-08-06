@@ -186,8 +186,26 @@ export async function applyViaBasicAuth(
   return { before: beforeSnap, after: afterSnap, postId: post.id };
 }
 
-/** Confirms a plugin-applied fix actually landed, via the plugin's own read-back endpoint. */
-export async function verifyWpFix(wpBase: string, token: string, postId: number): Promise<boolean> {
+/**
+ * Confirms a plugin-applied fix actually landed, by reading the field back
+ * and comparing it to what we tried to write.
+ *
+ * Deliberately does NOT trust the plugin's own `saved` flag: confirmed live
+ * against a real install that it returns `saved: true` unconditionally,
+ * regardless of what's actually in the database (a real bug in the plugin
+ * source, fixed there too -- but every already-installed copy needs a
+ * manual update to pick that up, which doesn't help today). The endpoint's
+ * returned field values themselves ARE the real current DB state, so
+ * comparing those ourselves is reliable independent of that bug.
+ */
+export async function verifyWpFix(
+  wpBase: string,
+  token: string,
+  postId: number,
+  fixType: string,
+  expectedValue: string,
+): Promise<boolean> {
+  const field = TYPE_TO_FIELD[fixType] ?? fixType.replace("wp_", "");
   try {
     const res = await fetch(`${wpBase}/wp-json/orangedoor/v1/verify/${postId}`, {
       headers: { "X-OD-Token": token },
@@ -195,7 +213,9 @@ export async function verifyWpFix(wpBase: string, token: string, postId: number)
     });
     if (!res.ok) return false;
     const data = await res.json();
-    return data?.saved === true;
+    const actual = data?.[field];
+    if (typeof actual !== "string") return false; // e.g. alt_text -- /verify has no equivalent, can't confirm
+    return actual.trim() === expectedValue.trim();
   } catch {
     return false;
   }

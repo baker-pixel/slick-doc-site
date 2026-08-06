@@ -138,7 +138,7 @@ serve(async (req) => {
     // Verify (best-effort, only for post-based fixes)
     let verified = true;
     if (typedFix.post_id) {
-      verified = await verifyWpFix(site_url, token, typedFix.post_id);
+      verified = await verifyWpFix(site_url, token, typedFix.post_id, FIELD_TO_FIXTYPE[typedFix.field] ?? typedFix.field, typedFix.suggested_value);
     }
 
     const finalStatus = verified ? "applied" : "failed";
