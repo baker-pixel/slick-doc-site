@@ -207,10 +207,44 @@ Deno.serve(async (req) => {
         }
         
         const { data: rows, error } = await query.order(orderColumn, { ascending: false });
-        
+
         if (error) throw error;
         return new Response(
           JSON.stringify({ data: rows }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "get_prospect_emails": {
+        // Admin-side equivalent of the client_get_prospect_emails RPC
+        // (that one only allows a portal user who owns the client_account_id
+        // via client_portal_users -- an admin session has no such row, so it
+        // needs this instead, gated the same way as every other admin action
+        // in this proxy rather than a separate auth model). Returns both the
+        // sent thread and whatever's still queued ahead, since a campaign
+        // enrolls every step upfront now.
+        const { prospect_id } = data || {};
+        if (!prospect_id) {
+          return new Response(JSON.stringify({ error: "data.prospect_id is required" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const [{ data: sent, error: sentErr }, { data: scheduled, error: schedErr }] = await Promise.all([
+          supabase
+            .from("email_logs")
+            .select("subject, status, sent_at, metadata")
+            .filter("metadata->>prospect_id", "eq", prospect_id)
+            .order("sent_at", { ascending: true }),
+          supabase
+            .from("email_queue")
+            .select("subject, scheduled_for, status, metadata")
+            .filter("metadata->>prospect_id", "eq", prospect_id)
+            .eq("status", "pending")
+            .order("scheduled_for", { ascending: true }),
+        ]);
+        if (sentErr || schedErr) throw sentErr || schedErr;
+        return new Response(
+          JSON.stringify({ data: { sent: sent ?? [], scheduled: scheduled ?? [] } }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

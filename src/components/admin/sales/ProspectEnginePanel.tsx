@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -141,6 +142,14 @@ export default function ProspectEnginePanel() {
   const [pageQueue, setPageQueue] = useState(1);
   const [pageAll, setPageAll] = useState(1);
 
+  // Email thread viewer dialog
+  const [threadProspect, setThreadProspect] = useState<Prospect | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadData, setThreadData] = useState<{
+    sent: { subject: string; status: string; sent_at: string }[];
+    scheduled: { subject: string; scheduled_for: string }[];
+  } | null>(null);
+
   // All reads/writes go through the `admin` edge function (service role +
   // checkAdminAuth) rather than direct table queries: prospects RLS is
   // admin-JWT-only now, and a legacy password login carries no JWT -- direct
@@ -236,6 +245,23 @@ export default function ProspectEnginePanel() {
       setEmailDrafts({});
       loadProspects();
     }
+  };
+
+  const openThread = async (p: Prospect) => {
+    setThreadProspect(p);
+    setThreadData(null);
+    setThreadLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "get_prospect_emails", data: { prospect_id: p.id }, password: adminPassword },
+    });
+    if (error || data?.error) {
+      const msg = await getEdgeErrorMessage(error, data);
+      toast({ title: "Failed to load email thread", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+      setThreadLoading(false);
+      return;
+    }
+    setThreadData(data?.data ?? { sent: [], scheduled: [] });
+    setThreadLoading(false);
   };
 
   const suggestFromIcp = async () => {
@@ -512,6 +538,14 @@ export default function ProspectEnginePanel() {
                   </Tooltip>
                 </TooltipProvider>
               ) : null}
+              <Button
+                size="sm" variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={() => openThread(p)}
+                title="View email thread"
+              >
+                <Mail className="w-3.5 h-3.5" />
+              </Button>
               <Badge variant="outline" className={`text-xs ${STATUS_COLORS[p.status] ?? ""}`}>
                 {p.status}
               </Badge>
@@ -973,6 +1007,58 @@ export default function ProspectEnginePanel() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!threadProspect} onOpenChange={(open) => { if (!open) setThreadProspect(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Email thread — {threadProspect?.name}</DialogTitle>
+          </DialogHeader>
+          {threadLoading ? (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          ) : (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Sent</p>
+                {threadData?.sent.length ? (
+                  <div className="space-y-2">
+                    {threadData.sent.map((e, i) => (
+                      <div key={i} className="text-sm border rounded p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">{e.subject}</span>
+                          <Badge variant="outline" className="text-xs">{e.status}</Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(e.sent_at), "MMM d, yyyy h:mm a")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No emails sent yet.</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Next scheduled</p>
+                {threadData?.scheduled.length ? (
+                  <div className="space-y-2">
+                    {threadData.scheduled.map((e, i) => (
+                      <div key={i} className="text-sm border rounded p-2 border-dashed">
+                        <span className="font-medium">{e.subject}</span>
+                        <br />
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(e.scheduled_for), "MMM d, yyyy h:mm a")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nothing scheduled.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

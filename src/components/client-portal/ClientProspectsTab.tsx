@@ -61,6 +61,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [selected, setSelected] = useState<Prospect | null>(null);
   const [emails, setEmails] = useState<ProspectEmail[] | null>(null);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  const [nextEmail, setNextEmail] = useState<{ subject: string; scheduled_for: string } | null>(null);
   const [icpLocal, setIcpLocal] = useState(true);
   const [findingLeads, setFindingLeads] = useState(false);
 
@@ -108,12 +109,20 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const openDetail = async (p: Prospect) => {
     setSelected(p);
     setEmails(null);
+    setNextEmail(null);
     setEmailsLoading(true);
-    const { data, error } = await (supabase.rpc as any)("client_get_prospect_emails", {
-      p_client_account_id: clientAccountId,
-      p_prospect_id: p.id,
-    });
+    const [{ data, error }, { data: nextData }] = await Promise.all([
+      (supabase.rpc as any)("client_get_prospect_emails", {
+        p_client_account_id: clientAccountId,
+        p_prospect_id: p.id,
+      }),
+      (supabase.rpc as any)("client_get_prospect_next_email", {
+        p_client_account_id: clientAccountId,
+        p_prospect_id: p.id,
+      }),
+    ]);
     setEmails(error ? [] : (data as ProspectEmail[]));
+    setNextEmail((nextData?.[0] as { subject: string; scheduled_for: string }) ?? null);
     setEmailsLoading(false);
   };
 
@@ -318,6 +327,18 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                     </ul>
                   )}
                 </div>
+
+                {!emailsLoading && nextEmail && (
+                  <div className="space-y-1 border-t pt-3">
+                    <div className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Next scheduled</div>
+                    <div className="rounded-lg border border-dashed bg-background px-3 py-2 text-xs">
+                      <div className="font-medium">{nextEmail.subject}</div>
+                      <div className="text-muted-foreground">
+                        {format(new Date(nextEmail.scheduled_for), "MMM d, yyyy 'at' h:mm a")}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
