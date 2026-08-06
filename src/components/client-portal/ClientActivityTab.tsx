@@ -181,6 +181,11 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     website_url: "",
     first_name: "",
     last_name: "",
+    industry: "",
+    target_audience: "",
+    main_competitors: "",
+    phone: "",
+    address: "",
     marketing_goal: "",
   });
 
@@ -457,6 +462,10 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       toast({ title: "Business name is required", variant: "destructive" });
       return;
     }
+    if (!bizForm.industry.trim() || !bizForm.target_audience.trim()) {
+      toast({ title: "Industry and target audience are required", description: "Every engine (SEO, social, ads) uses this to tailor your content.", variant: "destructive" });
+      return;
+    }
     setSubmittingBizForm(true);
     try {
       // Fetch existing context_profile so we can merge, not overwrite
@@ -473,9 +482,14 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           website_url: bizForm.website_url || null,
           first_name: bizForm.first_name || null,
           last_name: bizForm.last_name || null,
+          industry: bizForm.industry.trim(),
           context_profile: {
             ...((existing?.context_profile as Record<string, unknown>) || {}),
-            ...(bizForm.marketing_goal.trim() ? { marketing_goal: bizForm.marketing_goal } : {}),
+            target_audience: bizForm.target_audience.trim(),
+            ...(bizForm.main_competitors.trim() ? { competitors: bizForm.main_competitors.trim() } : {}),
+            ...(bizForm.phone.trim() ? { phone: bizForm.phone.trim() } : {}),
+            ...(bizForm.address.trim() ? { address: bizForm.address.trim() } : {}),
+            ...(bizForm.marketing_goal.trim() ? { marketing_goal: bizForm.marketing_goal.trim() } : {}),
           },
         })
         .eq("id", clientAccountId);
@@ -495,18 +509,25 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   const handleStepAction = useCallback(async (step: WorkflowStep) => {
     switch (step.task_type) {
       case "client_form": {
-        // Fetch existing account data to pre-fill the form
+        // Fetch existing account data to pre-fill the form (a lead-converted
+        // client may already have some of this from seedContextFromLead)
         const { data: acct } = await supabase
           .from("client_accounts")
-          .select("business_name, website_url, first_name, last_name")
+          .select("business_name, website_url, first_name, last_name, industry, context_profile")
           .eq("id", clientAccountId)
           .single();
+        const ctx = (acct?.context_profile as Record<string, unknown>) || {};
         setBizForm({
           business_name: acct?.business_name || "",
           website_url: acct?.website_url || "",
           first_name: acct?.first_name || "",
           last_name: acct?.last_name || "",
-          marketing_goal: "",
+          industry: acct?.industry || "",
+          target_audience: typeof ctx.target_audience === "string" ? ctx.target_audience : "",
+          main_competitors: typeof ctx.competitors === "string" ? ctx.competitors : "",
+          phone: typeof ctx.phone === "string" ? ctx.phone : "",
+          address: typeof ctx.address === "string" ? ctx.address : "",
+          marketing_goal: typeof ctx.marketing_goal === "string" ? ctx.marketing_goal : "",
         });
         setPendingFormStepId(step.id);
         setShowBusinessForm(true);
@@ -547,11 +568,11 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   // Business confirmation dialog — shared across all render paths
   const bizFormDialog = (
     <Dialog open={showBusinessForm} onOpenChange={(open) => { if (!open) setShowBusinessForm(false); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Confirm Your Business Details</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Review and confirm your information so we can tailor your marketing plan.
+            This is what every engine (SEO, social, ads) uses to tailor your content — the more specific, the better.
           </p>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -593,6 +614,54 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
               />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="biz-phone">Phone</Label>
+              <Input
+                id="biz-phone"
+                value={bizForm.phone}
+                onChange={(e) => setBizForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="(555) 555-5555"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="biz-address">Address</Label>
+              <Input
+                id="biz-address"
+                value={bizForm.address}
+                onChange={(e) => setBizForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="City, State"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="biz-industry">Industry *</Label>
+            <Input
+              id="biz-industry"
+              value={bizForm.industry}
+              onChange={(e) => setBizForm((f) => ({ ...f, industry: e.target.value }))}
+              placeholder="e.g. Residential HVAC, Family Law, Med Spa"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="biz-audience">Target Audience *</Label>
+            <Textarea
+              id="biz-audience"
+              value={bizForm.target_audience}
+              onChange={(e) => setBizForm((f) => ({ ...f, target_audience: e.target.value }))}
+              placeholder="Who are your ideal customers? e.g. Homeowners aged 35-65 within 20 miles"
+              rows={2}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="biz-competitors">Main Competitors</Label>
+            <Input
+              id="biz-competitors"
+              value={bizForm.main_competitors}
+              onChange={(e) => setBizForm((f) => ({ ...f, main_competitors: e.target.value }))}
+              placeholder="Names of 2-3 competing businesses"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="biz-goal">Top Marketing Goal</Label>
             <Textarea
@@ -600,7 +669,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
               value={bizForm.marketing_goal}
               onChange={(e) => setBizForm((f) => ({ ...f, marketing_goal: e.target.value }))}
               placeholder="e.g. Get more local leads, grow online reviews, increase website traffic"
-              rows={3}
+              rows={2}
             />
           </div>
         </div>
