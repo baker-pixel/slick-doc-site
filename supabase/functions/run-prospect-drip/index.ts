@@ -51,29 +51,24 @@ function getFirstName(name: string): string {
   return name?.split(" ")[0] || "there";
 }
 
+// Cold outreach reads as spam the moment it looks like a template -- no
+// branded header, no card, no colored button. Plain text on a white
+// background, like a person actually typed it.
 const wrapHtml = (body: string, unsubEmail: string = "") => `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
-<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;">
-  <div style="background:#1a1a1a;padding:24px 40px;">
-    <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2px;">ORANGE DOOR</div>
-    <div style="color:#666;font-size:9px;letter-spacing:1.5px;margin-top:2px;">MANAGED OUTREACH</div>
-  </div>
-  <div style="padding:30px 40px;font-size:15px;color:#444;line-height:1.7;">
-    ${body}
-  </div>
-  <div style="background:#f5f5f5;padding:16px 40px;text-align:center;font-size:12px;color:#999;">
-    <p style="margin:0 0 6px;">You're receiving this one-time outreach because your business looked like a fit. Reply to opt out, or</p>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;">
+<div style="max-width:600px;margin:20px auto;font-size:15px;color:#222;line-height:1.6;">
+  ${body}
+  <p style="font-size:12px;color:#999;margin-top:32px;">
     <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}" style="color:#999;">Unsubscribe</a>
-    <p style="margin:6px 0 0;">Orange Door Marketing &bull; Knoxville, TN</p>
-  </div>
+  </p>
 </div>
 </body></html>`;
 
 function buildClientCtaButton(client: ClientAccount): string {
   const url = client.website_url || "https://orangedoormarketing.com/schedule";
-  return `<div style="text-align:center;margin:25px 0;"><a href="${url}" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Get in Touch with ${client.business_name}</a></div>`;
+  return `<p><a href="${url}">${url}</a></p>`;
 }
 
 // Generic fallback — only fires if the AI call fails. No placeholders.
@@ -227,12 +222,12 @@ ${prospectBlock}
 EMAIL GOAL FOR STEP ${step}:
 ${theme}
 
-CTA button URL: ${ctaUrl}
+Link to reference (only if it fits naturally, e.g. "you can see more at ${ctaUrl}"): ${ctaUrl}
 
 RULES:
-- Write ONLY the email body HTML — no <html>/<head>/<body> tags, just paragraphs, lists, and one CTA button
-- Use this exact CTA button style: <a href="${ctaUrl}" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">BUTTON TEXT</a>
-- Sound like a thoughtful human, not a template — reference at least one specific thing about the prospect
+- Write ONLY the email body HTML — no <html>/<head>/<body> tags, no colors, no buttons, no divs — just plain <p> paragraphs like a real person typed in their email client
+- If a link belongs, write it as a plain inline <a href="${ctaUrl}">link</a> in a sentence, never a styled button
+- Sound like a thoughtful human, not a template or a marketing email — reference at least one specific thing about the prospect
 - Never use placeholder brackets like [X] or [Y] — if you don't know a detail, write around it naturally
 - End with: <p>— ${client.business_name}</p>
 
