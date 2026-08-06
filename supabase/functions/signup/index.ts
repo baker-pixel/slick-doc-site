@@ -9,6 +9,7 @@ import { checkRateLimit, getClientIp } from "../_shared/rateLimit.ts";
 // admin approves the pending row; this endpoint only captures the request.
 const VALID_TIERS = ["foundation", "growth", "transformation"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const URL_RE = /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/;
 
 serve(async (req) => {
   const preflight = handleOptions(req);
@@ -48,6 +49,9 @@ serve(async (req) => {
     if (!VALID_TIERS.includes(tier)) {
       return errorResponse("A valid tier is required", 400);
     }
+    if (typeof website_url !== "string" || !URL_RE.test(website_url.trim())) {
+      return errorResponse("A valid website URL (starting with http:// or https://) is required", 400);
+    }
 
     const { data: existing } = await supabase
       .from("client_accounts")
@@ -67,12 +71,19 @@ serve(async (req) => {
       business_name: business_name.trim(),
       first_name,
       last_name,
-      website_url,
+      website_url: website_url.trim(),
       tier,
       status: "pending",
     });
 
-    if (insertErr) throw insertErr;
+    if (insertErr) {
+      // idx_client_accounts_business_name_unique -- a different business can't
+      // reuse a name already on file, case-insensitively.
+      if (insertErr.code === "23505") {
+        return errorResponse("A business with this name is already registered. Contact us if this is a mistake.", 409);
+      }
+      throw insertErr;
+    }
 
     return jsonResponse({ success: true, status: "created" });
   } catch (err) {

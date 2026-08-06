@@ -27,7 +27,10 @@ const signupSchema = z.object({
   lastName: z.string().trim().max(50).optional(),
   businessName: z.string().trim().min(1, "Business name is required").max(100),
   email: z.string().trim().email("Invalid email address").max(255),
-  websiteUrl: z.string().trim().max(255).optional(),
+  websiteUrl: z.string().trim().max(255).regex(
+    /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/,
+    "Enter a valid website URL starting with http:// or https://"
+  ),
   tier: z.enum(["foundation", "growth", "transformation"]),
 });
 
@@ -190,13 +193,15 @@ export default function Signup() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="websiteUrl">Website (optional)</Label>
+                      <Label htmlFor="websiteUrl">Website *</Label>
                       <Input
                         id="websiteUrl"
                         value={formData.websiteUrl}
                         onChange={(e) => handleChange("websiteUrl", e.target.value)}
                         placeholder="https://example.com"
+                        className={errors.websiteUrl ? "border-destructive" : ""}
                       />
+                      {errors.websiteUrl && <p className="text-xs text-destructive">{errors.websiteUrl}</p>}
                     </div>
 
                     <div className="space-y-2">

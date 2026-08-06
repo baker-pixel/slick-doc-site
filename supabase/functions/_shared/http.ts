@@ -22,8 +22,14 @@ export function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** Standard error response; accepts Error or string. */
+/** Standard error response; accepts Error, string, or a Postgres/Supabase error object ({ message, code, ... }). */
 export function errorResponse(err: unknown, status = 500): Response {
-  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Unknown error";
+  const message = err instanceof Error
+    ? err.message
+    : typeof err === "string"
+    ? err
+    : typeof (err as { message?: unknown })?.message === "string"
+    ? (err as { message: string }).message
+    : "Unknown error";
   return jsonResponse({ error: message }, status);
 }
