@@ -423,7 +423,13 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
   }
 
   if (projects.length === 0) {
-    return <EmptyState icon={Bot} title="No Agents Yet" description="Your agents will appear here once they're set up by your team." />;
+    return (
+      <EmptyState
+        icon={Bot}
+        title="No Agents Yet"
+        description="Your agents unlock automatically once your onboarding checklist is complete — see the Home tab for what's left."
+      />
+    );
   }
 
   const completedCount = projects.filter(p => p.status === 'completed').length;

@@ -76,7 +76,7 @@ export function ClientTeamTab({ clientAccountId }: ClientTeamTabProps) {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No team members assigned yet — they'll appear here once assigned.
+            Your Orange Door team will show up here once they're added.
           </p>
         </CardContent>
       </Card>

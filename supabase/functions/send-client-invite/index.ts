@@ -39,6 +39,25 @@ serve(async (req) => {
 
     console.log(`Sending client portal invitation to ${email} for ${businessName}`);
 
+    // client_portal_users rows are only created when an invite is *accepted*,
+    // never when sent -- so if this client account already has one, whoever
+    // we're inviting now is joining an existing team, not setting up the
+    // account for the first time. Determined server-side (not passed by the
+    // caller) so it stays correct regardless of which flow triggers the send.
+    const { data: invitationRow } = await _sb
+      .from("client_invitations")
+      .select("client_account_id")
+      .eq("id", invitationId)
+      .maybeSingle();
+    let isFirstUser = true;
+    if (invitationRow?.client_account_id) {
+      const { count } = await _sb
+        .from("client_portal_users")
+        .select("id", { count: "exact", head: true })
+        .eq("client_account_id", invitationRow.client_account_id);
+      isFirstUser = !count;
+    }
+
     if (!RESEND_API_KEY) {
       console.error("RESEND_API_KEY is not configured");
       return new Response(
@@ -55,6 +74,10 @@ serve(async (req) => {
     const inviteLink = `${origin}/portal/auth?invite=${token}`;
 
     const greeting = firstName ? `Hi ${firstName}` : "Hi there";
+    const introCopy = isFirstUser
+      ? `Great news -- <strong>${businessName}</strong>'s account is approved. Set up your login to get into your client portal:`
+      : `You've been added as a collaborator on <strong>${businessName}</strong>'s account. Your portal gives you a
+          direct line into the work in progress:`;
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -76,8 +99,7 @@ serve(async (req) => {
         <p style="font-size: 15px; color: #1a1a1a; margin: 0 0 20px 0;">${greeting},</p>
 
         <p style="font-size: 15px; color: #3f3f46; margin: 0 0 20px 0;">
-          You've been added as a collaborator on <strong>${businessName}</strong>'s account. Your portal gives you a
-          direct line into the work in progress:
+          ${introCopy}
         </p>
 
         <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 28px 0;">
