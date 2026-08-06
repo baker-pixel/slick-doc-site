@@ -21,7 +21,6 @@ import ClientMessagesTab from "@/components/client-portal/ClientMessagesTab";
 import ClientMeetingsTab from "@/components/client-portal/ClientMeetingsTab";
 import ClientBrandAssetsTab from "@/components/client-portal/ClientBrandAssetsTab";
 import { ClientActivityTab } from "@/components/client-portal/ClientActivityTab";
-import { ClientTeamTab } from "@/components/client-portal/ClientTeamTab";
 import { ClientDeliverablesTab } from "@/components/client-portal/ClientDeliverablesTab";
 import ClientNotificationsTab from "@/components/client-portal/ClientNotificationsTab";
 import { ClientHelpTab } from "@/components/client-portal/ClientHelpTab";
@@ -358,10 +357,7 @@ export default function ClientPortal() {
     switch (activeTab) {
       case "activity":
         return (
-          <div className="space-y-6">
-            <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />
-            {tier === "transformation" && <ClientTeamTab clientAccountId={portalUser.client_account_id} />}
-          </div>
+          <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />
         );
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
