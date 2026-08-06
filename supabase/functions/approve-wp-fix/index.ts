@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
+import { applyWpFix, verifyWpFix } from "../_shared/wpApply.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +10,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const TIMEOUT_MS = 10_000;
 
 interface Fix {
   id: string;
@@ -27,54 +26,14 @@ interface ConnectedSite {
   client_id: string | null;
 }
 
-async function applyFix(siteUrl: string, token: string, fix: Fix): Promise<void> {
-  const payload: Record<string, unknown> = {
-    field: fix.field,
-    value: fix.suggested_value,
-  };
-  if (fix.media_id) {
-    payload.media_id = fix.media_id;
-  } else if (fix.post_id) {
-    payload.post_id = fix.post_id;
-  } else {
-    throw new Error("Fix has no post_id or media_id");
-  }
-
-  const res = await fetch(`${siteUrl}/wp-json/orangedoor/v1/apply`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-OD-Token": token,
-    },
-    body: JSON.stringify({ fixes: [payload] }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Plugin /apply returned ${res.status}: ${txt.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const failed = data?.failed ?? [];
-  if (failed.length > 0) {
-    throw new Error(`Plugin reported failure: ${failed[0]?.error ?? "unknown"}`);
-  }
-}
-
-async function verifyFix(siteUrl: string, token: string, postId: number): Promise<boolean> {
-  try {
-    const res = await fetch(`${siteUrl}/wp-json/orangedoor/v1/verify/${postId}`, {
-      headers: { "X-OD-Token": token },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return data?.saved === true;
-  } catch {
-    return false;
-  }
-}
+// field -> wp_* fixType, so this queue's rows can go through the same
+// applyWpFix used by the canonical seo-audit findings path.
+const FIELD_TO_FIXTYPE: Record<string, string> = {
+  meta_title: "wp_meta_title",
+  meta_desc: "wp_meta_description",
+  focus_keyword: "wp_focus_keyword",
+  alt_text: "wp_image_alt",
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -160,13 +119,26 @@ serve(async (req) => {
       .update({ status: "approved", updated_at: new Date().toISOString() })
       .eq("id", fixId);
 
-    // Apply the fix
-    await applyFix(site_url, token, fix as Fix);
+    const typedFix = fix as Fix;
+
+    // Apply the fix — same shared path the canonical findings use, just with
+    // WP-native IDs already known (this queue was built from a direct plugin
+    // scan, so post_id/media_id don't need URL/slug resolution).
+    await applyWpFix(
+      site_url,
+      { pluginToken: token },
+      {
+        fixType: FIELD_TO_FIXTYPE[typedFix.field] ?? typedFix.field,
+        value: typedFix.suggested_value,
+        postId: typedFix.post_id,
+        mediaId: typedFix.media_id,
+      },
+    );
 
     // Verify (best-effort, only for post-based fixes)
     let verified = true;
-    if ((fix as Fix).post_id) {
-      verified = await verifyFix(site_url, token, (fix as Fix).post_id!);
+    if (typedFix.post_id) {
+      verified = await verifyWpFix(site_url, token, typedFix.post_id);
     }
 
     const finalStatus = verified ? "applied" : "failed";
@@ -187,10 +159,10 @@ serve(async (req) => {
     if (verified && client_id) {
       await logActivity(supabase, client_id, {
         type: "seo_fix_applied",
-        title: `Applied SEO fix: ${String((fix as Fix).field).replace(/_/g, " ")}`,
+        title: `Applied SEO fix: ${typedFix.field.replace(/_/g, " ")}`,
         description: site_url,
         icon: "wrench",
-        metadata: { fix_id: fixId, field: (fix as Fix).field, source: "client_approved" },
+        metadata: { fix_id: fixId, field: typedFix.field, source: "client_approved" },
       });
     }
 

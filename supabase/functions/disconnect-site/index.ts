@@ -51,10 +51,29 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Clear the token, not just the status label -- otherwise a
+    // "disconnected" site keeps working forever (confirmed live: a fix
+    // could still be applied to it), and the portal shows a misleading
+    // "reconnect from scratch" flow for an integration that never actually
+    // stopped working.
+    const { data: site } = await supabase
+      .from("connected_sites")
+      .select("client_id")
+      .eq("id", site_id)
+      .maybeSingle();
+
     await supabase
       .from("connected_sites")
-      .update({ status: "disconnected", updated_at: new Date().toISOString() })
+      .update({ status: "disconnected", token: "", updated_at: new Date().toISOString() })
       .eq("id", site_id);
+
+    if (site?.client_id) {
+      await supabase
+        .from("client_credentials")
+        .update({ wordpress_plugin_api_key: null })
+        .eq("client_id", site.client_id);
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -5,6 +5,50 @@ import { callAIJson } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 
+// wp_fix_queue's field names -> the canonical seo-audit finding types that
+// cover the same underlying WordPress field. Where the canonical engine
+// already has an open, applyable finding for a page, this scan skips
+// generating its own AI suggestion for that exact field -- otherwise a
+// client sees two different suggested titles/descriptions for the same
+// page from two independent AI calls, and could apply both.
+const FIXTYPE_TO_LEGACY_FIELD: Record<string, string> = {
+  wp_meta_title: "meta_title",
+  wp_meta_description: "meta_desc",
+  wp_image_alt: "alt_text",
+};
+
+const normalizeUrl = (u: string) => u.trim().replace(/\/+$/, "").toLowerCase();
+
+/** Page URL -> set of legacy wp_fix_queue field names the canonical audit already covers. */
+// deno-lint-ignore no-explicit-any
+async function getCanonicallyCoveredFields(
+  supabase: any,
+  clientId: string,
+): Promise<Map<string, Set<string>>> {
+  const covered = new Map<string, Set<string>>();
+  const { data: audit } = await supabase
+    .from("seo_audits")
+    .select("results")
+    .eq("client_account_id", clientId)
+    .not("rubric_version", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const findings = (audit?.results as { findings?: { fix?: { type?: string }; pages?: string[]; status?: string; wp_applyable?: boolean }[] } | null)?.findings ?? [];
+  for (const f of findings) {
+    if (f.status !== "open" || !f.wp_applyable) continue;
+    const legacyField = f.fix?.type ? FIXTYPE_TO_LEGACY_FIELD[f.fix.type] : undefined;
+    if (!legacyField) continue;
+    for (const page of f.pages ?? []) {
+      const key = normalizeUrl(page);
+      if (!covered.has(key)) covered.set(key, new Set());
+      covered.get(key)!.add(legacyField);
+    }
+  }
+  return covered;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -59,11 +103,23 @@ async function generateFixes(
   brandBlock: string,
   industry: string,
   groqKey: string,
+  // Fields the canonical seo-audit already has an open, applyable finding
+  // for on this page -- skip asking the AI for them at all, not just
+  // discarding the result, since it's the same underlying suggestion twice.
+  skipFields: Set<string>,
 ): Promise<AiFixResult | null> {
-  const missingAltImages = page.images.filter(i => i.missing_alt);
+  const missingAltImages = skipFields.has("alt_text") ? [] : page.images.filter(i => i.missing_alt);
   const altTextSection = missingAltImages.length > 0
     ? `Images missing alt text (image IDs): ${missingAltImages.map(i => i.id).join(", ")}`
     : "";
+
+  const wantedFields = [
+    !skipFields.has("meta_title") && `  "meta_title": "string under 60 chars — only if missing or needs improvement",`,
+    !skipFields.has("meta_desc") && `  "meta_desc": "string under 155 chars — only if missing or needs improvement",`,
+    !skipFields.has("focus_keyword") && `  "focus_keyword": "1-3 word phrase — only if missing",`,
+    !skipFields.has("alt_text") && `  "alt_text": { "<image_id>": "descriptive alt text" }`,
+  ].filter(Boolean);
+  if (wantedFields.length === 0) return null;
 
   const systemPrompt = `You are an SEO expert. Generate optimized fixes for WordPress pages.
 Return ONLY a valid JSON object — no markdown, no explanation.
@@ -87,10 +143,7 @@ ${page.issues.map(i => `- [${i.severity}] ${i.message}`).join("\n")}
 
 Return a JSON object with ONLY the fields that need fixing:
 {
-  "meta_title": "string under 60 chars — only if missing or needs improvement",
-  "meta_desc": "string under 155 chars — only if missing or needs improvement",
-  "focus_keyword": "1-3 word phrase — only if missing",
-  "alt_text": { "<image_id>": "descriptive alt text" }
+${wantedFields.join("\n")}
 }
 Omit any field that does not need a fix.`;
 
@@ -217,6 +270,7 @@ serve(async (req) => {
       const brandKit = await getClientBrandKit(supabase, clientId, false);
       const brandBlock = brandKitToPromptBlock(brandKit);
       const industry = brandKit.business.industry ?? "General";
+      const canonicallyCovered = await getCanonicallyCoveredFields(supabase, clientId);
 
       // Prioritise errors first, then warnings; cap at MAX_PAGES_AI
       const pagesWithIssues = allPages
@@ -230,7 +284,8 @@ serve(async (req) => {
         .slice(0, MAX_PAGES_AI);
 
       for (const page of pagesWithIssues) {
-        const fixes = await generateFixes(page, brandBlock, industry, groqKey);
+        const pageCovered = canonicallyCovered.get(normalizeUrl(page.url)) ?? new Set<string>();
+        const fixes = await generateFixes(page, brandBlock, industry, groqKey, pageCovered);
         if (!fixes) continue;
 
         const rows: Record<string, unknown>[] = [];

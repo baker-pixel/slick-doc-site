@@ -770,11 +770,12 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         )}
 
         {/* ── Site Improvements ─────────────────────────────── */}
-        {wpSite?.status === "connected" && (() => {
+        {(wpSite?.status === "connected" || wpSite?.status === "unreachable") && (() => {
           const VISIBLE     = 8;
           const visible     = showAllFixes ? wpFixes : wpFixes.slice(0, VISIBLE);
           const hiddenCount = wpFixes.length - visible.length;
           const initialScan = scanning && wpFixes.length === 0;
+          const unreachable = wpSite?.status === "unreachable";
 
           return (
             <Card>
@@ -804,6 +805,12 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <p className="text-sm font-medium">Setting up your SEO data…</p>
                     <p className="text-xs">Scanning your WordPress site for the first time. This takes about 30 seconds.</p>
+                  </div>
+                ) : unreachable && wpFixes.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <AlertTriangle className="h-8 w-8 mb-2 text-destructive" />
+                    <p className="text-sm font-medium">Can't check right now</p>
+                    <p className="text-xs mt-1">Your site didn't respond to the last scan. Click "Scan site" to try again.</p>
                   </div>
                 ) : wpFixes.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
