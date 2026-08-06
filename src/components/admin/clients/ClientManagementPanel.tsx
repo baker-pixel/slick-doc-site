@@ -22,7 +22,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, FileText, TrendingUp, Mail, Loader2, Users, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban } from "lucide-react";
+import { Plus, FileText, TrendingUp, Mail, Loader2, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban } from "lucide-react";
 import { format } from "date-fns";
 import { TierBadge } from "../core/TierBadge";
 import { callAdminApi } from "@/lib/admin-api";
@@ -508,11 +508,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Client Management
-        </CardTitle>
+      <CardHeader className="flex flex-row items-center justify-end">
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
