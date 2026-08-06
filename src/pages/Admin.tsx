@@ -54,7 +54,6 @@ import { ClientProjectsAdminPanel } from "@/components/admin/clients/ClientProje
 import { AdminSettingsPanel } from "@/components/admin/core/AdminSettingsPanel";
 import { ActivityFeedAdminPanel } from "@/components/admin/misc/ActivityFeedAdminPanel";
 import { TaskTemplatesPanel } from "@/components/admin/workflow/TaskTemplatesPanel";
-import { ClientTasksPanel } from "@/components/admin/clients/ClientTasksPanel";
 import { OnboardingAutomationPanel } from "@/components/admin/clients/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/misc/IntegrationConfigPanel";
 import { WorkPanel } from "@/components/admin/content/WorkPanel";
@@ -1532,8 +1531,6 @@ const AdminInner = () => {
         return <AutomationJobsPanel />;
       case "task-templates":
         return <TaskTemplatesPanel />;
-      case "client-tasks":
-        return <ClientTasksPanel adminPassword={storedPassword} clientId={selectedClient?.id} />;
       case "seo-dashboard":
         return <SeoAnalysisPanel selectedClientId={selectedClient?.id} selectedClientName={selectedClient?.business_name} />;
       case "onboarding":
@@ -1577,7 +1574,6 @@ const AdminInner = () => {
     const titles: Record<AdminSection, string> = {
       home: "Dashboard",
       clients: "Client Management",
-      "client-tasks": "Client Tasks",
       "client-projects": "Client Projects",
       deliverables: "Deliverables",
       approvals: "Approvals",

@@ -34,6 +34,9 @@ interface AnalysisResult {
   quickWins?: QuickWin[];
   actionPlan?: ActionPlan;
   summary: string;
+  /** Ground-truth (parsed, not LLM-guessed) present/missing tags — use these for strengths/gaps, never raw findings. */
+  detectedStrengths?: string[];
+  detectedGaps?: string[];
 }
 
 const BUSINESS_TYPES = [
@@ -185,8 +188,11 @@ const QuickAnalysis = () => {
         { category: "Y", label: "Conversion Elements", score: result.conversion.score, status: result.conversion.score >= 70 ? "strong" : result.conversion.score >= 50 ? "moderate" : result.conversion.score >= 30 ? "weak" : "critical" },
         { category: "T", label: "Technical Performance", score: result.technical.score, status: result.technical.score >= 70 ? "strong" : result.technical.score >= 50 ? "moderate" : result.technical.score >= 30 ? "weak" : "critical" },
       ],
-      strengths: result.seo.findings.slice(0, 2),
-      gaps: [...result.seo.recommendations.slice(0, 1), ...result.conversion.recommendations.slice(0, 1), ...result.technical.recommendations.slice(0, 1)],
+      strengths: (result.detectedStrengths?.length ? result.detectedStrengths : result.seo.findings).slice(0, 2),
+      gaps: (result.detectedGaps?.length
+        ? result.detectedGaps
+        : [...result.seo.recommendations.slice(0, 1), ...result.conversion.recommendations.slice(0, 1), ...result.technical.recommendations.slice(0, 1)]
+      ).slice(0, 3),
       recommendations: [
         ...result.quickWins?.map(w => ({ title: w.title, description: w.description, priority: "Quick Win" })) || [],
         ...result.seo.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),

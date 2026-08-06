@@ -3,9 +3,6 @@ project_id = "axbeaqpjyzzmbvyaofbn"
 [functions.signup]
 verify_jwt = false
 
-[functions.run-agent]
-verify_jwt = false
-
 [functions.check-alerts]
 verify_jwt = true
 

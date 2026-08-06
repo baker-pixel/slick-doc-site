@@ -27,31 +27,37 @@ import {
   Zap,
   Target,
   TrendingUp,
-  ChevronRight,
   RefreshCw,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { runSingleTask } from "@/lib/n8n";
 
-interface ClientWithPhase {
-  id: string;
-  business_name: string;
-  tier: string;
-  status: string;
-  created_at: string;
-  tasksByCategory: Record<string, { total: number; completed: number }>;
-  currentPhase: string;
-  phaseProgress: number;
-  totalTasks: number;
-  completedTasks: number;
-}
+// Phases are read from the same engines that already track this client's
+// real progress -- not a second, parallel task list. Onboarding comes from
+// workflow_steps (the seed-tier-workflow chain); SEO/Content/Lead Nurturing
+// come from client_projects' self-updating "kind" rows (upsertSeoProject /
+// socialStrategy / refreshProspectProject); CRM/Ads are one-shot setup jobs
+// with no multi-step progress to show, so they're a done/not-done badge
+// backed by automation_jobs instead of a fake percentage.
+type EnginePhase = "seo" | "content" | "lead_nurturing";
+type OneShotPhase = "crm" | "ads";
 
-interface ClientPhaseTrackerProps {
-  adminPassword: string;
-}
+const ENGINE_PHASE_BY_KIND: Record<string, EnginePhase> = {
+  seo: "seo",
+  social: "content",
+  prospect: "lead_nurturing",
+};
 
-const phases = [
+const ONE_SHOT_JOB_BY_PHASE: Record<OneShotPhase, string> = {
+  crm: "add_to_crm",
+  ads: "setup_retargeting_audiences",
+};
+
+const CLIENT_STEP_TYPES = ["client_form", "client_upload", "client_oauth", "client_approval"];
+
+const phases: { id: string; label: string; icon: typeof Users; color: string }[] = [
   { id: "onboarding", label: "Onboarding", icon: Users, color: "text-blue-500" },
   { id: "lead_nurturing", label: "Lead Nurturing", icon: Zap, color: "text-purple-500" },
   { id: "crm", label: "CRM Setup", icon: Target, color: "text-orange-500" },
@@ -59,6 +65,7 @@ const phases = [
   { id: "content", label: "Content", icon: TrendingUp, color: "text-green-500" },
   { id: "seo", label: "SEO", icon: TrendingUp, color: "text-emerald-500" },
 ];
+const phaseOrder = phases.map((p) => p.id);
 
 const tierColors: Record<string, string> = {
   foundation: "bg-slate-500/10 text-slate-600 border-slate-500/30",
@@ -66,11 +73,38 @@ const tierColors: Record<string, string> = {
   transformation: "bg-purple-500/10 text-purple-600 border-purple-500/30",
 };
 
+interface ClientWithPhase {
+  id: string;
+  business_name: string;
+  tier: string;
+  status: string;
+  created_at: string;
+  onboarding: { completed: number; total: number } | null;
+  enginePct: Partial<Record<EnginePhase, number>>;
+  oneShotDone: Partial<Record<OneShotPhase, boolean>>;
+  currentPhase: string;
+}
+
+interface ClientPhaseTrackerProps {
+  adminPassword: string;
+}
+
+function isPhaseDone(
+  phaseId: string,
+  onboarding: ClientWithPhase["onboarding"],
+  enginePct: ClientWithPhase["enginePct"],
+  oneShotDone: ClientWithPhase["oneShotDone"],
+): boolean {
+  if (phaseId === "onboarding") return !!onboarding && onboarding.total > 0 && onboarding.completed === onboarding.total;
+  if (phaseId === "crm" || phaseId === "ads") return !!oneShotDone[phaseId as OneShotPhase];
+  return (enginePct[phaseId as EnginePhase] ?? 0) >= 100;
+}
+
 export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
   const [clients, setClients] = useState<ClientWithPhase[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTier, setSelectedTier] = useState<string>("all");
-  const [generatingTasks, setGeneratingTasks] = useState<string | null>(null);
+  const [runningAction, setRunningAction] = useState<string | null>(null);
 
   useEffect(() => {
     fetchClientsWithPhases();
@@ -79,78 +113,50 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
   const fetchClientsWithPhases = async () => {
     setLoading(true);
     try {
-      // Fetch all active clients
-      const { data: clientsData, error: clientsError } = await supabase
-        .from("client_accounts")
-        .select("id, business_name, tier, status, created_at")
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
+      const [{ data: clientsData, error: clientsError }, { data: stepsData, error: stepsError }, { data: projectsData, error: projectsError }, { data: jobsData, error: jobsError }] = await Promise.all([
+        supabase.from("client_accounts").select("id, business_name, tier, status, created_at").eq("status", "active").order("created_at", { ascending: false }),
+        supabase.from("workflow_steps").select("client_id, status").in("task_type", CLIENT_STEP_TYPES),
+        supabase.from("client_projects").select("client_account_id, kind, progress_percentage").in("kind", ["seo", "social", "prospect"]),
+        supabase.from("automation_jobs").select("client_id, job_type").eq("status", "completed").in("job_type", Object.values(ONE_SHOT_JOB_BY_PHASE)),
+      ]);
 
       if (clientsError) throw clientsError;
+      if (stepsError) throw stepsError;
+      if (projectsError) throw projectsError;
+      if (jobsError) throw jobsError;
 
-      // Fetch tasks for all clients
-      const { data: tasksData, error: tasksError } = await supabase
-        .from("client_tasks")
-        .select("client_account_id, category, status");
+      const onboardingByClient: Record<string, { completed: number; total: number }> = {};
+      for (const s of stepsData ?? []) {
+        const c = (onboardingByClient[s.client_id] ??= { completed: 0, total: 0 });
+        c.total++;
+        if (s.status === "completed") c.completed++;
+      }
 
-      if (tasksError) throw tasksError;
+      const engineByClient: Record<string, Partial<Record<EnginePhase, number>>> = {};
+      for (const p of projectsData ?? []) {
+        const phase = ENGINE_PHASE_BY_KIND[p.kind as string];
+        if (!phase) continue;
+        (engineByClient[p.client_account_id] ??= {})[phase] = p.progress_percentage ?? 0;
+      }
 
-      // Group tasks by client and category
-      const tasksByClient: Record<string, Record<string, { total: number; completed: number }>> = {};
-      
-      tasksData?.forEach((task) => {
-        if (!tasksByClient[task.client_account_id]) {
-          tasksByClient[task.client_account_id] = {};
-        }
-        if (!tasksByClient[task.client_account_id][task.category]) {
-          tasksByClient[task.client_account_id][task.category] = { total: 0, completed: 0 };
-        }
-        tasksByClient[task.client_account_id][task.category].total++;
-        if (task.status === "completed") {
-          tasksByClient[task.client_account_id][task.category].completed++;
-        }
-      });
+      const jobToPhase = Object.fromEntries(Object.entries(ONE_SHOT_JOB_BY_PHASE).map(([phase, job]) => [job, phase])) as Record<string, OneShotPhase>;
+      const oneShotByClient: Record<string, Partial<Record<OneShotPhase, boolean>>> = {};
+      for (const j of jobsData ?? []) {
+        const phase = jobToPhase[j.job_type];
+        if (!phase) continue;
+        (oneShotByClient[j.client_id] ??= {})[phase] = true;
+      }
 
-      // Determine current phase for each client
-      const clientsWithPhases: ClientWithPhase[] = (clientsData || []).map((client) => {
-        const categories = tasksByClient[client.id] || {};
-        let currentPhase = "onboarding";
-        let totalTasks = 0;
-        let completedTasks = 0;
+      const clientsWithPhases: ClientWithPhase[] = (clientsData ?? []).map((client) => {
+        const onboarding = onboardingByClient[client.id] ?? null;
+        const enginePct = engineByClient[client.id] ?? {};
+        const oneShotDone = oneShotByClient[client.id] ?? {};
 
-        // Calculate totals
-        Object.values(categories).forEach((cat) => {
-          totalTasks += cat.total;
-          completedTasks += cat.completed;
-        });
+        const currentPhase = !onboarding
+          ? "no_workflow"
+          : phaseOrder.find((p) => !isPhaseDone(p, onboarding, enginePct, oneShotDone)) ?? "complete";
 
-        // Determine current phase based on completion
-        const phaseOrder = ["onboarding", "lead_nurturing", "crm", "ads", "content", "seo"];
-        for (const phase of phaseOrder) {
-          const phaseTasks = categories[phase];
-          if (phaseTasks) {
-            if (phaseTasks.completed < phaseTasks.total) {
-              currentPhase = phase;
-              break;
-            }
-          }
-        }
-
-        // If no tasks exist yet, they're in pre-onboarding
-        if (totalTasks === 0) {
-          currentPhase = "no_tasks";
-        }
-
-        const phaseProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-        return {
-          ...client,
-          tasksByCategory: categories,
-          currentPhase,
-          phaseProgress,
-          totalTasks,
-          completedTasks,
-        };
+        return { ...client, onboarding, enginePct, oneShotDone, currentPhase };
       });
 
       setClients(clientsWithPhases);
@@ -162,43 +168,64 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
     }
   };
 
-  const handleGenerateTasks = async (clientId: string) => {
-    setGeneratingTasks(clientId);
+  const handleSeedWorkflow = async (clientId: string) => {
+    setRunningAction(`seed:${clientId}`);
     try {
-      const response = await supabase.functions.invoke("admin", {
-        body: {
-          action: "generate_client_tasks",
-          password: adminPassword,
-          data: { client_id: clientId },
-        },
+      const { data, error } = await supabase.functions.invoke("seed-tier-workflow", {
+        body: { client_id: clientId, password: adminPassword },
       });
-
-      if (response.error) {
-        const msg = await getEdgeErrorMessage(response.error, response.data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate tasks");
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to seed onboarding workflow");
       }
-      const result = response.data;
-      if (result?.error) throw new Error(result.error);
-
-      toast.success(`Generated ${result.tasksGenerated} tasks for ${result.client}`);
+      toast.success("Onboarding workflow seeded");
       await fetchClientsWithPhases();
     } catch (err: any) {
-      console.error("Error generating tasks:", err);
-      toast.error(err?.message || "Failed to generate tasks");
+      toast.error(err?.message || "Failed to seed onboarding workflow");
     } finally {
-      setGeneratingTasks(null);
+      setRunningAction(null);
     }
   };
 
-  const filteredClients = selectedTier === "all" 
-    ? clients 
-    : clients.filter((c) => c.tier === selectedTier);
+  const handleRunOneShot = async (clientId: string, phase: OneShotPhase) => {
+    setRunningAction(`${phase}:${clientId}`);
+    try {
+      await runSingleTask(clientId, undefined, ONE_SHOT_JOB_BY_PHASE[phase], adminPassword);
+      toast.success(`${phase === "crm" ? "CRM setup" : "Retargeting setup"} complete`);
+      await fetchClientsWithPhases();
+    } catch (err: any) {
+      toast.error(err?.message || "Automation failed");
+    } finally {
+      setRunningAction(null);
+    }
+  };
+
+  const filteredClients = selectedTier === "all" ? clients : clients.filter((c) => c.tier === selectedTier);
 
   const getCurrentPhaseInfo = (phaseId: string) => {
-    if (phaseId === "no_tasks") {
-      return { label: "No Tasks Yet", icon: Circle, color: "text-muted-foreground" };
-    }
+    if (phaseId === "no_workflow") return { label: "Not Started", icon: Circle, color: "text-muted-foreground" };
+    if (phaseId === "complete") return { label: "All Phases Complete", icon: CheckCircle2, color: "text-emerald-500" };
     return phases.find((p) => p.id === phaseId) || phases[0];
+  };
+
+  const phaseChipStatus = (
+    phaseId: string,
+    client: ClientWithPhase,
+  ): { state: "complete" | "in_progress" | "not_started"; detail: string } => {
+    if (phaseId === "onboarding") {
+      const o = client.onboarding;
+      if (!o || o.total === 0) return { state: "not_started", detail: "not seeded" };
+      if (o.completed === o.total) return { state: "complete", detail: `${o.completed}/${o.total} steps` };
+      return { state: o.completed > 0 ? "in_progress" : "not_started", detail: `${o.completed}/${o.total} steps` };
+    }
+    if (phaseId === "crm" || phaseId === "ads") {
+      const done = !!client.oneShotDone[phaseId as OneShotPhase];
+      return { state: done ? "complete" : "not_started", detail: done ? "done" : "not run" };
+    }
+    const pct = client.enginePct[phaseId as EnginePhase];
+    if (pct == null) return { state: "not_started", detail: "no project yet" };
+    if (pct >= 100) return { state: "complete", detail: "100%" };
+    return { state: pct > 0 ? "in_progress" : "not_started", detail: `${pct}%` };
   };
 
   if (loading) {
@@ -269,106 +296,103 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
                 const PhaseIcon = phaseInfo.icon;
 
                 return (
-                  <div
-                    key={client.id}
-                    className="p-4 border rounded-lg hover:bg-muted/30 transition-colors"
-                  >
+                  <div key={client.id} className="p-4 border rounded-lg hover:bg-muted/30 transition-colors">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
-                          <h4 className="font-semibold text-foreground truncate">
-                            {client.business_name}
-                          </h4>
-                          <Badge className={tierColors[client.tier] || tierColors.foundation}>
-                            {client.tier}
-                          </Badge>
+                          <h4 className="font-semibold text-foreground truncate">{client.business_name}</h4>
+                          <Badge className={tierColors[client.tier] || tierColors.foundation}>{client.tier}</Badge>
                         </div>
 
                         {/* Current Phase */}
                         <div className="flex items-center gap-2 mb-3">
                           <PhaseIcon className={`h-4 w-4 ${phaseInfo.color}`} />
                           <span className="text-sm font-medium">{phaseInfo.label}</span>
-                          {client.totalTasks > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              ({client.completedTasks}/{client.totalTasks} tasks)
-                            </span>
-                          )}
                         </div>
 
-                        {/* Phase Progress Bar */}
-                        {client.totalTasks > 0 ? (
-                          <div className="space-y-1.5">
-                            <Progress value={client.phaseProgress} className="h-2" />
+                        {/* Onboarding progress bar, when a workflow exists and isn't done yet */}
+                        {client.onboarding && client.onboarding.total > 0 && client.currentPhase === "onboarding" && (
+                          <div className="space-y-1.5 mb-3">
+                            <Progress value={Math.round((100 * client.onboarding.completed) / client.onboarding.total)} className="h-2" />
                             <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>{client.phaseProgress}% complete</span>
+                              <span>{client.onboarding.completed}/{client.onboarding.total} onboarding steps complete</span>
                             </div>
                           </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            Tasks not yet generated for this client
-                          </p>
                         )}
 
-                        {/* Category Breakdown */}
-                        {client.totalTasks > 0 && (
-                          <TooltipProvider>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                              {phases.map((phase) => {
-                                const categoryData = client.tasksByCategory[phase.id];
-                                if (!categoryData) return null;
-
-                                const isComplete = categoryData.completed === categoryData.total;
-                                const isInProgress = categoryData.completed > 0 && !isComplete;
-
-                                return (
-                                  <Tooltip key={phase.id}>
-                                    <TooltipTrigger>
-                                      <div
-                                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border ${
-                                          isComplete
-                                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-                                            : isInProgress
-                                            ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                                            : "bg-muted text-muted-foreground border-border"
-                                        }`}
-                                      >
-                                        {isComplete ? (
-                                          <CheckCircle2 className="h-3 w-3" />
-                                        ) : isInProgress ? (
-                                          <Clock className="h-3 w-3" />
-                                        ) : (
-                                          <Circle className="h-3 w-3" />
-                                        )}
-                                        <span>{phase.label.split(" ")[0]}</span>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>
-                                        {phase.label}: {categoryData.completed}/{categoryData.total} complete
-                                      </p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                );
-                              })}
-                            </div>
-                          </TooltipProvider>
-                        )}
+                        {/* Per-phase chips, sourced from workflow_steps / client_projects / automation_jobs */}
+                        <TooltipProvider>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {phases.map((phase) => {
+                              const { state, detail } = phaseChipStatus(phase.id, client);
+                              return (
+                                <Tooltip key={phase.id}>
+                                  <TooltipTrigger>
+                                    <div
+                                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border ${
+                                        state === "complete"
+                                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                                          : state === "in_progress"
+                                          ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                                          : "bg-muted text-muted-foreground border-border"
+                                      }`}
+                                    >
+                                      {state === "complete" ? (
+                                        <CheckCircle2 className="h-3 w-3" />
+                                      ) : state === "in_progress" ? (
+                                        <Clock className="h-3 w-3" />
+                                      ) : (
+                                        <Circle className="h-3 w-3" />
+                                      )}
+                                      <span>{phase.label.split(" ")[0]}</span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{phase.label}: {detail}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })}
+                          </div>
+                        </TooltipProvider>
                       </div>
 
                       {/* Actions */}
                       <div className="flex flex-col gap-2">
-                        {client.totalTasks === 0 && (
+                        {!client.onboarding && (
                           <Button
                             size="sm"
-                            onClick={() => handleGenerateTasks(client.id)}
-                            disabled={generatingTasks === client.id}
+                            onClick={() => handleSeedWorkflow(client.id)}
+                            disabled={runningAction === `seed:${client.id}`}
                           >
-                            {generatingTasks === client.id ? (
+                            {runningAction === `seed:${client.id}` ? (
                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             ) : (
                               <Zap className="h-4 w-4 mr-2" />
                             )}
-                            Generate Tasks
+                            Seed Onboarding
+                          </Button>
+                        )}
+                        {!client.oneShotDone.crm && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRunOneShot(client.id, "crm")}
+                            disabled={runningAction === `crm:${client.id}`}
+                          >
+                            {runningAction === `crm:${client.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Run CRM Setup
+                          </Button>
+                        )}
+                        {!client.oneShotDone.ads && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRunOneShot(client.id, "ads")}
+                            disabled={runningAction === `ads:${client.id}`}
+                          >
+                            {runningAction === `ads:${client.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Run Ads Setup
                           </Button>
                         )}
                       </div>

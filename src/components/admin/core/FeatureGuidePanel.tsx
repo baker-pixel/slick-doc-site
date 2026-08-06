@@ -38,7 +38,6 @@ import {
   FolderOpen,
   MessageCircle,
   CalendarCheck,
-  ClipboardList,
   Palette,
   UserCircle,
   FileSignature,
@@ -365,25 +364,6 @@ const features: FeatureInfo[] = [
       "Standardize client deliverables",
       "Automate task creation",
       "Ensure nothing is missed"
-    ],
-    status: "active"
-  },
-  {
-    id: "client-tasks",
-    name: "Client Tasks",
-    icon: ClipboardList,
-    category: "automation",
-    description: "View and manage all tasks across clients with status tracking and assignment capabilities.",
-    capabilities: [
-      "Task status management",
-      "Assignment tracking",
-      "Due date management",
-      "Automation integration"
-    ],
-    useCases: [
-      "Track work across all clients",
-      "Manage team workload",
-      "Monitor project progress"
     ],
     status: "active"
   },

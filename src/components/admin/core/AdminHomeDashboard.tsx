@@ -17,7 +17,7 @@ import {
   Building2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subDays, isAfter } from "date-fns";
+import { format } from "date-fns";
 import {
   Select,
   SelectContent,
@@ -30,8 +30,7 @@ interface DashboardStats {
   totalClients: number;
   activeClients: number;
   onboardingClients: number;
-  pendingTasks: number;
-  completedTasksThisWeek: number;
+  stillOnboarding: number;
   pendingDeliverables: number;
   unreadMessages: number;
   upcomingMeetings: number;
@@ -45,8 +44,9 @@ interface DashboardStats {
   clientsNeedingAttention: Array<{
     id: string;
     business_name: string;
-    pendingTasks: number;
     tier: string;
+    currentStep: number;
+    totalSteps: number;
   }>;
 }
 
@@ -65,8 +65,7 @@ export function AdminHomeDashboard({
     totalClients: 0,
     activeClients: 0,
     onboardingClients: 0,
-    pendingTasks: 0,
-    completedTasksThisWeek: 0,
+    stillOnboarding: 0,
     pendingDeliverables: 0,
     unreadMessages: 0,
     upcomingMeetings: 0,
@@ -100,10 +99,11 @@ export function AdminHomeDashboard({
         .from("client_accounts")
         .select("id, business_name, status, tier");
 
-      // Fetch tasks
-      const { data: tasks } = await supabase
-        .from("client_tasks")
-        .select("id, status, client_account_id, completed_at");
+      // Fetch onboarding workflows not yet completed
+      const { data: workflows } = await supabase
+        .from("client_workflows")
+        .select("client_id, current_step, total_steps")
+        .neq("status", "completed");
 
       // Fetch deliverables
       const { data: deliverables } = await supabase
@@ -132,39 +132,28 @@ export function AdminHomeDashboard({
         .order("created_at", { ascending: false })
         .limit(5);
 
-      // Calculate stats
-      const weekAgo = subDays(new Date(), 7);
-      const pendingTasks = tasks?.filter(t => t.status === "pending") || [];
-      const completedThisWeek = tasks?.filter(t => 
-        t.status === "completed" && 
-        t.completed_at && 
-        isAfter(new Date(t.completed_at), weekAgo)
-      ) || [];
-
-      // Group pending tasks by client
-      const tasksByClient: Record<string, number> = {};
-      pendingTasks.forEach(task => {
-        tasksByClient[task.client_account_id] = (tasksByClient[task.client_account_id] || 0) + 1;
-      });
-
-      // Find clients needing attention
+      // Find clients still mid-onboarding, least progress first
+      const workflowByClient = new Map((workflows || []).map(w => [w.client_id, w]));
       const clientsNeedingAttention = (clients || [])
-        .map(c => ({
-          id: c.id,
-          business_name: c.business_name,
-          pendingTasks: tasksByClient[c.id] || 0,
-          tier: c.tier,
-        }))
-        .filter(c => c.pendingTasks > 0)
-        .sort((a, b) => b.pendingTasks - a.pendingTasks)
+        .filter(c => workflowByClient.has(c.id))
+        .map(c => {
+          const wf = workflowByClient.get(c.id)!;
+          return {
+            id: c.id,
+            business_name: c.business_name,
+            tier: c.tier,
+            currentStep: wf.current_step,
+            totalSteps: wf.total_steps,
+          };
+        })
+        .sort((a, b) => (a.currentStep / a.totalSteps) - (b.currentStep / b.totalSteps))
         .slice(0, 5);
 
       setStats({
         totalClients: clients?.length || 0,
         activeClients: clients?.filter(c => c.status === "active").length || 0,
         onboardingClients: clients?.filter(c => c.status === "onboarding").length || 0,
-        pendingTasks: pendingTasks.length,
-        completedTasksThisWeek: completedThisWeek.length,
+        stillOnboarding: workflowByClient.size,
         pendingDeliverables: deliverables?.filter(d => d.status === "pending").length || 0,
         unreadMessages: messages?.length || 0,
         upcomingMeetings: meetings?.length || 0,
@@ -237,15 +226,15 @@ export function AdminHomeDashboard({
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onNavigateToSection("client-tasks")}>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onNavigateToSection("clients")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
                 <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.pendingTasks}</p>
-                <p className="text-xs text-muted-foreground">Pending Tasks</p>
+                <p className="text-2xl font-bold">{stats.stillOnboarding}</p>
+                <p className="text-xs text-muted-foreground">Still Onboarding</p>
               </div>
             </div>
           </CardContent>
@@ -298,7 +287,7 @@ export function AdminHomeDashboard({
               </div>
             ) : (
               stats.clientsNeedingAttention.map((client) => (
-                <div 
+                <div
                   key={client.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted cursor-pointer transition-colors"
                   onClick={() => onSelectClient(client.id, client.business_name)}
@@ -308,7 +297,7 @@ export function AdminHomeDashboard({
                     <div className="flex items-center gap-2 mt-1">
                       <Badge variant="secondary" className="text-xs">{client.tier}</Badge>
                       <span className="text-xs text-muted-foreground">
-                        {client.pendingTasks} pending task{client.pendingTasks !== 1 ? 's' : ''}
+                        onboarding step {client.currentStep}/{client.totalSteps}
                       </span>
                     </div>
                   </div>

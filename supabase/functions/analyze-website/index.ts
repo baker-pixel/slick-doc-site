@@ -2,11 +2,87 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
+import { parseOnPage } from "../_shared/seoSignals.ts";
 
 function getTier(score: number): "transformation" | "growth" | "optimization" {
   if (score <= 39) return "transformation";
   if (score <= 64) return "growth";
   return "optimization";
+}
+
+function factsSummary(signals: ReturnType<typeof parseOnPage>): string {
+  return `DETECTED FACTS (parsed directly from the HTML — this is ground truth, not a guess. Cite any MISSING item by name in your findings):
+- Title tag: ${signals.title ? `present ("${signals.title.slice(0, 80)}")` : "MISSING"}
+- Meta description: ${signals.meta_description ? "present" : "MISSING"}
+- H1 tags found: ${signals.h1_count}
+- Images missing alt text: ${signals.images_missing_alt} of ${signals.image_count}
+- Mobile viewport tag: ${signals.has_viewport ? "present" : "MISSING"}
+- Canonical tag: ${signals.has_canonical ? "present" : "MISSING"}
+- Schema/structured data: ${signals.has_schema ? "present" : "MISSING"}
+- Open Graph tags: ${signals.has_open_graph ? "present" : "MISSING"}
+- Word count: ${signals.word_count}`;
+}
+
+/** Ground-truth fact -> finding text, guaranteed to appear regardless of what the LLM notices. */
+function detectedIssueFindings(signals: ReturnType<typeof parseOnPage>) {
+  const seo: { missing: boolean; keywords: string[]; text: string }[] = [
+    { missing: !signals.title, keywords: ["title tag", "<title>", "missing title"], text: "Missing <title> tag — search engines have nothing to show as the page headline." },
+    { missing: !signals.meta_description, keywords: ["meta description"], text: "Missing meta description tag — search results will show a generic or blank snippet." },
+    { missing: signals.h1_count === 0, keywords: ["h1", "heading"], text: "No <h1> heading found on the page." },
+    { missing: !signals.has_canonical, keywords: ["canonical"], text: "Missing canonical tag — risk of duplicate-content SEO issues." },
+    { missing: !signals.has_schema, keywords: ["schema", "structured data"], text: "No structured data (schema markup) found." },
+    { missing: !signals.has_open_graph, keywords: ["open graph", "og:"], text: "Missing Open Graph tags — links look bare when shared on social media." },
+  ];
+  const technical: { missing: boolean; keywords: string[]; text: string }[] = [
+    { missing: !signals.has_viewport, keywords: ["viewport"], text: "Missing mobile viewport meta tag — page may not render correctly on phones." },
+    { missing: signals.images_missing_alt > 0, keywords: ["alt text", "alt attribute"], text: `${signals.images_missing_alt} image(s) missing alt text.` },
+  ];
+  return { seo, technical };
+}
+
+function factAlreadyMentioned(findings: string[], keywords: string[]): boolean {
+  const joined = findings.join(" ").toLowerCase();
+  return keywords.some((k) => joined.includes(k));
+}
+
+/** Facts that are PRESENT, phrased positively — for a genuine "what's working" list. */
+function detectedStrengthFindings(signals: ReturnType<typeof parseOnPage>): string[] {
+  const strengths: string[] = [];
+  if (signals.title) strengths.push("Title tag is present");
+  if (signals.meta_description) strengths.push("Meta description is present");
+  if (signals.has_viewport) strengths.push("Mobile viewport configured correctly");
+  if (signals.has_canonical) strengths.push("Canonical tag is present");
+  if (signals.has_schema) strengths.push("Structured data (schema markup) found");
+  if (signals.has_open_graph) strengths.push("Open Graph tags present for social sharing");
+  return strengths;
+}
+
+/** Force any ground-truth issue the LLM didn't mention into the findings — the LLM's job is
+ * framing/prioritization, not detection, so a miss here must never silently disappear. Also
+ * attaches flat detectedStrengths/detectedGaps so callers don't have to guess sentiment out of
+ * a findings array that mixes positives and negatives. */
+function applyDetectedFacts(analysis: any, signals: ReturnType<typeof parseOnPage>) {
+  const { seo, technical } = detectedIssueFindings(signals);
+  analysis.seo ??= { score: 50, findings: [], recommendations: [] };
+  analysis.technical ??= { score: 50, findings: [], recommendations: [] };
+  analysis.seo.findings = Array.isArray(analysis.seo.findings) ? analysis.seo.findings : [];
+  analysis.technical.findings = Array.isArray(analysis.technical.findings) ? analysis.technical.findings : [];
+
+  for (const fact of seo) {
+    if (fact.missing && !factAlreadyMentioned(analysis.seo.findings, fact.keywords)) {
+      analysis.seo.findings.unshift(fact.text);
+    }
+  }
+  for (const fact of technical) {
+    if (fact.missing && !factAlreadyMentioned(analysis.technical.findings, fact.keywords)) {
+      analysis.technical.findings.unshift(fact.text);
+    }
+  }
+  analysis.seo.findings = analysis.seo.findings.slice(0, 6);
+  analysis.technical.findings = analysis.technical.findings.slice(0, 6);
+
+  analysis.detectedGaps = [...seo, ...technical].filter((f) => f.missing).map((f) => f.text);
+  analysis.detectedStrengths = detectedStrengthFindings(signals);
 }
 
 serve(async (req) => {
@@ -83,6 +159,7 @@ serve(async (req) => {
     }
 
     const truncatedHtml = htmlContent.substring(0, 50000);
+    const signals = parseOnPage(htmlContent, url);
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) {
@@ -162,12 +239,14 @@ SCORING RUBRIC (be strict):
 - 30-49: Significant issues (missing h1, no clear conversion path)
 - 0-29: Critical failures (broken structure, no SEO elements at all)
 
-Reference SPECIFIC elements from the HTML to justify each score.`;
+Reference SPECIFIC elements from the HTML to justify each score. Any item flagged MISSING in the DETECTED FACTS block below is confirmed absent — always name it explicitly in the relevant findings, never omit it.`;
 
     const userPrompt = `Analyze this website HTML for SEO, conversion optimization, and technical performance:
 
 URL: ${url}
 ${industry ? `Industry: ${industry}` : ""}
+
+${factsSummary(signals)}
 
 HTML Content:
 ${truncatedHtml}
@@ -202,6 +281,8 @@ Provide your analysis as a valid JSON object.`;
       if (e instanceof AIError) throw new Error("AI analysis failed");
       throw e;
     }
+
+    applyDetectedFacts(analysis, signals);
 
     if (prospectId) {
       const topWeaknesses = [

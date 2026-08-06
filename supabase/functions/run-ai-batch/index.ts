@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI as sharedCallAI } from "../_shared/ai.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { generateMonthlyReport } from "../run-automation/handlers/ai-automation.ts";
 import type { ClientData as AutomationClientData } from "../run-automation/types.ts";
 
@@ -28,14 +29,6 @@ function callAI(prompt: string, systemPrompt: string): Promise<string> {
     maxTokens: 2048,
   });
 }
-
-// Map our content types to DB-allowed values
-const contentTypeMap: Record<string, string> = {
-  'google_post': 'other',
-  'social_post': 'social_post',
-  'email_newsletter': 'email',
-  'blog_post': 'blog_post',
-};
 
 async function generateContent(supabase: any, client: ClientData & { context_profile?: any }, contentType: string): Promise<any> {
   const ctx = client.context_profile;
@@ -84,7 +77,7 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
   console.log(`Generating ${contentType} for ${client.business_name}...`);
   
   const content = await callAI(prompt, systemPrompt);
-  const dbContentType = contentTypeMap[contentType] || 'other';
+  const dbContentType = toDbContentType(contentType);
   
   // Save as pending_admin_review — admin must review before client sees it.
   // Do NOT create content_approvals here; that is the admin's job via ContentReviewPanel.

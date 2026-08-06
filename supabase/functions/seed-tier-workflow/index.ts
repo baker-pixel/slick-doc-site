@@ -7,13 +7,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// 5 client-facing onboarding gates — prepended to ALL tiers
+// 4 client-facing onboarding gates — prepended to ALL tiers
 // Order rationale:
 //   1. Confirm info first (we need this before anything)
-//   2. Schedule kickoff immediately — creates commitment while client is engaged
-//   3. Upload brand assets — they have time before the call
-//   4. Connect social accounts — after kickoff call, trust is established
-//   5. Approve first content — after kickoff, strategy is aligned
+//   2. Upload brand assets — no dependency on a call anymore, can happen right away
+//   3. Connect social accounts — after brand assets are in
+//   4. Approve first content — after strategy is aligned
+// Kickoff call (Calendly) step removed for now -- see git history to restore.
 const ONBOARDING_STEPS = [
   {
     step_number: 1,
@@ -27,43 +27,34 @@ const ONBOARDING_STEPS = [
   },
   {
     step_number: 2,
-    step_name: "Schedule Kickoff Call",
-    task_type: "client_calendar",
-    depends_on: 1,
-    payload: {
-      calendar_url: "https://calendly.com/baker-orangedoor",
-    },
-  },
-  {
-    step_number: 3,
     step_name: "Upload Brand Assets",
     task_type: "client_upload",
-    depends_on: 2,
+    depends_on: 1,
     payload: {
       required: ["logo_primary"],
       optional: ["logo_dark", "brand_colors", "font_guidelines"],
     },
   },
   {
-    step_number: 4,
+    step_number: 3,
     step_name: "Connect Social Accounts",
     task_type: "client_oauth",
-    depends_on: 3,
+    depends_on: 2,
     payload: {
       platforms: ["linkedin", "facebook", "instagram", "twitter"],
       minimum_required: 1,
     },
   },
   {
-    step_number: 5,
+    step_number: 4,
     step_name: "Approve Your First Content Draft",
     task_type: "client_approval",
-    depends_on: 4,
+    depends_on: 3,
     payload: { content_type: "linkedin_post" },
   },
 ];
 
-const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 5
+const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 4
 
 // Automation steps — original step_numbers start at 1 but will be offset by 5.
 // No "Publish X" step here anymore (was n8n_post_social/n8n_post_blog, routed

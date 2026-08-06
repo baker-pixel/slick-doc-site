@@ -43,10 +43,21 @@ serve(async (req) => {
   const summary = { read: 0, succeeded: 0, skippedDuplicate: 0, retried: 0, deadLettered: 0, malformed: 0 };
 
   try {
-    const { data: rows, error: readErr } = await supabase.rpc("agent_jobs_read", {
-      vt: VISIBILITY_TIMEOUT_SECONDS,
-      qty: BATCH_SIZE,
-    });
+    // Transient network blips (e.g. TLS handshake EOF) shouldn't kill the
+    // whole batch run before any job is even read -- retry a couple times.
+    let rows: unknown[] | null = null;
+    let readErr: { message: string } | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await supabase.rpc("agent_jobs_read", {
+        vt: VISIBILITY_TIMEOUT_SECONDS,
+        qty: BATCH_SIZE,
+      });
+      rows = result.data;
+      readErr = result.error;
+      if (!readErr) break;
+      console.error(`[process-agent-jobs] agent_jobs_read attempt ${attempt} failed:`, readErr.message);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 500));
+    }
     if (readErr) throw new Error(`Failed to read agent_jobs queue: ${readErr.message}`);
 
     const messages = (rows ?? []) as { msg_id: number; read_ct: number; enqueued_at: string; message: unknown }[];

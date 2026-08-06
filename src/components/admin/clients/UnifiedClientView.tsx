@@ -17,12 +17,9 @@ import {
   BarChart3,
   Send,
   Loader2,
-  AlertCircle,
   Calendar,
-  TrendingUp,
   Package,
   ExternalLink,
-  RotateCcw,
   ThumbsUp,
   Edit3,
   Eye,
@@ -51,16 +48,6 @@ interface UnifiedClientViewProps {
   client: SelectedClient;
   adminPassword: string;
   onNavigateToSection?: (section: string) => void;
-}
-
-interface Task {
-  id: string;
-  name: string;
-  description: string | null;
-  status: string;
-  category: string;
-  due_date: string | null;
-  automation_type: string;
 }
 
 interface Deliverable {
@@ -112,7 +99,6 @@ interface Meeting {
 }
 
 export function UnifiedClientView({ client, adminPassword, onNavigateToSection }: UnifiedClientViewProps) {
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -131,7 +117,6 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
   const fetchAllData = async () => {
     setIsLoading(true);
     await Promise.all([
-      fetchTasks(),
       fetchDeliverables(),
       fetchMessages(),
       fetchProjects(),
@@ -139,20 +124,6 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       fetchMeetings(),
     ]);
     setIsLoading(false);
-  };
-
-  const fetchTasks = async () => {
-    const res = await supabase.functions.invoke("admin", {
-      body: { action: "list", table: "client_tasks", password: adminPassword },
-    });
-
-    if (!res.error) {
-      const rows = (res.data?.data || []) as Task[];
-      setTasks(rows.filter((t) => (t as any).client_account_id === client.id));
-    } else {
-      const msg = await getEdgeErrorMessage(res.error, res.data);
-      toast({ title: "Failed to load tasks", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
-    }
   };
 
   const fetchDeliverables = async () => {
@@ -249,46 +220,6 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
     }
   };
 
-  const completeTask = async (taskId: string) => {
-    const res = await supabase.functions.invoke("admin", {
-      body: {
-        action: "update",
-        table: "client_tasks",
-        id: taskId,
-        data: { status: "completed", completed_at: new Date().toISOString() },
-        password: adminPassword,
-      },
-    });
-
-    if (!res.error) {
-      toast({ title: "Task completed!" });
-      fetchTasks();
-    } else {
-      const msg = await getEdgeErrorMessage(res.error, res.data);
-      toast({ title: "Failed to complete task", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
-    }
-  };
-
-  const reopenTask = async (taskId: string) => {
-    const res = await supabase.functions.invoke("admin", {
-      body: {
-        action: "update",
-        table: "client_tasks",
-        id: taskId,
-        data: { status: "pending", completed_at: null },
-        password: adminPassword,
-      },
-    });
-
-    if (!res.error) {
-      toast({ title: "Task reopened" });
-      fetchTasks();
-    } else {
-      const msg = await getEdgeErrorMessage(res.error, res.data);
-      toast({ title: "Failed to reopen task", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
-    }
-  };
-
   const updateDeliverable = async (deliverableId: string, status: string) => {
     const res = await supabase.functions.invoke("admin", {
       body: {
@@ -374,8 +305,6 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
   };
 
   // Stats
-  const pendingTasks = tasks.filter((t) => t.status === "pending").length;
-  const completedTasks = tasks.filter((t) => t.status === "completed").length;
   const pendingDeliverables = deliverables.filter((d) => d.status === "pending_review").length;
   const unreadMessages = messages.filter((m) => !m.is_read && m.sender_type === "client").length;
   const activeProjects = projects.filter((p) => p.status === "in_progress").length;
@@ -391,21 +320,7 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
   return (
     <div className="space-y-6">
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className={cn("cursor-pointer hover:border-primary/50", activeTab === "tasks" && "border-primary")} onClick={() => setActiveTab("tasks")}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className={cn("p-2 rounded-lg", pendingTasks > 0 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700")}>
-                {pendingTasks > 0 ? <Clock className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{pendingTasks}</p>
-                <p className="text-xs text-muted-foreground">Pending Tasks</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className={cn("cursor-pointer hover:border-primary/50", activeTab === "deliverables" && "border-primary")} onClick={() => setActiveTab("deliverables")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -447,33 +362,14 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
             </div>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:border-primary/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{completedTasks}</p>
-                <p className="text-xs text-muted-foreground">Tasks Done</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview" className="gap-2">
             <BarChart3 className="w-4 h-4" />
             <span className="hidden sm:inline">Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="tasks" className="gap-2">
-            <CheckCircle2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Tasks</span>
-            {pendingTasks > 0 && <Badge variant="secondary" className="ml-1">{pendingTasks}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="deliverables" className="gap-2">
             <Package className="w-4 h-4" />
@@ -529,73 +425,6 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
               </CardContent>
             </Card>
 
-            {/* Priority Tasks */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    Priority Tasks
-                  </CardTitle>
-                  {onNavigateToSection && (
-                    <Button variant="ghost" size="sm" onClick={() => onNavigateToSection("client-tasks")} className="gap-1 text-xs">
-                      View All <ExternalLink className="w-3 h-3" />
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {tasks.filter((t) => t.status === "pending").length === 0 ? (
-                  <div className="text-center py-4">
-                    <CheckCircle2 className="w-8 h-8 mx-auto text-green-500 mb-2" />
-                    <p className="text-sm text-muted-foreground">All caught up!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {tasks
-                      .filter((t) => t.status === "pending")
-                      .slice(0, 3)
-                      .map((task) => (
-                        <div
-                          key={task.id}
-                          className="flex items-center justify-between p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
-                          onClick={() => {
-                            try {
-                              sessionStorage.setItem("admin:selectedTaskId", task.id);
-                            } catch {
-                              // ignore
-                            }
-                            onNavigateToSection?.("client-tasks");
-                          }}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{task.name}</p>
-                            <p className="text-xs text-muted-foreground">{task.category}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              try {
-                                sessionStorage.setItem("admin:selectedTaskId", task.id);
-                              } catch {
-                                // ignore
-                              }
-                              onNavigateToSection?.("client-tasks");
-                            }}
-                            className="gap-1"
-                          >
-                            <Eye className="w-4 h-4" />
-                            <span className="hidden sm:inline">Open</span>
-                          </Button>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Recent Activity */}
             <Card className="md:col-span-2">
               <CardHeader className="pb-3">
@@ -631,76 +460,6 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        {/* Tasks Tab */}
-        <TabsContent value="tasks">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tasks</CardTitle>
-              <CardDescription>{pendingTasks} pending, {completedTasks} completed</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[500px] pr-4">
-                <div className="space-y-2">
-                  {tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors",
-                        task.status === "completed" && "opacity-60 bg-muted/30"
-                      )}
-                      onClick={() => {
-                        try {
-                          sessionStorage.setItem("admin:selectedTaskId", task.id);
-                        } catch {
-                          // ignore
-                        }
-                        onNavigateToSection?.("client-tasks");
-                      }}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          try {
-                            sessionStorage.setItem("admin:selectedTaskId", task.id);
-                          } catch {
-                            // ignore
-                          }
-                          onNavigateToSection?.("client-tasks");
-                        }}
-                        title="Open task"
-                      >
-                        <Eye className="w-5 h-5" />
-                      </Button>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("font-medium", task.status === "completed" && "line-through")}>
-                          {task.name}
-                        </p>
-                        {task.description && (
-                          <p className="text-sm text-muted-foreground truncate">{task.description}</p>
-                        )}
-                      </div>
-                      <Badge variant="outline">{task.category}</Badge>
-                      {task.automation_type !== "MANUAL" && (
-                        <Badge variant="secondary" className="bg-violet-100 text-violet-700">AI</Badge>
-                      )}
-                      {task.status === "completed" && (
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); reopenTask(task.id); }} className="gap-1">
-                          <RotateCcw className="w-3 h-3" />
-                          Reopen
-                        </Button>
-                      )}
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Deliverables Tab */}

@@ -73,7 +73,7 @@ serve(async (req) => {
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door <hello@orangedoormarketing.com>";
-  const PORTAL_URL = Deno.env.get("APP_URL") || "https://client.orangedoormarketing.com";
+  const PORTAL_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
 
   if (!RESEND_API_KEY) {
     return new Response(JSON.stringify({ error: "RESEND_API_KEY not configured" }), {

@@ -24,15 +24,16 @@ export async function runAutoTasks(clientId: string, password?: string): Promise
 /**
  * Triggers a single task execution via run-automation.
  * Status updates are handled by run-automation itself — no duplicate writes here.
+ * `taskId` is optional for standalone/one-shot runs not tied to a client_tasks row.
  */
 export async function runSingleTask(
   clientId: string,
-  taskId: string,
+  taskId: string | undefined,
   jobType: string,
   password?: string
 ): Promise<{ success: boolean; error?: string }> {
   const { data, error } = await supabase.functions.invoke("run-automation", {
-    body: { clientId, taskId, jobType, password },
+    body: { clientId, ...(taskId ? { taskId } : {}), jobType, password },
   });
 
   if (error) {

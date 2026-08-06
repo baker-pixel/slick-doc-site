@@ -195,7 +195,7 @@ async function getPageSpeed(url: string): Promise<PageSpeed | null> {
 }
 
 // ── On-page parse ─────────────────────────────────────────────────────────
-function parseOnPage(html: string, url: string) {
+export function parseOnPage(html: string, url: string) {
   const low = html.toLowerCase();
   const title = (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim();
   const meta_description = (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim();

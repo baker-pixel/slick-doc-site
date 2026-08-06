@@ -38,7 +38,6 @@ import { cn } from "@/lib/utils";
 export type AdminSection =
   | "home"
   | "clients"
-  | "client-tasks"
   | "client-projects"
   | "deliverables"
   | "approvals"

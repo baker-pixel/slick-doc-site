@@ -6,6 +6,7 @@ import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromp
 import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { getSocialPillars } from "../_shared/socialStrategy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
+import { toDbContentType } from "../_shared/contentTypeMap.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -233,7 +234,7 @@ serve(async (req) => {
           .from("generated_content")
           .insert({
             client_id: slot.client_account_id,
-            content_type: slot.content_type,
+            content_type: toDbContentType(slot.content_type),
             title: slot.title,
             content: generatedContent,
             status: autoForward ? "approved" : "pending_admin_review",
