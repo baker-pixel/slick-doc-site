@@ -31,7 +31,8 @@ export type AutomationType =
   | "setup_sales_enablement"
   | "schedule_strategy_call"
   | "optimize_crm_pipeline"
-  | "create_full_analytics_suite";
+  | "create_full_analytics_suite"
+  | "generate_social_strategy";
 
 export interface AutomationRequest {
   clientId: string;

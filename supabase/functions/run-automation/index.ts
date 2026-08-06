@@ -34,6 +34,8 @@ import { setupSalesEnablement } from "./handlers/setup-sales-enablement.ts";
 import { scheduleStrategyCall } from "./handlers/schedule-strategy-call.ts";
 import { optimizeCrmPipeline } from "./handlers/optimize-crm-pipeline.ts";
 import { createFullAnalyticsSuite } from "./handlers/create-full-analytics-suite.ts";
+import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -203,6 +205,9 @@ serve(async (req) => {
         break;
       case "create_full_analytics_suite":
         result = await createFullAnalyticsSuite(supabase, client, inputData);
+        break;
+      case "generate_social_strategy":
+        result = await upsertSocialStrategy(supabase, client, tierPolicy(client.tier));
         break;
       default:
         throw new Error(`Unknown job type: ${jobType}`);

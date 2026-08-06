@@ -45,6 +45,7 @@ export const ALLOWED_JOB_TYPES: AutomationType[] = [
   "schedule_strategy_call",
   "optimize_crm_pipeline",
   "create_full_analytics_suite",
+  "generate_social_strategy",
 ];
 
 export function normalizeJobType(raw: unknown): AutomationType {
@@ -201,6 +202,7 @@ export function normalizeJobType(raw: unknown): AutomationType {
     // Workflow step task_type aliases (from seed-tier-workflow FOUNDATION_STEPS / GROWTH_EXTRA / TRANSFORMATION_EXTRA)
     website_analysis: "run_page_speed_test",
     gap_report: "run_keyword_gap_analysis",
+    social_strategy: "generate_social_strategy",
     content: "content_generation",
     email_template: "email_sequence",
     ad_copy: "content_generation",
