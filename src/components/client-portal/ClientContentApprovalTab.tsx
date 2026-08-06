@@ -13,7 +13,7 @@ import {
   Loader2, FileCheck, CheckCircle, XCircle, Clock, MessageSquare,
   FileText, Image, Mail, Share2, PenTool, Video, Megaphone, Calendar,
   ClipboardList, Sparkles, Target, Hash, Link, AtSign, Type, AlignLeft,
-  Facebook, Instagram, Linkedin, Twitter, LayoutGrid,
+  Facebook, Instagram, Linkedin, Twitter, LayoutGrid, CheckCheck,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -518,6 +518,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
   const [selectedApproval, setSelectedApproval] = useState<ContentApproval | null>(null);
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [bulkApproving, setBulkApproving] = useState(false);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   // Whether the client_approval onboarding step is unlocked but not yet complete
   // (draft is being generated in the background — show helpful empty state instead of blank)
@@ -658,6 +659,60 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Approves every currently pending, currently-filtered approval in one
+  // shot -- scoped to whatever platform tab is selected, same as the list
+  // it's approving actually shows. Reuses the same handle-approval call as
+  // the single-item flow, just fanned out.
+  const handleApproveAll = async (targets: ContentApproval[]) => {
+    if (targets.length === 0) return;
+    setBulkApproving(true);
+    try {
+      const results = await Promise.allSettled(
+        targets.map((a) =>
+          supabase.functions.invoke("handle-approval", {
+            body: { approval_id: a.id, action: "approved" },
+          }).then(({ error }) => {
+            if (error) throw error;
+          })
+        )
+      );
+
+      const succeededIds = new Set(
+        targets.filter((_, i) => results[i].status === "fulfilled").map((a) => a.id)
+      );
+      const failedCount = targets.length - succeededIds.size;
+
+      setApprovals((prev) =>
+        prev.map((a) =>
+          succeededIds.has(a.id)
+            ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString() }
+            : a
+        )
+      );
+
+      if (succeededIds.size > 0) {
+        toast({
+          title: failedCount > 0 ? `${succeededIds.size} approved, ${failedCount} failed` : `${succeededIds.size} post${succeededIds.size === 1 ? "" : "s"} approved`,
+          description: failedCount > 0 ? "Try again for the ones that failed." : "Approved content is queued for publishing.",
+          variant: failedCount > 0 ? "destructive" : "default",
+        });
+
+        completeWorkflowStep(clientAccountId, "client_approval")
+          .then((completed) => {
+            if (completed) {
+              queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
+              queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+            }
+          })
+          .catch((e) => console.error("Failed to complete approval workflow step:", e));
+      } else {
+        toast({ title: "Approval failed", description: "Nothing was approved. Please try again.", variant: "destructive" });
+      }
+    } finally {
+      setBulkApproving(false);
     }
   };
 
@@ -802,10 +857,22 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
           {/* Pending Approvals */}
           {pendingApprovals.length > 0 && (
             <div className="space-y-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <Clock className="h-5 w-5 text-yellow-600" />
-                Awaiting Your Review ({pendingApprovals.length})
-              </h3>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-yellow-600" />
+                  Awaiting Your Review ({pendingApprovals.length})
+                </h3>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={bulkApproving}
+                  onClick={() => handleApproveAll(pendingApprovals)}
+                >
+                  {bulkApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+                  Approve All{platformFilter !== "all" ? ` ${PLATFORM_CONFIG[platformFilter].label}` : ""} ({pendingApprovals.length})
+                </Button>
+              </div>
               <div className="grid gap-4">
                 {pendingApprovals.map((approval) => {
                   const typeConfig = getContentTypeConfig(approval.content_type);
