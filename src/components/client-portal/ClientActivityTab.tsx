@@ -466,6 +466,10 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       toast({ title: "Industry and target audience are required", description: "Every engine (SEO, social, ads) uses this to tailor your content.", variant: "destructive" });
       return;
     }
+    if (!bizForm.website_url.trim()) {
+      toast({ title: "Website URL is required", description: "Your SEO agent can't audit or fix anything without a site to crawl.", variant: "destructive" });
+      return;
+    }
     setSubmittingBizForm(true);
     try {
       // Fetch existing context_profile so we can merge, not overwrite
@@ -586,7 +590,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="biz-website">Website URL</Label>
+            <Label htmlFor="biz-website">Website URL *</Label>
             <Input
               id="biz-website"
               value={bizForm.website_url}

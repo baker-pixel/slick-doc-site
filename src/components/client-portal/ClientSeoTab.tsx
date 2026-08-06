@@ -288,7 +288,17 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const [disconnecting, setDisconnecting] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
   const [showAllFixes, setShowAllFixes] = useState(false);
+  const [hasWebsiteUrl, setHasWebsiteUrl] = useState(true);
   const autoScanFired = useRef(false);
+
+  useEffect(() => {
+    supabase
+      .from("client_accounts")
+      .select("website_url")
+      .eq("id", clientAccountId)
+      .maybeSingle()
+      .then(({ data }) => setHasWebsiteUrl(!!data?.website_url?.trim()));
+  }, [clientAccountId]);
 
   const loadAudit = useCallback(async () => {
     setLoadingAudit(true);
@@ -601,8 +611,17 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         ) : !audit ? (
           <Card><CardContent className="py-12 text-center text-muted-foreground">
             <Globe className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p className="font-medium">No audit run yet</p>
-            <p className="text-sm mt-1">Your Orange Door team will run your first SEO audit soon.</p>
+            {hasWebsiteUrl ? (
+              <>
+                <p className="font-medium">No audit run yet</p>
+                <p className="text-sm mt-1">Your Orange Door team will run your first SEO audit soon.</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-orange-600 dark:text-orange-400">Waiting on you: add your website</p>
+                <p className="text-sm mt-1">We can't audit or fix anything without a site to crawl. Add your website URL under "Confirm Business Information" on Home, or Settings → Company Context.</p>
+              </>
+            )}
           </CardContent></Card>
         ) : inconclusive ? (
           <Card><CardContent className="py-12 text-center text-muted-foreground">

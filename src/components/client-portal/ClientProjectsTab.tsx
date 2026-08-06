@@ -128,16 +128,20 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
   // instead of a generic "check back soon" that reads identically whether
   // the client is blocking it or an engine just hasn't run yet.
   const [hasBusinessInfo, setHasBusinessInfo] = useState(true);
+  // SEO's blocker is different (a URL to crawl, not industry/audience) --
+  // tracked separately so the SEO card explains the right thing.
+  const [hasWebsiteUrl, setHasWebsiteUrl] = useState(true);
 
   useEffect(() => {
     supabase
       .from("client_accounts")
-      .select("industry, context_profile")
+      .select("industry, context_profile, website_url")
       .eq("id", clientAccountId)
       .maybeSingle()
       .then(({ data }) => {
         const audience = (data?.context_profile as Record<string, unknown> | null)?.target_audience;
         setHasBusinessInfo(!!data?.industry?.trim() && typeof audience === "string" && audience.trim().length > 0);
+        setHasWebsiteUrl(!!data?.website_url?.trim());
       });
   }, [clientAccountId]);
 
@@ -537,16 +541,21 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
                         </div>
                       </div>
                       {(() => {
-                        // SEO isn't gated on business info (it crawls the real
-                        // site regardless), so only social/prospect get the
-                        // "waiting on you" framing here.
+                        const isAwaitingSetup = project.status === "awaiting_setup";
+                        // SEO's blocker is a missing website URL, not business
+                        // info (it crawls the real site regardless of industry/
+                        // audience); social/prospect are blocked by the latter.
+                        const blockedOnUrl = isAwaitingSetup && project.kind === "seo" && !hasWebsiteUrl;
                         const blockedOnBusinessInfo =
-                          project.status === "awaiting_setup" && !hasBusinessInfo && (project.kind === "social" || project.kind === "prospect");
-                        const description = blockedOnBusinessInfo
+                          isAwaitingSetup && !hasBusinessInfo && (project.kind === "social" || project.kind === "prospect");
+                        const blocked = blockedOnUrl || blockedOnBusinessInfo;
+                        const description = blockedOnUrl
+                          ? "Waiting on you: add your website URL under \"Confirm Business Information\" on Home (or Settings → Company Context) — nothing to crawl without it."
+                          : blockedOnBusinessInfo
                           ? "Waiting on you: complete \"Confirm Business Information\" on Home (or Settings → Company Context) to get this started."
                           : project.description || agent.tagline;
                         return description ? (
-                          <p className={cn("text-sm mb-4 line-clamp-2", blockedOnBusinessInfo ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                          <p className={cn("text-sm mb-4 line-clamp-2", blocked ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
                             {description}
                           </p>
                         ) : null;
