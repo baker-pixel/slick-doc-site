@@ -149,7 +149,7 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────
-async function fetchHtml(url: string): Promise<{ html: string; via: "render" | "plain"; status: number }> {
+export async function fetchHtml(url: string): Promise<{ html: string; via: "render" | "plain"; status: number }> {
   const key = Deno.env.get("BROWSERLESS_API_KEY");
   if (key) {
     try {

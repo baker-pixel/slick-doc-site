@@ -4,6 +4,7 @@ import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts
 import { callAIJson } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
+import { fetchHtml, parseOnPage } from "../_shared/seoSignals.ts";
 
 // wp_fix_queue's field names -> the canonical seo-audit finding types that
 // cover the same underlying WordPress field. Where the canonical engine
@@ -84,6 +85,49 @@ interface AiFixResult {
   meta_desc?: string;
   focus_keyword?: string;
   alt_text?: Record<string, string>;
+}
+
+// The plugin reads meta_title/meta_desc from raw Yoast/RankMath postmeta and
+// h1/word count from the raw post_content DB field -- both miss real,
+// visible content: an SEO plugin's title/description TEMPLATE renders a real
+// value with no per-post override needed (confirmed live: Navtech's
+// /insights/ has a real title and description in the browser, Yoast shows
+// green, but the plugin reported both empty), and any page-builder-rendered
+// content lives outside post_content entirely (word_count: 0 for a real,
+// non-empty page is the tell). The rendered page is ground truth for what a
+// visitor or Google actually sees -- re-verify against it, using the same
+// crawl the canonical seo-audit engine already trusts, before generating a
+// fix for something that was never actually missing. Only pages the plugin
+// already flagged are re-checked, to avoid a full extra crawl per scan.
+async function verifyRenderedMeta(page: WpPage): Promise<void> {
+  const relevantFields = new Set(["meta_title", "meta_desc", "h1", "content"]);
+  if (!(page.issues ?? []).some((i) => relevantFields.has(i.field))) return;
+
+  try {
+    const { html } = await fetchHtml(page.url);
+    if (!html) return;
+    const rendered = parseOnPage(html, page.url);
+
+    if (rendered.title) page.meta_title = rendered.title;
+    if (rendered.meta_description) page.meta_desc = rendered.meta_description;
+    page.h1_count = rendered.h1_count;
+    page.word_count = rendered.word_count;
+
+    // Recompute these 4 checks fresh against the corrected values rather
+    // than trying to selectively patch the plugin's own list -- its rules
+    // are simple enough to mirror exactly (see od_detect_issues in the
+    // plugin source).
+    page.issues = (page.issues ?? []).filter((i) => !relevantFields.has(i.field));
+    if (!page.meta_title) page.issues.push({ field: "meta_title", severity: "error", message: "Missing meta title" });
+    else if (page.meta_title.length > 60) page.issues.push({ field: "meta_title", severity: "warning", message: "Meta title too long (over 60 chars)" });
+    if (!page.meta_desc) page.issues.push({ field: "meta_desc", severity: "error", message: "Missing meta description" });
+    else if (page.meta_desc.length > 155) page.issues.push({ field: "meta_desc", severity: "warning", message: "Meta description too long (over 155 chars)" });
+    if (page.h1_count === 0) page.issues.push({ field: "h1", severity: "error", message: "Missing H1 tag" });
+    else if (page.h1_count > 1) page.issues.push({ field: "h1", severity: "warning", message: "Multiple H1 tags found" });
+    if (page.word_count < 300) page.issues.push({ field: "content", severity: "warning", message: "Thin content (under 300 words)" });
+  } catch (e) {
+    console.error(`verifyRenderedMeta failed for ${page.url}:`, e);
+  }
 }
 
 async function fetchWithRetry(url: string, opts: RequestInit, retries = 1): Promise<Response> {
@@ -232,8 +276,18 @@ serve(async (req) => {
 
     const scanData = (await scanRes.json()) as ScanData;
 
+    // 2b. Re-verify meta_title/meta_desc/h1/content against the actually
+    // rendered page before trusting the plugin's raw-DB-field read (see
+    // verifyRenderedMeta). Only for pages it already flagged, run with
+    // limited concurrency so a large site doesn't serialize dozens of fetches.
+    const allPagesForVerify: WpPage[] = [...(scanData.posts ?? []), ...(scanData.pages ?? [])];
+    const VERIFY_CONCURRENCY = 5;
+    for (let i = 0; i < allPagesForVerify.length; i += VERIFY_CONCURRENCY) {
+      await Promise.all(allPagesForVerify.slice(i, i + VERIFY_CONCURRENCY).map(verifyRenderedMeta));
+    }
+
     // 3. Count issues
-    const allPages: WpPage[] = [...(scanData.posts ?? []), ...(scanData.pages ?? [])];
+    const allPages: WpPage[] = allPagesForVerify;
     let errors = 0, warnings = 0, notices = 0;
     for (const p of allPages) {
       for (const iss of p.issues ?? []) {
