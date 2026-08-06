@@ -158,20 +158,18 @@ export async function unlockReadySteps(
       // The moment onboarding completes does exactly one more thing: seed
       // the shared context (brand/ICP/voice, from the original lead's
       // gap-analysis data) so engines have something real to pull. It does
-      // NOT call any engine directly -- seo-reaudit-scan's own due-scan
-      // already treats "active client, website_url set, no audit on file"
-      // as due, so this just nudges that pickup sooner instead of leaving a
-      // brand-new client waiting for the next cron pass. Same idempotency
-      // key as the cron uses, so the two can never double-run.
+      // NOT enqueue an SEO audit directly -- every tier's automation chain
+      // already includes a "run_seo_audit" step (FOUNDATION_STEPS in
+      // seed-tier-workflow) that fires within moments of this same
+      // onboarding-completion event, hitting the identical seo-audit
+      // function. A prior version of this code also enqueued seo-audit
+      // here directly "to nudge it sooner" -- that produced two full audits
+      // (two crawls + two PageSpeed runs + two seo_audits rows) for every
+      // single new client, since the two enqueues use different job-queue
+      // idempotency keys and never collide.
       await seedContextFromLead(supabase, resolvedClientId).catch((e: unknown) =>
         console.error("seedContextFromLead failed:", e)
       );
-
-      const { data: activatedClient } = await supabase
-        .from("client_accounts")
-        .select("website_url, tier")
-        .eq("id", resolvedClientId)
-        .maybeSingle();
 
       // Empty shells so the portal shows what's coming instead of a blank
       // Projects tab until each engine's own cron/scan gets around to it.
@@ -179,6 +177,12 @@ export async function unlockReadySteps(
       // `tier` (NOT NULL), not `plan_tier` -- every other tierPolicy() call
       // site in this codebase reads client.tier; plan_tier is a separate,
       // apparently-unused nullable column nothing else consults.
+      const { data: activatedClient } = await supabase
+        .from("client_accounts")
+        .select("tier")
+        .eq("id", resolvedClientId)
+        .maybeSingle();
+
       await supabase
         .rpc("bootstrap_client_projects", {
           p_client_account_id: resolvedClientId,
@@ -187,11 +191,6 @@ export async function unlockReadySteps(
         .then(({ error }: { error: unknown }) => {
           if (error) console.error("bootstrap_client_projects failed:", error);
         });
-
-      if (activatedClient?.website_url) {
-        const today = new Date().toISOString().slice(0, 10);
-        await enqueue("seo-audit", `seo-audit:${resolvedClientId}:${today}`, { clientId: resolvedClientId });
-      }
     }
   }
 
