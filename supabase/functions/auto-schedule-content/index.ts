@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
+import { hasBusinessContext } from "../_shared/businessContext.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -99,7 +100,7 @@ serve(async (req) => {
     // Fetch active clients
     let clientQuery = supabase
       .from("client_accounts")
-      .select("id, tier, business_name")
+      .select("id, tier, business_name, industry, context_profile")
       .eq("status", "active");
 
     if (specificClientId) {
@@ -111,7 +112,11 @@ serve(async (req) => {
     // Skip clients whose portal invite was never accepted -- nobody could
     // review the drafts, so scheduling for them just burns spend on content
     // that auto-deletes unseen.
-    const clients = await filterEngagedClients(supabase, rawClients ?? []);
+    const engagedClients = await filterEngagedClients(supabase, rawClients ?? []);
+    // Skip clients missing real business info too -- fill-scheduled-content
+    // would refuse to fill these slots anyway (same hasBusinessContext gate),
+    // so creating them here just leaves dead placeholders in the calendar.
+    const clients = engagedClients.filter((c: any) => hasBusinessContext(c));
     if (!clients || clients.length === 0) {
       return new Response(
         JSON.stringify({ success: true, message: "No active clients with accepted portal access found" }),

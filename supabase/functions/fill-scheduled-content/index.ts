@@ -7,6 +7,7 @@ import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { getSocialPillars } from "../_shared/socialStrategy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
+import { hasBusinessContext } from "../_shared/businessContext.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -99,24 +100,26 @@ serve(async (req) => {
     // auto-delete unseen via cleanup-expired-draft-content.
     const clients = await filterEngagedClients(supabase, rawClients ?? []);
 
-    // Alert for any clients missing context_profile — content generation is blocked for them
-    const clientsWithoutContext = (clients || []).filter((c: any) => !c.context_profile);
+    // Alert for any clients missing real business info — content generation is blocked for them.
+    // Checks industry + target_audience specifically, not just "context_profile is non-null"
+    // (a client could have context_profile = {marketing_goal: "..."} with neither field set).
+    const clientsWithoutContext = (clients || []).filter((c: any) => !hasBusinessContext(c));
     for (const c of clientsWithoutContext) {
-      console.warn(`Skipping content for ${c.business_name} — no context_profile and intake not complete`);
+      console.warn(`Skipping content for ${c.business_name} — missing industry/target audience`);
       await supabase.from("automation_alerts").insert({
         alert_type: "missing_context",
         severity: "warning",
-        title: `Content blocked for ${c.business_name} — intake form not submitted`,
-        message: `${c.business_name} has scheduled content slots but no context profile. Ask the client to complete their intake form so AI content can be generated.`,
+        title: `Content blocked for ${c.business_name} — business info incomplete`,
+        message: `${c.business_name} has scheduled content slots but hasn't provided industry/target audience yet. Ask the client to complete "Confirm Business Information" (or Settings → Company Context) so AI content can be generated.`,
         source: "fill-scheduled-content",
         metadata: { client_id: c.id, business_name: c.business_name, timestamp: new Date().toISOString() },
       }).select().maybeSingle(); // fire-and-forget, ignore dupe errors
     }
 
-    // Only process clients that have a context_profile
+    // Only process clients with real business info
     const clientMap = Object.fromEntries(
       (clients || [])
-        .filter((c: any) => !!c.context_profile)
+        .filter((c: any) => hasBusinessContext(c))
         .map((c: any) => [c.id, c as ClientInfo])
     );
 

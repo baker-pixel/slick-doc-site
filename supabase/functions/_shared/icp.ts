@@ -3,6 +3,7 @@
 // backfill-prospect-context (scores enriched prospects in the background).
 
 import { callAIJson, MODELS } from "./ai.ts";
+import { hasBusinessContext } from "./businessContext.ts";
 
 export interface ClientICP {
   industries: string[];
@@ -22,7 +23,11 @@ export function hasValidICP(icp: unknown): icp is ClientICP {
 
 /**
  * Returns the client's structured ICP, generating and persisting one from
- * its context_profile the first time. Returns null only if generation fails.
+ * its context_profile the first time. Returns null if generation fails, OR
+ * if the client hasn't provided real business info yet (industry + target
+ * audience) -- every caller already treats a null ICP as "not ready", so
+ * this is the one place that stops the LLM from deriving an ICP out of
+ * "unknown"/"unknown"/"unknown" placeholders.
  */
 export async function ensureClientICP(
   supabase: any,
@@ -35,6 +40,7 @@ export async function ensureClientICP(
   },
 ): Promise<ClientICP | null> {
   if (hasValidICP(client.icp)) return client.icp;
+  if (!hasBusinessContext(client)) return null;
 
   const ctx = client.context_profile || {};
   const prompt = `A marketing agency runs outbound prospecting on behalf of this client. Derive the client's ideal customer profile (ICP) -- who the CLIENT sells to, i.e. who we should prospect FOR them.

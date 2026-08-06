@@ -4,6 +4,7 @@ import { corsHeaders } from "../_shared/http.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { hasBusinessContext } from "../_shared/businessContext.ts";
 
 const COOLDOWN_HOURS = 24;
 
@@ -39,6 +40,9 @@ serve(async (req) => {
       .eq("id", client_id)
       .single();
     if (clientErr || !client) return json({ error: "Client not found" }, 404);
+    if (!hasBusinessContext(client)) {
+      return json({ error: "Fill in your industry and target audience first -- see Company Context in Settings" }, 422);
+    }
 
     // Cheap spam guard: this calls an LLM every time, so cap how often a
     // client can re-roll their topics.

@@ -6,6 +6,7 @@
 
 import { callAIJson, MODELS } from "./ai.ts";
 import type { TierPolicy } from "./tierPolicy.ts";
+import { hasBusinessContext } from "./businessContext.ts";
 
 interface StrategyClient {
   id: string;
@@ -21,6 +22,10 @@ export async function upsertSocialStrategy(
   client: StrategyClient,
   policy: TierPolicy,
 ): Promise<{ projectId: string | null; pillars: Pillar[] }> {
+  // Don't derive pillars from "unknown"/"n/a" -- that's guessing, not
+  // strategy. Every caller already treats a null projectId as "not ready".
+  if (!hasBusinessContext(client)) return { projectId: null, pillars: [] };
+
   const ctx = client.context_profile ?? {};
   const services = Array.isArray(ctx.services) ? (ctx.services as string[]).join(", ") : "";
   const audience = typeof ctx.target_audience === "string" ? ctx.target_audience : "";

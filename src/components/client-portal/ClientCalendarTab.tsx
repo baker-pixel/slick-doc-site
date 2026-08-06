@@ -6,16 +6,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, ExternalLink, Trash2 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
-import { getMarketingOrigin } from "@/lib/getPortalUrl";
 import { toast } from "@/hooks/use-toast";
 
 interface ClientCalendarTabProps {
   clientAccountId: string;
   clientTier?: string;
-  clientEmail?: string;
 }
 
 interface CalendarItem {
@@ -58,7 +56,7 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
   failed: "Failed",
 };
 
-export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", clientEmail }: ClientCalendarTabProps) {
+export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }: ClientCalendarTabProps) {
   const queryClient = useQueryClient();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
@@ -81,10 +79,15 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
     queryFn: async () => {
       const { data } = await supabase
         .from("client_accounts")
-        .select("context_profile")
+        .select("industry, context_profile")
         .eq("id", clientAccountId)
         .maybeSingle();
-      return !!(data?.context_profile);
+      // Matches the backend hasBusinessContext gate exactly -- a client can
+      // have a non-null context_profile (e.g. just a marketing_goal) without
+      // industry/target_audience, which is what content generation actually
+      // needs and checks for.
+      const audience = (data?.context_profile as Record<string, unknown> | null)?.target_audience;
+      return !!data?.industry?.trim() && typeof audience === "string" && audience.trim().length > 0;
     },
   });
 
@@ -148,27 +151,19 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation", 
     );
   }
 
-  const intakeUrl = clientEmail
-    ? `${getMarketingOrigin()}/gap-analysis?email=${encodeURIComponent(clientEmail)}`
-    : `${getMarketingOrigin()}/gap-analysis`;
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Intake reminder — shown when context_profile is missing */}
+      {/* Business-info reminder — shown when industry/target audience is missing.
+          Points at "Confirm Business Information" (Home) / Company Context
+          (Settings) specifically, not the Gap Analysis funnel -- that form
+          doesn't collect industry, so completing it wouldn't actually clear
+          this banner. */}
       {hasContext === false && (
         <Alert className="border-orange-400/40 bg-orange-500/5">
           <AlertTriangle className="h-4 w-4 text-orange-500" />
-          <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your intake form</AlertTitle>
-          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
-            <span className="text-sm text-muted-foreground">
-              Your content calendar can't be filled until we know more about your business. Complete the SYSTEM Gap Analysis — it takes about 10 minutes.
-            </span>
-            <a href={intakeUrl} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white">
-                Start Intake Form
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
-            </a>
+          <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your business profile</AlertTitle>
+          <AlertDescription className="mt-1 text-sm text-muted-foreground">
+            Your content calendar can't be filled until we know your industry and target audience. Complete "Confirm Business Information" on your Home tab, or fill in Company Context under Settings.
           </AlertDescription>
         </Alert>
       )}
