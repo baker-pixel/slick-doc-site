@@ -717,22 +717,16 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
   };
 
   const handleRequestChanges = async () => {
-    if (!selectedApproval || !feedback.trim()) {
-      toast({
-        title: "Feedback Required",
-        description: "Please provide feedback on what changes are needed.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!selectedApproval) return;
     setSubmitting(true);
 
     try {
+      const trimmedFeedback = feedback.trim() || undefined;
       const { data, error } = await supabase.functions.invoke("handle-approval", {
         body: {
           approval_id: selectedApproval.id,
           action: "changes_requested",
-          feedback,
+          feedback: trimmedFeedback,
         },
       });
 
@@ -742,15 +736,16 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
       setApprovals((prev) =>
         prev.map((a) =>
           a.id === selectedApproval.id
-            ? { ...a, status: "changes_requested", publish_status: "changes_requested", feedback, reviewed_at: new Date().toISOString() }
+            ? { ...a, status: "changes_requested", publish_status: "changes_requested", feedback: trimmedFeedback ?? null, reviewed_at: new Date().toISOString() }
             : a
         )
       );
 
-      toast({
-        title: "Changes Requested",
-        description: "Your feedback has been sent to the team.",
-      });
+      toast(
+        trimmedFeedback
+          ? { title: "Changes Requested", description: "Your feedback has been sent to the team." }
+          : { title: "Content Declined", description: "This post won't be published." }
+      );
 
       setSelectedApproval(null);
       setFeedback("");
@@ -1081,7 +1076,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                         Your Feedback
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        Optional for approval, required if requesting changes
+                        Optional — leave a note if you'd like, or just decline below
                       </p>
                       <Textarea
                         placeholder="Share any thoughts, suggestions, or specific changes you'd like to see..."
@@ -1122,7 +1117,7 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
                       className="border-orange-200 text-orange-700 hover:bg-orange-50"
                     >
                       <XCircle className="h-4 w-4 mr-2" />
-                      Request Changes
+                      {feedback.trim() ? "Request Changes" : "Reject"}
                     </Button>
                     <Button onClick={handleApprove} disabled={submitting} className="bg-green-600 hover:bg-green-700">
                       {submitting ? (
