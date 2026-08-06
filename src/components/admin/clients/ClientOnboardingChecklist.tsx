@@ -394,14 +394,23 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
         const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Website scan failed");
       }
-      const contextProfile = data?.analysis?.context_profile;
+      const contextProfile = data?.analysis?.context_profile as Record<string, unknown> | undefined;
       if (!contextProfile) throw new Error("No context profile returned from scan");
+      // industry lives on client_accounts.industry (every content-generation
+      // prompt reads it from there, not context_profile) -- pull it out
+      // instead of leaving it stranded in the jsonb blob where nothing looks
+      // for it, which would leave hasBusinessContext() blocked forever
+      // even after a successful scan.
+      const { industry, ...restContext } = contextProfile;
 
       const { error: updateError } = await callAdminApi(adminPassword, {
         action: "update",
         table: "client_accounts",
         id: selectedClient.id,
-        data: { context_profile: { ...(contextProfile as Record<string, unknown>), source: "website_scan", partial: false } },
+        data: {
+          ...(typeof industry === "string" && industry.trim() ? { industry: industry.trim() } : {}),
+          context_profile: { ...restContext, source: "website_scan", partial: false },
+        },
       });
       if (updateError) throw new Error(updateError);
 

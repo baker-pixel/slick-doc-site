@@ -221,6 +221,7 @@ Return your analysis as a JSON object with this exact structure:
   },
   "summary": "<2-3 sentence summary>",
   "context_profile": {
+    "industry": "a short industry/business-type label, e.g. 'Residential HVAC', 'Family Law', 'Med Spa'",
     "services": ["list of specific services or products offered — be specific, e.g. 'HVAC repair' not 'services'"],
     "differentiators": ["key differentiators or USPs visible on the site — e.g. '20+ years experience', 'family-owned', '24/7 emergency service'"],
     "target_audience": "who they primarily serve based on site content",
