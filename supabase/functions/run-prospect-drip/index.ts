@@ -7,13 +7,14 @@ import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { logAlert } from "../_shared/alerts.ts";
+// logActivity for "email sent" moved to process-email-queue -- that's where
+// the actual send now happens (this function only enrolls/schedules).
 
-const RESEND_API_URL = "https://api.resend.com";
-
-// Hard ceiling on cold sends per hourly run — deliverability protection.
-// 25/hr ≈ 600/day worst case; plenty for the current client base and safe
-// for a single sending domain without warm-up.
-const MAX_SENDS_PER_RUN = 25;
+// Cap on how many prospects get (re-)enrolled per run -- each enrollment
+// makes up to 4 AI calls to draft the full sequence upfront, so this bounds
+// LLM spend per run, not send volume (sending/rate-limiting is
+// process-email-queue's job now, not this function's).
+const MAX_ENROLLMENTS_PER_RUN = 25;
 
 interface Prospect {
   id: string;
@@ -42,13 +43,9 @@ interface ClientAccount {
   brand_voice?: Record<string, unknown> | null;
 }
 
-// Days after nurture begins for each drip step
-const DRIP_SCHEDULE: Record<number, number> = {
-  1: 2,
-  2: 4,
-  3: 7,
-  4: 10,
-};
+interface SequenceStep {
+  delay_days?: number;
+}
 
 function getFirstName(name: string): string {
   return name?.split(" ")[0] || "there";
@@ -79,7 +76,7 @@ function buildClientCtaButton(client: ClientAccount): string {
   return `<div style="text-align:center;margin:25px 0;"><a href="${url}" style="display:inline-block;padding:14px 28px;background:#E8521A;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Get in Touch with ${client.business_name}</a></div>`;
 }
 
-// Generic fallback — only fires if Groq is down. No placeholders.
+// Generic fallback — only fires if the AI call fails. No placeholders.
 function buildStaticOutreachEmail(
   prospect: Prospect,
   client: ClientAccount,
@@ -256,6 +253,18 @@ Return ONLY valid JSON on one line: { "subject": "...", "html": "..." }`;
   }
 }
 
+// Cancels any not-yet-sent queued steps for a prospect who became
+// disqualified (converted/unsubscribed/bounced) after enrollment -- without
+// this, steps already queued ahead would still go out on schedule even
+// though the prospect converted or opted out days ago.
+async function cancelPendingQueuedEmails(supabase: any, prospectId: string): Promise<void> {
+  await supabase
+    .from("email_queue")
+    .update({ status: "cancelled" })
+    .filter("metadata->>prospect_id", "eq", prospectId)
+    .eq("status", "pending");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -266,19 +275,39 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-
-  if (!GROQ_API_KEY || !RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: "GROQ_API_KEY or RESEND_API_KEY not configured" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   try {
     const now = new Date();
-    let emailsSent = 0;
     let prospectsNurtured = 0;
+    let prospectsEnrolled = 0;
+
+    // 0. Load the campaign definition. Cadence (delay_days per step) is
+    // data-driven from here -- reusing the same email_sequences model that
+    // already powers inbound marketing-lead nurture, instead of a hardcoded
+    // schedule living in this function's source code. Content is NOT driven
+    // by this row's own templating (that's flat merge-field substitution,
+    // built for uniform marketing copy) -- it's generated per-prospect below,
+    // which is what makes cold outreach actually work.
+    const { data: sequence, error: sequenceErr } = await supabase
+      .from("email_sequences")
+      .select("id, emails")
+      .eq("trigger_type", "prospect_outreach")
+      .eq("is_active", true)
+      .is("tier", null)
+      .maybeSingle();
+
+    if (sequenceErr || !sequence) {
+      await logAlert(supabase, {
+        source: "run-prospect-drip",
+        alertType: "function_error",
+        severity: "error",
+        title: "No active prospect_outreach sequence found",
+        message: sequenceErr?.message ?? "email_sequences has no active, tier-less row for trigger_type=prospect_outreach",
+      });
+      return new Response(JSON.stringify({ error: "No active prospect_outreach sequence configured" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const steps = (sequence.emails as SequenceStep[] | null) ?? [];
 
     // 1. Move pending prospects (48h+ after approval) to nurture
     const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
@@ -300,16 +329,16 @@ serve(async (req) => {
       console.log(`Moved ${ids.length} prospects to nurture`);
     }
 
-    // 2. Fetch nurture prospects
+    // 2. Fetch nurture prospects who haven't finished the sequence
     const { data: nurtureProspects } = await supabase
       .from("prospects")
       .select("*")
       .eq("status", "nurture")
-      .lt("drip_step", 4);
+      .lt("drip_step", steps.length);
 
     if (!nurtureProspects || nurtureProspects.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, prospectsNurtured, emailsSent }),
+        JSON.stringify({ success: true, prospectsNurtured, prospectsEnrolled }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -399,26 +428,18 @@ serve(async (req) => {
       for (const r of badSends ?? []) bouncedSet.add((r as { recipient_email: string }).recipient_email.toLowerCase());
     }
 
-    // 5. Send drip emails
+    // 5. For every eligible prospect: disqualify (and cancel anything
+    // already queued) or enroll their remaining steps.
     const touchedClients = new Set<string>();
     for (const prospect of nurtureProspects as Prospect[]) {
-      if (emailsSent >= MAX_SENDS_PER_RUN) {
-        console.log(`Send cap ${MAX_SENDS_PER_RUN} reached — remaining prospects picked up next run`);
-        break;
-      }
-      if (prospect.client_id && prospectingDisabled.has(prospect.client_id)) {
-        console.log(`Skipping prospect ${prospect.id} — client's plan tier has prospecting disabled`);
-        continue;
-      }
-      if (!prospect.email || !prospect.email.includes("@")) {
-        console.log(`Skipping prospect ${prospect.id} — no valid email`);
-        continue;
-      }
+      if (prospect.client_id && prospectingDisabled.has(prospect.client_id)) continue;
+      if (!prospect.email || !prospect.email.includes("@")) continue;
 
       const emailLower = prospect.email.toLowerCase();
 
       if (clientEmailSet.has(emailLower)) {
         await supabase.from("prospects").update({ status: "converted", converted_at: new Date().toISOString() }).eq("id", prospect.id);
+        await cancelPendingQueuedEmails(supabase, prospect.id);
         // Outcome signal + feedback input: a real conversion. getConversionWins
         // reads these back to calibrate future fit scoring for this client.
         if (prospect.client_id) {
@@ -426,165 +447,94 @@ serve(async (req) => {
             source: "prospect", metric: "prospect_converted", value: 1,
             metadata: { prospect_id: prospect.id, business_type: prospect.business_type },
           });
+          touchedClients.add(prospect.client_id);
         }
-        if (prospect.client_id) touchedClients.add(prospect.client_id);
-        console.log(`Prospect ${prospect.email} is now a client — marked converted`);
+        console.log(`Prospect ${prospect.email} is now a client — marked converted, queue cancelled`);
         continue;
       }
 
       if (unsubscribedSet.has(emailLower)) {
         await supabase.from("prospects").update({ status: "unsubscribed" }).eq("id", prospect.id);
-        console.log(`Prospect ${prospect.email} unsubscribed — removed from drip`);
+        await cancelPendingQueuedEmails(supabase, prospect.id);
+        console.log(`Prospect ${prospect.email} unsubscribed — removed from drip, queue cancelled`);
         continue;
       }
 
       if (bouncedSet.has(emailLower)) {
         await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospect.id);
-        console.log(`Prospect ${prospect.email} previously bounced/complained — removed from drip`);
+        await cancelPendingQueuedEmails(supabase, prospect.id);
+        console.log(`Prospect ${prospect.email} previously bounced/complained — removed from drip, queue cancelled`);
         continue;
       }
 
-      if (!prospect.client_id) {
-        console.warn(`Skipping prospect ${prospect.id} — no client_id assigned`);
-        continue;
-      }
-
+      if (!prospect.client_id) continue;
       const client = clientMap.get(prospect.client_id);
-      if (!client) {
-        console.warn(`Skipping prospect ${prospect.id} — client ${prospect.client_id} not found or inactive`);
-        continue;
-      }
+      if (!client) continue;
 
-      const nextStep = prospect.drip_step + 1;
-      const daysRequired = DRIP_SCHEDULE[nextStep];
-      if (!daysRequired) continue;
+      if (prospectsEnrolled >= MAX_ENROLLMENTS_PER_RUN) continue;
 
-      // Clock starts from when nurture began (approved_at + 48h), not created_at.
-      // This prevents outbound prospects discovered days ago from firing all steps at once.
+      // Already enrolled? (email_queue rows persist with status flipped to
+      // sent/failed/cancelled, never deleted, so this is a reliable check
+      // regardless of how far through the sequence they've gotten.)
+      const { data: existingQueueRows } = await supabase
+        .from("email_queue")
+        .select("id")
+        .filter("metadata->>prospect_id", "eq", prospect.id)
+        .filter("metadata->>sequence_id", "eq", sequence.id)
+        .limit(1);
+      if (existingQueueRows && existingQueueRows.length > 0) continue;
+
+      // Clock starts from when nurture began (approved_at + 48h), not
+      // created_at -- prevents prospects discovered days ago from firing
+      // every step at once.
       const nurtureStart = prospect.approved_at
         ? new Date(new Date(prospect.approved_at).getTime() + 48 * 60 * 60 * 1000)
         : new Date(prospect.created_at);
-      const daysSinceNurture = (now.getTime() - nurtureStart.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceNurture < daysRequired) continue;
 
-      let emailContent = await buildPersonalizedOutreachEmail(prospect, client, nextStep);
-      if (!emailContent) {
-        emailContent = buildStaticOutreachEmail(prospect, client, nextStep);
-      }
-      if (!emailContent) continue;
+      let cumulativeDays = 0;
+      let enrolledAny = false;
+      for (let i = 0; i < steps.length; i++) {
+        const stepNumber = i + 1;
+        cumulativeDays += steps[i].delay_days ?? 0;
+        if (stepNumber <= prospect.drip_step) continue; // already sent under this or a prior run
 
-      if (emailContent.html && !emailContent.html.includes("<!DOCTYPE")) {
-        emailContent = {
+        let emailContent = await buildPersonalizedOutreachEmail(prospect, client, stepNumber);
+        if (!emailContent) emailContent = buildStaticOutreachEmail(prospect, client, stepNumber);
+        if (!emailContent) continue;
+
+        const html = emailContent.html.includes("<!DOCTYPE")
+          ? emailContent.html
+          : wrapHtml(emailContent.html, prospect.email);
+        const scheduledFor = new Date(nurtureStart.getTime() + cumulativeDays * 24 * 60 * 60 * 1000);
+        const isFinalStep = stepNumber >= steps.length;
+
+        const { error: queueErr } = await supabase.from("email_queue").insert({
+          recipient_email: prospect.email,
+          recipient_name: prospect.name,
           subject: emailContent.subject,
-          html: wrapHtml(emailContent.html, prospect.email),
-        };
+          html_content: html,
+          scheduled_for: scheduledFor.toISOString(),
+          status: "pending",
+          metadata: {
+            source: "run-prospect-drip",
+            sequence_id: sequence.id,
+            prospect_id: prospect.id,
+            client_id: prospect.client_id,
+            drip_step: stepNumber,
+            is_final_step: isFinalStep,
+          },
+        });
+        if (queueErr) {
+          console.error(`Failed to queue step ${stepNumber} for ${prospect.email}:`, queueErr.message);
+          continue;
+        }
+        enrolledAny = true;
       }
 
-      try {
-        const fromAddress = `${client.business_name} Team <hello@orangedoormarketing.com>`;
-        // RFC 8058 one-click unsubscribe — required by Gmail/Yahoo bulk-sender
-        // rules for cold mail. The unsubscribe fn acts on query params, so a
-        // provider POST with an empty body works.
-        const oneClickUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/unsubscribe?email=${encodeURIComponent(prospect.email)}&token=${btoa(prospect.email)}&action=unsubscribe`;
-        const emailRes = await fetch(`${RESEND_API_URL}/emails`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
-          },
-          body: JSON.stringify({
-            from: fromAddress,
-            reply_to: client.email,
-            to: [prospect.email],
-            subject: emailContent.subject,
-            html: emailContent.html,
-            headers: {
-              "List-Unsubscribe": `<${oneClickUrl}>`,
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            },
-          }),
-        });
-
-        if (emailRes.ok) {
-          // Sequence is done after the last step -- park in a terminal
-          // status instead of leaving it "nurture" forever (which both
-          // reprocessed it every run and misreported it as active).
-          const isFinalStep = nextStep >= Math.max(...Object.keys(DRIP_SCHEDULE).map(Number));
-          // count+head on an update().select() chain doesn't reliably come
-          // back on this SDK version -- confirmed live: the update itself
-          // worked every time (drip_step actually advanced), but this always
-          // read as falsy, so emailsSent silently stayed 0 while real emails
-          // were going out. Check the returned row itself instead of count.
-          const { data: updatedRows } = await supabase
-            .from("prospects")
-            .update({ drip_step: nextStep, ...(isFinalStep ? { status: "exhausted" } : {}) })
-            .eq("id", prospect.id)
-            .eq("drip_step", prospect.drip_step)
-            .select("id");
-          if (updatedRows && updatedRows.length > 0) {
-            emailsSent++;
-            touchedClients.add(prospect.client_id!);
-          }
-
-          // Log the send so resend-webhook can match delivery/bounce/
-          // complaint events back to it (matches on resend_id).
-          try {
-            const sendData = await emailRes.json().catch(() => ({}));
-            await supabase.from("email_logs").insert({
-              recipient_email: prospect.email,
-              subject: emailContent.subject,
-              status: "sent",
-              resend_id: sendData?.id || null,
-              metadata: {
-                source: "run-prospect-drip",
-                prospect_id: prospect.id,
-                client_id: prospect.client_id,
-                drip_step: nextStep,
-              },
-            });
-          } catch (logErr) {
-            console.error(`Failed to log drip send for ${prospect.email}:`, logErr);
-          }
-
-          // Work-done trail: reporting narrates outreach from this.
-          await logActivity(supabase, prospect.client_id!, {
-            type: "prospect_outreach",
-            title: `Outreach email sent to ${prospect.name} (step ${nextStep}/4)`,
-            description: emailContent.subject,
-            icon: "mail",
-            metadata: { prospect_id: prospect.id, drip_step: nextStep },
-          });
-
-          console.log(`Drip step ${nextStep} sent to ${prospect.email} from ${fromAddress}`);
-        } else {
-          const errBody = await emailRes.text();
-          console.error(`Failed drip ${nextStep} to ${prospect.email}:`, errBody);
-          // This was a silent console.error with no persisted record --
-          // confirmed live: 8 real prospects sat overdue by 12+ days with
-          // zero emails sent and zero visibility into why, because nothing
-          // here ever wrote to automation_alerts.
-          await logAlert(supabase, {
-            source: "run-prospect-drip",
-            alertType: "drip_send_failed",
-            severity: "error",
-            title: `Drip step ${nextStep} failed for ${prospect.email}`,
-            message: `Resend returned ${emailRes.status}: ${errBody.slice(0, 500)}`,
-            sourceId: prospect.client_id ?? undefined,
-            metadata: { prospect_id: prospect.id, client_id: prospect.client_id, drip_step: nextStep, resend_status: emailRes.status },
-          });
-        }
-      } catch (sendErr) {
-        const msg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-        console.error(`Error sending drip to ${prospect.email}:`, sendErr);
-        await logAlert(supabase, {
-          source: "run-prospect-drip",
-          alertType: "drip_send_failed",
-          severity: "error",
-          title: `Drip step ${nextStep} failed for ${prospect.email}`,
-          message: msg,
-          sourceId: prospect.client_id ?? undefined,
-          metadata: { prospect_id: prospect.id, client_id: prospect.client_id, drip_step: nextStep },
-        });
+      if (enrolledAny) {
+        prospectsEnrolled++;
+        touchedClients.add(prospect.client_id);
+        console.log(`Enrolled ${prospect.email} into prospect_outreach sequence from step ${prospect.drip_step + 1}`);
       }
     }
 
@@ -593,10 +543,10 @@ serve(async (req) => {
       await refreshProspectProject(supabase, cid);
     }
 
-    console.log(`Drip run complete: ${prospectsNurtured} nurtured, ${emailsSent} emails sent`);
+    console.log(`Drip run complete: ${prospectsNurtured} nurtured, ${prospectsEnrolled} enrolled`);
 
     return new Response(
-      JSON.stringify({ success: true, prospectsNurtured, emailsSent }),
+      JSON.stringify({ success: true, prospectsNurtured, prospectsEnrolled }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {

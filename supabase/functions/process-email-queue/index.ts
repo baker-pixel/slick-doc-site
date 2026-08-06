@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { logActivity } from "../_shared/activityLog.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -430,6 +431,39 @@ const handler = async (req: Request): Promise<Response> => {
           tracking_id: trackingId,
           metadata: email.metadata,
         });
+
+        // Prospect-outreach sequence steps carry prospect_id/drip_step in
+        // metadata (set by run-prospect-drip at enrollment time) -- this is
+        // the one place that knows a step actually sent, so it's the right
+        // place to advance drip_step, not enrollment time. Only advances
+        // forward (>=), so re-processing or out-of-order delivery can't
+        // regress it.
+        const meta = email.metadata as Record<string, unknown> | null;
+        if (meta?.prospect_id && typeof meta.drip_step === "number") {
+          const { data: prospectRow } = await supabase
+            .from("prospects")
+            .select("drip_step, client_id")
+            .eq("id", meta.prospect_id)
+            .maybeSingle();
+          if (prospectRow && meta.drip_step > (prospectRow.drip_step ?? 0)) {
+            await supabase
+              .from("prospects")
+              .update({
+                drip_step: meta.drip_step,
+                ...(meta.is_final_step ? { status: "exhausted" } : {}),
+              })
+              .eq("id", meta.prospect_id);
+          }
+          if (prospectRow?.client_id) {
+            await logActivity(supabase, prospectRow.client_id, {
+              type: "prospect_outreach",
+              title: `Outreach email sent (step ${meta.drip_step})`,
+              description: email.subject,
+              icon: "mail",
+              metadata: { prospect_id: meta.prospect_id, drip_step: meta.drip_step },
+            });
+          }
+        }
 
         results.push({ id: email.id, status: "sent" });
       } catch (emailError: any) {
