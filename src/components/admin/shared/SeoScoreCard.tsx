@@ -17,8 +17,20 @@ interface Props {
   siteId: string;
 }
 
+// Diminishing-returns curve instead of a flat per-issue subtraction: a flat
+// "100 - errors*8" floors at 0 for any site with 13+ errors and stays there
+// forever, no matter how much better or worse it gets from there -- exactly
+// what happened live for a real client sitting at ~195-200 errors, where
+// every single historical scan showed 0, making "Before/Now" always read as
+// "no change" regardless of real progress. Each category asymptotically
+// approaches its max penalty (60/25/15) as the count grows, so there's
+// always real differentiation, at every count, in both directions.
 function issueScore(r: ScanResult): number {
-  return Math.max(0, Math.min(100, 100 - r.errors * 8 - r.warnings * 3 - r.notices));
+  const penalty =
+    (60 * r.errors) / (r.errors + 15) +
+    (25 * r.warnings) / (r.warnings + 10) +
+    (15 * r.notices) / (r.notices + 8);
+  return Math.max(0, Math.min(100, Math.round(100 - penalty)));
 }
 
 function ScorePill({ value, label }: { value: number; label: string }) {
@@ -47,7 +59,7 @@ export function SeoScoreCard({ siteId }: Props) {
           .from("scan_results")
           .select("id, scanned_at, total_issues, errors, warnings, notices")
           .eq("site_id", siteId)
-          .order("scanned_at", { ascending: true })
+          .order("scanned_at", { ascending: false })
           .limit(10),
         supabase
           .from("wp_fix_queue")
@@ -55,7 +67,10 @@ export function SeoScoreCard({ siteId }: Props) {
           .eq("site_id", siteId)
           .eq("status", "applied"),
       ]);
-      setScans((scanData ?? []) as ScanResult[]);
+      // Fetched newest-first (to actually get the most recent 10, not the
+      // oldest 10); reverse back to chronological so firstScan/latestScan
+      // below and the history list's own re-reverse still read correctly.
+      setScans(((scanData ?? []) as ScanResult[]).reverse());
       setAppliedCount(count ?? 0);
       setLoading(false);
     }
