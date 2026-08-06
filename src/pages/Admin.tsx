@@ -1734,7 +1734,7 @@ const AdminInner = () => {
               />
             ) : (
               <>
-                {(["contacts", "gap-analysis", "pdf-leads", "analytics"] as AdminSection[]).includes(activeSection) && (
+                {activeSection === "analytics" && (
                   <AdminStatsCards
                     contactsCount={contacts.length}
                     gapAnalysesCount={gapAnalyses.length}

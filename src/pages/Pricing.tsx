@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, ArrowRight, Zap, Star, Crown, Info, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PricingTierModal } from "@/components/PricingTierModal";
-import { TierInterestForm } from "@/components/TierInterestForm";
 import { pricingData, formatPriceRange } from "@/lib/pricingData";
+
+// Plan names are "SYSTEM Foundation" / "SYSTEM Growth" / "SYSTEM Transformation" --
+// the second word lowercased is exactly the tier slug /signup expects.
+const tierSlug = (planName: string) => planName.split(" ")[1].toLowerCase();
 import {
   Table,
   TableBody,
@@ -144,15 +147,18 @@ const faqs = [
 ];
 
 export default function Pricing() {
+  const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [interestPlan, setInterestPlan] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <PricingTierModal planName={selectedPlan} onClose={() => setSelectedPlan(null)} onGetStarted={(plan) => { setSelectedPlan(null); setInterestPlan(plan); }} />
-      <TierInterestForm tierName={interestPlan} onClose={() => setInterestPlan(null)} />
-      
+      <PricingTierModal
+        planName={selectedPlan}
+        onClose={() => setSelectedPlan(null)}
+        onGetStarted={(plan) => navigate(`/signup?tier=${tierSlug(plan)}`)}
+      />
+
       <main className="pt-32 pb-20">
         <div className="container-wide mx-auto px-4">
           <div className="mb-6">
@@ -286,7 +292,7 @@ export default function Pricing() {
                       }`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setInterestPlan(plan.name);
+                        navigate(`/signup?tier=${tierSlug(plan.name)}`);
                       }}
                     >
                       {plan.cta}

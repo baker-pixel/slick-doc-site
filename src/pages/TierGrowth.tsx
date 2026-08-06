@@ -8,7 +8,6 @@ import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TierInterestForm } from "@/components/TierInterestForm";
 
 const heroImages = [
   "https://images.unsplash.com/photo-1542744094-3a31f272c490?w=1200&h=600&fit=crop", // Google Analytics traffic graphs
@@ -68,7 +67,6 @@ const results = [
 
 export default function TierGrowth() {
   const [currentImage, setCurrentImage] = useState(0);
-  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -80,7 +78,6 @@ export default function TierGrowth() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <TierInterestForm tierName={showForm ? "SYSTEM Growth" : null} onClose={() => setShowForm(false)} />
 
       <main className="pt-24">
         {/* Hero Section with Auto-playing Images */}
@@ -129,9 +126,11 @@ export default function TierGrowth() {
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <div className="flex gap-4">
-                  <Button size="lg" onClick={() => setShowForm(true)}>
-                    Get Started
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                  <Button size="lg" asChild>
+                    <Link to="/signup?tier=growth">
+                      Get Started
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Link>
                   </Button>
                   <Button size="lg" variant="outline" asChild>
                     <Link to="/gap-analysis">Take Gap Analysis</Link>
@@ -295,9 +294,11 @@ export default function TierGrowth() {
                 Join the majority of our clients who chose Growth and never looked back.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="lg" onClick={() => setShowForm(true)}>
-                  Get Started Today
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                <Button size="lg" asChild>
+                  <Link to="/signup?tier=growth">
+                    Get Started Today
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild>
                   <Link to="/schedule">Schedule a Call</Link>

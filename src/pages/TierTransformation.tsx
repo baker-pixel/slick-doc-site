@@ -8,7 +8,6 @@ import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TierInterestForm } from "@/components/TierInterestForm";
 
 const heroImages = [
   "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&h=600&fit=crop", // SEO performance dashboard
@@ -76,7 +75,6 @@ const transformationSteps = [
 
 export default function TierTransformation() {
   const [currentImage, setCurrentImage] = useState(0);
-  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -88,7 +86,6 @@ export default function TierTransformation() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <TierInterestForm tierName={showForm ? "SYSTEM Transformation" : null} onClose={() => setShowForm(false)} />
 
       <main className="pt-24">
         {/* Hero Section with Auto-playing Images */}
@@ -137,9 +134,11 @@ export default function TierTransformation() {
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <div className="flex gap-4">
-                  <Button size="lg" onClick={() => setShowForm(true)}>
-                    Get Started
-                    <ArrowRight className="ml-2 h-5 w-5" />
+                  <Button size="lg" asChild>
+                    <Link to="/signup?tier=transformation">
+                      Get Started
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Link>
                   </Button>
                   <Button size="lg" variant="outline" asChild>
                     <Link to="/gap-analysis">Take Gap Analysis</Link>
@@ -320,9 +319,11 @@ export default function TierTransformation() {
                 This isn't a quick fix—it's a complete rebuild designed for businesses serious about dominating their market.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="lg" onClick={() => setShowForm(true)}>
-                  Get Started Today
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                <Button size="lg" asChild>
+                  <Link to="/signup?tier=transformation">
+                    Get Started Today
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild>
                   <Link to="/schedule">Schedule a Call</Link>

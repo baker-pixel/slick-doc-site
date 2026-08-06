@@ -484,11 +484,11 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "active": return "bg-green-500";
-      case "pending": return "bg-blue-500";
-      case "paused": return "bg-yellow-500";
-      case "cancelled": return "bg-red-500";
-      default: return "bg-gray-500";
+      case "active": return "bg-green-100 text-green-700 border-green-300";
+      case "pending": return "bg-blue-100 text-blue-700 border-blue-300";
+      case "paused": return "bg-yellow-100 text-yellow-700 border-yellow-300";
+      case "cancelled": return "bg-red-100 text-red-700 border-red-300";
+      default: return "bg-gray-100 text-gray-700 border-gray-300";
     }
   };
 
@@ -502,6 +502,9 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   };
 
   const pendingSignups = clients.filter((c) => c.status === "pending");
+  // Pending signups get their own tab -- keep them out of the main Clients
+  // list so a self-serve signup doesn't show up in both places at once.
+  const managedClients = clients.filter((c) => c.status !== "pending");
 
   return (
     <Card>
@@ -603,7 +606,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       <CardContent>
         <Tabs defaultValue="clients">
           <TabsList className="mb-4">
-            <TabsTrigger value="clients">Clients ({clients.length})</TabsTrigger>
+            <TabsTrigger value="clients">Clients ({managedClients.length})</TabsTrigger>
             <TabsTrigger value="pending-signups">Pending Signups ({pendingSignups.length})</TabsTrigger>
             <TabsTrigger value="invitations">Invitations ({invitations.filter(i => !i.accepted_at).length})</TabsTrigger>
             <TabsTrigger value="portal-users">Portal Users ({portalUsers.length})</TabsTrigger>
@@ -702,7 +705,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : clients.length === 0 ? (
+            ) : managedClients.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No clients yet. Add your first client to get started.
               </div>
@@ -719,7 +722,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clients.map((client) => {
+                  {managedClients.map((client) => {
                     const hasPortalAccess = portalUsers.some(u => u.client_account_id === client.id);
                     const pendingInvites = invitations.filter(i => i.client_account_id === client.id && !i.accepted_at).length;
                     
@@ -737,7 +740,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusColor(client.status)}>
-                            {client.status}
+                            {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
                           </Badge>
                         </TableCell>
                         <TableCell>
