@@ -1,11 +1,14 @@
-// Report data config — swap this object for different clients
-export interface ReportConfig {
+// Single data contract both the web report and the PDF render from --
+// whichever surface builds this object, <ReportView> renders it identically.
+export interface ReportData {
+  businessName?: string;
   clientDomain: string;
   reportDate: string;
   overallScore: number;
-  gradeBadge: string;
-  executiveSummary: string;
-  biggestOpportunity: string;
+  /** Free-tier heuristic score from ai_readiness_scores.total_score -- undefined while still loading, not yet computed. */
+  aiReadinessScore?: number;
+  executiveSummary?: string;
+  biggestOpportunity?: string;
   categoryScores: {
     label: string;
     score: number;
@@ -19,6 +22,10 @@ export interface ReportConfig {
     tag: "Quick Win" | "Medium Term" | "Long Term";
   }[];
 }
+
+// Kept as an alias -- ReportConfig was the old name, still referenced by its
+// original call sites.
+export type ReportConfig = ReportData;
 
 export function getGradeBadge(score: number): string {
   if (score >= 80) return "Strong Performance";
@@ -80,4 +87,13 @@ export function scoreToStatus(score: number): "Strong" | "Moderate" | "Weak" | "
   if (score >= 50) return "Moderate";
   if (score >= 30) return "Weak";
   return "Critical";
+}
+
+/** Shared priority-tag mapping -- was duplicated across Report.tsx, QuickAnalysis.tsx, and generateGapReportPDF.ts. */
+export function mapPriority(priority: string, index: number): "Quick Win" | "Medium Term" | "Long Term" {
+  const p = (priority || "").toLowerCase();
+  if (p.includes("high") || p.includes("quick") || p.includes("immediate") || p.includes("urgent")) return "Quick Win";
+  if (p.includes("low") || p.includes("long")) return "Long Term";
+  if (p.includes("medium") || p.includes("mid")) return "Medium Term";
+  return index < 3 ? "Quick Win" : index < 6 ? "Medium Term" : "Long Term";
 }

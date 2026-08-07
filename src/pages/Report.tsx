@@ -6,14 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateSystemScorecard, type SystemScorecard } from "@/lib/systemScorecard";
-import { scoreToStatus } from "@/components/report/ReportConfig";
-
-import { CoverSection } from "@/components/report/CoverSection";
-import { ExecutiveSummarySection } from "@/components/report/ExecutiveSummarySection";
-import { CategoryScoresSection } from "@/components/report/CategoryScoresSection";
-import { StrengthsGapsSection } from "@/components/report/StrengthsGapsSection";
-import { ActionPlanSection } from "@/components/report/ActionPlanSection";
-import { FooterCTA } from "@/components/report/FooterCTA";
+import { scoreToStatus, mapPriority, type ReportData } from "@/components/report/ReportConfig";
+import { ReportView } from "@/components/report/ReportView";
 
 interface PlainEnglishSummaryData {
   headline?: string;
@@ -31,7 +25,7 @@ interface AIAnalysis {
   plain_english_summary?: PlainEnglishSummaryData;
 }
 
-interface ReportData {
+interface SubmissionRow {
   id: string;
   business_name: string;
   website_url: string | null;
@@ -76,8 +70,9 @@ export default function Report() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
-  const [report, setReport] = useState<ReportData | null>(null);
+  const [report, setReport] = useState<SubmissionRow | null>(null);
   const [scorecard, setScorecard] = useState<SystemScorecard | null>(null);
+  const [aiReadinessScore, setAiReadinessScore] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
@@ -99,12 +94,19 @@ export default function Report() {
         return;
       }
 
-      const reportData: ReportData = {
+      const reportData: SubmissionRow = {
         ...data,
         ai_analysis: data.ai_analysis as unknown as AIAnalysis | null,
       };
       setReport(reportData);
       setScorecard(calculateSystemScorecard(data));
+
+      const { data: readiness } = await supabase
+        .from("ai_readiness_scores")
+        .select("total_score")
+        .eq("submission_id", id)
+        .maybeSingle();
+      if (readiness) setAiReadinessScore(readiness.total_score);
     } catch (err) {
       console.error("Failed to fetch report:", err);
       setNotFound(true);
@@ -185,20 +187,26 @@ export default function Report() {
       }))
     : [];
 
-  const mapPriority = (priority: string, index: number): "Quick Win" | "Medium Term" | "Long Term" => {
-    const p = (priority || "").toLowerCase();
-    if (p.includes("high") || p.includes("quick") || p.includes("immediate") || p.includes("urgent")) return "Quick Win";
-    if (p.includes("low") || p.includes("long")) return "Long Term";
-    if (p.includes("medium") || p.includes("mid")) return "Medium Term";
-    return index < 3 ? "Quick Win" : index < 6 ? "Medium Term" : "Long Term";
-  };
-
   // Build action plan from recommendations
   const actions = (aiAnalysis?.recommendations || []).map((rec, i) => ({
     title: rec.title,
     description: rec.description,
     tag: mapPriority(rec.priority, i),
   }));
+
+  const reportViewData: ReportData = {
+    businessName: report?.business_name,
+    clientDomain,
+    reportDate,
+    overallScore: scorecard?.overallScore ?? 0,
+    aiReadinessScore,
+    executiveSummary: aiAnalysis?.executiveSummary,
+    biggestOpportunity: aiAnalysis?.plain_english_summary?.biggest_opportunity,
+    categoryScores,
+    strengths: aiAnalysis?.strengths || [],
+    gaps: aiAnalysis?.gaps || [],
+    actions,
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F8FA]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -239,38 +247,7 @@ export default function Report() {
 
       {/* Report shell */}
       <div className="pt-12 max-w-[820px] mx-auto bg-white shadow-[0_2px_24px_rgba(0,0,0,0.06)]">
-        <CoverSection
-          businessName={report?.business_name}
-          clientDomain={clientDomain}
-          reportDate={reportDate}
-          overallScore={scorecard?.overallScore ?? 0}
-        />
-
-        {aiAnalysis?.executiveSummary && (
-          <ExecutiveSummarySection
-            summary={aiAnalysis.executiveSummary}
-            biggestOpportunity={aiAnalysis.plain_english_summary?.biggest_opportunity}
-            topGap={aiAnalysis.gaps?.[0]}
-            topRecommendation={aiAnalysis.recommendations?.[0]?.title}
-          />
-        )}
-
-        {categoryScores.length > 0 && (
-          <CategoryScoresSection scores={categoryScores} />
-        )}
-
-        {(aiAnalysis?.strengths?.length || aiAnalysis?.gaps?.length) && (
-          <StrengthsGapsSection
-            strengths={aiAnalysis?.strengths || []}
-            gaps={aiAnalysis?.gaps || []}
-          />
-        )}
-
-        {actions.length > 0 && (
-          <ActionPlanSection actions={actions} />
-        )}
-
-        <FooterCTA />
+        <ReportView data={reportViewData} />
 
         <div className="bg-[#F7F8FA] py-4 text-center border-t border-[rgba(0,0,0,0.06)]">
           <Link to="/" className="text-[#8A8F9B] hover:text-[#1A1D23] text-xs transition-colors">

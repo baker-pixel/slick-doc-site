@@ -4,14 +4,16 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
 import { motion } from "framer-motion";
-import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, AlertTriangle, XCircle, Download, Sparkles, Calendar, Rocket, Target, Mail, User, Building2, ArrowRight } from "lucide-react";
+import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, Download, Calendar, Mail, User, Building2, ArrowRight } from "lucide-react";
 import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { scoreToStatus, mapPriority, type ReportData } from "@/components/report/ReportConfig";
+import { ReportView } from "@/components/report/ReportView";
 
 interface QuickWin {
   title: string;
@@ -82,6 +84,7 @@ const QuickAnalysis = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [prospectId, setProspectId] = useState<string | null>(null);
+  const [aiReadinessScore, setAiReadinessScore] = useState<number | undefined>(undefined);
   const { toast } = useToast();
 
   // Step 1: URL submission
@@ -141,6 +144,15 @@ const QuickAnalysis = () => {
             body: { prospectId: pId },
           })
           .catch((err) => console.error("Failed to send prospect report email:", err));
+
+        supabase
+          .from("ai_readiness_scores")
+          .select("total_score")
+          .eq("prospect_id", pId)
+          .maybeSingle()
+          .then(({ data: readiness }) => {
+            if (readiness) setAiReadinessScore(readiness.total_score);
+          });
       }
 
       toast({ title: "Analysis Complete", description: "Your website analysis is ready!" });
@@ -156,49 +168,63 @@ const QuickAnalysis = () => {
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600";
-    if (score >= 60) return "text-yellow-600";
-    if (score >= 40) return "text-orange-500";
-    return "text-red-600";
+  // Shared building blocks for both the on-screen report and the PDF --
+  // one definition of "what strengths/gaps/actions this analysis produced,"
+  // not two that could drift.
+  const buildStrengths = (r: AnalysisResult): string[] =>
+    (r.detectedStrengths?.length ? r.detectedStrengths : r.seo.findings).slice(0, 4);
+
+  const buildGaps = (r: AnalysisResult): string[] =>
+    (r.detectedGaps?.length
+      ? r.detectedGaps
+      : [...r.seo.recommendations.slice(0, 1), ...r.conversion.recommendations.slice(0, 1), ...r.technical.recommendations.slice(0, 1)]
+    ).slice(0, 4);
+
+  const buildActions = (r: AnalysisResult) => {
+    const items: { title: string; description: string; tag: "Quick Win" | "Medium Term" | "Long Term" }[] = [
+      ...(r.quickWins?.map((w) => ({ title: w.title, description: w.description, tag: "Quick Win" as const })) || []),
+      ...(r.actionPlan?.week1.tasks.map((t) => ({ title: t, description: "", tag: "Quick Win" as const })) || []),
+      ...(r.actionPlan?.week2to4.tasks.map((t) => ({ title: t, description: "", tag: "Medium Term" as const })) || []),
+      ...(r.actionPlan?.month2to3.tasks.map((t) => ({ title: t, description: "", tag: "Long Term" as const })) || []),
+    ];
+    if (items.length > 0) return items;
+    // No structured quick-wins/action-plan came back -- fall back to the raw recommendations.
+    return [...r.seo.recommendations, ...r.conversion.recommendations, ...r.technical.recommendations]
+      .map((rec, i) => ({ title: rec, description: "", tag: mapPriority("", i) }));
   };
 
-  const getScoreBg = (score: number) => {
-    if (score >= 80) return "bg-green-100";
-    if (score >= 60) return "bg-yellow-100";
-    if (score >= 40) return "bg-orange-100";
-    return "bg-red-100";
-  };
+  const buildCategoryScores = (r: AnalysisResult) => [
+    { label: "SEO & Visibility", score: r.seo.score, status: scoreToStatus(r.seo.score) },
+    { label: "Conversion Elements", score: r.conversion.score, status: scoreToStatus(r.conversion.score) },
+    { label: "Technical Performance", score: r.technical.score, status: scoreToStatus(r.technical.score) },
+  ];
 
-  const getScoreIcon = (score: number) => {
-    if (score >= 80) return <CheckCircle className="h-5 w-5 text-green-600" />;
-    if (score >= 60) return <AlertTriangle className="h-5 w-5 text-yellow-600" />;
-    return <XCircle className="h-5 w-5 text-red-600" />;
-  };
+  const reportViewData: ReportData | null = result
+    ? {
+        businessName: name || url,
+        clientDomain: validatedUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+        reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+        overallScore: result.overallScore,
+        aiReadinessScore,
+        executiveSummary: result.summary,
+        categoryScores: buildCategoryScores(result),
+        strengths: buildStrengths(result),
+        gaps: buildGaps(result),
+        actions: buildActions(result),
+      }
+    : null;
 
   const downloadPDF = () => {
-    if (!result) return;
+    if (!result || !reportViewData) return;
     generateGapReportPDF({
-      businessName: name || url,
+      businessName: reportViewData.businessName!,
       websiteUrl: validatedUrl,
       overallScore: result.overallScore,
       plainEnglishSummary: result.summary,
-      scores: [
-        { category: "S", label: "SEO & Visibility", score: result.seo.score, status: result.seo.score >= 70 ? "strong" : result.seo.score >= 50 ? "moderate" : result.seo.score >= 30 ? "weak" : "critical" },
-        { category: "Y", label: "Conversion Elements", score: result.conversion.score, status: result.conversion.score >= 70 ? "strong" : result.conversion.score >= 50 ? "moderate" : result.conversion.score >= 30 ? "weak" : "critical" },
-        { category: "T", label: "Technical Performance", score: result.technical.score, status: result.technical.score >= 70 ? "strong" : result.technical.score >= 50 ? "moderate" : result.technical.score >= 30 ? "weak" : "critical" },
-      ],
-      strengths: (result.detectedStrengths?.length ? result.detectedStrengths : result.seo.findings).slice(0, 2),
-      gaps: (result.detectedGaps?.length
-        ? result.detectedGaps
-        : [...result.seo.recommendations.slice(0, 1), ...result.conversion.recommendations.slice(0, 1), ...result.technical.recommendations.slice(0, 1)]
-      ).slice(0, 3),
-      recommendations: [
-        ...result.quickWins?.map(w => ({ title: w.title, description: w.description, priority: "Quick Win" })) || [],
-        ...result.seo.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),
-        ...result.conversion.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),
-        ...result.technical.recommendations.map(r => ({ title: r, description: "", priority: "Medium Term" })),
-      ],
+      scores: reportViewData.categoryScores.map((c) => ({ category: c.label[0], label: c.label, score: c.score, status: c.status.toLowerCase() })),
+      strengths: reportViewData.strengths,
+      gaps: reportViewData.gaps,
+      recommendations: reportViewData.actions.map((a) => ({ title: a.title, description: a.description, priority: a.tag })),
     });
   };
 
@@ -381,146 +407,13 @@ const QuickAnalysis = () => {
                   </Button>
                 </div>
 
-                {/* Overall Score */}
-                <Card>
-                  <CardContent className="p-6 text-center">
-                    <h2 className="text-xl font-semibold mb-4">Your Website Marketing Score</h2>
-                    <div className={`inline-flex items-center justify-center w-32 h-32 rounded-full ${getScoreBg(result.overallScore)}`}>
-                      <span className={`text-5xl font-bold ${getScoreColor(result.overallScore)}`}>
-                        {result.overallScore}
-                      </span>
-                    </div>
-                    <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">{result.summary}</p>
-                  </CardContent>
-                </Card>
-
-                {/* Top 3 Weaknesses */}
-                <Card className="border-red-200 bg-red-50/50">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5 text-red-500" />
-                      Your Top 3 Areas to Improve
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {[
-                        ...result.seo.recommendations.slice(0, 1),
-                        ...result.conversion.recommendations.slice(0, 1),
-                        ...result.technical.recommendations.slice(0, 1),
-                      ].slice(0, 3).map((w, i) => (
-                        <div key={i} className="flex items-start gap-3 bg-background rounded-lg p-4 border border-border">
-                          <span className="flex-shrink-0 h-6 w-6 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-bold">{i + 1}</span>
-                          <p className="text-sm text-foreground">{w}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Quick Wins */}
-                {result.quickWins && result.quickWins.length > 0 && (
-                  <Card className="border-primary/20 bg-primary/5">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Sparkles className="h-5 w-5 text-primary" />
-                        Quick Wins — Do This Week
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid sm:grid-cols-3 gap-4">
-                        {result.quickWins.map((win, i) => (
-                          <div key={i} className="bg-background rounded-lg p-4 border border-border">
-                            <div className="flex items-start justify-between mb-2">
-                              <h4 className="font-semibold text-sm">{win.title}</h4>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                win.impact === "high" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                              }`}>
-                                {win.impact} impact
-                              </span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{win.description}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Category Scores */}
-                <div className="grid md:grid-cols-3 gap-6">
-                  {[
-                    { key: "seo", label: "SEO & Visibility", desc: "How easy you are to find on Google", icon: <Search className="h-5 w-5 text-primary" />, data: result.seo },
-                    { key: "conversion", label: "Conversion", desc: "How well your site turns visitors into customers", icon: <MousePointer className="h-5 w-5 text-primary" />, data: result.conversion },
-                    { key: "technical", label: "Technical", desc: "How fast and smooth your website runs", icon: <Gauge className="h-5 w-5 text-primary" />, data: result.technical },
-                  ].map((cat) => (
-                    <Card key={cat.key}>
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-lg flex items-center gap-2">{cat.icon}{cat.label}</CardTitle>
-                          {getScoreIcon(cat.data.score)}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{cat.desc}</p>
-                        <div className={`text-3xl font-bold ${getScoreColor(cat.data.score)}`}>{cat.data.score}/100</div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <h4 className="font-medium text-sm mb-2">What We Found</h4>
-                          <ul className="text-sm text-muted-foreground space-y-1">
-                            {cat.data.findings.map((f, i) => (
-                              <li key={i} className="flex items-start gap-2"><span className="text-primary mt-1">•</span>{f}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-sm mb-2">What to Do</h4>
-                          <ul className="text-sm text-muted-foreground space-y-1">
-                            {cat.data.recommendations.map((r, i) => (
-                              <li key={i} className="flex items-start gap-2"><span className="text-green-600 mt-1">→</span>{r}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* 90-Day Action Plan */}
-                {result.actionPlan && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Rocket className="h-5 w-5 text-primary" />
-                        Your 90-Day Action Plan
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid md:grid-cols-3 gap-6">
-                        {[
-                          { num: 1, label: "Week 1", data: result.actionPlan.week1, color: "green" },
-                          { num: 2, label: "Weeks 2-4", data: result.actionPlan.week2to4, color: "yellow" },
-                          { num: 3, label: "Months 2-3", data: result.actionPlan.month2to3, color: "primary" },
-                        ].map((phase) => (
-                          <div key={phase.num} className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <div className={`h-8 w-8 rounded-full bg-${phase.color === "primary" ? "primary/10" : `${phase.color}-100`} text-${phase.color === "primary" ? "primary" : `${phase.color}-700`} flex items-center justify-center text-sm font-bold`}>{phase.num}</div>
-                              <div>
-                                <h4 className="font-semibold text-sm">{phase.label}</h4>
-                                <p className="text-xs text-muted-foreground">{phase.data.title}</p>
-                              </div>
-                            </div>
-                            <ul className="space-y-2 pl-10">
-                              {phase.data.tasks.map((task, i) => (
-                                <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                                  <span className={`text-${phase.color === "primary" ? "primary" : `${phase.color}-600`}`}>✓</span>{task}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                {/* Report -- same component tree the full 11-step form's report
+                    uses, so a quick scan and a deep-dive form never show a
+                    differently-shaped report for what's conceptually the same thing. */}
+                {reportViewData && (
+                  <div className="rounded-2xl border border-border overflow-hidden text-left">
+                    <ReportView data={reportViewData} />
+                  </div>
                 )}
 
                 {/* CTA */}

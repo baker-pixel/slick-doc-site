@@ -1,26 +1,25 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { 
-  CheckCircle, 
-  Loader2, 
-  ArrowRight, 
-  TrendingUp, 
+import {
+  CheckCircle,
+  Loader2,
+  ArrowRight,
   AlertTriangle,
-  Lightbulb,
-  FileText,
+  Download,
   Mail,
-  Share2,
   Check,
   Link as LinkIcon,
   LayoutDashboard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateSystemScorecard, type SystemScorecard } from "@/lib/systemScorecard";
+import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
+import { scoreToStatus, mapPriority, type ReportData } from "@/components/report/ReportConfig";
+import { ReportView } from "@/components/report/ReportView";
 import type { GapAnalysisData } from "../GapAnalysisForm";
 
 interface AIAnalysis {
@@ -40,6 +39,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
   const { toast } = useToast();
   const [scorecard, setScorecard] = useState<SystemScorecard | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
+  const [aiReadinessScore, setAiReadinessScore] = useState<number | undefined>(undefined);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(true);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
@@ -117,6 +117,13 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
             setAiAnalysis(row.ai_analysis as unknown as AIAnalysis);
             setIsLoadingAnalysis(false);
             setEmailSent(true); // Email is sent server-side now
+
+            const { data: readiness } = await supabase
+              .from("ai_readiness_scores")
+              .select("total_score")
+              .eq("submission_id", submissionId)
+              .maybeSingle();
+            if (readiness) setAiReadinessScore(readiness.total_score);
             return;
           }
         } catch (err) {
@@ -146,22 +153,49 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 70) return "bg-emerald-500";
-    if (score >= 50) return "bg-yellow-500";
-    if (score >= 30) return "bg-orange-500";
-    return "bg-red-500";
+  const downloadPDF = () => {
+    if (!scorecard) return;
+    generateGapReportPDF({
+      businessName: formData.businessName,
+      firstName: formData.firstName,
+      websiteUrl: formData.websiteUrl,
+      overallScore: scorecard.overallScore,
+      overallStatus: scorecard.overallStatus,
+      scores: scorecard.scores,
+      biggestOpportunity: aiAnalysis?.recommendations?.[0]?.title,
+      plainEnglishSummary: aiAnalysis?.executiveSummary,
+      executiveSummary: aiAnalysis?.executiveSummary,
+      strengths: aiAnalysis?.strengths,
+      gaps: aiAnalysis?.gaps,
+      recommendations: aiAnalysis?.recommendations,
+    });
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "strong": return "Strong";
-      case "moderate": return "Moderate";
-      case "weak": return "Weak";
-      case "critical": return "Critical";
-      default: return status;
-    }
-  };
+  const reportViewData: ReportData | null = scorecard
+    ? {
+        businessName: formData.businessName,
+        clientDomain: formData.websiteUrl
+          ? formData.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+          : formData.businessName,
+        reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+        overallScore: scorecard.overallScore,
+        aiReadinessScore,
+        executiveSummary: aiAnalysis?.executiveSummary,
+        biggestOpportunity: aiAnalysis?.recommendations?.[0]?.title,
+        categoryScores: scorecard.scores.map((s) => ({
+          label: s.label,
+          score: s.score,
+          status: scoreToStatus(s.score),
+        })),
+        strengths: aiAnalysis?.strengths || [],
+        gaps: aiAnalysis?.gaps || [],
+        actions: (aiAnalysis?.recommendations || []).map((rec, i) => ({
+          title: rec.title,
+          description: rec.description,
+          tag: mapPriority(rec.priority, i),
+        })),
+      }
+    : null;
 
   return (
     <motion.div
@@ -212,149 +246,36 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
                 {copied ? "Link Copied!" : "Copy Shareable Link"}
               </Button>
             )}
+            {reportViewData && (
+              <Button variant="outline" size="sm" onClick={downloadPDF} className="gap-2">
+                <Download size={14} />
+                Download PDF
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* SYSTEM Scorecard */}
-      {scorecard && (
-        <Card className="border-primary/20">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <FileText className="text-primary" size={20} />
-              SYSTEM Health Score
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Overall Score */}
-            <div className="text-center p-4 bg-secondary/50 rounded-lg">
-              <div className="text-5xl font-bold text-primary mb-2">
-                {scorecard.overallScore}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {scorecard.overallStatus}
-              </div>
-            </div>
-
-            {/* Individual Scores */}
-            <div className="space-y-3">
-              {scorecard.scores.map((score) => (
-                <div key={score.category} className="space-y-1">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-medium">
-                      <span className="text-primary font-bold mr-2">{score.category.replace('S2', 'S')}</span>
-                      {score.label}
-                    </span>
-                    <Badge variant="outline" className={`${score.status === 'strong' ? 'border-emerald-500 text-emerald-600' : score.status === 'moderate' ? 'border-yellow-500 text-yellow-600' : score.status === 'weak' ? 'border-orange-500 text-orange-600' : 'border-red-500 text-red-600'}`}>
-                      {getStatusLabel(score.status)}
-                    </Badge>
-                  </div>
-                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                    <motion.div
-                      className={`h-full ${getScoreColor(score.score)}`}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${score.score}%` }}
-                      transition={{ duration: 0.5, delay: 0.2 }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Report -- same component tree the shareable /report/:id page renders,
+          so this inline view and that page can never show different things. */}
+      {reportViewData && (
+        <div className="rounded-2xl border border-border overflow-hidden">
+          <ReportView data={reportViewData} />
+        </div>
       )}
 
-      {/* AI Analysis */}
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Lightbulb className="text-primary" size={20} />
-            AI-Powered Analysis
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoadingAnalysis ? (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="animate-spin mb-3" size={32} />
-              <p>Generating your personalized analysis...</p>
-            </div>
-          ) : analysisError ? (
-            <div className="text-center py-6 text-muted-foreground">
-              <AlertTriangle className="mx-auto mb-3 text-yellow-500" size={32} />
-              <p>{analysisError}</p>
-            </div>
-          ) : aiAnalysis ? (
-            <div className="space-y-6">
-              {/* Executive Summary */}
-              <div>
-                <h4 className="font-semibold text-foreground mb-2">Executive Summary</h4>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  {aiAnalysis.executiveSummary}
-                </p>
-              </div>
-
-              {/* Strengths */}
-              {aiAnalysis.strengths?.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <TrendingUp size={16} className="text-emerald-500" />
-                    Key Strengths
-                  </h4>
-                  <ul className="space-y-1">
-                    {aiAnalysis.strengths.map((strength, idx) => (
-                      <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                        <span className="text-emerald-500 mt-1">•</span>
-                        {typeof strength === 'string' ? strength : (strength as any)?.description || ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Gaps */}
-              {aiAnalysis.gaps?.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <AlertTriangle size={16} className="text-orange-500" />
-                    Critical Gaps
-                  </h4>
-                  <ul className="space-y-1">
-                    {aiAnalysis.gaps.map((gap, idx) => (
-                      <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
-                        <span className="text-orange-500 mt-1">•</span>
-                        {typeof gap === 'string' ? gap : (gap as any)?.description || ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Recommendations */}
-              {aiAnalysis.recommendations?.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <Lightbulb size={16} className="text-primary" />
-                    Top Recommendations
-                  </h4>
-                  <div className="space-y-3">
-                    {aiAnalysis.recommendations.map((rec, idx) => (
-                      <div key={idx} className="bg-secondary/50 rounded-lg p-3">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <h5 className="font-medium text-foreground text-sm">{rec.title}</h5>
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            {rec.priority}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{rec.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+      {isLoadingAnalysis && (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+          <Loader2 className="animate-spin mb-3" size={32} />
+          <p>Generating your personalized AI analysis...</p>
+        </div>
+      )}
+      {analysisError && (
+        <div className="text-center py-6 text-muted-foreground">
+          <AlertTriangle className="mx-auto mb-3 text-yellow-500" size={32} />
+          <p>{analysisError}</p>
+        </div>
+      )}
 
       {/* Next Steps */}
       <Card className="bg-primary/5 border-primary/20">
