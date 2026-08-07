@@ -173,22 +173,31 @@ Deno.serve(async (req) => {
 
       case "fetch": {
         // Fetch all admin data in one call
-        const [contactsResult, gapResult, pdfResult] = await Promise.all([
+        const [contactsResult, gapResult, pdfResult, quickScanResult] = await Promise.all([
           supabase.from("contact_submissions").select("*").order("created_at", { ascending: false }),
           supabase.from("gap_analysis_submissions").select("*").order("created_at", { ascending: false }),
           supabase.from("pdf_leads").select("*").order("created_at", { ascending: false }),
+          // Marketing-site /quick-analysis leads land in `prospects` with no
+          // client_id (that column only gets set for a client's own outbound
+          // prospecting). Surfaced here so every marketing-site audit lead --
+          // full form or instant scan -- shows up in one Inbound Leads view,
+          // instead of only the form path (gap_analysis_submissions) with the
+          // scan path buried in the Outbound/Prospect Engine panel.
+          supabase.from("prospects").select("*").is("client_id", null).order("created_at", { ascending: false }),
         ]);
 
         if (contactsResult.error) throw contactsResult.error;
         if (gapResult.error) throw gapResult.error;
         if (pdfResult.error) throw pdfResult.error;
+        if (quickScanResult.error) throw quickScanResult.error;
 
-        console.log(`Fetched ${contactsResult.data?.length || 0} contacts, ${gapResult.data?.length || 0} gap analyses, ${pdfResult.data?.length || 0} PDF leads`);
+        console.log(`Fetched ${contactsResult.data?.length || 0} contacts, ${gapResult.data?.length || 0} gap analyses, ${pdfResult.data?.length || 0} PDF leads, ${quickScanResult.data?.length || 0} quick scans`);
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             contacts: contactsResult.data,
             gapAnalyses: gapResult.data,
-            pdfLeads: pdfResult.data
+            pdfLeads: pdfResult.data,
+            quickScanLeads: quickScanResult.data
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );

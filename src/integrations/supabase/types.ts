@@ -430,6 +430,188 @@ export type Database = {
           },
         ]
       }
+      ai_readiness_scores: {
+        Row: {
+          client_id: string | null
+          computed_at: string
+          crawlability_score: number
+          entity_consistency_score: number
+          fact_density_score: number
+          faq_structure_score: number
+          id: string
+          llms_txt_score: number
+          prospect_id: string | null
+          schema_score: number
+          submission_id: string | null
+          total_score: number
+        }
+        Insert: {
+          client_id?: string | null
+          computed_at?: string
+          crawlability_score: number
+          entity_consistency_score: number
+          fact_density_score: number
+          faq_structure_score: number
+          id?: string
+          llms_txt_score: number
+          prospect_id?: string | null
+          schema_score: number
+          submission_id?: string | null
+          total_score: number
+        }
+        Update: {
+          client_id?: string | null
+          computed_at?: string
+          crawlability_score?: number
+          entity_consistency_score?: number
+          fact_density_score?: number
+          faq_structure_score?: number
+          id?: string
+          llms_txt_score?: number
+          prospect_id?: string | null
+          schema_score?: number
+          submission_id?: string | null
+          total_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_readiness_scores_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_readiness_scores_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: true
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_readiness_scores_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: true
+            referencedRelation: "gap_analysis_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_prompts: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          prompt_text: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          prompt_text: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          prompt_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_prompts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_runs: {
+        Row: {
+          client_id: string
+          id: string
+          mentioned: boolean
+          model: string
+          position: number | null
+          prompt_id: string
+          response_excerpt: string | null
+          run_at: string
+        }
+        Insert: {
+          client_id: string
+          id?: string
+          mentioned: boolean
+          model: string
+          position?: number | null
+          prompt_id: string
+          response_excerpt?: string | null
+          run_at?: string
+        }
+        Update: {
+          client_id?: string
+          id?: string
+          mentioned?: boolean
+          model?: string
+          position?: number | null
+          prompt_id?: string
+          response_excerpt?: string | null
+          run_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_visibility_runs_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "ai_visibility_prompts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_scores: {
+        Row: {
+          avg_position: number | null
+          client_id: string
+          computed_at: string
+          id: string
+          mention_rate: number
+          total_score: number
+        }
+        Insert: {
+          avg_position?: number | null
+          client_id: string
+          computed_at?: string
+          id?: string
+          mention_rate: number
+          total_score: number
+        }
+        Update: {
+          avg_position?: number | null
+          client_id?: string
+          computed_at?: string
+          id?: string
+          mention_rate?: number
+          total_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_scores_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_alerts: {
         Row: {
           acknowledged_at: string | null
@@ -4937,6 +5119,13 @@ export type Database = {
           subject: string
         }[]
       }
+      client_get_prospect_next_email: {
+        Args: { p_client_account_id: string; p_prospect_id: string }
+        Returns: {
+          scheduled_for: string
+          subject: string
+        }[]
+      }
       client_update_company_context: {
         Args: {
           p_client_account_id: string
@@ -4964,10 +5153,6 @@ export type Database = {
         Returns: Json
       }
       create_seo_audit_task: { Args: { p_client_id: string }; Returns: string }
-      generate_tasks_for_client: {
-        Args: { p_client_id: string }
-        Returns: number
-      }
       get_anon_key: { Args: never; Returns: string }
       get_optimal_send_hour: { Args: { p_timezone?: string }; Returns: number }
       has_role: {

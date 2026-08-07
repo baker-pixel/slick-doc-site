@@ -87,6 +87,7 @@ export type AdminSection =
   | "client-analytics"
   | "client-requests"
   | "pdf-leads"
+  | "quick-scans"
   | "templates"
   | "sequences"
   | "campaigns"
@@ -120,7 +121,7 @@ const agentItems: NavItem[] = [
 
 // GROWTH group
 const growthItems: NavItem[] = [
-  { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "prospect-engine", "pipeline", "lead-scoring"] },
+  { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "prospect-engine", "pipeline", "lead-scoring"] },
   { id: "sales-proposals", label: "Sales", icon: Send, matchIds: ["case-studies", "before-after"] },
 ];
 

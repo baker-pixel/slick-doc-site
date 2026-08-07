@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
 import { friendlyEdgeMessage, getEdgeErrorMessage } from "@/lib/edge-error";
 import { inviteLeadToPortal, type InviteLead } from "@/lib/inviteLeadToPortal";
-import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus } from "lucide-react";
+import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus, Zap } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar, type AdminSection } from "@/components/admin/core/AdminSidebar";
@@ -202,6 +202,19 @@ interface PdfLead {
   created_at: string;
 }
 
+// A /quick-analysis instant-scan lead from the marketing site -- lives in
+// `prospects` (client_id NULL), never in gap_analysis_submissions.
+interface QuickScanLead {
+  id: string;
+  name: string;
+  email: string;
+  website_url: string | null;
+  business_type: string | null;
+  gap_score: number | null;
+  status: string;
+  created_at: string;
+}
+
 const AdminInner = () => {
   const { adminPassword: storedPassword, isAuthenticated, login: authLogin, logout: authLogout } = useAdminAuth();
   const [password, setPassword] = useState("");
@@ -297,6 +310,7 @@ const AdminInner = () => {
   const [contacts, setContacts] = useState<ContactSubmission[]>([]);
   const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisData[]>([]);
   const [pdfLeads, setPdfLeads] = useState<PdfLead[]>([]);
+  const [quickScanLeads, setQuickScanLeads] = useState<QuickScanLead[]>([]);
   const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<AdminSection>("home");
@@ -502,6 +516,7 @@ const AdminInner = () => {
       setContacts(d.contacts || []);
       setGapAnalyses(d.gapAnalyses || []);
       setPdfLeads(d.pdfLeads || []);
+      setQuickScanLeads(d.quickScanLeads || []);
     } catch (error: any) {
       toast({ title: "Error fetching data", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     } finally {
@@ -1178,6 +1193,97 @@ const AdminInner = () => {
     </Card>
   );
 
+  const renderQuickScanLeadsTable = () => (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg">Quick Scan Leads</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Instant /quick-analysis submissions from the marketing site. Full 11-step Gap Analysis form
+          submissions show up in the "Gap Analyses" tab instead -- this is the other entry point.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="p-2 text-left">Name</th>
+                <th className="p-2 text-left">Email</th>
+                <th className="p-2 text-left">Website</th>
+                <th className="p-2 text-left">Score</th>
+                <th className="p-2 text-left">Status</th>
+                <th className="p-2 text-left">Date</th>
+                <th className="p-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {quickScanLeads.map(lead => {
+                const [firstName, ...rest] = lead.name.split(" ");
+                const lastName = rest.join(" ") || null;
+                return (
+                  <tr key={lead.id} className="border-b hover:bg-muted/50">
+                    <td className="p-2 font-medium">{lead.name}</td>
+                    <td className="p-2 text-muted-foreground">{lead.email}</td>
+                    <td className="p-2 text-muted-foreground">
+                      {lead.website_url ? (
+                        <a href={lead.website_url} target="_blank" rel="noopener noreferrer" className="underline">
+                          {lead.website_url.replace(/^https?:\/\//, "")}
+                        </a>
+                      ) : "—"}
+                    </td>
+                    <td className="p-2">{lead.gap_score ?? "—"}</td>
+                    <td className="p-2"><Badge variant="secondary" className="capitalize">{lead.status}</Badge></td>
+                    <td className="p-2 text-muted-foreground">{format(new Date(lead.created_at), 'MMM d, yyyy')}</td>
+                    <td className="p-2 text-right space-x-1">
+                      {invitedEmails.has(lead.email) ? (
+                        <Badge className="bg-green-100 text-green-800">Invited ✓</Badge>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={invitingEmail === lead.email}
+                          onClick={() => handleInviteToPortal({
+                            email: lead.email,
+                            first_name: firstName || null,
+                            last_name: lastName,
+                            business_name: lead.business_type || lead.name,
+                            overall_score: lead.gap_score,
+                            website_url: lead.website_url,
+                          })}
+                        >
+                          <UserPlus className="w-4 h-4 mr-1" />
+                          {invitingEmail === lead.email ? "..." : "Invite"}
+                        </Button>
+                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Quick Scan Lead</AlertDialogTitle>
+                            <AlertDialogDescription>Are you sure you want to delete this lead?</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteRecord("prospects", lead.id)}>Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </td>
+                  </tr>
+                );
+              })}
+              {quickScanLeads.length === 0 && (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No quick scan leads found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   const renderPdfLeadsTable = () => (
     <Card>
       <CardHeader className="flex flex-col gap-4 pb-4">
@@ -1361,6 +1467,11 @@ const AdminInner = () => {
           Gap Analyses
           <Badge variant="secondary" className="ml-1 text-xs">{gapAnalyses.length}</Badge>
         </TabsTrigger>
+        <TabsTrigger value="quick-scans" className="flex items-center gap-2">
+          <Zap className="h-4 w-4" />
+          Quick Scans
+          <Badge variant="secondary" className="ml-1 text-xs">{quickScanLeads.length}</Badge>
+        </TabsTrigger>
         <TabsTrigger value="pdf-leads" className="flex items-center gap-2">
           <FileDown className="h-4 w-4" />
           PDF Leads
@@ -1369,6 +1480,7 @@ const AdminInner = () => {
       </TabsList>
       <TabsContent value="contacts">{renderContactsTable()}</TabsContent>
       <TabsContent value="gap-analysis">{renderGapAnalysisTable()}</TabsContent>
+      <TabsContent value="quick-scans">{renderQuickScanLeadsTable()}</TabsContent>
       <TabsContent value="pdf-leads">{renderPdfLeadsTable()}</TabsContent>
     </Tabs>
   );
@@ -1474,6 +1586,7 @@ const AdminInner = () => {
         return <FeatureGuidePanel onNavigate={(section) => setActiveSection(section as AdminSection)} />;
       case "contacts":
       case "gap-analysis":
+      case "quick-scans":
       case "pdf-leads":
         return renderLeadsHub();
       case "emails":
@@ -1583,6 +1696,7 @@ const AdminInner = () => {
       "client-invoices": "Client Invoices",
       contacts: "Leads",
       "gap-analysis": "Leads",
+      "quick-scans": "Leads",
       "pdf-leads": "Leads",
       emails: "Email Centre",
       "social-posts": "Social Media Posts",
@@ -1635,7 +1749,7 @@ const AdminInner = () => {
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
     "home", "daily-digest", "task-notifications",
-    "pipeline", "contacts", "gap-analysis", "pdf-leads",
+    "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
     "emails", "templates", "sequences", "campaigns", "alerts",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",

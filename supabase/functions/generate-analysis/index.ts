@@ -491,7 +491,19 @@ Generate a comprehensive analysis in JSON format.`;
               email: sub.email,
               firstName: sub.first_name,
               businessName: sub.business_name,
+              websiteUrl: gapAnalysis.website_url,
               resumeToken: sub.resume_token,
+              scorecard: {
+                overallScore: systemScores.overall,
+                scores: [
+                  { label: "Search & Visibility", score: systemScores.breakdown.search },
+                  { label: "Yield Optimization", score: systemScores.breakdown.yield },
+                  { label: "Sequence & Nurture", score: systemScores.breakdown.sequence },
+                  { label: "Transaction Activation", score: systemScores.breakdown.transaction },
+                  { label: "Engagement & Retention", score: systemScores.breakdown.engagement },
+                  { label: "Metrics & Improvement", score: systemScores.breakdown.metrics },
+                ],
+              },
               analysis,
             }),
           });
