@@ -3,6 +3,30 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, extractJson, AIError } from "../_shared/ai.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { auditWebsite } from "../_shared/websiteAudit.ts";
+
+// deno-lint-ignore no-explicit-any
+async function ensureReadinessScore(
+  supabase: any,
+  submissionId: string,
+  websiteUrl: string | null | undefined,
+): Promise<void> {
+  if (!websiteUrl) return;
+  const { data: existing } = await supabase
+    .from("ai_readiness_scores")
+    .select("id")
+    .eq("submission_id", submissionId)
+    .maybeSingle();
+  if (existing) return;
+
+  const audit = await auditWebsite(websiteUrl);
+  if (!audit) return;
+
+  const { error } = await supabase
+    .from("ai_readiness_scores")
+    .upsert({ submission_id: submissionId, ...audit.readiness }, { onConflict: "submission_id" });
+  if (error) console.error("AI readiness score insert error:", error);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -81,6 +105,7 @@ serve(async (req) => {
             console.error("Context extraction on cached path failed:", ctxCacheErr);
           }
         }
+        await ensureReadinessScore(supabase, body.submission_id, row.website_url as string | null);
         return new Response(
           JSON.stringify({ analysis: row.ai_analysis, cached: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -345,6 +370,8 @@ Generate a comprehensive analysis in JSON format.`;
       if (updateErr) {
         console.error("Failed to save analysis to submission:", updateErr);
       }
+
+      await ensureReadinessScore(supabase, body.submission_id, gapAnalysis.website_url as string | null);
 
       // --- Context profile extraction (non-blocking) ---
       let contextProfile: Record<string, unknown> | null = null;

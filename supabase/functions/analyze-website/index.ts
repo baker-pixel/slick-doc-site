@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
 import { parseOnPage } from "../_shared/seoSignals.ts";
+import { auditWebsite } from "../_shared/websiteAudit.ts";
 
 function getTier(score: number): "transformation" | "growth" | "optimization" {
   if (score <= 39) return "transformation";
@@ -135,31 +136,17 @@ serve(async (req) => {
 
     console.log("Analyzing website:", url, "Industry:", industry || "not specified");
 
-    let htmlContent = "";
-    try {
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; WebsiteAnalyzer/1.0)",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch website: ${response.status}`);
-      }
-
-      htmlContent = await response.text();
-      console.log("Fetched HTML length:", htmlContent.length);
-    } catch (fetchError) {
-      console.error("Fetch error:", fetchError);
+    const audit = await auditWebsite(url);
+    if (!audit) {
       return new Response(
         JSON.stringify({ error: "Failed to fetch website. Please check the URL and try again." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const { html: htmlContent, signals, readiness } = audit;
+    console.log("Fetched HTML length:", htmlContent.length);
 
     const truncatedHtml = htmlContent.substring(0, 50000);
-    const signals = parseOnPage(htmlContent, url);
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) {
@@ -308,6 +295,44 @@ Provide your analysis as a valid JSON object.`;
 
       if (updateError) {
         console.error("Prospect update error:", updateError);
+      }
+
+      const { error: readinessError } = await supabase
+        .from("ai_readiness_scores")
+        .upsert({ prospect_id: prospectId, ...readiness }, { onConflict: "prospect_id" });
+      if (readinessError) {
+        console.error("AI readiness score insert error:", readinessError);
+      }
+
+      // Nurture: send-prospect-report (called separately by the frontend) is a
+      // one-off email -- nothing else enrolls a quick-scan lead into any
+      // follow-up sequence, so today they get one email and go stranded. Reuse
+      // the same generic sequence full-form gap-analysis leads already get
+      // (queue-sequence-emails already skips this if the email/site matches an
+      // existing client) so every non-converted lead lands in one pipeline
+      // regardless of which entry point it came from.
+      try {
+        const baseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const nurtureRes = await fetch(`${baseUrl}/functions/v1/queue-sequence-emails`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({
+            triggerType: "gap_analysis_complete",
+            recipientEmail: prospectEmail,
+            recipientName: prospectName,
+            data: {
+              businessName: prospectBusinessType || new URL(url).hostname,
+              websiteUrl: url,
+              leadSource: "quick_analysis",
+            },
+          }),
+        });
+        if (!nurtureRes.ok) {
+          console.error("queue-sequence-emails failed:", nurtureRes.status, await nurtureRes.text());
+        }
+      } catch (nurtureErr) {
+        console.error("Failed to queue nurture sequence:", nurtureErr);
       }
     }
 

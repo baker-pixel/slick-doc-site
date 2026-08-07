@@ -13,7 +13,6 @@ import { Loader2 } from "lucide-react";
 
 const Index = lazy(() => import("@/pages/Index"));
 const GapAnalysis = lazy(() => import("@/pages/GapAnalysis"));
-const QuickAssessment = lazy(() => import("@/pages/QuickAssessment"));
 const QuickAnalysis = lazy(() => import("@/pages/QuickAnalysis"));
 const AboutUs = lazy(() => import("@/pages/AboutUs"));
 const ScheduleCall = lazy(() => import("@/pages/ScheduleCall"));
@@ -51,7 +50,6 @@ function AnimatedRoutes() {
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<PageTransition><Index /></PageTransition>} />
           <Route path="/gap-analysis" element={<PageTransition><GapAnalysis /></PageTransition>} />
-          <Route path="/quick-assessment" element={<PageTransition><QuickAssessment /></PageTransition>} />
           <Route path="/quick-analysis" element={<PageTransition><QuickAnalysis /></PageTransition>} />
           <Route path="/about" element={<PageTransition><AboutUs /></PageTransition>} />
           <Route path="/portfolio" element={<PageTransition><Portfolio /></PageTransition>} />

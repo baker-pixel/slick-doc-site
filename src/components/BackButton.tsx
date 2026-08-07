@@ -6,7 +6,7 @@ const routeNames: Record<string, string> = {
   "/": "Home",
   "/system": "SYSTEM Methodology",
   "/gap-analysis": "Gap Analysis",
-  "/quick-assessment": "Quick Assessment",
+  "/quick-analysis": "Quick Analysis",
   "/schedule": "Schedule Call",
   "/pricing": "Pricing",
   "/pricing/foundation": "Foundation",

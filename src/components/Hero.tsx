@@ -131,7 +131,7 @@ export function Hero() {
               </a>
             </motion.div>
 
-            {/* Quick Assessment Link */}
+            {/* Quick Analysis Link */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -140,10 +140,10 @@ export function Hero() {
             >
               Short on time?{" "}
               <Link
-                to="/quick-assessment"
+                to="/quick-analysis"
                 className="text-primary hover:text-orange-dark underline underline-offset-2 transition-colors"
               >
-                Take our 2-minute Quick Assessment
+                Get an instant AI audit of your website
               </Link>
             </motion.p>
 
