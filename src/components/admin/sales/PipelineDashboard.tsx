@@ -474,38 +474,6 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
         )}
       </Card>
 
-      {/* Automation Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Automation Status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <p className="font-medium">Email Queue Processing</p>
-                <p className="text-sm text-muted-foreground">Runs every minute</p>
-              </div>
-              <Badge variant="default" className="bg-green-500">Active</Badge>
-            </div>
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <p className="font-medium">Content Publisher</p>
-                <p className="text-sm text-muted-foreground">Runs every minute</p>
-              </div>
-              <Badge variant="default" className="bg-green-500">Active</Badge>
-            </div>
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <p className="font-medium">Form → Sequence Triggers</p>
-                <p className="text-sm text-muted-foreground">Auto-enrolls new leads</p>
-              </div>
-              <Badge variant="default" className="bg-green-500">Active</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Create Client & Send Invite Modal */}
       <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
         <DialogContent>

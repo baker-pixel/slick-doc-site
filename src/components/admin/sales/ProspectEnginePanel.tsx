@@ -182,7 +182,13 @@ export default function ProspectEnginePanel() {
       setLoading(false);
       return;
     }
-    let rows: Prospect[] = data?.data ?? [];
+    // `prospects` also holds marketing-site /quick-analysis leads
+    // (source: "inbound") -- a totally different audience that has its own
+    // "Quick Scans" tab under the Leads section. This panel is only for
+    // candidates discovered/emailed on behalf of a client's own cold
+    // outreach, so it's scoped to source: "outbound" regardless of the
+    // client filter below.
+    let rows: Prospect[] = (data?.data ?? []).filter((p: Prospect) => p.source === "outbound");
     if (filterClient !== "all") {
       rows = rows.filter(p => p.client_id === filterClient);
     }

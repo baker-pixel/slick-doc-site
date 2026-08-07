@@ -19,6 +19,7 @@ import {
   Send,
   Bell,
   UserCog,
+  Radar,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -121,7 +122,14 @@ const agentItems: NavItem[] = [
 
 // GROWTH group
 const growthItems: NavItem[] = [
-  { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "prospect-engine", "pipeline", "lead-scoring"] },
+  // OrangeDoor's own top-of-funnel: people who submitted the marketing site's
+  // form/quick-scan, or downloaded a PDF -- prospective OrangeDoor clients.
+  { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "pipeline", "lead-scoring"] },
+  // A world apart from the above: candidates OrangeDoor discovers/emails on
+  // behalf of one of ITS clients' own cold-outreach campaigns. Kept as its
+  // own nav entry (not merged into "Leads") so the two audiences -- our own
+  // leads vs. a client's prospects -- are never mixed in one view.
+  { id: "prospect-engine", label: "Prospecting", icon: Radar },
   { id: "sales-proposals", label: "Sales", icon: Send, matchIds: ["case-studies", "before-after"] },
 ];
 

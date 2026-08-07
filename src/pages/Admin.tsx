@@ -1486,12 +1486,13 @@ const AdminInner = () => {
   );
 
   // "Inbound Leads", "Pipeline", and "Prospect Engine" used to be three
-  // separate sidebar items. They're all facets of the same job -- working
-  // leads -- so they're one section with an inner mode switch instead.
-  // The mode is derived from activeSection itself (still the source of
-  // truth other stacking logic below reads), not separate local state.
-  const leadsHubMode: "inbound" | "outbound" | "pipeline" | "scoring" =
-    activeSection === "prospect-engine" ? "outbound" :
+  // separate sidebar items. All three are views over OrangeDoor's OWN
+  // inbound leads (contacts/gap-analysis/pdf-leads/quick-scans), so they
+  // share one hub with an inner mode switch. Prospect Engine used to be a
+  // fourth "Outbound" mode here, but it tracks a client's own cold-outreach
+  // prospects -- a different audience entirely -- so it now has its own
+  // top-level sidebar entry ("Prospecting") instead of living inside Leads.
+  const leadsHubMode: "inbound" | "pipeline" | "scoring" =
     activeSection === "pipeline" ? "pipeline" :
     activeSection === "lead-scoring" ? "scoring" :
     "inbound";
@@ -1502,20 +1503,17 @@ const AdminInner = () => {
         value={leadsHubMode}
         onValueChange={(v) => {
           if (v === "inbound") setActiveSection("contacts");
-          else if (v === "outbound") setActiveSection("prospect-engine");
           else if (v === "pipeline") setActiveSection("pipeline");
           else if (v === "scoring") setActiveSection("lead-scoring");
         }}
       >
         <TabsList>
           <TabsTrigger value="inbound">Inbound</TabsTrigger>
-          <TabsTrigger value="outbound">Outbound</TabsTrigger>
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
           <TabsTrigger value="scoring">Scoring</TabsTrigger>
         </TabsList>
       </Tabs>
       {leadsHubMode === "inbound" && renderLeadsSection()}
-      {leadsHubMode === "outbound" && <ProspectEnginePanel />}
       {leadsHubMode === "pipeline" && <PipelineDashboard adminPassword={storedPassword} />}
       {leadsHubMode === "scoring" && <LeadScoringPanel />}
     </div>
@@ -1660,6 +1658,7 @@ const AdminInner = () => {
       case "review-engine":
         return <GoogleReviewEngine />;
       case "prospect-engine":
+        return <ProspectEnginePanel />;
       case "lead-scoring":
         return renderLeadsHub();
       case "ad-generator":

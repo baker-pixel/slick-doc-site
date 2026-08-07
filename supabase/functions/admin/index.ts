@@ -177,13 +177,13 @@ Deno.serve(async (req) => {
           supabase.from("contact_submissions").select("*").order("created_at", { ascending: false }),
           supabase.from("gap_analysis_submissions").select("*").order("created_at", { ascending: false }),
           supabase.from("pdf_leads").select("*").order("created_at", { ascending: false }),
-          // Marketing-site /quick-analysis leads land in `prospects` with no
-          // client_id (that column only gets set for a client's own outbound
-          // prospecting). Surfaced here so every marketing-site audit lead --
-          // full form or instant scan -- shows up in one Inbound Leads view,
-          // instead of only the form path (gap_analysis_submissions) with the
-          // scan path buried in the Outbound/Prospect Engine panel.
-          supabase.from("prospects").select("*").is("client_id", null).order("created_at", { ascending: false }),
+          // Marketing-site /quick-analysis leads land in `prospects` tagged
+          // source: "inbound" (the table also holds source: "outbound" rows --
+          // candidates discovered for a client's own cold-outreach campaigns,
+          // a different audience entirely, shown only in the Prospecting
+          // panel). Surfaced here so every marketing-site audit lead -- full
+          // form or instant scan -- shows up in one Inbound Leads view.
+          supabase.from("prospects").select("*").eq("source", "inbound").order("created_at", { ascending: false }),
         ]);
 
         if (contactsResult.error) throw contactsResult.error;
