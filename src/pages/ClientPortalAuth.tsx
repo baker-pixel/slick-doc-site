@@ -100,8 +100,14 @@ export default function ClientPortalAuth() {
       }
     });
 
+    // Skip the auto-redirect when there's a pending invite token -- an
+    // unrelated existing session (e.g. this browser is also logged into
+    // admin, or logged in as some other client from earlier testing) would
+    // otherwise silently redirect to /portal before the visitor ever saw or
+    // submitted the accept-invite form for THIS invite. loadInvitation below
+    // is the only thing that should drive what happens next in that case.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && !isPasswordRecoveryRef.current) {
+      if (session && !isPasswordRecoveryRef.current && !inviteToken) {
         checkClientPortalAccess(session.user.id);
       }
     });
