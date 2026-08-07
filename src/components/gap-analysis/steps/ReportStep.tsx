@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateSystemScorecard, type SystemScorecard } from "@/lib/systemScorecard";
-import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
+import { downloadReportPdf } from "@/lib/downloadReportPdf";
 import { scoreToStatus, mapPriority, type ReportData } from "@/components/report/ReportConfig";
 import { ReportView } from "@/components/report/ReportView";
 import type { GapAnalysisData } from "../GapAnalysisForm";
@@ -44,6 +44,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const shareableUrl = submissionId ? `${window.location.origin}/report/${submissionId}` : null;
 
@@ -153,24 +154,6 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
     }
   };
 
-  const downloadPDF = () => {
-    if (!scorecard) return;
-    generateGapReportPDF({
-      businessName: formData.businessName,
-      firstName: formData.firstName,
-      websiteUrl: formData.websiteUrl,
-      overallScore: scorecard.overallScore,
-      overallStatus: scorecard.overallStatus,
-      scores: scorecard.scores,
-      biggestOpportunity: aiAnalysis?.recommendations?.[0]?.title,
-      plainEnglishSummary: aiAnalysis?.executiveSummary,
-      executiveSummary: aiAnalysis?.executiveSummary,
-      strengths: aiAnalysis?.strengths,
-      gaps: aiAnalysis?.gaps,
-      recommendations: aiAnalysis?.recommendations,
-    });
-  };
-
   const reportViewData: ReportData | null = scorecard
     ? {
         businessName: formData.businessName,
@@ -196,6 +179,19 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
         })),
       }
     : null;
+
+  const downloadPDF = async () => {
+    if (!reportViewData || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await downloadReportPdf(reportViewData);
+    } catch (err) {
+      console.error("Failed to download PDF:", err);
+      toast({ title: "PDF download failed", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <motion.div
@@ -247,8 +243,8 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
               </Button>
             )}
             {reportViewData && (
-              <Button variant="outline" size="sm" onClick={downloadPDF} className="gap-2">
-                <Download size={14} />
+              <Button variant="outline" size="sm" onClick={downloadPDF} disabled={isDownloading} className="gap-2">
+                {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                 Download PDF
               </Button>
             )}

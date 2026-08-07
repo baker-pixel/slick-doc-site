@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Search, MousePointer, Zap, Mail, DollarSign, Users, BarChart3 } from "lucide-react";
 import { getStatusColor } from "./ReportConfig";
+import { usePrintMode } from "./PrintModeContext";
 
 interface CategoryScore {
   label: string;
@@ -31,15 +32,19 @@ function getPillarIcon(label: string) {
 
 export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
   const displayScores = scores.slice(0, 6);
+  const printMode = usePrintMode();
+  const reveal = printMode
+    ? { animate: { opacity: 1, y: 0 } }
+    : { initial: { opacity: 0, y: 20 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
+  const cardReveal = printMode
+    ? { animate: { opacity: 1, y: 0 } }
+    : { initial: { opacity: 0, y: 15 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
+  const barReveal = (pct: number) => (printMode ? { animate: { width: `${pct}%` } } : { initial: { width: 0 }, whileInView: { width: `${pct}%` }, viewport: { once: true } });
 
   return (
     <section className="bg-[#F7F8FA] px-10 py-12 md:px-14 border-b border-[rgba(0,0,0,0.06)]">
       <div className="max-w-3xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-        >
+        <motion.div {...reveal}>
           <p className="text-[#0F6E56] text-[11px] tracking-[0.12em] uppercase font-semibold mb-2">
             Category Scores
           </p>
@@ -56,10 +61,8 @@ export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
               return (
                 <motion.div
                   key={cat.label}
-                  initial={{ opacity: 0, y: 15 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.07 }}
+                  {...cardReveal}
+                  transition={{ delay: printMode ? 0 : i * 0.07 }}
                   className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-5"
                 >
                   {/* Icon circle */}
@@ -85,10 +88,8 @@ export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
                   <div className="h-[3px] bg-[#EAECF0] rounded-full overflow-hidden mb-3">
                     <motion.div
                       className={`h-full rounded-full ${colors.bar}`}
-                      initial={{ width: 0 }}
-                      whileInView={{ width: `${cat.score}%` }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.8, delay: 0.2 + i * 0.07 }}
+                      {...barReveal(cat.score)}
+                      transition={{ duration: printMode ? 0 : 0.8, delay: printMode ? 0 : 0.2 + i * 0.07 }}
                     />
                   </div>
 

@@ -38,3 +38,4 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+api/_reportRenderer.generated.mjs

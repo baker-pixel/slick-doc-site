@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { addJargonExplanations } from "@/lib/jargonHelper";
+import { usePrintMode } from "./PrintModeContext";
 
 interface StrengthsGapsSectionProps {
   strengths: string[];
@@ -7,14 +8,15 @@ interface StrengthsGapsSectionProps {
 }
 
 export function StrengthsGapsSection({ strengths, gaps }: StrengthsGapsSectionProps) {
+  const printMode = usePrintMode();
+  const reveal = printMode
+    ? { animate: { opacity: 1, y: 0 } }
+    : { initial: { opacity: 0, y: 20 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
+
   return (
     <section className="bg-white px-10 py-12 md:px-14 border-b border-[rgba(0,0,0,0.06)]">
       <div className="max-w-3xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-        >
+        <motion.div {...reveal}>
           <p className="text-[#0F6E56] text-[11px] tracking-[0.12em] uppercase font-semibold mb-2">
             Analysis
           </p>

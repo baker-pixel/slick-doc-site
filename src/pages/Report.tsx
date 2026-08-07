@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Loader2, Home, Download, Share2, Check } from "lucide-react";
-import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
+import { downloadReportPdf } from "@/lib/downloadReportPdf";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -75,6 +75,7 @@ export default function Report() {
   const [aiReadinessScore, setAiReadinessScore] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (id) fetchReport();
@@ -120,24 +121,6 @@ export default function Report() {
     setCopied(true);
     toast({ title: "Link copied!", description: "Share this link with your team." });
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const downloadPDF = () => {
-    if (!report || !scorecard) return;
-    const aiAnalysis = report.ai_analysis;
-    generateGapReportPDF({
-      businessName: report.business_name,
-      firstName: report.first_name,
-      overallScore: scorecard.overallScore,
-      overallStatus: scorecard.overallStatus,
-      scores: scorecard.scores,
-      biggestOpportunity: aiAnalysis?.plain_english_summary?.biggest_opportunity,
-      plainEnglishSummary: aiAnalysis?.executiveSummary,
-      executiveSummary: aiAnalysis?.executiveSummary,
-      strengths: aiAnalysis?.strengths,
-      gaps: aiAnalysis?.gaps,
-      recommendations: aiAnalysis?.recommendations,
-    });
   };
 
   if (isLoading) {
@@ -208,6 +191,19 @@ export default function Report() {
     actions,
   };
 
+  const downloadPDF = async () => {
+    if (!scorecard || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await downloadReportPdf(reportViewData);
+    } catch (err) {
+      console.error("Failed to download PDF:", err);
+      toast({ title: "PDF download failed", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F7F8FA]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Sticky toolbar */}
@@ -227,11 +223,11 @@ export default function Report() {
           <div className="flex gap-3 shrink-0">
             <button
               onClick={downloadPDF}
-              disabled={!scorecard}
+              disabled={!scorecard || isDownloading}
               className="flex items-center gap-1.5 text-[#8A8F9B] hover:text-[#1A1D23] text-xs transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               title={!scorecard ? "Report still loading…" : "Download PDF"}
             >
-              <Download size={14} />
+              {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
               PDF
             </button>
             <button

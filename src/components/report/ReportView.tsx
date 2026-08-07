@@ -5,20 +5,21 @@ import { CategoryScoresSection } from "./CategoryScoresSection";
 import { StrengthsGapsSection } from "./StrengthsGapsSection";
 import { ActionPlanSection } from "./ActionPlanSection";
 import { FooterCTA } from "./FooterCTA";
+import { PrintModeProvider } from "./PrintModeContext";
 import type { ReportData } from "./ReportConfig";
 
-// Single component tree both the web report (Report.tsx, ReportStep.tsx) and
-// the quick-analysis result view render -- and, once server-rendered PDF
-// lands, what the PDF renders too. One tree fed by one ReportData shape is
-// what makes "what we show" and "what we deliver" the same thing by
-// construction, not by two implementations staying in sync by hand.
-export function ReportView({ data }: { data: ReportData }) {
+// Single component tree the web report (Report.tsx, ReportStep.tsx,
+// QuickAnalysis's result view) AND the server-rendered PDF (api/render-report-pdf.ts)
+// all render. One tree fed by one ReportData shape is what makes "what we
+// show" and "what we deliver" the same thing by construction, not two
+// implementations staying in sync by hand.
+export function ReportView({ data, printMode = false }: { data: ReportData; printMode?: boolean }) {
   const weakestPillar = data.categoryScores.length > 0
     ? data.categoryScores.reduce((min, c) => (c.score < min.score ? c : min), data.categoryScores[0])
     : undefined;
 
   return (
-    <>
+    <PrintModeProvider value={printMode}>
       <CoverSection
         businessName={data.businessName}
         clientDomain={data.clientDomain}
@@ -51,6 +52,6 @@ export function ReportView({ data }: { data: ReportData }) {
       {data.actions.length > 0 && <ActionPlanSection actions={data.actions} />}
 
       <FooterCTA />
-    </>
+    </PrintModeProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Info } from "lucide-react";
+import { usePrintMode } from "./PrintModeContext";
 
 const INK = "#1A1D23";
 const MUTED = "#8A8F9B";
@@ -56,6 +57,10 @@ export function ScoreTrajectorySection({ currentScore, aiReadinessScore, weakest
   });
 
   const gridScores = [0, 25, 50, 75, 100];
+  const printMode = usePrintMode();
+  const reveal = printMode
+    ? { animate: { opacity: 1, y: 0 } }
+    : { initial: { opacity: 0, y: 20 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
 
   const stats: { label: string; value: string; sub: string }[] = [
     { label: "Composite score", value: `${currentScore}/100`, sub: currentScore >= 70 ? "Above local average" : "Below local average" },
@@ -74,7 +79,7 @@ export function ScoreTrajectorySection({ currentScore, aiReadinessScore, weakest
   return (
     <section className="bg-white px-10 py-12 md:px-14 border-b border-[rgba(0,0,0,0.06)]">
       <div className="max-w-3xl">
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+        <motion.div {...reveal}>
           <div className="border border-[rgba(0,0,0,0.08)] rounded-xl p-6">
             <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
               <div className="flex items-center gap-1.5">

@@ -1,14 +1,16 @@
 import { motion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
+import { usePrintMode } from "./PrintModeContext";
 
 export function FooterCTA() {
+  const printMode = usePrintMode();
+  const reveal = printMode
+    ? { animate: { opacity: 1, y: 0 } }
+    : { initial: { opacity: 0, y: 20 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true } };
+
   return (
     <section className="bg-[#F7F8FA] px-10 py-12 md:px-14">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="max-w-3xl"
-      >
+      <motion.div {...reveal} className="max-w-3xl">
         <div className="bg-[#F0F1F3] border border-[rgba(0,0,0,0.08)] rounded-xl px-8 py-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <h2
@@ -26,9 +28,10 @@ export function FooterCTA() {
             href="https://orangedoormarketing.com/schedule"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block bg-[#0F6E56] hover:bg-[#0a4f3e] text-[#E1F5EE] text-[13px] font-semibold tracking-[0.02em] px-7 py-3.5 rounded-lg transition-colors shrink-0"
+            className="inline-flex items-center gap-1.5 bg-[#0F6E56] hover:bg-[#0a4f3e] text-[#E1F5EE] text-[13px] font-semibold tracking-[0.02em] px-7 py-3.5 rounded-lg transition-colors shrink-0"
           >
-            Schedule a call →
+            Schedule a call
+            <ArrowRight size={14} />
           </a>
         </div>
       </motion.div>

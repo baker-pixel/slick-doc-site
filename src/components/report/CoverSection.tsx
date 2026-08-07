@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { getGradeBadge } from "./ReportConfig";
+import { usePrintMode } from "./PrintModeContext";
 
 interface CoverSectionProps {
   businessName?: string;
@@ -68,6 +69,12 @@ export function CoverSection({ businessName, clientDomain, reportDate, overallSc
   const badge = getGradeBadge(overallScore);
   const { label: labelCls } = gradeRingColor(overallScore);
   const displayName = clientDomain || businessName || "";
+  const printMode = usePrintMode();
+  // A real initial->animate transition needs framer-motion's JS engine running client-side --
+  // the static PDF ships zero JS/React runtime, so it would stay stuck at `initial` (invisible)
+  // forever. Dropping `initial` in print mode renders straight at the `animate` target, same
+  // fix as every whileInView section elsewhere in this component tree.
+  const reveal = printMode ? { animate: { opacity: 1, y: 0 } } : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } };
 
   return (
     <section className="bg-white">
@@ -90,9 +97,8 @@ export function CoverSection({ businessName, clientDomain, reportDate, overallSc
       {/* Hero card */}
       <div className="px-10 py-8 md:px-14">
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          {...reveal}
+          transition={{ duration: printMode ? 0 : 0.5 }}
           className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-8 flex flex-col sm:flex-row gap-8 items-center sm:items-start"
         >
           <RingDial score={overallScore} />

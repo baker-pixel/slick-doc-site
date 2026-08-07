@@ -5,7 +5,7 @@ import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
 import { motion } from "framer-motion";
 import { Globe, Zap, Search, MousePointer, Gauge, Loader2, CheckCircle, Download, Calendar, Mail, User, Building2, ArrowRight } from "lucide-react";
-import { generateGapReportPDF } from "@/lib/generateGapReportPDF";
+import { downloadReportPdf } from "@/lib/downloadReportPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,6 +85,7 @@ const QuickAnalysis = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [prospectId, setProspectId] = useState<string | null>(null);
   const [aiReadinessScore, setAiReadinessScore] = useState<number | undefined>(undefined);
+  const [isDownloading, setIsDownloading] = useState(false);
   const { toast } = useToast();
 
   // Step 1: URL submission
@@ -214,18 +215,17 @@ const QuickAnalysis = () => {
       }
     : null;
 
-  const downloadPDF = () => {
-    if (!result || !reportViewData) return;
-    generateGapReportPDF({
-      businessName: reportViewData.businessName!,
-      websiteUrl: validatedUrl,
-      overallScore: result.overallScore,
-      plainEnglishSummary: result.summary,
-      scores: reportViewData.categoryScores.map((c) => ({ category: c.label[0], label: c.label, score: c.score, status: c.status.toLowerCase() })),
-      strengths: reportViewData.strengths,
-      gaps: reportViewData.gaps,
-      recommendations: reportViewData.actions.map((a) => ({ title: a.title, description: a.description, priority: a.tag })),
-    });
+  const downloadPDF = async () => {
+    if (!reportViewData || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await downloadReportPdf(reportViewData);
+    } catch (err) {
+      console.error("Failed to download PDF:", err);
+      toast({ title: "PDF download failed", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   // Mark prospect as converted
@@ -401,8 +401,8 @@ const QuickAnalysis = () => {
                   <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium ${getTierColor(getTier(result.overallScore))}`}>
                     Recommended: {getTierLabel(getTier(result.overallScore))} Tier
                   </div>
-                  <Button onClick={downloadPDF} variant="outline" className="gap-2">
-                    <Download className="h-4 w-4" />
+                  <Button onClick={downloadPDF} disabled={isDownloading} variant="outline" className="gap-2">
+                    {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                     Download PDF
                   </Button>
                 </div>
