@@ -35,6 +35,121 @@ interface Candidate {
   value?: string;
   name: string;
   confidence: number;
+  /** Inline SVG markup (header logos with no raster source) — stored as text, never fetched. */
+  svgMarkup?: string;
+}
+
+interface RenderedLogoSignal {
+  url: string | null;
+  svgMarkup: string | null;
+  source: string;
+}
+
+interface RenderedSignals {
+  logo: RenderedLogoSignal | null;
+  favicon: string | null;
+  ogImage: string | null;
+  colors: string[];
+  headingFont: string | null;
+  bodyFont: string | null;
+  headline: string | null;
+  description: string | null;
+  language: string | null;
+  pageText: string;
+}
+
+const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
+
+const LOGO_SOURCE_CONFIDENCE: Record<string, number> = {
+  icon_link: 90,
+  og_image: 80,
+  header_img_position: 78,
+  header_inline_svg: 72,
+  header_css_background: 68,
+};
+
+const LANG_NAMES: Record<string, string> = {
+  en: "English", "en-US": "English (US)", "en-GB": "English (UK)",
+  fr: "French", de: "German", es: "Spanish", it: "Italian",
+  pt: "Portuguese", nl: "Dutch", sv: "Swedish", da: "Danish",
+  no: "Norwegian", fi: "Finnish", pl: "Polish", ru: "Russian",
+  ja: "Japanese", ko: "Korean", zh: "Chinese", ar: "Arabic",
+};
+
+/** Calls the headless-render Vercel function (Deno edge functions can't run
+ * Chromium themselves) for JS-rendered extraction. Never throws — a site
+ * that blocks the renderer, or the service being unconfigured/down, falls
+ * back to the static-HTML regex parse below rather than failing the request. */
+async function callRenderService(targetUrl: string): Promise<RenderedSignals | null> {
+  const secret = Deno.env.get("BRAND_RENDER_SECRET");
+  if (!secret) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 35_000);
+  try {
+    const res = await fetch(`${APP_URL}/api/render-brand-assets`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json", "x-internal-secret": secret },
+      body: JSON.stringify({ url: targetUrl }),
+    });
+    if (!res.ok) {
+      console.warn(`[extract-brand-assets] render service returned ${res.status}`);
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    console.warn("[extract-brand-assets] render service call failed:", e instanceof Error ? e.message : e);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function renderedSignalsToCandidates(sig: RenderedSignals, baseUrl: string): Candidate[] {
+  const candidates: Candidate[] = [];
+
+  if (sig.logo?.svgMarkup) {
+    candidates.push({
+      type: "logo",
+      svgMarkup: sig.logo.svgMarkup,
+      name: "Logo (inline SVG)",
+      confidence: LOGO_SOURCE_CONFIDENCE[sig.logo.source] ?? 65,
+    });
+  } else if (sig.logo?.url) {
+    const url = normalizeUrl(sig.logo.url, baseUrl);
+    if (url) {
+      candidates.push({ type: "logo", url, name: "Logo", confidence: LOGO_SOURCE_CONFIDENCE[sig.logo.source] ?? 65 });
+    }
+  }
+
+  const faviconUrl = sig.favicon ? normalizeUrl(sig.favicon, baseUrl) : null;
+  if (faviconUrl) candidates.push({ type: "favicon", url: faviconUrl, name: "Favicon", confidence: 90 });
+
+  const ogUrl = sig.ogImage ? normalizeUrl(sig.ogImage, baseUrl) : null;
+  if (ogUrl) candidates.push({ type: "og_image", url: ogUrl, name: "Social Share Image", confidence: 80 });
+
+  for (const hex of sig.colors) {
+    if (/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
+      candidates.push({ type: "color", value: hex, name: hex.toUpperCase(), confidence: 85 });
+    }
+  }
+
+  if (sig.headingFont) candidates.push({ type: "font", value: sig.headingFont, name: sig.headingFont, confidence: 90 });
+  if (sig.bodyFont && sig.bodyFont !== sig.headingFont) {
+    candidates.push({ type: "font", value: sig.bodyFont, name: sig.bodyFont, confidence: 85 });
+  }
+
+  if (sig.headline) candidates.push({ type: "headline", value: sig.headline, name: "Brand Headline", confidence: 88 });
+  if (sig.description) {
+    candidates.push({ type: "description", value: sig.description, name: "Brand Description", confidence: 85 });
+  }
+
+  if (sig.language) {
+    const langName = LANG_NAMES[sig.language] || sig.language.toUpperCase();
+    candidates.push({ type: "language", value: sig.language, name: langName, confidence: 95 });
+  }
+
+  return candidates;
 }
 
 const GENERIC_FONTS = new Set([
@@ -45,6 +160,55 @@ const GENERIC_FONTS = new Set([
 
 function isGenericFont(name: string): boolean {
   return GENERIC_FONTS.has(name.toLowerCase().trim());
+}
+
+function isPrivateIpLiteral(ip: string): boolean {
+  const v4 = ip.replace(/^::ffff:/i, "").replace(/^\[|\]$/g, "");
+  if (
+    /^127\./.test(v4) ||
+    /^10\./.test(v4) ||
+    /^192\.168\./.test(v4) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(v4) ||
+    /^169\.254\./.test(v4) ||
+    v4 === "0.0.0.0"
+  ) return true;
+  const lower = v4.toLowerCase();
+  return lower === "::1" || lower === "::" || /^fe80:/.test(lower) || /^f[cd][0-9a-f]{2}:/.test(lower);
+}
+
+async function resolveViaDoh(hostname: string, type: "A" | "AAAA"): Promise<string[]> {
+  const res = await fetch(
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`,
+    { headers: { accept: "application/dns-json" } },
+  );
+  if (!res.ok) throw new Error(`DoH lookup failed: ${res.status}`);
+  const data = await res.json();
+  const wantType = type === "A" ? 1 : 28;
+  return ((data.Answer ?? []) as { type: number; data: string }[])
+    .filter((a) => a.type === wantType)
+    .map((a) => a.data);
+}
+
+/** DNS-rebinding guard: a hostname can pass a string check yet resolve to an
+ * internal IP by the time fetch() looks it up. `Deno.resolveDns` isn't
+ * available here — Supabase's edge runtime mirrors Deno Deploy, which only
+ * grants fetch() for outbound, no raw socket/DNS APIs — so we resolve via
+ * Cloudflare's DNS-over-HTTPS endpoint over plain fetch instead. Blocks only
+ * on a confirmed private/internal address; a DoH outage fails open here
+ * since this is defense-in-depth on top of the hostname-string check above,
+ * not the only guard — the real fetch will fail on its own for a dead host. */
+async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
+  if (isPrivateIpLiteral(hostname)) return true;
+  const [v4, v6] = await Promise.allSettled([
+    resolveViaDoh(hostname, "A"),
+    resolveViaDoh(hostname, "AAAA"),
+  ]);
+  if (v4.status === "rejected" && v6.status === "rejected") return false;
+  const ips = [
+    ...(v4.status === "fulfilled" ? v4.value : []),
+    ...(v6.status === "fulfilled" ? v6.value : []),
+  ];
+  return ips.some(isPrivateIpLiteral);
 }
 
 function stripHtml(html: string): string {
@@ -97,6 +261,18 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
     const altM = tag.match(/alt=["']([^"']*)["']/i);
     candidates.push({ type: "logo", url, name: altM?.[1]?.trim() || "Logo", confidence: 75 });
     logoCount++;
+  }
+
+  if (logoCount < 3) {
+    const headerBlockM = html.match(/<header[^>]*>([\s\S]{0,4000}?)<\/header>/i);
+    const imgInHeader = headerBlockM?.[1].match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+    if (imgInHeader) {
+      const url = normalizeUrl(imgInHeader[1], baseUrl);
+      if (url) {
+        const altM = imgInHeader[0].match(/alt=["']([^"']*)["']/i);
+        candidates.push({ type: "logo", url, name: altM?.[1]?.trim() || "Logo", confidence: 70 });
+      }
+    }
   }
 
   const themeM =
@@ -201,12 +377,25 @@ function parseHtml(html: string, baseUrl: string): Candidate[] {
   });
 }
 
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+interface StoredAsset {
+  filePath: string;
+  fileSize: number;
+  contentHash: string;
+  /** Set when identical bytes are already stored for this client under a different URL — caller should update, not insert. */
+  existing?: { id: string; name: string; asset_type: string; file_path: string; metadata: Record<string, unknown> | null };
+}
+
 async function fetchAndStore(
   supabase: ReturnType<typeof createClient>,
   imageUrl: string,
   clientAccountId: string,
   label: string
-): Promise<{ filePath: string; fileSize: number } | null> {
+): Promise<StoredAsset | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -228,13 +417,28 @@ async function fetchAndStore(
     const fileSize = arrayBuffer.byteLength;
     if (fileSize > 5 * 1024 * 1024) return null;
 
+    // Content-hash dedup: catches the same image served from a different URL
+    // (e.g. CDN cache-busting), which a plain original_url check misses.
+    const contentHash = await sha256Hex(arrayBuffer);
+    const { data: existingByHash } = (await supabase
+      .from("brand_assets")
+      .select("id, name, asset_type, file_path, metadata")
+      .eq("client_account_id", clientAccountId)
+      .eq("metadata->>content_hash", contentHash)
+      .maybeSingle()) as {
+      data: { id: string; name: string; asset_type: string; file_path: string; metadata: Record<string, unknown> | null } | null;
+    };
+    if (existingByHash) {
+      return { filePath: existingByHash.file_path, fileSize, contentHash, existing: existingByHash };
+    }
+
     const safeName = label.replace(/[^a-z0-9]/gi, "-").toLowerCase();
     const filePath = `${clientAccountId}/scraped-${Date.now()}-${safeName}.${ext}`;
     const { error } = await supabase.storage
       .from("brand-assets")
       .upload(filePath, arrayBuffer, { contentType, upsert: false });
     if (error) return null;
-    return { filePath, fileSize };
+    return { filePath, fileSize, contentHash };
   } catch {
     return null;
   }
@@ -247,13 +451,12 @@ interface BrandVoiceAsset {
 }
 
 async function extractBrandVoice(
-  html: string,
+  pageText: string,
   contextProfile: Record<string, unknown> | null
 ): Promise<BrandVoiceAsset[]> {
   const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
   if (!GROQ_API_KEY) return [];
 
-  const pageText = stripHtml(html);
   const cp = contextProfile || {};
 
   const prompt = `Analyse this website content and extract brand voice signals. Return ONLY valid JSON, no markdown.
@@ -381,31 +584,37 @@ serve(async (req) => {
       const host = parsed.hostname;
       const isPrivate =
         host === "localhost" ||
-        host === "169.254.169.254" ||
-        /^127\./.test(host) ||
-        /^10\./.test(host) ||
-        /^192\.168\./.test(host) ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-        host === "::1" || host === "[::1]" ||
-        host.endsWith(".internal") || host.endsWith(".local");
+        host.endsWith(".internal") || host.endsWith(".local") ||
+        isPrivateIpLiteral(host);
       if (isPrivate) {
         return json({ error: "URL points to a private or internal address" }, 422);
+      }
+      if (await resolvesToPrivateAddress(host)) {
+        return json({ error: "URL resolves to a private or internal address" }, 422);
       }
     } catch {
       return json({ error: "Invalid website URL" }, 422);
     }
 
     let html: string;
+    let rendered: RenderedSignals | null;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15_000);
-      const res = await fetch(targetUrl, {
-        signal: controller.signal,
-        headers: { "User-Agent": "Mozilla/5.0 OrangeDoor-BrandBot/1.0", Accept: "text/html" },
-      });
+      // Static fetch (fallback source + AI-voice text if render fails) and the
+      // headless-render call run concurrently — neither depends on the other,
+      // and the render service already re-validates SSRF on its own side.
+      const [res, renderResult] = await Promise.all([
+        fetch(targetUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "Mozilla/5.0 OrangeDoor-BrandBot/1.0", Accept: "text/html" },
+        }),
+        callRenderService(targetUrl),
+      ]);
       clearTimeout(timeout);
       if (!res.ok) return json({ error: `Could not fetch website (HTTP ${res.status})` }, 422);
       html = await res.text();
+      rendered = renderResult;
     } catch (e: any) {
       if (e?.name === "AbortError") return json({ error: "Website took too long to respond" }, 422);
       return json({ error: `Could not reach website: ${e?.message}` }, 422);
@@ -419,7 +628,11 @@ serve(async (req) => {
       .single();
     const contextProfile = (clientRow?.context_profile as Record<string, unknown> | null) ?? null;
 
-    const candidates = parseHtml(html, targetUrl);
+    // Prefer JS-rendered signals (fixes the SPA blind spot); fall back to the
+    // static-HTML regex parse if the render service is unconfigured, down,
+    // or blocked by the target site.
+    const candidates = rendered ? renderedSignalsToCandidates(rendered, targetUrl) : parseHtml(html, targetUrl);
+    const voiceSourceText = rendered?.pageText || stripHtml(html);
     const created: { id: string; name: string; asset_type: string; preview_url?: string }[] = [];
 
     const TEXT_ONLY_TYPES: CandidateType[] = ["font", "headline", "language", "description", "color"];
@@ -438,18 +651,19 @@ serve(async (req) => {
         if (isDeduped) {
           const { data: existing } = await supabase
             .from("brand_assets")
-            .select("id, name, asset_type")
+            .select("id, name, asset_type, metadata")
             .eq("client_account_id", client_account_id)
             .eq("asset_type", candidate.type)
             .ilike("name", normalizedName)
             .maybeSingle();
 
           if (existing) {
-            // Update source/timestamp, keep existing confirmation status
+            // Merge onto existing metadata (not overwrite) so confirmation_status survives a rescan
             await supabase
               .from("brand_assets")
               .update({
                 metadata: {
+                  ...(existing.metadata as Record<string, unknown> ?? {}),
                   value: candidate.value,
                   hex: candidate.type === "color" ? candidate.value : undefined,
                   scraped_from: targetUrl,
@@ -491,10 +705,108 @@ serve(async (req) => {
         continue;
       }
 
-      // Image assets
+      // Image assets — dedup by original_url so a rescan doesn't pile up duplicate blobs
       const assetType = candidate.type === "favicon" ? "icon" : "logo";
+
+      if (candidate.svgMarkup && !candidate.url) {
+        // Inline <svg> logo — no raster to fetch; store the markup itself, dedup by its hash.
+        const svgHash = await sha256Hex(new TextEncoder().encode(candidate.svgMarkup).buffer as ArrayBuffer);
+        const { data: existingSvg } = await supabase
+          .from("brand_assets")
+          .select("id, name, asset_type, metadata")
+          .eq("client_account_id", client_account_id)
+          .eq("asset_type", assetType)
+          .eq("metadata->>content_hash", svgHash)
+          .maybeSingle();
+
+        if (existingSvg) {
+          await supabase
+            .from("brand_assets")
+            .update({
+              metadata: {
+                ...(existingSvg.metadata as Record<string, unknown> ?? {}),
+                scraped_from: targetUrl,
+                confidence: candidate.confidence,
+                last_scraped_at: new Date().toISOString(),
+              },
+            })
+            .eq("id", existingSvg.id);
+          created.push({ ...existingSvg });
+        } else {
+          const { data, error } = await supabase
+            .from("brand_assets")
+            .insert({
+              client_account_id,
+              name: candidate.name,
+              asset_type: assetType,
+              category: "logos",
+              description: `Auto-detected from ${targetUrl}`,
+              metadata: {
+                svg_markup: candidate.svgMarkup,
+                confirmation_status: "pending_client",
+                scraped_from: targetUrl,
+                confidence: candidate.confidence,
+                content_hash: svgHash,
+              },
+            })
+            .select("id, name, asset_type")
+            .single();
+          if (!error && data) created.push({ ...data });
+        }
+        continue;
+      }
+
+      const { data: existingImg } = await supabase
+        .from("brand_assets")
+        .select("id, name, asset_type, file_path, metadata")
+        .eq("client_account_id", client_account_id)
+        .eq("asset_type", assetType)
+        .eq("metadata->>original_url", candidate.url)
+        .maybeSingle();
+
+      if (existingImg) {
+        await supabase
+          .from("brand_assets")
+          .update({
+            metadata: {
+              ...(existingImg.metadata as Record<string, unknown> ?? {}),
+              scraped_from: targetUrl,
+              confidence: candidate.confidence,
+              last_scraped_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", existingImg.id);
+
+        const urlData = existingImg.file_path
+          ? (await supabase.storage.from("brand-assets").createSignedUrl(existingImg.file_path, 3600)).data
+          : null;
+        created.push({ ...existingImg, preview_url: urlData?.signedUrl });
+        continue;
+      }
+
       const stored = await fetchAndStore(supabase, candidate.url!, client_account_id, candidate.name);
       if (!stored) continue;
+
+      if (stored.existing) {
+        // Identical bytes already stored under a different URL — refresh metadata, skip a second copy.
+        await supabase
+          .from("brand_assets")
+          .update({
+            metadata: {
+              ...(stored.existing.metadata ?? {}),
+              scraped_from: targetUrl,
+              confidence: candidate.confidence,
+              last_scraped_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", stored.existing.id);
+
+        const urlData = stored.existing.file_path
+          ? (await supabase.storage.from("brand-assets").createSignedUrl(stored.existing.file_path, 3600)).data
+          : null;
+        created.push({ ...stored.existing, preview_url: urlData?.signedUrl });
+        continue;
+      }
 
       const { data, error } = await supabase
         .from("brand_assets")
@@ -511,6 +823,7 @@ serve(async (req) => {
             scraped_from: targetUrl,
             original_url: candidate.url,
             confidence: candidate.confidence,
+            content_hash: stored.contentHash,
           },
         })
         .select("id, name, asset_type")
@@ -526,7 +839,7 @@ serve(async (req) => {
 
     // Brand voice extraction (non-blocking — best effort)
     try {
-      const voiceAssets = await extractBrandVoice(html, contextProfile);
+      const voiceAssets = await extractBrandVoice(voiceSourceText, contextProfile);
 
       for (const va of voiceAssets) {
         // Dedup by sub_type
