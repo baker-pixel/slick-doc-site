@@ -209,6 +209,30 @@ serve(async (req) => {
       case "generate_social_strategy":
         result = await upsertSocialStrategy(supabase, client, tierPolicy(client.tier));
         break;
+      case "extract_brand_assets": {
+        if (!client.website_url) {
+          result = { skipped: "no_website_url" };
+          break;
+        }
+        // Awaited now, unlike the old seed-tier-workflow fire-and-forget
+        // call this replaces -- this step's whole purpose is to let
+        // content_generation/social_strategy depends_on it and know brand
+        // context actually landed before they run.
+        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/extract-brand-assets`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ client_account_id: clientId, website_url: client.website_url }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`extract-brand-assets failed (${res.status}): ${text}`);
+        }
+        result = await res.json();
+        break;
+      }
       default:
         throw new Error(`Unknown job type: ${jobType}`);
     }

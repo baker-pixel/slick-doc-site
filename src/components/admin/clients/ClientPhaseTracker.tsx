@@ -200,6 +200,31 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
     }
   };
 
+  // Manual override on top of the daily auto-discover-prospects cron, not a
+  // replacement for it -- for a client who just got approved and shouldn't
+  // have to wait for tomorrow's 9am run. Always calls discover-prospects
+  // (Maps), same default the cron itself uses; it doesn't know a given
+  // client's icp.local=false preference for the AI-web-search variant.
+  const handleFindProspects = async (clientId: string) => {
+    setRunningAction(`prospects:${clientId}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("discover-prospects", {
+        body: { client_id: clientId, password: adminPassword },
+      });
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Prospect discovery failed");
+      }
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Discovered ${data?.discovered ?? 0} prospect(s)`);
+      await fetchClientsWithPhases();
+    } catch (err: any) {
+      toast.error(err?.message || "Prospect discovery failed");
+    } finally {
+      setRunningAction(null);
+    }
+  };
+
   const filteredClients = selectedTier === "all" ? clients : clients.filter((c) => c.tier === selectedTier);
 
   const getCurrentPhaseInfo = (phaseId: string) => {
@@ -393,6 +418,17 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
                           >
                             {runningAction === `ads:${client.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                             Run Ads Setup
+                          </Button>
+                        )}
+                        {client.tier !== "foundation" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleFindProspects(client.id)}
+                            disabled={runningAction === `prospects:${client.id}`}
+                          >
+                            {runningAction === `prospects:${client.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Find Prospects Now
                           </Button>
                         )}
                       </div>

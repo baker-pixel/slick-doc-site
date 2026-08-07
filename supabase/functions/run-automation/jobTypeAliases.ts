@@ -46,6 +46,7 @@ export const ALLOWED_JOB_TYPES: AutomationType[] = [
   "optimize_crm_pipeline",
   "create_full_analytics_suite",
   "generate_social_strategy",
+  "extract_brand_assets",
 ];
 
 export function normalizeJobType(raw: unknown): AutomationType {
@@ -203,6 +204,7 @@ export function normalizeJobType(raw: unknown): AutomationType {
     website_analysis: "run_page_speed_test",
     gap_report: "run_keyword_gap_analysis",
     social_strategy: "generate_social_strategy",
+    brand_extraction: "extract_brand_assets",
     content: "content_generation",
     email_template: "email_sequence",
     ad_copy: "content_generation",
