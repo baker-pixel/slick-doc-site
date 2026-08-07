@@ -29,6 +29,15 @@ export interface TierPolicy {
     /** prospects discovered per run */
     discoveryBatch: number;
   };
+  /** Paid-tier live LLM probe -- does ChatGPT/Claude actually cite this client
+   * when asked a category+location question. Distinct from the free
+   * ai_readiness_scores heuristic (schema/llms.txt/crawlability), which every
+   * report gets regardless of tier. */
+  aiVisibility: {
+    enabled: boolean;
+    /** prompts probed per client per monthly run, across both models */
+    promptsPerMonth: number;
+  };
   reporting: {
     weekly: boolean;
     monthly: boolean;
@@ -41,6 +50,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
     seo: { crawlPages: 5, reauditCadenceDays: 90, applyMode: "off" },
     social: { contentTypes: ["google_post"], postsPerMonth: 4 },
     prospect: { enabled: false, discoveryBatch: 0 },
+    aiVisibility: { enabled: false, promptsPerMonth: 0 },
     reporting: { weekly: false, monthly: true },
   },
   growth: {
@@ -48,6 +58,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
     seo: { crawlPages: 10, reauditCadenceDays: 30, applyMode: "key_pages" },
     social: { contentTypes: ["google_post", "social_post", "email_newsletter"], postsPerMonth: 12 },
     prospect: { enabled: true, discoveryBatch: 10 },
+    aiVisibility: { enabled: true, promptsPerMonth: 8 },
     reporting: { weekly: true, monthly: true },
   },
   transformation: {
@@ -55,6 +66,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
     seo: { crawlPages: 15, reauditCadenceDays: 30, applyMode: "full" },
     social: { contentTypes: ["google_post", "social_post", "email_newsletter", "blog_post"], postsPerMonth: 20 },
     prospect: { enabled: true, discoveryBatch: 20 },
+    aiVisibility: { enabled: true, promptsPerMonth: 8 },
     reporting: { weekly: true, monthly: true },
   },
 };
