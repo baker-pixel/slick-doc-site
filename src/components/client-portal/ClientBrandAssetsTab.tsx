@@ -37,7 +37,7 @@ interface ClientBrandAssetsTabProps {
 
 function brandKitCompleteness(assets: BrandAsset[]): { score: number; breakdown: Record<string, boolean> } {
   const confirmed = assets.filter((a) => a.confirmed);
-  const hasLogo = confirmed.some((a) => a.asset_type === "logo" || a.asset_type === "icon");
+  const hasLogo = confirmed.some((a) => a.asset_type === "logo" || a.asset_type === "icon" || a.asset_type === "og_image");
   const hasColors = confirmed.filter((a) => a.asset_type === "color").length >= 3;
   const hasFont = confirmed.some((a) => a.asset_type === "font");
   const hasVoice = confirmed.some((a) => a.asset_type === "brand_voice");
@@ -318,13 +318,13 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
   const confirmedAssets = assets.filter((a) => a.confirmed);
   const pendingAssets = assets.filter((a) => !a.confirmed);
 
-  const logos = confirmedAssets.filter((a) => a.asset_type === "logo" || a.asset_type === "icon");
+  const logos = confirmedAssets.filter((a) => a.asset_type === "logo" || a.asset_type === "icon" || a.asset_type === "og_image");
   const colorAssets = confirmedAssets.filter((a) => a.asset_type === "color");
   const fontAssets = confirmedAssets.filter((a) => a.asset_type === "font");
   const voiceAssets = confirmedAssets.filter((a) => a.asset_type === "brand_voice");
   const legacyVoiceAssets = confirmedAssets.filter((a) => ["headline", "description"].includes(a.asset_type));
   const otherAssets = confirmedAssets.filter(
-    (a) => !["logo", "icon", "color", "font", "brand_voice", "headline", "description"].includes(a.asset_type)
+    (a) => !["logo", "og_image", "icon", "color", "font", "brand_voice", "headline", "description"].includes(a.asset_type)
   );
   const langAsset = confirmedAssets.find((a) => a.asset_type === "language");
 
@@ -362,7 +362,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
             <Progress value={completeness} className="h-2 mb-3" />
             <div className="flex flex-wrap gap-2">
               {[
-                { label: "Logo", done: confirmedAssets.some((a) => a.asset_type === "logo" || a.asset_type === "icon") },
+                { label: "Logo", done: confirmedAssets.some((a) => a.asset_type === "logo" || a.asset_type === "icon" || a.asset_type === "og_image") },
                 { label: "3+ Colors", done: confirmedAssets.filter((a) => a.asset_type === "color").length >= 3 },
                 { label: "Font", done: confirmedAssets.some((a) => a.asset_type === "font") },
                 { label: "Brand Voice", done: confirmedAssets.some((a) => a.asset_type === "brand_voice") },

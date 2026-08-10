@@ -420,14 +420,17 @@ async function fetchAndStore(
     // Content-hash dedup: catches the same image served from a different URL
     // (e.g. CDN cache-busting), which a plain original_url check misses.
     const contentHash = await sha256Hex(arrayBuffer);
-    const { data: existingByHash } = (await supabase
+    const { data: existingByHashRows } = (await supabase
       .from("brand_assets")
       .select("id, name, asset_type, file_path, metadata")
       .eq("client_account_id", clientAccountId)
       .eq("metadata->>content_hash", contentHash)
-      .maybeSingle()) as {
-      data: { id: string; name: string; asset_type: string; file_path: string; metadata: Record<string, unknown> | null } | null;
+      .order("confirmed", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)) as {
+      data: { id: string; name: string; asset_type: string; file_path: string; metadata: Record<string, unknown> | null }[] | null;
     };
+    const existingByHash = existingByHashRows?.[0] ?? null;
     if (existingByHash) {
       return { filePath: existingByHash.file_path, fileSize, contentHash, existing: existingByHash };
     }
@@ -645,23 +648,40 @@ serve(async (req) => {
 
         const normalizedName = (candidate.value || candidate.name).trim();
 
-        // Dedup: upsert by (client_account_id, asset_type, name) for color/font/language
+        // color/font/language: dedup by (client_account_id, asset_type, name) -- several
+        // distinct values can legitimately coexist (a palette, a font pairing).
+        // headline/description: singleton -- there is only ever one "the" headline/
+        // description per client, matched by asset_type alone (not name), because some
+        // sites rotate their hero text client-side (e.g. cycling industry verticals), so
+        // matching by exact text would just create a new row every time it rotates.
         const isDeduped = ["color", "font", "language"].includes(candidate.type);
+        const isSingleton = ["headline", "description"].includes(candidate.type);
 
-        if (isDeduped) {
-          const { data: existing } = await supabase
+        if (isDeduped || isSingleton) {
+          let query = supabase
             .from("brand_assets")
             .select("id, name, asset_type, metadata")
             .eq("client_account_id", client_account_id)
-            .eq("asset_type", candidate.type)
-            .ilike("name", normalizedName)
-            .maybeSingle();
+            .eq("asset_type", candidate.type);
+          if (isDeduped) query = query.ilike("name", normalizedName);
+
+          // .maybeSingle() would silently no-op (data: null, swallowed error) if
+          // pre-existing dupes from before this dedup logic existed leave more
+          // than one row matching -- order + take the first instead, so an
+          // ambiguous match still resolves to *something* rather than falling
+          // through to a fresh insert and adding yet another duplicate.
+          const { data: existingRows } = await query
+            .order("confirmed", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(1);
+          const existing = existingRows?.[0] ?? null;
 
           if (existing) {
             // Merge onto existing metadata (not overwrite) so confirmation_status survives a rescan
             await supabase
               .from("brand_assets")
               .update({
+                ...(isSingleton ? { name: normalizedName } : {}),
                 metadata: {
                   ...(existing.metadata as Record<string, unknown> ?? {}),
                   value: candidate.value,
@@ -672,7 +692,11 @@ serve(async (req) => {
                 },
               })
               .eq("id", existing.id);
-            created.push({ ...existing, preview_url: candidate.type === "color" ? candidate.value : undefined });
+            created.push({
+              ...existing,
+              name: isSingleton ? normalizedName : existing.name,
+              preview_url: candidate.type === "color" ? candidate.value : undefined,
+            });
             continue;
           }
         }
@@ -705,19 +729,25 @@ serve(async (req) => {
         continue;
       }
 
-      // Image assets — dedup by original_url so a rescan doesn't pile up duplicate blobs
-      const assetType = candidate.type === "favicon" ? "icon" : "logo";
+      // Image assets — dedup by original_url so a rescan doesn't pile up duplicate blobs.
+      // og_image gets its own asset_type (not "logo") -- collapsing it into "logo" would
+      // let a site's arbitrary og:image (which isn't always the logo) silently win the
+      // primary-logo pick in getClientBrandKit, corrupting the AI content-generation prompt.
+      const assetType = candidate.type === "favicon" ? "icon" : candidate.type === "og_image" ? "og_image" : "logo";
 
       if (candidate.svgMarkup && !candidate.url) {
         // Inline <svg> logo — no raster to fetch; store the markup itself, dedup by its hash.
         const svgHash = await sha256Hex(new TextEncoder().encode(candidate.svgMarkup).buffer as ArrayBuffer);
-        const { data: existingSvg } = await supabase
+        const { data: existingSvgRows } = await supabase
           .from("brand_assets")
           .select("id, name, asset_type, metadata")
           .eq("client_account_id", client_account_id)
           .eq("asset_type", assetType)
           .eq("metadata->>content_hash", svgHash)
-          .maybeSingle();
+          .order("confirmed", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const existingSvg = existingSvgRows?.[0] ?? null;
 
         if (existingSvg) {
           await supabase
@@ -756,13 +786,16 @@ serve(async (req) => {
         continue;
       }
 
-      const { data: existingImg } = await supabase
+      const { data: existingImgRows } = await supabase
         .from("brand_assets")
         .select("id, name, asset_type, file_path, metadata")
         .eq("client_account_id", client_account_id)
         .eq("asset_type", assetType)
         .eq("metadata->>original_url", candidate.url)
-        .maybeSingle();
+        .order("confirmed", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const existingImg = existingImgRows?.[0] ?? null;
 
       if (existingImg) {
         await supabase
@@ -843,13 +876,15 @@ serve(async (req) => {
 
       for (const va of voiceAssets) {
         // Dedup by sub_type
-        const { data: existing } = await supabase
+        const { data: existingRows } = await supabase
           .from("brand_assets")
           .select("id")
           .eq("client_account_id", client_account_id)
           .eq("asset_type", "brand_voice")
           .eq("metadata->>sub_type", va.sub_type)
-          .maybeSingle();
+          .order("created_at", { ascending: false })
+          .limit(1);
+        const existing = existingRows?.[0] ?? null;
 
         if (existing) {
           await supabase

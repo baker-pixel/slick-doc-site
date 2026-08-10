@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Loader2, Plus, Image, Type, Palette, FileText, Trash2, Globe,
   Building2, CheckCircle, Sparkles, AlertCircle, MessageSquare,
-  RefreshCw, Clock, BarChart2, Eye, Volume2, BookOpen, CheckCircle2,
+  Clock, BarChart2, Eye, Volume2, BookOpen, CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -46,6 +46,7 @@ interface ClientAccount {
 
 const ASSET_TYPES = [
   { value: "logo", label: "Logo", icon: Image },
+  { value: "og_image", label: "Social Image", icon: Image },
   { value: "color", label: "Color", icon: Palette },
   { value: "font", label: "Font", icon: Type },
   { value: "guideline", label: "Guideline", icon: FileText },
@@ -74,7 +75,7 @@ function AssetStatusBadge({ asset }: { asset: BrandAsset }) {
 
 function completenessScore(assets: BrandAsset[]): { score: number; counts: Record<string, number> } {
   const confirmed = assets.filter((a) => a.confirmed);
-  const hasLogo = confirmed.some((a) => a.asset_type === "logo" || a.asset_type === "icon") ? 20 : 0;
+  const hasLogo = confirmed.some((a) => a.asset_type === "logo" || a.asset_type === "icon" || a.asset_type === "og_image") ? 20 : 0;
   const colors = confirmed.filter((a) => a.asset_type === "color").length;
   const hasColors = colors >= 3 ? 20 : 0;
   const hasFont = confirmed.some((a) => a.asset_type === "font") ? 15 : 0;
@@ -82,7 +83,7 @@ function completenessScore(assets: BrandAsset[]): { score: number; counts: Recor
   const hasValueProp = confirmed.some((a) => a.asset_type === "brand_voice" && a.metadata?.sub_type === "value_proposition") ? 15 : 0;
 
   const counts: Record<string, number> = {
-    logo: confirmed.filter((a) => a.asset_type === "logo" || a.asset_type === "icon").length,
+    logo: confirmed.filter((a) => a.asset_type === "logo" || a.asset_type === "icon" || a.asset_type === "og_image").length,
     color: confirmed.filter((a) => a.asset_type === "color").length,
     font: confirmed.filter((a) => a.asset_type === "font").length,
     brand_voice: confirmed.filter((a) => a.asset_type === "brand_voice").length,
@@ -361,14 +362,14 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
 
   const pendingCount = filteredAssets.filter((a) => !a.confirmed).length;
 
-  const logos = filteredAssets.filter((a) => a.asset_type === "logo");
+  const logos = filteredAssets.filter((a) => a.asset_type === "logo" || a.asset_type === "og_image");
   const colors = filteredAssets.filter((a) => a.asset_type === "color");
   const icons = filteredAssets.filter((a) => a.asset_type === "icon");
   const fonts = filteredAssets.filter((a) => a.asset_type === "font");
   const brandVoice = filteredAssets.filter((a) => a.asset_type === "brand_voice");
   const legacyVoice = filteredAssets.filter((a) => ["headline", "description"].includes(a.asset_type));
   const other = filteredAssets.filter((a) =>
-    !["logo", "color", "icon", "font", "brand_voice", "headline", "description"].includes(a.asset_type)
+    !["logo", "og_image", "color", "icon", "font", "brand_voice", "headline", "description"].includes(a.asset_type)
   );
 
   const currentClient = clients.find((c) => c.id === clientId);
@@ -631,10 +632,6 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
           </div>
           <div className="flex gap-2">
             {addDialog}
-            <Button variant="outline" onClick={openExtractDialog}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Re-extract
-            </Button>
             <Button onClick={openExtractDialog}>
               <Globe className="h-4 w-4 mr-2" />
               Extract from Website
@@ -707,7 +704,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
                     ) : (
                       <div className="h-6 w-6 rounded bg-amber-100 border border-amber-300 flex-shrink-0 flex items-center justify-center">
                         {a.asset_type === "brand_voice" ? <Volume2 className="h-3 w-3" /> :
-                         (a.asset_type === "logo" || a.asset_type === "icon") ? <Image className="h-3 w-3" /> :
+                         (a.asset_type === "logo" || a.asset_type === "icon" || a.asset_type === "og_image") ? <Image className="h-3 w-3" /> :
                          a.asset_type === "font" ? <Type className="h-3 w-3" /> :
                          <FileText className="h-3 w-3" />}
                       </div>
@@ -1015,7 +1012,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
               <Card key={asset.id} className="overflow-hidden">
                 {asset.asset_type === "color" ? (
                   <div className="h-24 w-full" style={{ backgroundColor: asset.metadata?.hex || asset.metadata?.value || "#ccc" }} />
-                ) : asset.asset_type === "logo" && url ? (
+                ) : (asset.asset_type === "logo" || asset.asset_type === "og_image") && url ? (
                   <div className="h-24 bg-muted/50 flex items-center justify-center p-4">
                     <img src={url} alt={asset.name} className="max-h-full max-w-full object-contain" />
                   </div>

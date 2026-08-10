@@ -106,6 +106,7 @@ interface RawSignals {
   bodyFontStack: string | null;
   cssVarColors: string[];
   themeColor: string | null;
+  pageText: string;
 }
 
 async function extractSignals(page: Page): Promise<RawSignals> {
@@ -194,13 +195,14 @@ async function extractSignals(page: Page): Promise<RawSignals> {
       logo,
       favicon,
       ogImage: abs(ogImageMeta?.content ?? null),
-      headline: h1?.textContent?.trim().slice(0, 200) || null,
-      description: descMeta?.content?.trim().slice(0, 400) || null,
+      headline: h1?.textContent?.replace(/\s+/g, " ").trim().slice(0, 200) || null,
+      description: descMeta?.content?.replace(/\s+/g, " ").trim().slice(0, 400) || null,
       language: document.documentElement.lang || null,
       headingFontStack: h1 ? getComputedStyle(h1).fontFamily : null,
       bodyFontStack: getComputedStyle(document.body).fontFamily,
       cssVarColors: cssVarColors.slice(0, 5),
       themeColor: themeMeta?.content?.trim() || null,
+      pageText: document.body.innerText.replace(/\s+/g, " ").trim().slice(0, 8000),
     };
   });
 }
@@ -342,6 +344,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headline: signals.headline,
       description: signals.description,
       language: signals.language,
+      pageText: signals.pageText,
     });
   } catch (err) {
     console.error("render-brand-assets error:", err);
