@@ -8,6 +8,7 @@ import { getSocialPillars } from "../_shared/socialStrategy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
+import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -218,7 +219,7 @@ serve(async (req) => {
           pillarCursor[slot.client_account_id]++;
         }
 
-        const generatedContent = await generateContent(slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
+        const generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
 
         // Self-QA: cheap second-model critique, best-effort. A QA failure
         // (null) never blocks the draft -- it just means no auto-forward.
@@ -420,6 +421,7 @@ serve(async (req) => {
 });
 
 async function generateContent(
+  supabase: any,
   slot: any,
   client: ClientInfo,
   recentTopics: string[],
@@ -432,7 +434,13 @@ async function generateContent(
   const month = MONTHS[now.getMonth()];
   const season = SEASONS[now.getMonth()];
 
-  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, recentTopics, recentFeedback, recentApproved, month, season, pillar);
+  // Confirmed brand assets (logo colors, voice, pillars, "never say" list)
+  // the client set up in "Verify Brand Assets" -- previously this generator
+  // only had context_profile's 4-value tone enum, ignoring brand_assets
+  // entirely even though the onboarding content generator already used it.
+  const kit = await getClientBrandKit(supabase, client.id);
+
+  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, kit, recentTopics, recentFeedback, recentApproved, month, season, pillar);
 
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
@@ -533,6 +541,7 @@ function buildPrompt(
   contentType: string,
   platform: string,
   client: ClientInfo,
+  kit: BrandKit,
   recentTopics: string[],
   recentFeedback: ContentFeedbackItem[],
   recentApproved: ApprovedContentItem[],
@@ -544,6 +553,16 @@ function buildPrompt(
   const industry = client.industry || "local business";
   const clientContext = buildClientContext(client);
   const brandVoice = getBrandVoice(client);
+  // Real confirmed brand kit wins when the client has one; the tone-enum
+  // guess is only a fallback for a client who hasn't confirmed any brand
+  // voice assets yet.
+  const hasBrandKit =
+    kit.voice.tone_descriptors.length > 0 ||
+    !!kit.voice.value_proposition ||
+    !!kit.voice.tagline ||
+    kit.voice.messaging_pillars.length > 0;
+  const brandSection = hasBrandKit ? brandKitToPromptBlock(kit) : `BRAND VOICE: ${brandVoice}`;
+  const toneLine = kit.voice.tone_descriptors.length > 0 ? kit.voice.tone_descriptors.join(", ") : brandVoice;
   const pillarLine = pillar ? `\nCONTENT PILLAR (anchor this post to this theme from the client's social plan): ${pillar}` : "";
   // The feedback loop, consumed: whats_working is refined from real outcomes
   // (client-context-refresh) and pulled here so content leans into what has
@@ -565,7 +584,7 @@ function buildPrompt(
 BUSINESS CONTEXT:
 ${clientContext}
 
-BRAND VOICE: ${brandVoice}
+${brandSection}
 PLATFORM: ${platform}
 CURRENT MONTH: ${month} (${season} season)${pillarLine}${workingLine}
 
@@ -662,28 +681,6 @@ Requirements:
         };
       }
 
-      if (platform === "twitter") {
-        return {
-          system,
-          user: `Write a single tweet for ${biz}.
-
-HARD LIMIT: 240 characters maximum (Twitter caps at 280 — stay under to allow edits).
-Count every character including spaces, punctuation, and hashtags.
-
-Pick ONE angle:
-${services.length ? `- A quick tip about: ${services[0]}` : "- A quick industry tip"}
-${differentiators.length ? `- A bold claim: ${differentiators[0]}` : "- A trust signal"}
-- A ${month} seasonal hook for ${targetAudience}
-- An engaging question that invites replies
-
-Rules:
-- NO hashtags (waste precious chars unless brand-critical)
-- ONE punchy idea only — no multi-part threads
-- End with a CTA only if it fits naturally within the limit
-- Output ONLY the tweet text — nothing else${avoidRepeat}`,
-        };
-      }
-
       // Generic social
       return {
         system,
@@ -717,7 +714,7 @@ Structure:
 - Conclusion with a CTA to contact ${biz}
 
 Length: ${wordCount}
-Tone: ${brandVoice}${avoidRepeat}`,
+Tone: ${toneLine}${avoidRepeat}`,
       };
     }
 

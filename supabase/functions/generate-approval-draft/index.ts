@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI } from "../_shared/ai.ts";
+import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -43,38 +44,33 @@ serve(async (req) => {
       return json({ success: true, skipped: true });
     }
 
-    // Fetch client data
+    // Fetch client data. Note: `tone` (a plain column) used to be read here
+    // instead of context_profile.tone -- a different, stale duplicate of the
+    // same concept that fill-scheduled-content and the rest of the pipeline
+    // actually use. Dropped in favor of the shared brand kit below.
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("business_name, industry, tone, website_summary, website_url, context_profile")
+      .select("business_name, industry, website_summary, website_url, context_profile")
       .eq("id", client_id)
       .single();
 
     if (clientErr || !client) return json({ error: "Client not found" }, 404);
 
-    // Fetch confirmed brand assets for context
-    const { data: brandAssets } = await supabase
-      .from("brand_assets")
-      .select("asset_type, name, metadata")
-      .eq("client_account_id", client_id)
-      .neq("metadata->>confirmation_status", "pending_client");
-
-    const headline = brandAssets?.find((a) => a.asset_type === "headline")?.metadata?.value || "";
-    const description = brandAssets?.find((a) => a.asset_type === "description")?.metadata?.value || "";
-    const brandColors = brandAssets
-      ?.filter((a) => a.asset_type === "color")
-      .map((a) => a.metadata?.hex || a.metadata?.value)
-      .filter(Boolean)
-      .join(", ");
+    // Same brand kit source run-automation and fill-scheduled-content use --
+    // this used to hand-roll a thinner brand_assets query here (headline/
+    // description/colors only, no voice/pillars/differentiators/"never say").
+    const kit = await getClientBrandKit(supabase, client_id);
+    const brandBlock = brandKitToPromptBlock(kit);
+    const fallbackTone = (client.context_profile as { tone?: string } | null)?.tone;
 
     // Build prompt context
     const businessContext = [
       `Business: ${client.business_name}`,
       client.industry ? `Industry: ${client.industry}` : null,
-      client.tone ? `Brand tone: ${client.tone}` : null,
       client.website_summary ? `About: ${client.website_summary}` : null,
-      headline ? `Brand headline: "${headline}"` : null,
-      description ? `Brand description: "${description}"` : null,
+      brandBlock,
+      // Only relevant if the brand kit above found no confirmed voice info.
+      !kit.voice.tone_descriptors.length && fallbackTone ? `Brand tone preference: ${fallbackTone}` : null,
     ]
       .filter(Boolean)
       .join("\n");
