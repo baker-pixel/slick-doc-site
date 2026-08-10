@@ -20,7 +20,6 @@ serve(async (req) => {
   try {
     const now = new Date();
     const summary = {
-      n8n_timeouts: 0,
       stuck_tasks: 0,
       orphaned_steps: 0,
       stuck_client_tasks: 0,
@@ -30,37 +29,6 @@ serve(async (req) => {
       stale_prospect_alert: 0,
       stale_automation_step_alert: 0,
     };
-
-    // ── Sweep 1: n8n callback timeouts (original behavior) ──────────────
-    const { data: stalled, error } = await supabase
-      .from("workflow_steps")
-      .select("id, workflow_id, client_id, step_number, step_name, callback_deadline")
-      .eq("status", "awaiting_callback")
-      .not("callback_deadline", "is", null)
-      .lt("callback_deadline", now.toISOString());
-
-    if (error) throw error;
-
-    for (const step of stalled ?? []) {
-      await supabase
-        .from("workflow_steps")
-        .update({
-          status: "failed",
-          result: { error: "n8n callback timeout — no response within 2 hours" },
-        })
-        .eq("id", step.id)
-        .eq("status", "awaiting_callback");
-
-      await logAlert(supabase, {
-        source: "check-stalled-workflows",
-        alertType: "n8n_callback_timeout",
-        severity: "high",
-        title: `Step ${step.step_number} timed out`,
-        message: `Step ${step.step_number} (${step.step_name}) timed out waiting for n8n callback`,
-        sourceId: step.workflow_id,
-      });
-      summary.n8n_timeouts++;
-    }
 
     // ── Sweep 2: workflow_tasks stuck in "running" ──────────────────────
     // An agent function sets running, then crashes/times out → row is stuck
@@ -223,6 +191,9 @@ serve(async (req) => {
     // auto-forward -- see fill-scheduled-content's AUTO_FORWARD_PLATFORMS)
     // and have no reminder today. A draft that never gets reviewed just
     // silently never publishes -- surface it instead of leaving it invisible.
+    // n8n (the only publisher either platform ever had) is now removed, so
+    // approving one of these drafts won't make it publish either -- this
+    // sweep now exists to flag the backlog for cleanup/triage, not just review.
     const STALE_DRAFT_HOURS = 48;
     const staleDraftCutoff = new Date(now.getTime() - STALE_DRAFT_HOURS * 60 * 60_000).toISOString();
     const { data: staleDrafts, error: draftErr } = await supabase
@@ -257,7 +228,7 @@ serve(async (req) => {
           alertType: "stale_draft_backlog",
           severity: "warning",
           title: `${staleDrafts.length} Google Business/email draft(s) awaiting review`,
-          message: `${staleDrafts.length} Google Business Profile / newsletter draft(s) across ${clientCount} client(s) have sat unreviewed for over ${STALE_DRAFT_HOURS}h (oldest created ${oldestCreatedAt}). These platforms require a manual "send for approval" click and will never auto-publish.`,
+          message: `${staleDrafts.length} Google Business Profile / newsletter draft(s) across ${clientCount} client(s) have sat unreviewed for over ${STALE_DRAFT_HOURS}h (oldest created ${oldestCreatedAt}). These platforms have no publisher now that n8n is removed -- approving one will not make it publish. Review and clear this backlog (approve if you've wired up a replacement, otherwise delete).`,
           metadata: { count: staleDrafts.length, client_count: clientCount, oldest_created_at: oldestCreatedAt },
         });
         summary.stale_draft_alert = 1;

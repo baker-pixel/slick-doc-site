@@ -26,15 +26,13 @@ type WeeklySlot = {
 // what the tier is sold as (the old hardcoded table produced ~2x).
 //
 // policyType maps to tierPolicy contentTypes; content_type on the slot is
-// what fill-scheduled-content's prompt switch expects (email_newsletter
-// slots use content_type "email_copy" for that reason).
-// google_business publishes via the n8n path in publish-scheduled-content,
-// not Post for Me. Social platforms are additionally filtered per client to
-// only those with a connected Post for Me account.
+// what fill-scheduled-content's prompt switch expects.
+// google_post and email_newsletter candidates removed -- both only ever
+// published via n8n (now fully removed, see git history), and neither has a
+// replacement publisher. Social platforms are additionally filtered per
+// client to only those with a connected Post for Me account.
 const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: WeeklySlot }> = [
-  { policyType: "google_post",      perMonth: 4, slot: { dayOfWeek: 3, platform: "google_business", content_type: "google_post", titlePrefix: "Google Business Post" } },
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" } },
-  { policyType: "email_newsletter", perMonth: 2, slot: { dayOfWeek: 3, platform: "email",     content_type: "email_copy",  titlePrefix: "Email Newsletter", weekFilter: [2, 4] } },
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" } },
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 5, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post", weekFilter: [1, 3] } },
   { policyType: "blog_post",        perMonth: 2, slot: { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",   weekFilter: [2, 4] } },

@@ -227,25 +227,6 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Check n8n webhook status
-  const { data: n8nStatus } = useQuery({
-    queryKey: ["n8n-webhook-status"],
-    queryFn: async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("trigger-n8n", {
-          body: { clientId: "__health_check__", tasks: [], trigger: "health_check", password: adminPassword },
-        });
-        if (error?.message?.includes("N8N_WEBHOOK_URL") || data?.error?.includes("N8N_WEBHOOK_URL")) {
-          return { configured: false };
-        }
-        return { configured: true };
-      } catch {
-        return { configured: false };
-      }
-    },
-    staleTime: 60_000,
-  });
-
   // Fetch recent automation alerts
   const { data: recentAlerts = [] } = useQuery({
     queryKey: ["pipeline-alerts"],
@@ -263,13 +244,10 @@ export default function SocialMediaPostsPanel() {
       const all = (data?.data || []) as AutomationAlert[];
       return all
         .filter((a) =>
-          a.source === "trigger-n8n" ||
           a.source === "publish-scheduled-content" ||
           a.source === "postforme-publish-post" ||
-          a.title?.includes("trigger-n8n") ||
           a.title?.includes("publish-scheduled-content") ||
           a.title?.includes("Post for Me") ||
-          a.message?.includes("n8n") ||
           a.message?.includes("publish") ||
           a.message?.includes("Post for Me")
         )
@@ -278,20 +256,14 @@ export default function SocialMediaPostsPanel() {
     staleTime: 30_000,
   });
 
-  // Pipeline status: green if PfM accounts connected, yellow if legacy OAuth only, red if nothing
+  // Pipeline status: green if PfM accounts connected, red if nothing.
+  // Used to have a "yellow" tier for legacy OAuth + n8n; n8n is gone and
+  // legacy OAuth tokens were never a real publish path on their own.
   const pfmConnectedPlatforms = pfmAccounts.map((a) => a.platform);
-  const legacyConnectedPlatforms = oauthTokens.map((t) => t.platform);
-  const n8nConfigured = n8nStatus?.configured ?? false;
-  const pipelineStatus: "green" | "yellow" | "red" =
-    pfmConnectedPlatforms.length > 0
-      ? "green"
-      : legacyConnectedPlatforms.length > 0 && n8nConfigured
-      ? "yellow"
-      : "red";
+  const pipelineStatus: "green" | "red" = pfmConnectedPlatforms.length > 0 ? "green" : "red";
 
   const pipelineStatusConfig = {
     green: { color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30", label: "Post for Me Ready" },
-    yellow: { color: "text-yellow-600", bg: "bg-yellow-100 dark:bg-yellow-900/30", label: "Legacy OAuth Only" },
     red: { color: "text-red-600", bg: "bg-red-100 dark:bg-red-900/30", label: "No Accounts Connected" },
   };
 

@@ -17,6 +17,13 @@ const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Resend error `name` values that mean "try again later" rather than "this
+// will never work" (bad address, missing field, invalid key, etc).
+const RETRYABLE_RESEND_ERRORS = new Set(["rate_limit_exceeded", "internal_server_error", "application_error", "concurrent_idempotent_requests"]);
+function isRetryableResendError(name: string | undefined): boolean {
+  return !!name && RETRYABLE_RESEND_ERRORS.has(name);
+}
+
 // Best-effort bookkeeping after a successful direct publish: activity trail
 // for reporting + keep the Social Media Plan progress current.
 async function recordPublish(
@@ -43,16 +50,35 @@ async function recordPublish(
 // anything querying the real error_message column) and most paths never
 // alerted an admin at all -- 51/55 failed posts over 2.5 months went
 // unnoticed. Centralized so every platform branch fails the same visible way.
+//
+// `retryable` mirrors postforme-publish-post's pattern: a transient failure
+// (rate limit, 5xx, timeout) requeues to "scheduled" so the next cron run
+// retries, up to MAX_PUBLISH_ATTEMPTS; only then (or for a non-retryable
+// error) does it actually fail + alert. Email/blog used to fail permanently
+// on the first error with no retry at all, unlike social.
+const MAX_PUBLISH_ATTEMPTS = 3;
 async function markFailed(
   supabase: any,
   item: { id: string; platform: string; metadata?: unknown },
   msg: string,
+  retryable = false,
 ): Promise<void> {
+  const meta = (item.metadata as Record<string, unknown>) || {};
+  const attempts = (Number(meta.publish_attempts) || 0) + 1;
+
+  if (retryable && attempts < MAX_PUBLISH_ATTEMPTS) {
+    console.warn(`Publish attempt ${attempts}/${MAX_PUBLISH_ATTEMPTS} failed for ${item.id}, will retry: ${msg}`);
+    await supabase.from("content_calendar")
+      .update({ status: "scheduled", metadata: { ...meta, publish_attempts: attempts, last_error: msg } })
+      .eq("id", item.id);
+    return;
+  }
+
   await supabase.from("content_calendar")
     .update({
       status: "failed",
       error_message: msg,
-      metadata: { ...((item.metadata as object) || {}), error: msg },
+      metadata: { ...meta, publish_attempts: attempts, error: msg },
     })
     .eq("id", item.id);
 
@@ -67,6 +93,23 @@ async function markFailed(
   });
 }
 
+// Atomic claim, same pattern postforme-publish-post uses for social: flips
+// scheduled -> processing only if still "scheduled", so two overlapping cron
+// runs can't both send the same email or double-log the same blog publish.
+async function claimItem(supabase: any, id: string): Promise<boolean> {
+  const { data: claimedRows, error } = await supabase
+    .from("content_calendar")
+    .update({ status: "processing", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "scheduled")
+    .select("id");
+  if (error) {
+    console.error(`Claim error for ${id}:`, error.message);
+    return false;
+  }
+  return !!claimedRows && claimedRows.length > 0;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -74,12 +117,14 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-    // ── Cleanup: reset rows stuck in processing/awaiting_callback for > 2 hours ──
+    // ── Cleanup: reset rows stuck in processing for > 2 hours ──
+    // "awaiting_callback" used to also appear here (n8n publish in flight) --
+    // n8n is gone and nothing sets that status anymore, so it's dropped.
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { data: stuckPosts } = await supabase
       .from("content_calendar")
       .update({ status: "scheduled", updated_at: new Date().toISOString() })
-      .in("status", ["processing", "awaiting_callback"])
+      .eq("status", "processing")
       .lt("updated_at", twoHoursAgo)
       .select("id, platform, title");
 
@@ -155,8 +200,18 @@ serve(async (req) => {
             break;
           }
 
-          // ── Email — Resend directly (known recipients) or n8n (newsletter) ──
+          // ── Email — Resend directly, known recipients only ──
+          // Newsletter (no explicit recipients) used to fall back to n8n;
+          // n8n is gone and nothing replaces it, so it now just fails clearly
+          // via the default case's "not supported" message below.
           case "email": {
+            const claimed = await claimItem(supabase, item.id);
+            if (!claimed) {
+              console.log(`Email item ${item.id} already handled (skipped)`);
+              results.push({ id: item.id, platform: "email", success: true, skipped: true });
+              break;
+            }
+
             const metadata = item.metadata as { recipients?: string[]; subject?: string } | null;
             const recipients = metadata?.recipients || [];
 
@@ -170,7 +225,7 @@ serve(async (req) => {
               if (emailRes.error) {
                 const msg = emailRes.error.message;
                 console.error("Resend error:", msg);
-                await markFailed(supabase, item, msg);
+                await markFailed(supabase, item, msg, isRetryableResendError(emailRes.error.name));
                 results.push({ id: item.id, platform: "email", success: false, error: msg });
               } else {
                 await supabase.from("content_calendar")
@@ -180,60 +235,29 @@ serve(async (req) => {
                 results.push({ id: item.id, platform: "email", success: true });
               }
             } else {
-              // Newsletter — route via n8n
-              const n8nRes = await supabase.functions.invoke("trigger-n8n", {
-                body: {
-                  clientId: item.client_account_id,
-                  trigger: "publish_email_newsletter",
-                  tasks: [],
-                  metadata: { content_calendar_id: item.id, platform: "email", title: item.title, content: item.content, scheduled_for: item.scheduled_for },
-                },
-              });
-              if (n8nRes.error) {
-                const msg = `n8n trigger failed: ${n8nRes.error.message}`;
-                await markFailed(supabase, item, msg);
-                results.push({ id: item.id, platform: "email", success: false, error: msg });
-              } else {
-                await supabase.from("content_calendar")
-                  .update({ status: "awaiting_callback", metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() } })
-                  .eq("id", item.id);
-                results.push({ id: item.id, platform: "email", success: true });
-              }
-            }
-            break;
-          }
-
-          // ── Google Business — route via n8n ──
-          case "google_business": {
-            const n8nRes = await supabase.functions.invoke("trigger-n8n", {
-              body: {
-                clientId: item.client_account_id,
-                trigger: "publish_social",
-                tasks: [],
-                metadata: { content_calendar_id: item.id, platform: item.platform, title: item.title, content: item.content, scheduled_for: item.scheduled_for },
-              },
-            });
-            if (n8nRes.error) {
-              const msg = `n8n trigger failed: ${n8nRes.error.message}`;
+              // Config/data problem, not transient -- retrying won't help.
+              const msg = !resend ? "RESEND_API_KEY not configured" : "No recipients on this email item";
               await markFailed(supabase, item, msg);
-              results.push({ id: item.id, platform: item.platform, success: false, error: msg });
-            } else {
-              await supabase.from("content_calendar")
-                .update({ status: "awaiting_callback", metadata: { ...((item.metadata as object) || {}), n8n_triggered_at: new Date().toISOString() } })
-                .eq("id", item.id);
-              results.push({ id: item.id, platform: item.platform, success: true });
+              results.push({ id: item.id, platform: "email", success: false, error: msg });
             }
             break;
           }
 
           // ── Blog — mark published (CMS handles actual publishing) ──
-          case "blog":
+          case "blog": {
+            const claimed = await claimItem(supabase, item.id);
+            if (!claimed) {
+              console.log(`Blog item ${item.id} already handled (skipped)`);
+              results.push({ id: item.id, platform: "blog", success: true, skipped: true });
+              break;
+            }
             await supabase.from("content_calendar")
               .update({ status: "published", published_at: new Date().toISOString() })
               .eq("id", item.id);
             await recordPublish(supabase, item);
             results.push({ id: item.id, platform: "blog", success: true });
             break;
+          }
 
           default: {
             const msg = `Platform "${item.platform}" is not supported for automated publishing.`;

@@ -165,12 +165,6 @@ verify_jwt = true
 [functions.generate-personalized-content]
 verify_jwt = false
 
-[functions.trigger-n8n]
-verify_jwt = false
-
-[functions.n8n-callback]
-verify_jwt = false
-
 [functions.prepare-connection]
 verify_jwt = false
 

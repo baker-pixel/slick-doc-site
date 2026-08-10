@@ -14,7 +14,6 @@ const VISIBILITY_TIMEOUT_SECONDS = 120;
 const MAX_ATTEMPTS = 5;
 
 const TARGET_PATHS: Record<string, string> = {
-  "trigger-n8n": "trigger-n8n",
   "run-automation": "run-automation",
   "generate-approval-draft": "generate-approval-draft",
   "seo-audit": "seo-audit",
