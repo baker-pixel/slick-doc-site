@@ -225,7 +225,7 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
       });
       if (insertError) throw insertError;
 
-      // Note: uploading doesn't complete the "Upload Brand Assets" onboarding
+      // Note: uploading doesn't complete the "Verify Brand Assets" onboarding
       // step by itself -- the asset lands unconfirmed (same as a website-
       // detected asset) and the step only completes once a logo/icon is
       // actually confirmed, in handleConfirmAsset.

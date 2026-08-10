@@ -7,12 +7,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// 4 client-facing onboarding gates — prepended to ALL tiers
+// 5 client-facing onboarding gates — prepended to ALL tiers
 // Order rationale:
-//   1. Confirm info first (we need this before anything)
-//   2. Upload brand assets — no dependency on a call anymore, can happen right away
-//   3. Connect social accounts — after brand assets are in
-//   4. Approve first content — after strategy is aligned
+//   1. Confirm info first (we need this before anything, incl. website_url for extraction)
+//   2. Extract brand assets from the website automatically -- runs as soon as
+//      we have a website_url, so the client has candidates waiting instead of
+//      a blank upload form. Real automation step (task_type: brand_extraction),
+//      not client-driven, just seeded in this array so it sits before step 3.
+//   3. Verify brand assets — client confirms/edits/rejects what extraction
+//      found (or uploads from scratch if extraction found nothing/was wrong).
+//   4. Connect social accounts — after brand assets are in
+//   5. Approve first content — after strategy is aligned
 // Kickoff call (Calendly) step removed for now -- see git history to restore.
 const ONBOARDING_STEPS = [
   {
@@ -25,38 +30,48 @@ const ONBOARDING_STEPS = [
       fields: ["business_name", "website_url", "phone", "address", "industry", "target_audience", "main_competitors"],
     },
   },
+  // Used to run as step 8, gating content/strategy steps that came after it.
+  // Moved here so the candidates it finds are ready before the client ever
+  // sees the "Verify Brand Assets" step below, instead of the client
+  // uploading blind and extraction redoing the same job days later.
   {
     step_number: 2,
-    step_name: "Upload Brand Assets",
-    task_type: "client_upload",
+    step_name: "Extract brand assets from website",
+    task_type: "brand_extraction",
     depends_on: 1,
+  },
+  {
+    step_number: 3,
+    step_name: "Verify Brand Assets",
+    task_type: "client_upload",
+    depends_on: 2,
     payload: {
       required: ["logo_primary"],
       optional: ["logo_dark", "brand_colors", "font_guidelines"],
     },
   },
   {
-    step_number: 3,
+    step_number: 4,
     step_name: "Connect Social Accounts",
     task_type: "client_oauth",
-    depends_on: 2,
+    depends_on: 3,
     payload: {
       platforms: ["linkedin", "facebook", "instagram", "twitter"],
       minimum_required: 1,
     },
   },
   {
-    step_number: 4,
+    step_number: 5,
     step_name: "Approve Your First Content Draft",
     task_type: "client_approval",
-    depends_on: 3,
+    depends_on: 4,
     payload: { content_type: "linkedin_post" },
   },
 ];
 
-const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 4
+const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 5
 
-// Automation steps — original step_numbers start at 1 but will be offset by 4.
+// Automation steps — original step_numbers start at 1 but will be offset by ONBOARDING_OFFSET (5).
 // No "Publish X" step here anymore (was n8n_post_social/n8n_post_blog, routed
 // to trigger-n8n) -- actual publishing already happens on its own continuous
 // schedule (auto-schedule-content -> content_calendar -> publish-scheduled-
@@ -67,7 +82,7 @@ const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 4
 // This chain is SETUP ONLY, not a content burst. It used to also include a
 // second blog article, ad copy, a nurture sequence, a retention sequence, and
 // both a quarterly and monthly report -- all one-time, all firing back-to-
-// back within the same ~30 minutes once step 4 (client_approval) unlocks the
+// back within the same ~30 minutes once step 5 (client_approval) unlocks the
 // chain, since process-agent-jobs dequeues every minute and each step
 // auto-unlocks the next the instant it completes. Two problems with that:
 // content pieces were quota borrowed from the tier's actual monthly
@@ -82,21 +97,20 @@ const ONBOARDING_OFFSET = ONBOARDING_STEPS.length; // 4
 // everything else here is analysis/config that legitimately IS a day-one
 // concern (audit the current state, extract brand context, seed the social
 // strategy) rather than content output.
+// Brand extraction moved to ONBOARDING_STEPS (runs right after step 1,
+// "Confirm Business Information") instead of gating these content/strategy
+// steps from down here -- by the time gap_report finishes, brand context has
+// already been extracted and verified days earlier.
 const FOUNDATION_STEPS = [
   { step_number: 1, step_name: "Analyze current website performance", task_type: "website_analysis", depends_on: null },
   { step_number: 2, step_name: "Run basic SEO audit", task_type: "seo_audit", depends_on: 1 },
   { step_number: 3, step_name: "Generate marketing gap report", task_type: "gap_report", depends_on: 2 },
-  // Used to be a fire-and-forget background fetch with no tracking, no
-  // depends_on, and no guarantee it finished before any content/strategy
-  // step ran off default/empty brand context. Now a real step everything
-  // brand-sensitive waits on.
-  { step_number: 4, step_name: "Extract brand assets from website", task_type: "brand_extraction", depends_on: 3 },
-  { step_number: 5, step_name: "Create Google Business Profile post", task_type: "content", depends_on: 4, payload: { content_type: "gbp_post" } },
+  { step_number: 4, step_name: "Create Google Business Profile post", task_type: "content", depends_on: 3, payload: { content_type: "gbp_post" } },
   // Previously only ever generated by the weekly client-context-refresh cron
   // (or a manual trigger with no UI) -- a brand-new client's Social agent
   // could sit at "Setting Up" for up to a week with zero way to speed it up,
   // unlike SEO which gets a real audit immediately as step 2 above.
-  { step_number: 6, step_name: "Generate social media strategy", task_type: "social_strategy", depends_on: 4 },
+  { step_number: 5, step_name: "Generate social media strategy", task_type: "social_strategy", depends_on: 3 },
 ];
 
 // Tier no longer changes the onboarding chain itself -- every tier gets the

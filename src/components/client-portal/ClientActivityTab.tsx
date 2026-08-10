@@ -710,7 +710,8 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   if (!hasWorkflow && totalCount === 0) {
     const placeholderSteps = [
       "Confirm Business Information",
-      "Upload Brand Assets",
+      "Extract brand assets from website",
+      "Verify Brand Assets",
       "Connect Social Accounts",
       "Approve Your First Content Draft",
     ];
