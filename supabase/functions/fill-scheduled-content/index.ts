@@ -229,7 +229,11 @@ serve(async (req) => {
           client.id,
         );
         const flagged = qaNeedsAttention(qa);
-        const autoForward = AUTO_FORWARD_PLATFORMS.has(slot.platform) && !flagged;
+        // Social platforms always go straight to the client's approval queue --
+        // admin review is not in this loop. QA still runs and is attached as
+        // metadata so a flagged post is visible to the client/admin, it just
+        // doesn't reroute it into the admin-only pending_admin_review queue.
+        const autoForward = AUTO_FORWARD_PLATFORMS.has(slot.platform);
 
         // Save the draft to generated_content. Include full traceability
         // metadata so the admin panel can link back to the slot.
