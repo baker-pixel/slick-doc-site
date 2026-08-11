@@ -67,6 +67,7 @@ const serializeLinkedInOrganizations = (organizations: LinkedInOrganization[]): 
 
 interface ClientIntegrationsTabProps {
   clientAccountId: string;
+  onTabChange?: (tab: string) => void;
 }
 
 interface OAuthToken {
@@ -185,7 +186,7 @@ function TokenStatus({ expiresAt }: { expiresAt: string | null }) {
   );
 }
 
-export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTabProps) {
+export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIntegrationsTabProps) {
   const [tokens, setTokens] = useState<OAuthToken[]>([]);
   const [pfmAccounts, setPfmAccounts] = useState<PfmAccount[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -249,9 +250,13 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
       setSearchParams(next, { replace: true });
 
       // Complete the client_oauth workflow step now that a real account is connected
-      completeWorkflowStep(clientAccountId, "client_oauth").catch((e) =>
-        console.error("Failed to complete OAuth workflow step:", e),
-      );
+      completeWorkflowStep(clientAccountId, "client_oauth")
+        .then((completed) => {
+          // Onboarding step done -- take them straight to the next one
+          // (Approve Your First Content Draft) instead of leaving them here.
+          if (completed) onTabChange?.("approvals");
+        })
+        .catch((e) => console.error("Failed to complete OAuth workflow step:", e));
     }
 
     if (errorMsg) {
@@ -318,9 +323,13 @@ export function ClientIntegrationsTab({ clientAccountId }: ClientIntegrationsTab
             title: `${platform?.name ?? attempted} connected`,
             description: "Your account is now connected and ready for automated posting.",
           });
-          completeWorkflowStep(clientAccountId, "client_oauth").catch((e) =>
-            console.error("Failed to complete OAuth workflow step:", e),
-          );
+          completeWorkflowStep(clientAccountId, "client_oauth")
+            .then((completed) => {
+              // Onboarding step done -- take them straight to the next one
+              // (Approve Your First Content Draft) instead of leaving them here.
+              if (completed) onTabChange?.("approvals");
+            })
+            .catch((e) => console.error("Failed to complete OAuth workflow step:", e));
         }
       }
     };

@@ -38,6 +38,7 @@ interface ContentApproval {
 
 interface ClientContentApprovalTabProps {
   clientAccountId: string;
+  onTabChange?: (tab: string) => void;
 }
 
 type PlatformFilter = "all" | "facebook" | "instagram" | "twitter" | "linkedin" | "other";
@@ -511,7 +512,7 @@ function GenericContentView({ data }: { data: any }) {
   );
 }
 
-export default function ClientContentApprovalTab({ clientAccountId }: ClientContentApprovalTabProps) {
+export default function ClientContentApprovalTab({ clientAccountId, onTabChange }: ClientContentApprovalTabProps) {
   const queryClient = useQueryClient();
   const [approvals, setApprovals] = useState<ContentApproval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -647,6 +648,8 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
           if (completed) {
             queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
             queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+            // Last onboarding step -- take them Home to see the "all done" state.
+            onTabChange?.("activity");
           }
         })
         .catch((e) => console.error("Failed to complete approval workflow step:", e));
@@ -705,6 +708,8 @@ export default function ClientContentApprovalTab({ clientAccountId }: ClientCont
             if (completed) {
               queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
               queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+              // Last onboarding step -- take them Home to see the "all done" state.
+              onTabChange?.("activity");
             }
           })
           .catch((e) => console.error("Failed to complete approval workflow step:", e));

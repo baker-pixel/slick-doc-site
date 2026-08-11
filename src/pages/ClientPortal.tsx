@@ -378,9 +378,9 @@ export default function ClientPortal() {
       case "documents":
         return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} clientTier={tier} />;
       case "brand":
-        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
       case "social":
-        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />;
+        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
       case "prospects":
         return <ClientProspectsTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
@@ -402,7 +402,7 @@ export default function ClientPortal() {
           />
         );
       case "approvals":
-        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />;
+        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
       case "learning":
         return gate("growth", "Learning Hub", "Guides and resources to get the most out of your marketing.", <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />);
       default:

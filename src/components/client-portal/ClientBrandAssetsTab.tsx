@@ -33,6 +33,7 @@ interface BrandAsset {
 
 interface ClientBrandAssetsTabProps {
   clientAccountId: string;
+  onTabChange?: (tab: string) => void;
 }
 
 function brandKitCompleteness(assets: BrandAsset[]): { score: number; breakdown: Record<string, boolean> } {
@@ -56,7 +57,7 @@ function brandKitCompleteness(assets: BrandAsset[]): { score: number; breakdown:
   return { score, breakdown };
 }
 
-export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAssetsTabProps) {
+export default function ClientBrandAssetsTab({ clientAccountId, onTabChange }: ClientBrandAssetsTabProps) {
   const queryClient = useQueryClient();
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,6 +146,9 @@ export default function ClientBrandAssetsTab({ clientAccountId }: ClientBrandAss
           if (completed) {
             queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
             queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
+            // Onboarding step done -- take them straight to the next one
+            // (Connect Social Accounts) instead of leaving them here.
+            onTabChange?.("social");
           }
         }
       } catch (e) {

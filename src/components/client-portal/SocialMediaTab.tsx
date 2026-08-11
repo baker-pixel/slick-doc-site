@@ -7,9 +7,10 @@ import { SocialPostComposer } from "./social/SocialPostComposer";
 interface SocialMediaTabProps {
   clientAccountId: string;
   initialTab?: "composer" | "accounts";
+  onTabChange?: (tab: string) => void;
 }
 
-export function SocialMediaTab({ clientAccountId, initialTab = "accounts" }: SocialMediaTabProps) {
+export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTabChange }: SocialMediaTabProps) {
   const [subTab, setSubTab] = useState<string>(initialTab);
 
   return (
@@ -38,7 +39,7 @@ export function SocialMediaTab({ clientAccountId, initialTab = "accounts" }: Soc
         </TabsContent>
 
         <TabsContent value="accounts" className="mt-6">
-          <ClientIntegrationsTab clientAccountId={clientAccountId} />
+          <ClientIntegrationsTab clientAccountId={clientAccountId} onTabChange={onTabChange} />
         </TabsContent>
       </Tabs>
     </div>
