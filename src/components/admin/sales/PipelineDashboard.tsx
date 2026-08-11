@@ -211,6 +211,11 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
       });
     } catch (error) {
       console.error("Error fetching pipeline data:", error);
+      toast({
+        title: "Failed to load pipeline data",
+        description: "Showing stale or partial data. Try refreshing the page.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }

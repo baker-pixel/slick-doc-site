@@ -49,31 +49,40 @@ export default function CaseStudyBuilderPanel() {
     metrics: [{ label: "", before: "", after: "", improvement: "" }]
   });
 
+  // Routed through the `admin` edge function (service role), not direct
+  // table queries -- both tables' RLS is admin-JWT-only, and a legacy
+  // password login carries no guaranteed JWT (the magic-link session mint
+  // is best-effort). Same pattern already used by the mutations below and
+  // by ProspectEnginePanel.
   const { data: clients } = useQuery({
     queryKey: ["clients-for-case-study"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("client_accounts")
-        .select("id, business_name, industry")
-        .order("business_name");
-      if (error) throw error;
-      return data;
+      const { data, error } = await callAdminApi<{ data: { id: string; business_name: string; industry: string | null }[] }>(
+        adminPassword, { action: "list", table: "client_accounts" }
+      );
+      if (error) throw new Error(error);
+      return [...(data?.data ?? [])].sort((a, b) => a.business_name.localeCompare(b.business_name));
     }
   });
 
   const { data: caseStudies, isLoading } = useQuery({
     queryKey: ["case-studies"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("case_studies")
-        .select("*, client_accounts(business_name)")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data || []).map(item => ({
+      const { data, error } = await callAdminApi<{ data: CaseStudy[] }>(
+        adminPassword, { action: "list", table: "case_studies" }
+      );
+      if (error) throw new Error(error);
+      // Generic list action doesn't support joins -- attach the client name
+      // client-side from the clients list fetched above instead.
+      return (data?.data ?? []).map(item => ({
         ...item,
-        results: (item.results as unknown as CaseStudyResults) || { metrics: [] }
+        results: (item.results as unknown as CaseStudyResults) || { metrics: [] },
+        client_accounts: clients?.find(c => c.id === item.client_account_id)
+          ? { business_name: clients.find(c => c.id === item.client_account_id)!.business_name }
+          : null,
       })) as (CaseStudy & { client_accounts: { business_name: string } | null })[];
-    }
+    },
+    enabled: clients !== undefined,
   });
 
   const createMutation = useMutation({
@@ -113,7 +122,8 @@ export default function CaseStudyBuilderPanel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["case-studies"] });
       toast.success("Case study deleted");
-    }
+    },
+    onError: (error) => toast.error("Failed to delete case study", { description: error.message })
   });
 
   const publishMutation = useMutation({
@@ -124,7 +134,8 @@ export default function CaseStudyBuilderPanel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["case-studies"] });
       toast.success("Status updated");
-    }
+    },
+    onError: (error) => toast.error("Failed to update status", { description: error.message })
   });
 
   const generateWithAI = async () => {

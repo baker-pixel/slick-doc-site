@@ -108,15 +108,21 @@ export default function SalesProposalPanel() {
     status: 'draft'
   });
 
+  // Routed through the `admin` edge function (service role), not direct
+  // table queries -- sales_proposals RLS is admin-JWT-only, and a legacy
+  // password login carries no guaranteed JWT (the magic-link session mint
+  // is best-effort). Same pattern already used by ProspectEnginePanel.
   const { data: proposals, isLoading } = useQuery({
     queryKey: ['sales-proposals'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sales_proposals' as any)
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []) as unknown as SalesProposal[];
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'sales_proposals', password: adminPassword },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : 'Failed to load proposals');
+      }
+      return (data?.data || []) as unknown as SalesProposal[];
     }
   });
 
@@ -135,25 +141,30 @@ export default function SalesProposalPanel() {
 
   const createProposalMutation = useMutation({
     mutationFn: async (proposal: Partial<SalesProposal>) => {
-      const { error } = await supabase
-        .from('sales_proposals' as any)
-        .insert({
-          prospect_name: proposal.prospect_name,
-          prospect_email: proposal.prospect_email,
-          prospect_business: proposal.prospect_business,
-          prospect_industry: proposal.prospect_industry,
-          industry_analysis: proposal.industry_analysis,
-          proposed_services: proposal.proposed_services,
-          sample_designs: proposal.sample_designs,
-          roi_projections: proposal.roi_projections,
-          timeline: proposal.timeline,
-          pricing_breakdown: proposal.pricing_breakdown,
-          total_investment: proposal.total_investment,
-          contact_submission_id: proposal.contact_submission_id,
-          status: 'draft'
-        } as any);
-      if (error) {
-        const msg = await getEdgeErrorMessage(error, undefined);
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'create',
+          table: 'sales_proposals',
+          password: adminPassword,
+          data: {
+            prospect_name: proposal.prospect_name,
+            prospect_email: proposal.prospect_email,
+            prospect_business: proposal.prospect_business,
+            prospect_industry: proposal.prospect_industry,
+            industry_analysis: proposal.industry_analysis,
+            proposed_services: proposal.proposed_services,
+            sample_designs: proposal.sample_designs,
+            roi_projections: proposal.roi_projections,
+            timeline: proposal.timeline,
+            pricing_breakdown: proposal.pricing_breakdown,
+            total_investment: proposal.total_investment,
+            contact_submission_id: proposal.contact_submission_id,
+            status: 'draft',
+          },
+        },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to create proposal");
       }
     },
@@ -178,10 +189,19 @@ export default function SalesProposalPanel() {
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send proposal");
       }
 
-      await supabase
-        .from('sales_proposals' as any)
-        .update({ status: 'sent', sent_at: new Date().toISOString() } as any)
-        .eq('id', id);
+      const { data: updateData, error: updateError } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'update',
+          table: 'sales_proposals',
+          id,
+          password: adminPassword,
+          data: { status: 'sent', sent_at: new Date().toISOString() },
+        },
+      });
+      if (updateError || updateData?.error) {
+        const msg = await getEdgeErrorMessage(updateError, updateData);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Proposal was sent, but marking it as sent failed");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-proposals'] });
@@ -194,15 +214,20 @@ export default function SalesProposalPanel() {
 
   const deleteProposalMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('sales_proposals' as any)
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'delete', table: 'sales_proposals', id, password: adminPassword },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to delete proposal");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-proposals'] });
       toast.success('Proposal deleted');
+    },
+    onError: (error) => {
+      toast.error(error.message);
     }
   });
 
@@ -309,7 +334,12 @@ export default function SalesProposalPanel() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Viewed/Accepted stat cards removed -- nothing in the system tracks
+          proposal views or client responses (no tracking pixel, no hosted
+          view page, no accept/decline handler exists), so those counts were
+          permanently stuck at zero and misleading. Only Total/Sent reflect
+          real state. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardContent className="pt-4 text-center">
             <p className="text-3xl font-bold">{proposals?.length || 0}</p>
@@ -322,22 +352,6 @@ export default function SalesProposalPanel() {
               {proposals?.filter(p => p.status === 'sent').length || 0}
             </p>
             <p className="text-sm text-muted-foreground">Sent</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 text-center">
-            <p className="text-3xl font-bold text-yellow-500">
-              {proposals?.filter(p => p.status === 'viewed').length || 0}
-            </p>
-            <p className="text-sm text-muted-foreground">Viewed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 text-center">
-            <p className="text-3xl font-bold text-green-500">
-              {proposals?.filter(p => p.status === 'accepted').length || 0}
-            </p>
-            <p className="text-sm text-muted-foreground">Accepted</p>
           </CardContent>
         </Card>
       </div>

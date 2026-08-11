@@ -77,16 +77,25 @@ export default function BeforeAfterShowcasePanel() {
     improvements: []
   });
 
+  // Routed through the `admin` edge function (service role), not direct
+  // table queries -- both tables' RLS is admin-JWT-only, and a legacy
+  // password login carries no guaranteed JWT (the magic-link session mint
+  // is best-effort). Same pattern already used by ProspectEnginePanel. The
+  // generic list action has no filter/order support, so status/client/date
+  // filtering happens client-side after the fetch.
   const { data: clients } = useQuery({
     queryKey: ['clients-for-showcase'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('client_accounts')
-        .select('id, business_name')
-        .eq('status', 'active')
-        .order('business_name');
-      if (error) throw error;
-      return data;
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'client_accounts', password: adminPassword },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : 'Failed to load clients');
+      }
+      return ((data?.data ?? []) as { id: string; business_name: string; status: string }[])
+        .filter(c => c.status === 'active')
+        .sort((a, b) => a.business_name.localeCompare(b.business_name));
     }
   });
 
@@ -94,37 +103,45 @@ export default function BeforeAfterShowcasePanel() {
     queryKey: ['before-after-showcases', selectedClient],
     queryFn: async () => {
       if (!selectedClient) return [];
-      const { data, error } = await supabase
-        .from('before_after_showcases' as any)
-        .select('*')
-        .eq('client_account_id', selectedClient)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data || []) as unknown as BeforeAfterShowcase[];
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'list', table: 'before_after_showcases', password: adminPassword },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : 'Failed to load showcases');
+      }
+      return ((data?.data ?? []) as unknown as BeforeAfterShowcase[])
+        .filter(s => s.client_account_id === selectedClient)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
     },
     enabled: !!selectedClient
   });
 
   const createShowcaseMutation = useMutation({
     mutationFn: async (showcase: Partial<BeforeAfterShowcase>) => {
-      const { error } = await supabase
-        .from('before_after_showcases' as any)
-        .insert({
-          client_account_id: selectedClient,
-          title: showcase.title,
-          description: showcase.description,
-          project_type: showcase.project_type,
-          before_screenshot_url: showcase.before_screenshot_url,
-          after_screenshot_url: showcase.after_screenshot_url,
-          before_mobile_url: showcase.before_mobile_url,
-          after_mobile_url: showcase.after_mobile_url,
-          before_stats: showcase.before_stats,
-          after_stats: showcase.after_stats,
-          improvements: showcase.improvements,
-          is_public: showcase.is_public
-        } as any);
-      if (error) {
-        const msg = await getEdgeErrorMessage(error, undefined);
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: {
+          action: 'create',
+          table: 'before_after_showcases',
+          password: adminPassword,
+          data: {
+            client_account_id: selectedClient,
+            title: showcase.title,
+            description: showcase.description,
+            project_type: showcase.project_type,
+            before_screenshot_url: showcase.before_screenshot_url,
+            after_screenshot_url: showcase.after_screenshot_url,
+            before_mobile_url: showcase.before_mobile_url,
+            after_mobile_url: showcase.after_mobile_url,
+            before_stats: showcase.before_stats,
+            after_stats: showcase.after_stats,
+            improvements: showcase.improvements,
+            is_public: showcase.is_public,
+          },
+        },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to create showcase");
       }
     },
@@ -141,30 +158,36 @@ export default function BeforeAfterShowcasePanel() {
 
   const togglePublicMutation = useMutation({
     mutationFn: async ({ id, is_public }: { id: string; is_public: boolean }) => {
-      const { error } = await supabase
-        .from('before_after_showcases' as any)
-        .update({ is_public } as any)
-        .eq('id', id);
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'update', table: 'before_after_showcases', id, password: adminPassword, data: { is_public } },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to update visibility");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['before-after-showcases'] });
       toast.success('Visibility updated');
-    }
+    },
+    onError: (error) => toast.error(error.message)
   });
 
   const deleteShowcaseMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('before_after_showcases' as any)
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('admin', {
+        body: { action: 'delete', table: 'before_after_showcases', id, password: adminPassword },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to delete showcase");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['before-after-showcases'] });
       toast.success('Showcase deleted');
-    }
+    },
+    onError: (error) => toast.error(error.message)
   });
 
   const generateShowcase = async () => {

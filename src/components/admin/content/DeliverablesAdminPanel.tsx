@@ -103,7 +103,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
 
   const sendNotification = async (clientId: string, title: string, description: string, category: string) => {
     try {
-      await supabase.functions.invoke("send-client-notification", {
+      const response = await supabase.functions.invoke("send-client-notification", {
         body: {
           type: "deliverable",
           client_account_id: clientId,
@@ -113,9 +113,22 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
           password: adminPassword,
         },
       });
+      // supabase.functions.invoke doesn't throw on a non-2xx response --
+      // response.error only catches network-level failures. Without this
+      // check, a real function-side failure (bad client id, email service
+      // down) silently showed a green "sent" toast anyway.
+      if (response.error || response.data?.error) {
+        const msg = await getEdgeErrorMessage(response.error, response.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send notification");
+      }
       toast({ title: "Notification sent to client" });
     } catch (error) {
       console.error("Failed to send notification:", error);
+      toast({
+        title: "Notification not sent",
+        description: error instanceof Error ? error.message : "The client may not have been notified about this deliverable.",
+        variant: "destructive",
+      });
     }
   };
 
