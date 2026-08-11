@@ -71,7 +71,7 @@ export default function ClientPortalAuth() {
           setTimeout(() => {
             try {
               const pending = JSON.parse(pendingRaw);
-              finalizePortalSetup(session.user.id, pending);
+              finalizePortalSetup(session.user.id, session.user.email, pending);
             } catch (e) {
               console.error("Pending invitation parse error:", e);
             }
@@ -89,7 +89,7 @@ export default function ClientPortalAuth() {
               .gt("expires_at", new Date().toISOString())
               .maybeSingle();
             if (inv) {
-              finalizePortalSetup(session.user.id, inv);
+              finalizePortalSetup(session.user.id, session.user.email, inv);
             } else {
               checkClientPortalAccess(session.user.id);
             }
@@ -121,8 +121,26 @@ export default function ClientPortalAuth() {
 
   const finalizePortalSetup = async (
     userId: string,
-    pending: { id: string; client_account_id: string; first_name: string | null; last_name: string | null }
+    sessionEmail: string | null | undefined,
+    pending: { id: string; client_account_id: string; first_name: string | null; last_name: string | null; email?: string | null }
   ) => {
+    // Guard against finalizing someone else's invite under the wrong,
+    // already-signed-in session -- e.g. this SIGNED_IN event fires for a
+    // browser that was already logged in as a different person when it
+    // loaded an invite link meant for someone else. Without this, the
+    // invite's name/client get attached to the wrong auth account (found
+    // live: a "yash chitlangi" invite ended up on a coworker's account
+    // because their browser had an unrelated existing session).
+    if (pending.email && sessionEmail && pending.email.toLowerCase() !== sessionEmail.toLowerCase()) {
+      console.warn(`Invite finalize skipped: signed in as ${sessionEmail}, invite was sent to ${pending.email}`);
+      toast({
+        title: "Wrong account signed in",
+        description: `This invite was sent to ${pending.email}, but you're signed in as ${sessionEmail}. Sign out and open the invite link again to accept it with the correct account.`,
+        variant: "destructive",
+      });
+      await supabase.auth.signOut();
+      return;
+    }
     try {
       const { data: existing } = await supabase
         .from("client_portal_users")
@@ -140,10 +158,15 @@ export default function ClientPortalAuth() {
             first_name: pending.first_name,
             last_name: pending.last_name,
             invited_by: "admin",
+            last_login_at: new Date().toISOString(),
           });
         if (portalError && portalError.code !== "23505") {
           console.error("Portal user creation error (post-confirm):", portalError);
         }
+      } else {
+        await supabase.from("client_portal_users")
+          .update({ last_login_at: new Date().toISOString() })
+          .eq("id", existing.id);
       }
 
       await supabase
@@ -334,6 +357,9 @@ export default function ClientPortalAuth() {
         return;
       }
 
+      supabase.from("client_portal_users").update({ last_login_at: new Date().toISOString() }).eq("id", portalUser.id)
+        .then(({ error: loginErr }) => { if (loginErr) console.error("last_login_at update failed:", loginErr.message); });
+
       navigate("/portal");
     } catch (error: any) {
       toast({
@@ -400,6 +426,7 @@ export default function ClientPortalAuth() {
               first_name: invitation.first_name,
               last_name: invitation.last_name,
               invited_by: "admin",
+              last_login_at: new Date().toISOString(),
             });
 
           if (portalError) {
@@ -417,6 +444,10 @@ export default function ClientPortalAuth() {
             setLoading(false);
             return;
           }
+        } else {
+          await supabase.from("client_portal_users")
+            .update({ last_login_at: new Date().toISOString() })
+            .eq("id", existingPortalUser.id);
         }
 
         // Ensure client role exists
@@ -503,6 +534,7 @@ export default function ClientPortalAuth() {
             client_account_id: invitation.client_account_id,
             first_name: invitation.first_name,
             last_name: invitation.last_name,
+            email: invitation.email,
           })
         );
         setConfirmEmailSent(true);
@@ -522,6 +554,7 @@ export default function ClientPortalAuth() {
           first_name: invitation.first_name,
           last_name: invitation.last_name,
           invited_by: "admin",
+          last_login_at: new Date().toISOString(),
         });
 
       if (portalError) {
