@@ -331,8 +331,14 @@ export default function ClientPortal() {
   /**
    * Tier-to-feature mapping for soft gating:
    * Foundation: activity, projects, messages (incl. formal requests), deliverables,
-   *             analytics, calendar, notifications, meetings, documents, invoices, help, settings
-   * Growth:     + approvals, brand, access, social, integrations, learning
+   *             analytics, calendar, notifications, meetings, documents, invoices, help,
+   *             settings, brand, social, approvals (all three required by onboarding
+   *             steps -- "Verify Brand Assets", "Connect Social Accounts", "Approve Your
+   *             First Content Draft" -- that every tier's workflow chain includes. Gating
+   *             them behind Growth locked Foundation clients out of their own onboarding,
+   *             and permanently out of reviewing/approving the content tierPolicy already
+   *             generates for them post-onboarding.)
+   * Growth:     + access, integrations, learning
    * Transformation: + agreements (shown inline inside Documents)
    */
   const gate = (
@@ -372,9 +378,9 @@ export default function ClientPortal() {
       case "documents":
         return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} clientTier={tier} />;
       case "brand":
-        return gate("growth", "Brand Assets", "Store and access your logo, colors, fonts, and brand guidelines.", <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />);
+        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} />;
       case "social":
-        return gate("growth", "Social & Accounts", "Create, schedule, and manage social media posts with AI.", <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />);
+        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} />;
       case "prospects":
         return <ClientProspectsTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
@@ -396,7 +402,7 @@ export default function ClientPortal() {
           />
         );
       case "approvals":
-        return gate("growth", "Content Approvals", "Review and approve marketing content before it goes live.", <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />);
+        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} />;
       case "learning":
         return gate("growth", "Learning Hub", "Guides and resources to get the most out of your marketing.", <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />);
       default:
