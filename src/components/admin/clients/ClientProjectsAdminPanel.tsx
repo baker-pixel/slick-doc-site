@@ -12,10 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Plus, Trash2, Edit, Target, Milestone, Sparkles, Loader2, MessageCircle, Send, RefreshCw, CornerDownRight } from "lucide-react";
+import { Plus, Trash2, Edit, Target, Milestone, Loader2, MessageCircle, Send, RefreshCw, CornerDownRight } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { ProjectSetupWizard } from "../misc/ProjectSetupWizard";
 
 interface ClientAccountWithTier {
   id: string;
@@ -94,10 +93,6 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     status: 'pending',
   });
 
-  // Wizard state
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [isClientSelectOpen, setIsClientSelectOpen] = useState(false);
-  const [wizardClientId, setWizardClientId] = useState<string>("");
   const [projectComments, setProjectComments] = useState<Record<string, AdminComment[]>>({});
   const [projectUpdateRequests, setProjectUpdateRequests] = useState<Record<string, AdminUpdateRequest[]>>({});
   const [replyText, setReplyText] = useState('');
@@ -461,15 +456,6 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
     setIsEditOpen(true);
   };
 
-  const handleOpenWizard = (preselectedClientId?: string) => {
-    if (preselectedClientId || clientId) {
-      setWizardClientId(preselectedClientId || clientId || '');
-      setIsWizardOpen(true);
-    } else {
-      setIsClientSelectOpen(true);
-    }
-  };
-
   const handleSubmit = () => {
     if (!formData.client_account_id || !formData.name) {
       toast.error("Please fill in all required fields");
@@ -522,46 +508,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
           <h2 className="text-2xl font-bold">Client Projects</h2>
           <p className="text-muted-foreground">Manage projects and milestones for clients.</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => handleOpenWizard()}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Create Project
-          </Button>
-        </div>
       </div>
-
-      {/* Client selector pre-step (when no clientId prop) */}
-      <Dialog open={isClientSelectOpen} onOpenChange={setIsClientSelectOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Select Client</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Select value={wizardClientId} onValueChange={setWizardClientId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose a client…" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients?.map(c => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.business_name}
-                    <Badge variant="outline" className="ml-2 text-xs">{c.tier}</Badge>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsClientSelectOpen(false)}>Cancel</Button>
-              <Button
-                disabled={!wizardClientId}
-                onClick={() => { setIsClientSelectOpen(false); setIsWizardOpen(true); }}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Milestone Dialog */}
       <Dialog open={isMilestoneOpen} onOpenChange={setIsMilestoneOpen}>
@@ -610,7 +557,7 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
           <Accordion type="single" collapsible className="w-full">
             {displayedProjects?.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No projects yet. Create your first project to get started.
+                No projects yet — they're generated automatically once SEO, Social, or Prospect work runs for this client.
               </div>
             ) : (
               displayedProjects?.map((project) => (
@@ -861,19 +808,6 @@ export function ClientProjectsAdminPanel({ clientId, adminPassword }: { clientId
         </DialogContent>
       </Dialog>
 
-      {/* Project Setup Wizard */}
-      {wizardClientId && clients && (
-        <ProjectSetupWizard
-          open={isWizardOpen}
-          onClose={() => { setIsWizardOpen(false); setWizardClientId(''); }}
-          client={(() => {
-            const c = clients.find(c => c.id === wizardClientId);
-            return { id: wizardClientId, business_name: c?.business_name || '', tier: c?.tier || 'foundation' };
-          })()}
-          adminPassword={adminPassword || ''}
-          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['admin-client-projects'] })}
-        />
-      )}
     </div>
   );
 }
