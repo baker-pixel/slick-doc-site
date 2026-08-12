@@ -864,6 +864,39 @@ Deno.serve(async (req) => {
 
         if (listError) throw listError;
 
+        // Self-heal: the invited user's client_invitations.accepted_at write
+        // (done client-side, RLS-gated on email match + not-yet-expired) can
+        // silently no-op, leaving an invite stuck "Pending" even though the
+        // person already has a working portal account. Reconcile against
+        // client_portal_users, which is the reliable signal, and backfill.
+        const pending = (invitations || []).filter((inv: any) => !inv.accepted_at);
+        if (pending.length > 0) {
+          const accountIds = [...new Set(pending.map((inv: any) => inv.client_account_id))];
+          const { data: portalUsers } = await supabase
+            .from("client_portal_users")
+            .select("user_id, client_account_id")
+            .in("client_account_id", accountIds);
+
+          for (const inv of pending) {
+            const candidates = (portalUsers || []).filter(
+              (pu: any) => pu.client_account_id === inv.client_account_id
+            );
+            for (const pu of candidates) {
+              const { data: userRes } = await supabase.auth.admin.getUserById(pu.user_id);
+              if (userRes?.user?.email?.toLowerCase() === inv.email.toLowerCase()) {
+                const { data: updated } = await supabase
+                  .from("client_invitations")
+                  .update({ accepted_at: new Date().toISOString() })
+                  .eq("id", inv.id)
+                  .select()
+                  .single();
+                if (updated) inv.accepted_at = updated.accepted_at;
+                break;
+              }
+            }
+          }
+        }
+
         return new Response(
           JSON.stringify({ data: invitations }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
