@@ -34,7 +34,8 @@ export function TierGate({
   featureDescription,
   children,
 }: TierGateProps) {
-  const hasAccess = TIER_RANK[clientTier] >= TIER_RANK[requiredTier];
+  // ponytail: tier gating disabled, all clients get full access. Restore TIER_RANK check to re-enable.
+  const hasAccess = true;
 
   if (hasAccess) {
     return <>{children}</>;
