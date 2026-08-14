@@ -36,7 +36,6 @@ import {
   Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getMarketingOrigin } from "@/lib/getPortalUrl";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
@@ -47,6 +46,12 @@ interface ClientActivityTabProps {
   clientEmail?: string;
   onTabChange?: (tab: string) => void;
 }
+
+// Sentinel pendingFormStepId for the business-info form opened outside a
+// workflow_steps row (no onboarding workflow seeded yet, or a gap score is
+// missing) -- there's no step to mark complete afterward, unlike the
+// client_form workflow step case which passes a real step id.
+const STANDALONE_INTAKE = "__standalone_intake__";
 
 interface WorkflowStep {
   id: string;
@@ -507,43 +512,55 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
 
       if (error) throw error;
       setShowBusinessForm(false);
-      await handleCompleteStep(pendingFormStepId);
+      if (pendingFormStepId === STANDALONE_INTAKE) {
+        toast({ title: "Thanks! We've got your details." });
+        queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+        queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
+      } else {
+        await handleCompleteStep(pendingFormStepId);
+      }
       setPendingFormStepId(null);
     } catch (err: any) {
       toast({ title: "Failed to save details", description: err.message, variant: "destructive" });
     } finally {
       setSubmittingBizForm(false);
     }
-  }, [pendingFormStepId, bizForm, clientAccountId, handleCompleteStep]);
+  }, [pendingFormStepId, bizForm, clientAccountId, handleCompleteStep, queryClient]);
+
+  // Fetch existing account data to pre-fill the form (a lead-converted
+  // client may already have some of this from seedContextFromLead), then
+  // open it in-portal. `stepId` is either a real workflow_steps id (marked
+  // complete on submit) or STANDALONE_INTAKE when there's no step to
+  // complete -- either way this never leaves the client portal.
+  const openBusinessForm = useCallback(async (stepId: string) => {
+    const { data: acct } = await supabase
+      .from("client_accounts")
+      .select("business_name, website_url, first_name, last_name, industry, context_profile")
+      .eq("id", clientAccountId)
+      .single();
+    const ctx = (acct?.context_profile as Record<string, unknown>) || {};
+    setBizForm({
+      business_name: acct?.business_name || "",
+      website_url: acct?.website_url || "",
+      first_name: acct?.first_name || "",
+      last_name: acct?.last_name || "",
+      industry: acct?.industry || "",
+      target_audience: typeof ctx.target_audience === "string" ? ctx.target_audience : "",
+      main_competitors: typeof ctx.competitors === "string" ? ctx.competitors : "",
+      phone: typeof ctx.phone === "string" ? ctx.phone : "",
+      address: typeof ctx.address === "string" ? ctx.address : "",
+      marketing_goal: typeof ctx.marketing_goal === "string" ? ctx.marketing_goal : "",
+    });
+    setPendingFormStepId(stepId);
+    setShowBusinessForm(true);
+  }, [clientAccountId]);
 
   // Handle CTA click
   const handleStepAction = useCallback(async (step: WorkflowStep) => {
     switch (step.task_type) {
-      case "client_form": {
-        // Fetch existing account data to pre-fill the form (a lead-converted
-        // client may already have some of this from seedContextFromLead)
-        const { data: acct } = await supabase
-          .from("client_accounts")
-          .select("business_name, website_url, first_name, last_name, industry, context_profile")
-          .eq("id", clientAccountId)
-          .single();
-        const ctx = (acct?.context_profile as Record<string, unknown>) || {};
-        setBizForm({
-          business_name: acct?.business_name || "",
-          website_url: acct?.website_url || "",
-          first_name: acct?.first_name || "",
-          last_name: acct?.last_name || "",
-          industry: acct?.industry || "",
-          target_audience: typeof ctx.target_audience === "string" ? ctx.target_audience : "",
-          main_competitors: typeof ctx.competitors === "string" ? ctx.competitors : "",
-          phone: typeof ctx.phone === "string" ? ctx.phone : "",
-          address: typeof ctx.address === "string" ? ctx.address : "",
-          marketing_goal: typeof ctx.marketing_goal === "string" ? ctx.marketing_goal : "",
-        });
-        setPendingFormStepId(step.id);
-        setShowBusinessForm(true);
+      case "client_form":
+        await openBusinessForm(step.id);
         break;
-      }
       case "client_upload":
         // Navigate to Brand Assets — completion handled by ClientBrandAssetsTab after actual upload
         if (onTabChange) onTabChange("brand");
@@ -566,7 +583,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       default:
         break;
     }
-  }, [handleCompleteStep, onTabChange]);
+  }, [handleCompleteStep, onTabChange, openBusinessForm]);
 
   // Legacy task-based progress
   const completedCount = useMemo(() => tasks.filter((t) => t.status === "completed").length, [tasks]);
@@ -715,10 +732,6 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       "Connect Social Accounts",
       "Approve Your First Content Draft",
     ];
-    const intakeUrl = clientEmail
-      ? `${getMarketingOrigin()}/gap-analysis?email=${encodeURIComponent(clientEmail)}`
-      : `${getMarketingOrigin()}/gap-analysis`;
-
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Intake form prompt */}
@@ -727,14 +740,15 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your intake form</AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
             <span className="text-sm text-muted-foreground">
-              Your personalized content can't be created until we know more about your business. Fill out the SYSTEM Gap Analysis — it takes about 10 minutes.
+              Your personalized content can't be created until we know more about your business. Tell us a bit about it — it takes about 2 minutes.
             </span>
-            <a href={intakeUrl} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white">
-                Start Intake Form
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
-            </a>
+            <Button
+              size="sm"
+              className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white"
+              onClick={() => openBusinessForm(STANDALONE_INTAKE)}
+            >
+              Start Intake Form
+            </Button>
           </AlertDescription>
         </Alert>
 
@@ -857,24 +871,21 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     }
 
     // No gap analysis found — prompt the client to fill out the intake form
-    const intakeUrl = clientEmail
-      ? `${getMarketingOrigin()}/gap-analysis?email=${encodeURIComponent(clientEmail)}`
-      : `${getMarketingOrigin()}/gap-analysis`;
-
     return (
       <Alert className="border-orange-400/40 bg-orange-500/5">
         <AlertTriangle className="h-4 w-4 text-orange-500" />
         <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your intake form</AlertTitle>
         <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
           <span className="text-sm text-muted-foreground">
-            Your personalized content can't be created until we know more about your business. Fill out the SYSTEM Gap Analysis — it takes about 10 minutes.
+            Your personalized content can't be created until we know more about your business. Tell us a bit about it — it takes about 2 minutes.
           </span>
-          <a href={intakeUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white">
-              Start Intake Form
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Button>
-          </a>
+          <Button
+            size="sm"
+            className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white"
+            onClick={() => openBusinessForm(STANDALONE_INTAKE)}
+          >
+            Start Intake Form
+          </Button>
         </AlertDescription>
       </Alert>
     );
