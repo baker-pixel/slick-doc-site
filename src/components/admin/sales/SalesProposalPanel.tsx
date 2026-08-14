@@ -247,15 +247,18 @@ export default function SalesProposalPanel() {
           password: adminPassword
         }
       });
-      if (error) throw error;
-      
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate proposal");
+      }
+
       setNewProposal(prev => ({
         ...prev,
         ...data.proposal
       }));
       toast.success('AI-generated proposal ready');
-    } catch (error) {
-      toast.error('Failed to generate proposal');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to generate proposal');
     } finally {
       setIsGenerating(false);
     }

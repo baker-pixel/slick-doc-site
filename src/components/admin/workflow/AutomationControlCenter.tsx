@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { handleEdgeError, friendlyEdgeMessage } from "@/lib/edge-error";
+import { handleEdgeError, getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { callAdminApi } from "@/lib/admin-api";
 import { 
   Zap, 
@@ -173,7 +173,10 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
         body: { clientId, password: adminPassword },
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Automation failed");
+      }
 
       toast({
         title: `✅ Automation complete for ${clientName}`,

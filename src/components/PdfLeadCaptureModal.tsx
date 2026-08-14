@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface PdfLeadCaptureModalProps {
   isOpen: boolean;
@@ -38,7 +39,10 @@ export function PdfLeadCaptureModal({ isOpen, onClose }: PdfLeadCaptureModalProp
         body: { email, firstName },
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to send the brochure. Please try again.");
+      }
 
       setIsSuccess(true);
       toast({
@@ -49,7 +53,7 @@ export function PdfLeadCaptureModal({ isOpen, onClose }: PdfLeadCaptureModalProp
       console.error("Error sending PDF:", error);
       toast({
         title: "Error",
-        description: "Failed to send the brochure. Please try again.",
+        description: error?.message || "Failed to send the brochure. Please try again.",
         variant: "destructive",
       });
     } finally {

@@ -327,12 +327,17 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("admin", {
         body: { action: "delete", table: "content_calendar", id },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to delete post");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
       toast({ title: "Post deleted" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error deleting post", description: error.message, variant: "destructive" });
     },
   });
 
@@ -351,8 +356,10 @@ export default function SocialMediaPostsPanel() {
       const { data, error } = await supabase.functions.invoke("admin", {
         body: { action: "update", table: "content_calendar", id, data: extraFields },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to update post status");
+      }
     },
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
@@ -361,6 +368,9 @@ export default function SocialMediaPostsPanel() {
       } else {
         toast({ title: "Post status updated" });
       }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error updating post", description: error.message, variant: "destructive" });
     },
   });
 

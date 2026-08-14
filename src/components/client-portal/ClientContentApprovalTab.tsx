@@ -16,6 +16,7 @@ import {
   Facebook, Instagram, Linkedin, Twitter, LayoutGrid, CheckCheck,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 import { format } from "date-fns";
@@ -623,7 +624,10 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
         },
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to approve content");
+      }
 
       // Optimistic update
       setApprovals((prev) =>
@@ -657,7 +661,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
       console.error("Error approving content:", error);
       toast({
         title: "Error",
-        description: "Failed to approve content. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to approve content. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -735,7 +739,10 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
         },
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to submit feedback");
+      }
 
       // Optimistic update
       setApprovals((prev) =>
@@ -758,7 +765,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
       console.error("Error requesting changes:", error);
       toast({
         title: "Error",
-        description: "Failed to submit feedback. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to submit feedback. Please try again.",
         variant: "destructive",
       });
     } finally {

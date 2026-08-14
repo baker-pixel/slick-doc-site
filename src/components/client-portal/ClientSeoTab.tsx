@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import {
   Search, CheckCircle2, XCircle, Loader2, AlertTriangle,
   TrendingUp, Lightbulb, RefreshCw,
@@ -391,7 +392,10 @@ export function ClientSeoTab({ clientAccountId }: Props) {
       const { data, error } = await supabase.functions.invoke("scan-wordpress-site", {
         body: { site_id: wpSite.id },
       });
-      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Scan failed");
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Scan failed");
+      }
       const issueCount = data.total_issues ?? 0;
       const fixCount   = data.fixes_generated ?? 0;
       toast.success(
@@ -413,10 +417,13 @@ export function ClientSeoTab({ clientAccountId }: Props) {
     if (!wpSite?.id) return;
     setDisconnecting(true);
     try {
-      const { error } = await supabase.functions.invoke("disconnect-site", {
+      const { data, error } = await supabase.functions.invoke("disconnect-site", {
         body: { site_id: wpSite.id },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Could not disconnect");
+      }
       toast.success("WordPress site disconnected");
       setShowDisconnectConfirm(false);
       await loadWpData();

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import {
   Link2,
   Unlink,
@@ -396,10 +397,13 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
     if (!pfmPickerPlatform || !selectedPfmAccountId) return;
     setSavingPfmPrimary(true);
     try {
-      const { error } = await supabase.functions.invoke("postforme-set-primary-account", {
+      const { data, error } = await supabase.functions.invoke("postforme-set-primary-account", {
         body: { clientId: clientAccountId, platform: pfmPickerPlatform, pfmAccountId: selectedPfmAccountId },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Please try again.");
+      }
       await fetchPfmAccounts();
       const account = getPfmAccountsForPlatform(pfmPickerPlatform).find((a) => a.postforme_account_id === selectedPfmAccountId);
       toast({
@@ -428,8 +432,10 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
           permissions: ["posts", "feeds"],
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Unable to start OAuth flow");
+      }
 
       // Store clientId so the callback popup can sync the right client
       localStorage.setItem("pfm_oauth_client_id", clientAccountId);
@@ -485,7 +491,10 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
       const { data, error } = await supabase.functions.invoke("postforme-sync-accounts", {
         body: { clientId: clientAccountId },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Unknown error");
+      }
       await fetchPfmAccounts();
       toast({ title: "Synced", description: `${data?.synced ?? 0} account${data?.synced === 1 ? "" : "s"} updated` });
     } catch (err: unknown) {
@@ -500,14 +509,17 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
     if (!pfmAccount) return;
     setDisconnecting(platformId);
     try {
-      const { error } = await supabase.functions.invoke("postforme-disconnect-account", {
+      const { data, error } = await supabase.functions.invoke("postforme-disconnect-account", {
         body: {
           clientId: clientAccountId,
           platform: platformId,
           pfmAccountId: pfmAccount.postforme_account_id,
         },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Unknown error");
+      }
       await fetchPfmAccounts();
       toast({ title: "Disconnected" });
     } catch (err: unknown) {

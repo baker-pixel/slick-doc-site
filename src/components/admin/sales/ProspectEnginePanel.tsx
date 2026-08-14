@@ -329,8 +329,10 @@ export default function ProspectEnginePanel() {
             : { client_id: discClientId, focus: discQuery || undefined, geography: discLocation || undefined, max_results: 15, password: adminPassword },
         },
       );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Prospect discovery failed");
+      }
       setDiscResult({
         discovered: data.discovered ?? 0,
         skipped: data.skipped_duplicates ?? 0,

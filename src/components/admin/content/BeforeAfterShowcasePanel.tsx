@@ -198,8 +198,10 @@ export default function BeforeAfterShowcasePanel() {
       const { data, error } = await supabase.functions.invoke('generate-before-after', {
         body: { clientId: selectedClient, password: adminPassword }
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate showcase");
+      }
 
       setIsCreating(true);
       setNewShowcase(prev => ({

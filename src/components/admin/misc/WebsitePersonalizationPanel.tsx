@@ -205,15 +205,18 @@ export default function WebsitePersonalizationPanel() {
         }
       });
 
-      if (error) throw error;
-      
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate content");
+      }
+
       setNewRule(prev => ({
         ...prev,
         personalized_content: data.personalizedContent
       }));
       toast.success('AI generated personalized content');
-    } catch (error) {
-      toast.error('Failed to generate content');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to generate content');
     } finally {
       setIsGenerating(false);
     }

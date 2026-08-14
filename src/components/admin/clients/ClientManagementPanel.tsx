@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getClientPortalOrigin } from "@/lib/getPortalUrl";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -399,7 +400,8 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       body: { action: "delete_invitation", password: adminPassword, id },
     });
     if (error || data?.error) {
-      toast.error("Failed to delete invitation");
+      const msg = await getEdgeErrorMessage(error, data);
+      toast.error(msg ? friendlyEdgeMessage(msg) : "Failed to delete invitation");
     } else {
       toast.success("Invitation deleted");
       fetchInvitations();
@@ -414,7 +416,10 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       const { data, error } = await supabase.functions.invoke("run-automation", {
         body: { clientId, jobType, password: adminPassword },
       });
-      if (error) throw error;
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Unknown error");
+      }
 
       toast.success(`${jobType.replace("_", " ")} triggered successfully`);
     } catch (err) {
