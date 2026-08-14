@@ -25,24 +25,23 @@ import {
   Users,
   Rocket,
   Zap,
-  Target,
   TrendingUp,
   RefreshCw,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
-import { runSingleTask } from "@/lib/n8n";
 
 // Phases are read from the same engines that already track this client's
 // real progress -- not a second, parallel task list. Onboarding comes from
 // workflow_steps (the seed-tier-workflow chain); SEO/Content/Lead Nurturing
 // come from client_projects' self-updating "kind" rows (upsertSeoProject /
-// socialStrategy / refreshProspectProject); CRM/Ads are one-shot setup jobs
-// with no multi-step progress to show, so they're a done/not-done badge
-// backed by automation_jobs instead of a fake percentage.
+// socialStrategy / refreshProspectProject). CRM Setup / Ads & Retargeting
+// were removed -- neither had a real integration behind it (no GoHighLevel
+// or ad-platform API calls anywhere), so the "done" badge was always a lie:
+// clicking either just generated a placeholder deliverable and marked
+// itself complete regardless.
 type EnginePhase = "seo" | "content" | "lead_nurturing";
-type OneShotPhase = "crm" | "ads";
 
 const ENGINE_PHASE_BY_KIND: Record<string, EnginePhase> = {
   seo: "seo",
@@ -50,18 +49,11 @@ const ENGINE_PHASE_BY_KIND: Record<string, EnginePhase> = {
   prospect: "lead_nurturing",
 };
 
-const ONE_SHOT_JOB_BY_PHASE: Record<OneShotPhase, string> = {
-  crm: "add_to_crm",
-  ads: "setup_retargeting_audiences",
-};
-
 const CLIENT_STEP_TYPES = ["client_form", "client_upload", "client_oauth", "client_approval"];
 
 const phases: { id: string; label: string; icon: typeof Users; color: string }[] = [
   { id: "onboarding", label: "Onboarding", icon: Users, color: "text-blue-500" },
   { id: "lead_nurturing", label: "Lead Nurturing", icon: Zap, color: "text-purple-500" },
-  { id: "crm", label: "CRM Setup", icon: Target, color: "text-orange-500" },
-  { id: "ads", label: "Ads & Retargeting", icon: Rocket, color: "text-pink-500" },
   { id: "content", label: "Content", icon: TrendingUp, color: "text-green-500" },
   { id: "seo", label: "SEO", icon: TrendingUp, color: "text-emerald-500" },
 ];
@@ -81,7 +73,6 @@ interface ClientWithPhase {
   created_at: string;
   onboarding: { completed: number; total: number } | null;
   enginePct: Partial<Record<EnginePhase, number>>;
-  oneShotDone: Partial<Record<OneShotPhase, boolean>>;
   currentPhase: string;
 }
 
@@ -93,10 +84,8 @@ function isPhaseDone(
   phaseId: string,
   onboarding: ClientWithPhase["onboarding"],
   enginePct: ClientWithPhase["enginePct"],
-  oneShotDone: ClientWithPhase["oneShotDone"],
 ): boolean {
   if (phaseId === "onboarding") return !!onboarding && onboarding.total > 0 && onboarding.completed === onboarding.total;
-  if (phaseId === "crm" || phaseId === "ads") return !!oneShotDone[phaseId as OneShotPhase];
   return (enginePct[phaseId as EnginePhase] ?? 0) >= 100;
 }
 
@@ -113,17 +102,15 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
   const fetchClientsWithPhases = async () => {
     setLoading(true);
     try {
-      const [{ data: clientsData, error: clientsError }, { data: stepsData, error: stepsError }, { data: projectsData, error: projectsError }, { data: jobsData, error: jobsError }] = await Promise.all([
+      const [{ data: clientsData, error: clientsError }, { data: stepsData, error: stepsError }, { data: projectsData, error: projectsError }] = await Promise.all([
         supabase.from("client_accounts").select("id, business_name, tier, status, created_at").eq("status", "active").order("created_at", { ascending: false }),
         supabase.from("workflow_steps").select("client_id, status").in("task_type", CLIENT_STEP_TYPES),
         supabase.from("client_projects").select("client_account_id, kind, progress_percentage").in("kind", ["seo", "social", "prospect"]),
-        supabase.from("automation_jobs").select("client_id, job_type").eq("status", "completed").in("job_type", Object.values(ONE_SHOT_JOB_BY_PHASE)),
       ]);
 
       if (clientsError) throw clientsError;
       if (stepsError) throw stepsError;
       if (projectsError) throw projectsError;
-      if (jobsError) throw jobsError;
 
       const onboardingByClient: Record<string, { completed: number; total: number }> = {};
       for (const s of stepsData ?? []) {
@@ -139,24 +126,15 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
         (engineByClient[p.client_account_id] ??= {})[phase] = p.progress_percentage ?? 0;
       }
 
-      const jobToPhase = Object.fromEntries(Object.entries(ONE_SHOT_JOB_BY_PHASE).map(([phase, job]) => [job, phase])) as Record<string, OneShotPhase>;
-      const oneShotByClient: Record<string, Partial<Record<OneShotPhase, boolean>>> = {};
-      for (const j of jobsData ?? []) {
-        const phase = jobToPhase[j.job_type];
-        if (!phase) continue;
-        (oneShotByClient[j.client_id] ??= {})[phase] = true;
-      }
-
       const clientsWithPhases: ClientWithPhase[] = (clientsData ?? []).map((client) => {
         const onboarding = onboardingByClient[client.id] ?? null;
         const enginePct = engineByClient[client.id] ?? {};
-        const oneShotDone = oneShotByClient[client.id] ?? {};
 
         const currentPhase = !onboarding
           ? "no_workflow"
-          : phaseOrder.find((p) => !isPhaseDone(p, onboarding, enginePct, oneShotDone)) ?? "complete";
+          : phaseOrder.find((p) => !isPhaseDone(p, onboarding, enginePct)) ?? "complete";
 
-        return { ...client, onboarding, enginePct, oneShotDone, currentPhase };
+        return { ...client, onboarding, enginePct, currentPhase };
       });
 
       setClients(clientsWithPhases);
@@ -182,19 +160,6 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
       await fetchClientsWithPhases();
     } catch (err: any) {
       toast.error(err?.message || "Failed to seed onboarding workflow");
-    } finally {
-      setRunningAction(null);
-    }
-  };
-
-  const handleRunOneShot = async (clientId: string, phase: OneShotPhase) => {
-    setRunningAction(`${phase}:${clientId}`);
-    try {
-      await runSingleTask(clientId, undefined, ONE_SHOT_JOB_BY_PHASE[phase], adminPassword);
-      toast.success(`${phase === "crm" ? "CRM setup" : "Retargeting setup"} complete`);
-      await fetchClientsWithPhases();
-    } catch (err: any) {
-      toast.error(err?.message || "Automation failed");
     } finally {
       setRunningAction(null);
     }
@@ -242,10 +207,6 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
       if (!o || o.total === 0) return { state: "not_started", detail: "not seeded" };
       if (o.completed === o.total) return { state: "complete", detail: `${o.completed}/${o.total} steps` };
       return { state: o.completed > 0 ? "in_progress" : "not_started", detail: `${o.completed}/${o.total} steps` };
-    }
-    if (phaseId === "crm" || phaseId === "ads") {
-      const done = !!client.oneShotDone[phaseId as OneShotPhase];
-      return { state: done ? "complete" : "not_started", detail: done ? "done" : "not run" };
     }
     const pct = client.enginePct[phaseId as EnginePhase];
     if (pct == null) return { state: "not_started", detail: "no project yet" };
@@ -396,28 +357,6 @@ export function ClientPhaseTracker({ adminPassword }: ClientPhaseTrackerProps) {
                               <Zap className="h-4 w-4 mr-2" />
                             )}
                             Seed Onboarding
-                          </Button>
-                        )}
-                        {!client.oneShotDone.crm && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRunOneShot(client.id, "crm")}
-                            disabled={runningAction === `crm:${client.id}`}
-                          >
-                            {runningAction === `crm:${client.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            Run CRM Setup
-                          </Button>
-                        )}
-                        {!client.oneShotDone.ads && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRunOneShot(client.id, "ads")}
-                            disabled={runningAction === `ads:${client.id}`}
-                          >
-                            {runningAction === `ads:${client.id}` ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            Run Ads Setup
                           </Button>
                         )}
                         {client.tier !== "foundation" && (

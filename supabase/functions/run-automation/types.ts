@@ -1,6 +1,5 @@
 export type AutomationType =
   | "send_intake_form"
-  | "add_to_crm"
   | "schedule_kickoff"
   | "run_page_speed_test"
   | "create_google_review_link"
@@ -12,7 +11,6 @@ export type AutomationType =
   | "run_seo_audit"
   | "run_keyword_gap_analysis"
   | "setup_lead_automations"
-  | "setup_retargeting_audiences"
   | "setup_retention_automations"
   | "generate_monthly_report"
   | "generate_report"

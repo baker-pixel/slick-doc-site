@@ -605,7 +605,6 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
             <TabsTrigger value="clients">Clients ({managedClients.length})</TabsTrigger>
             <TabsTrigger value="pending-signups">Pending Signups ({pendingSignups.length})</TabsTrigger>
             <TabsTrigger value="invitations">Invitations ({invitations.filter(i => !i.accepted_at).length})</TabsTrigger>
-            <TabsTrigger value="portal-users">Portal Users ({portalUsers.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending-signups">
@@ -890,44 +889,6 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </TabsContent>
-
-          <TabsContent value="portal-users">
-            {portalUsers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No portal users yet. Users will appear here after accepting their invitations.
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Last Login</TableHead>
-                    <TableHead>Joined</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {portalUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">
-                        {user.first_name} {user.last_name}
-                      </TableCell>
-                      <TableCell>{getClientName(user.client_account_id)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {user.last_login_at 
-                          ? format(new Date(user.last_login_at), "MMM d, yyyy h:mm a")
-                          : "Never"
-                        }
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(user.created_at), "MMM d, yyyy")}
                       </TableCell>
                     </TableRow>
                   ))}

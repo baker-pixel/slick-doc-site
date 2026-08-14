@@ -12,7 +12,6 @@ import type { AutomationType } from "./types.ts";
 
 export const ALLOWED_JOB_TYPES: AutomationType[] = [
   "send_intake_form",
-  "add_to_crm",
   "schedule_kickoff",
   "run_page_speed_test",
   "create_google_review_link",
@@ -25,7 +24,6 @@ export const ALLOWED_JOB_TYPES: AutomationType[] = [
   "run_seo_audit",
   "run_keyword_gap_analysis",
   "setup_lead_automations",
-  "setup_retargeting_audiences",
   "setup_retention_automations",
   "generate_monthly_report",
   "generate_report",
@@ -97,19 +95,12 @@ export function normalizeJobType(raw: unknown): AutomationType {
 
     // Lead automation aliases
     lead_automation: "setup_lead_automations",
-    retargeting: "setup_retargeting_audiences",
     retention: "setup_retention_automations",
 
     // Other aliases
     page_speed: "run_page_speed_test",
     speed_test: "run_page_speed_test",
-    crm: "add_to_crm",
     kickoff: "schedule_kickoff",
-
-    // CRM/project tracker aliases
-    add_client_to_crm_project_tracker: "add_to_crm",
-    add_client_to_crm: "add_to_crm",
-    connect_automations_to_crm: "add_to_crm",
 
     // Landing pages aliases
     landing_page_pack: "build_landing_pages",
@@ -168,8 +159,7 @@ export function normalizeJobType(raw: unknown): AutomationType {
     build_no_response_sms_workflow: "setup_lead_automations",
     build_no_response_sms: "setup_lead_automations",
 
-    // Retargeting/segmentation aliases
-    build_retargeting_audiences: "setup_retargeting_audiences",
+    // Segmentation aliases
     add_automated_crm_reminders: "setup_lead_automations",
     add_lead_tagging_and_segmentation: "setup_lead_automations",
     add_team_notifications_for_pipeline_events: "setup_lead_automations",

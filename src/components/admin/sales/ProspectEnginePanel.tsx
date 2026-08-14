@@ -716,7 +716,7 @@ export default function ProspectEnginePanel() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
             <div className="space-y-1.5">
               <Label className="text-xs">Client</Label>
               <Select
@@ -761,29 +761,30 @@ export default function ProspectEnginePanel() {
                 onChange={e => { setDiscLocation(e.target.value); setIcpMismatch(null); }}
               />
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={suggestFromIcp}
-                disabled={suggesting || !discClientId}
-                className="gap-2"
-              >
-                {suggesting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-                Suggest
-              </Button>
-              <Button
-                onClick={runDiscovery}
-                disabled={discovering || !discClientId || (discSource === "maps" && (!discQuery || !discLocation))}
-                className={`gap-2 ${icpMismatch ? "bg-amber-600 hover:bg-amber-700" : ""}`}
-              >
-                {discovering ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Radar className="w-4 h-4" />
-                )}
-                {discovering ? "Scanning..." : icpMismatch ? "Discover anyway" : "Discover"}
-              </Button>
-            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button
+              variant="outline"
+              onClick={suggestFromIcp}
+              disabled={suggesting || !discClientId}
+              className="gap-2"
+            >
+              {suggesting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+              Suggest
+            </Button>
+            <Button
+              onClick={runDiscovery}
+              disabled={discovering || !discClientId || (discSource === "maps" && (!discQuery || !discLocation))}
+              className={`gap-2 ${icpMismatch ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+            >
+              {discovering ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Radar className="w-4 h-4" />
+              )}
+              {discovering ? "Scanning..." : icpMismatch ? "Discover anyway" : "Discover"}
+            </Button>
           </div>
 
           {icpMismatch && (

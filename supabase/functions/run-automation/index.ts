@@ -7,7 +7,6 @@ import type { AutomationRequest } from "./types.ts";
 import { normalizeJobType } from "./jobTypeAliases.ts";
 
 import { sendIntakeForm } from "./handlers/send-intake-form.ts";
-import { addClientToCrm } from "./handlers/add-to-crm.ts";
 import { sendKickoffScheduler } from "./handlers/schedule-kickoff.ts";
 import { runPageSpeedTest } from "./handlers/run-page-speed-test.ts";
 import { createGoogleReviewLink } from "./handlers/create-google-review-link.ts";
@@ -18,7 +17,6 @@ import { createKpiDashboard } from "./handlers/create-kpi-dashboard.ts";
 import { runSeoAudit } from "./handlers/run-seo-audit.ts";
 import { runKeywordGapAnalysis } from "./handlers/run-keyword-gap-analysis.ts";
 import { setupLeadAutomations } from "./handlers/setup-lead-automations.ts";
-import { setupRetargetingAudiences } from "./handlers/setup-retargeting-audiences.ts";
 import { setupRetentionAutomations } from "./handlers/setup-retention-automations.ts";
 import { generateMonthlyReport, runAiAutomation } from "./handlers/ai-automation.ts";
 import { runCustomAutomation } from "./handlers/custom.ts";
@@ -118,9 +116,6 @@ serve(async (req) => {
       case "send_intake_form":
         result = await sendIntakeForm(supabase, client);
         break;
-      case "add_to_crm":
-        result = await addClientToCrm(supabase, client);
-        break;
       case "schedule_kickoff":
         result = await sendKickoffScheduler(supabase, client);
         break;
@@ -151,9 +146,6 @@ serve(async (req) => {
         break;
       case "setup_lead_automations":
         result = await setupLeadAutomations(supabase, client);
-        break;
-      case "setup_retargeting_audiences":
-        result = await setupRetargetingAudiences(supabase, client);
         break;
       case "setup_retention_automations":
         result = await setupRetentionAutomations(supabase, client);

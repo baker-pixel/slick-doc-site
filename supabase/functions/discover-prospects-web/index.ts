@@ -16,11 +16,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Web-research discovery for clients whose customers aren't local physical
+// Company discovery for clients whose customers aren't local physical
 // businesses (B2B / national / global) -- Google Maps can't find "enterprises
-// in regulated industries", but an LLM with a web-search tool can. Uses the
-// OpenAI Responses API web_search tool with the already-configured
-// OPENAI_API_KEY; no extra vendor.
+// in regulated industries". Apollo's organization-search API is the primary
+// source when APOLLO_API_KEY is configured (real B2B company database,
+// filterable by industry/location/size). Falls back to an LLM with the
+// OpenAI web_search tool when Apollo isn't configured or returns nothing --
+// that was the only source before Apollo was wired in, so it stays as a
+// safety net rather than being ripped out.
 
 interface RequestBody {
   client_id: string;
@@ -41,6 +44,56 @@ interface FoundCompany {
 }
 
 const OPENAI_API = "https://api.openai.com/v1";
+const APOLLO_API = "https://api.apollo.io/api/v1";
+
+// "10-200 employees" / "10 to 200" -> "10,200" (Apollo's range format).
+// Returns undefined for "any" or anything unparseable -- an omitted filter
+// searches all sizes, which is the safer default over guessing wrong.
+function parseEmployeeRange(companySize?: string): string | undefined {
+  if (!companySize) return undefined;
+  const nums = companySize.match(/\d+/g);
+  if (!nums || nums.length < 2) return undefined;
+  return `${nums[0]},${nums[1]}`;
+}
+
+async function apolloSearchCompanies(
+  apolloKey: string,
+  icp: { industries: string[]; company_size?: string; geography: string },
+  geography: string,
+  maxResults: number,
+  focus?: string,
+): Promise<FoundCompany[]> {
+  const body: Record<string, unknown> = {
+    q_organization_keyword_tags: focus?.trim() ? [...icp.industries, focus.trim()] : icp.industries,
+    per_page: Math.min(maxResults, 100),
+    page: 1,
+  };
+  if (!/global/i.test(geography)) body.organization_locations = [geography];
+  const employeeRange = parseEmployeeRange(icp.company_size);
+  if (employeeRange) body.organization_num_employees_ranges = [employeeRange];
+
+  const res = await fetch(`${APOLLO_API}/mixed_companies/search`, {
+    method: "POST",
+    headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Apollo organization search failed (${res.status}: ${(await res.text()).slice(0, 300)})`);
+  }
+
+  const data = await res.json();
+  const orgs: any[] = data?.organizations ?? [];
+  // Apollo's search response doesn't include city/industry/employee-count
+  // fields (those need a separate per-org enrichment call) -- leave city and
+  // business_type unset rather than fabricate them.
+  return orgs
+    .map((o) => ({
+      name: o.name as string,
+      website_url: (o.website_url || (o.primary_domain ? `https://${o.primary_domain}` : "")) as string,
+    }))
+    .filter((c) => c.name && c.website_url);
+}
 
 async function webSearchCompanies(
   openaiKey: string,
@@ -125,8 +178,9 @@ serve(async (req) => {
       return json({ error: "Discovery already ran recently for this account -- try again later." }, 429);
     }
 
+    const apolloKey = Deno.env.get("APOLLO_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiKey) return json({ error: "OPENAI_API_KEY not configured" }, 503);
+    if (!apolloKey && !openaiKey) return json({ error: "Neither APOLLO_API_KEY nor OPENAI_API_KEY is configured" }, 503);
 
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
@@ -163,10 +217,23 @@ Find up to ${maxResults} distinct companies. Each MUST have a real, working comp
 Respond with ONLY a JSON array, no prose:
 [{ "name": "...", "website_url": "https://...", "city": "city/region or null", "business_type": "short type", "why_fit": "one short sentence" }]`;
 
-    const companies = await webSearchCompanies(openaiKey, prompt);
+    let companies: FoundCompany[] = [];
+    let via: "apollo" | "web_search" = "web_search";
+    if (apolloKey) {
+      try {
+        companies = await apolloSearchCompanies(apolloKey, icp, geography, maxResults, body.focus);
+        via = "apollo";
+      } catch (e) {
+        console.error("Apollo search failed, falling back to web search:", e instanceof Error ? e.message : e);
+      }
+    }
+    if (companies.length === 0 && openaiKey) {
+      companies = await webSearchCompanies(openaiKey, prompt);
+      via = "web_search";
+    }
 
     if (companies.length === 0) {
-      return json({ discovered: 0, skipped_duplicates: 0, skipped_no_website: 0, email_enrichment: !!Deno.env.get("HUNTER_API_KEY"), message: "Web research found no matching companies" });
+      return json({ discovered: 0, skipped_duplicates: 0, skipped_no_website: 0, email_enrichment: !!Deno.env.get("HUNTER_API_KEY"), message: "No matching companies found" });
     }
 
     // Dedupe against existing prospects for this client (normalized URL)
@@ -197,7 +264,7 @@ Respond with ONLY a JSON array, no prose:
         source: "outbound",
         status: "discovered",
         business_type: c.business_type || null,
-        research_snapshot: { via: "web_search", why_fit: c.why_fit || null, focus: body.focus || null, geography },
+        research_snapshot: { via, why_fit: c.why_fit || null, focus: body.focus || null, geography },
       }));
 
       inserted = await insertNewProspects(supabase, body.client_id, rows);
@@ -207,15 +274,15 @@ Respond with ONLY a JSON array, no prose:
         event_type: "prospect_research",
         units: inserted.length,
         source_fn: "discover-prospects-web",
-        metadata: { kind: "web_search_discovery", focus: body.focus || null, geography, found: companies.length, inserted: inserted.length },
+        metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, inserted: inserted.length },
       });
 
       await logActivity(supabase, body.client_id, {
         type: "prospect_discovery",
-        title: `Discovered ${inserted.length} prospects via web research`,
+        title: `Discovered ${inserted.length} prospects via ${via === "apollo" ? "Apollo" : "web research"}`,
         description: `${icp.industries.join(", ")} — ${geography}`,
         icon: "search",
-        metadata: { source: "web_search", geography, discovered: inserted.length },
+        metadata: { source: via, geography, discovered: inserted.length },
       });
 
       await refreshProspectProject(supabase, body.client_id);
@@ -230,7 +297,7 @@ Respond with ONLY a JSON array, no prose:
       }).catch((e) => console.error("backfill-prospect-context trigger failed:", e));
     }
 
-    console.log(`discover-prospects-web: client=${body.client_id} found=${companies.length} inserted=${inserted.length}`);
+    console.log(`discover-prospects-web: client=${body.client_id} via=${via} found=${companies.length} inserted=${inserted.length}`);
 
     return json({
       discovered: inserted.length,

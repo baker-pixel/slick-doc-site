@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -40,7 +39,6 @@ import {
   EyeOff,
   Zap,
   AlertTriangle,
-  ChevronDown,
   Link2,
   CircleDot,
   FlaskConical,
@@ -85,15 +83,6 @@ interface PostForMeAccount {
   username: string | null;
   profile_photo_url: string | null;
   status: string;
-}
-
-interface AutomationAlert {
-  id: string;
-  title: string;
-  message: string;
-  severity: string;
-  source: string | null;
-  created_at: string;
 }
 
 const platformIcons: Record<string, React.ReactNode> = {
@@ -145,7 +134,6 @@ export default function SocialMediaPostsPanel() {
   const [contentTopic, setContentTopic] = useState("");
   const [testResultOpen, setTestResultOpen] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
-  const [errorsOpen, setErrorsOpen] = useState(false);
   const [newPost, setNewPost] = useState({
     title: "",
     content: "",
@@ -225,35 +213,6 @@ export default function SocialMediaPostsPanel() {
       if (error) throw error;
       return data as Record<string, { clientId: string; configured: boolean }>;
     },
-  });
-
-  // Fetch recent automation alerts
-  const { data: recentAlerts = [] } = useQuery({
-    queryKey: ["pipeline-alerts"],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: {
-          action: "list",
-          table: "automation_alerts",
-          filters: {},
-          order: { column: "created_at", ascending: false },
-          limit: 20,
-        },
-      });
-      if (error) throw error;
-      const all = (data?.data || []) as AutomationAlert[];
-      return all
-        .filter((a) =>
-          a.source === "publish-scheduled-content" ||
-          a.source === "postforme-publish-post" ||
-          a.title?.includes("publish-scheduled-content") ||
-          a.title?.includes("Post for Me") ||
-          a.message?.includes("publish") ||
-          a.message?.includes("Post for Me")
-        )
-        .slice(0, 5);
-    },
-    staleTime: 30_000,
   });
 
   // Pipeline status: green if PfM accounts connected, red if nothing.
@@ -1021,33 +980,6 @@ export default function SocialMediaPostsPanel() {
           </Dialog>
         </div>
       </div>
-
-      {/* Recent Errors - collapsible */}
-      {recentAlerts.length > 0 && (
-        <Collapsible open={errorsOpen} onOpenChange={setErrorsOpen}>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" className="w-full justify-between text-sm text-destructive hover:text-destructive">
-              <span className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Recent Pipeline Errors ({recentAlerts.length})
-              </span>
-              <ChevronDown className={cn("h-4 w-4 transition-transform", errorsOpen && "rotate-180")} />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2 pt-2">
-            {recentAlerts.map((alert) => (
-              <div key={alert.id} className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20 p-3 text-sm space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-red-800 dark:text-red-300">{alert.title}</span>
-                  <span className="text-xs text-muted-foreground">{format(new Date(alert.created_at), "MMM d, h:mm a")}</span>
-                </div>
-                <p className="text-xs text-red-700 dark:text-red-400">{alert.message}</p>
-                {alert.source && <Badge variant="outline" className="text-xs">{alert.source}</Badge>}
-              </div>
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
 
       {/* Test Pipeline Result Dialog */}
       <Dialog open={testResultOpen} onOpenChange={setTestResultOpen}>

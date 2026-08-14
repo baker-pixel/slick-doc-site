@@ -151,8 +151,6 @@ serve(async (req) => {
 function mapTaskToJobType(taskName: string): string {
   const mappings: Record<string, string> = {
     "Send Intake Form": "send_intake_form",
-    "Add to CRM": "add_to_crm",
-    "Add client to CRM": "add_to_crm",
     "Schedule Kickoff Call": "schedule_kickoff",
     "Run PageSpeed Test": "run_page_speed_test",
     // task_templates seed (20260506115909) names — no substring overlap
@@ -168,7 +166,6 @@ function mapTaskToJobType(taskName: string): string {
     "Run SEO Audit": "run_seo_audit",
     "Run Keyword Gap Analysis": "run_keyword_gap_analysis",
     "Setup Lead Automations": "setup_lead_automations",
-    "Setup Retargeting Audiences": "setup_retargeting_audiences",
     "Setup Retention Automations": "setup_retention_automations",
     "Generate Monthly Report": "generate_monthly_report",
     // New mappings for task names from task templates
@@ -177,8 +174,6 @@ function mapTaskToJobType(taskName: string): string {
     "Build 3-5 follow-up emails": "email_sequence",
     "Build no response SMS": "setup_lead_automations",
     "Build nurture email sequence": "email_sequence",
-    "Connect automations to CRM": "add_to_crm",
-    "Build retargeting audiences": "setup_retargeting_audiences",
     "Add automated CRM reminders": "setup_lead_automations",
     "Add lead tagging and segmentation": "setup_lead_automations",
     "Add team notifications": "setup_lead_automations",
