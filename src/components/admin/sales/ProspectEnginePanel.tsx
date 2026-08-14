@@ -281,8 +281,10 @@ export default function ProspectEnginePanel() {
       const { data, error } = await supabase.functions.invoke("prospect-icp", {
         body: { client_id: discClientId, action: "suggest", password: adminPassword },
       });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "ICP suggestion failed");
+      }
       setIcpInfo({
         summary: data.icp?.summary ?? "",
         maps_suitable: data.maps_suitable !== false,

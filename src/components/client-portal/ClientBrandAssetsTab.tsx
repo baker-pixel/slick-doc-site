@@ -14,6 +14,7 @@ import {
   Upload, Plus, Trash2, CheckCircle2, X, Info, MessageSquare, BookOpen, Volume2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 
 interface BrandAsset {
@@ -285,8 +286,10 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange }: C
       const { data, error } = await supabase.functions.invoke("generate-brand-guidelines", {
         body: { client_id: clientAccountId },
       });
-      if (error) throw new Error(error.message || "Generation failed");
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Generation failed");
+      }
       toast({
         title: "Brand guidelines generated!",
         description: "Available in your deliverables.",

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
-import { friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -326,8 +326,10 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
       const { data, error } = await supabase.functions.invoke("extract-brand-assets", {
         body: { client_account_id: extractClientId, website_url: extractUrl.trim(), password: adminPassword },
       });
-      if (error) throw new Error(error.message || "Extraction failed");
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Extraction failed");
+      }
       setExtractedAssets(data?.assets || []);
       if ((data?.assets || []).length === 0) {
         toast({ title: "No brand assets found", description: data?.message || "Try a different URL", variant: "destructive" });

@@ -362,7 +362,10 @@ export function ClientSeoTab({ clientAccountId }: Props) {
       const { data, error } = await supabase.functions.invoke("approve-wp-fix", {
         body: { fix_id: fix.id },
       });
-      if (error || data?.error) throw new Error(data?.error ?? error?.message ?? "Failed");
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Could not apply fix");
+      }
       toast.success(`Fix applied to ${fix.page_title ?? fix.page_url ?? "your page"}`);
       setWpFixes(prev => prev.filter(f => f.id !== fix.id));
     } catch (e) {

@@ -118,5 +118,13 @@ export function friendlyEdgeMessage(raw: string): string {
     return "Something went wrong on our end. Please try again in a moment — if this persists, contact support.";
   if (lower.includes("cors") || lower.includes("blocked"))
     return "A connection issue occurred — please refresh the page and try again.";
+  // Last-resort net: this is the SDK's own placeholder text for a non-2xx
+  // response, shown verbatim whenever body extraction couldn't recover the
+  // function's real message (non-JSON body, opaque response, or a caller
+  // that never ran it through getEdgeErrorMessage at all). Never let this
+  // literal string reach a user — it's Supabase SDK plumbing, not a real
+  // explanation of anything.
+  if (lower.includes("non-2xx") || lower.includes("edge function returned"))
+    return "Something went wrong completing that request. Please try again — if this persists, contact support.";
   return raw;
 }

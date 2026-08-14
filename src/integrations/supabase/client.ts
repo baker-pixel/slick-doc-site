@@ -37,5 +37,13 @@ supabase.functions.invoke = (async (name: string, options?: Parameters<typeof or
       // body not JSON — keep the SDK's default message
     }
   }
+  // Extraction above only works for a real HTTP response (context present,
+  // JSON body). Whatever's left over -- a genuine network failure, an
+  // opaque/non-JSON body, or the SDK's own generic non-2xx placeholder --
+  // never surface verbatim; callers that skip getEdgeErrorMessage and read
+  // error.message directly still get something a user can read.
+  if (result.error?.message && /non-2xx|edge function returned/i.test(result.error.message)) {
+    result.error.message = "Something went wrong completing that request. Please try again — if this persists, contact support.";
+  }
   return result;
 }) as typeof supabase.functions.invoke;
