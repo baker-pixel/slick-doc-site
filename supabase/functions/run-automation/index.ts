@@ -53,8 +53,8 @@ serve(async (req) => {
     const body: AutomationRequest = await req.json();
 
     // Callers: process-agent-jobs / auto-run-client-tasks (service key
-    // bearer) and the admin panel (session JWT + admin role, or legacy
-    // ADMIN_PASSWORD in body/x-admin-password header during migration).
+    // bearer) and the admin panel (session JWT + admin role, or the shared
+    // ADMIN_PASSWORD in body/x-admin-password header).
     const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
     const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!isServer) {

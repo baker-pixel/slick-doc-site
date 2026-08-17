@@ -109,8 +109,8 @@ export default function SalesProposalPanel() {
   });
 
   // Routed through the `admin` edge function (service role), not direct
-  // table queries -- sales_proposals RLS is admin-JWT-only, and a legacy
-  // password login carries no guaranteed JWT (the magic-link session mint
+  // table queries -- sales_proposals RLS is admin-JWT-only, and password
+  // login carries no guaranteed JWT (the magic-link session mint
   // is best-effort). Same pattern already used by ProspectEnginePanel.
   const { data: proposals, isLoading } = useQuery({
     queryKey: ['sales-proposals'],

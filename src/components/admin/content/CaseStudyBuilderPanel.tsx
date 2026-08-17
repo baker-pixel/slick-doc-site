@@ -50,8 +50,8 @@ export default function CaseStudyBuilderPanel() {
   });
 
   // Routed through the `admin` edge function (service role), not direct
-  // table queries -- both tables' RLS is admin-JWT-only, and a legacy
-  // password login carries no guaranteed JWT (the magic-link session mint
+  // table queries -- both tables' RLS is admin-JWT-only, and password
+  // login carries no guaranteed JWT (the magic-link session mint
   // is best-effort). Same pattern already used by the mutations below and
   // by ProspectEnginePanel.
   const { data: clients } = useQuery({

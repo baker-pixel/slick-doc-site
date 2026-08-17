@@ -64,36 +64,36 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "authenticate": {
-        console.log(`Admin authenticated successfully via ${authorizedUserId ? "real user session" : "legacy password"}`);
+        console.log(`Admin authenticated successfully via ${authorizedUserId ? "real user session" : "shared admin password"}`);
 
         // A password-only login carries no Supabase JWT, so every direct
         // table query from the panel hits RLS as anon (or as whatever
         // portal session the browser happens to hold) -- admins saw partial
-        // or empty data. Mint a real session for a dedicated legacy-admin
+        // or empty data. Mint a real session for a dedicated shared-admin
         // user (admin role) and hand its magiclink token_hash back; the
         // frontend verifies it to establish a proper admin JWT. Best-effort:
         // a failure here still returns authenticated:true (edge-function
         // calls keep working on the password alone).
-        let legacyTokenHash: string | undefined;
+        let sharedTokenHash: string | undefined;
         if (!authorizedUserId) {
           try {
-            const legacyEmail = "legacy-admin@orangedoormarketing.com";
-            let link = await supabase.auth.admin.generateLink({ type: "magiclink", email: legacyEmail });
+            const sharedAdminEmail = "legacy-admin@orangedoormarketing.com";
+            let link = await supabase.auth.admin.generateLink({ type: "magiclink", email: sharedAdminEmail });
 
             if (link.error) {
-              const created = await supabase.auth.admin.createUser({ email: legacyEmail, email_confirm: true });
+              const created = await supabase.auth.admin.createUser({ email: sharedAdminEmail, email_confirm: true });
               if (created.error) throw created.error;
               await supabase.from("user_roles").insert({ user_id: created.data.user.id, role: "admin" });
-              link = await supabase.auth.admin.generateLink({ type: "magiclink", email: legacyEmail });
+              link = await supabase.auth.admin.generateLink({ type: "magiclink", email: sharedAdminEmail });
               if (link.error) throw link.error;
             } else if (link.data.user?.id) {
               // Idempotent role guarantee; duplicate-key errors are fine.
               await supabase.from("user_roles").insert({ user_id: link.data.user.id, role: "admin" }).then(() => {}, () => {});
             }
 
-            legacyTokenHash = link.data.properties?.hashed_token;
+            sharedTokenHash = link.data.properties?.hashed_token;
           } catch (e) {
-            console.error("Could not mint legacy admin session:", e instanceof Error ? e.message : e);
+            console.error("Could not mint shared admin session:", e instanceof Error ? e.message : e);
           }
         }
 
@@ -101,12 +101,12 @@ Deno.serve(async (req) => {
           // A real, JWT-verified admin gets the shared password back so the
           // frontend can keep populating it for the other edge functions
           // that still check it directly (not yet migrated off it). A
-          // legacy-password login already knows the password, so there's
+          // password-only login already knows the password, so there's
           // nothing new to reveal.
           JSON.stringify({
             authenticated: true,
             ...(authorizedUserId ? { password: adminPassword } : {}),
-            ...(legacyTokenHash ? { token_hash: legacyTokenHash } : {}),
+            ...(sharedTokenHash ? { token_hash: sharedTokenHash } : {}),
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -262,8 +262,8 @@ Deno.serve(async (req) => {
       case "update_prospects_status": {
         // Bulk approve/reject from the prospect review queue. Runs here
         // (service role) because prospects RLS no longer allows anon
-        // writes and the admin panel's legacy password login carries no
-        // admin JWT. `emails` lets drafted addresses ride along with an
+        // writes and the admin panel's password login carries no admin
+        // JWT. `emails` lets drafted addresses ride along with an
         // approval in one call.
         const { ids, status, emails } = data || {};
         if (!Array.isArray(ids) || ids.length === 0 || !status) {

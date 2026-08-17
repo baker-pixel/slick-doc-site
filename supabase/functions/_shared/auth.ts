@@ -1,7 +1,7 @@
 // Shared admin auth check: real per-user login (Supabase Auth JWT + admin
-// role) is checked first, with the legacy shared ADMIN_PASSWORD as a
-// fallback during migration. See supabase/functions/admin/index.ts for the
-// original implementation this was extracted from.
+// role) is checked first, with the shared ADMIN_PASSWORD as a fallback.
+// See supabase/functions/admin/index.ts for the original implementation
+// this was extracted from.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export interface AdminAuthResult {

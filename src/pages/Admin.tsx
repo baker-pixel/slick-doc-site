@@ -6,7 +6,6 @@ import { Footer } from "@/components/Footer";
 import { BackButton } from "@/components/BackButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
-import { friendlyEdgeMessage, getEdgeErrorMessage } from "@/lib/edge-error";
+import { friendlyEdgeMessage } from "@/lib/edge-error";
 import { inviteLeadToPortal, type InviteLead } from "@/lib/inviteLeadToPortal";
 import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus, Zap } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -221,92 +220,6 @@ const AdminInner = () => {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Real per-user admin login (Supabase Auth + admin role), replacing the
-  // shared-password-only flow. Legacy password stays available as a
-  // fallback (loginMode "legacy") during migration.
-  const [loginMode, setLoginMode] = useState<"email" | "legacy">("email");
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginEmailPassword, setLoginEmailPassword] = useState("");
-  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
-  const [newAccountPassword, setNewAccountPassword] = useState("");
-
-  // An invite/recovery link lands here with a Supabase session already
-  // established but no password set yet -- catch that before treating the
-  // session as a normal logged-in admin.
-  useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setNeedsPasswordSetup(true);
-      }
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  const completeAdminLogin = async () => {
-    // A real Supabase session now exists (supabase-js auto-attaches its
-    // token to functions.invoke calls) -- ask the admin function to verify
-    // the session + admin role and hand back the shared password so the
-    // ~75 other edge functions that still check it directly keep working
-    // unchanged.
-    const { data, error } = await supabase.functions.invoke("admin", {
-      body: { action: "authenticate" },
-    });
-    if (error) {
-      // FunctionsHttpError hides the real body ({"error":"Unauthorized"}) behind a
-      // generic "non-2xx status code" message -- read the body before mapping.
-      const raw = (await getEdgeErrorMessage(error, data)) || error.message;
-      // A 401 here means the login itself worked but the account lacks the
-      // admin role -- "session expired" would be misleading.
-      if (/unauthorized|401/i.test(raw)) {
-        throw new Error("This account doesn't have admin access. Contact your administrator if you believe this is a mistake.");
-      }
-      throw new Error(friendlyEdgeMessage(raw));
-    }
-    const result = data as { authenticated?: boolean; password?: string; error?: string } | null;
-    if (result?.error) throw new Error(friendlyEdgeMessage(result.error));
-    if (!result?.authenticated) throw new Error("This account doesn't have admin access. Contact your administrator if you believe this is a mistake.");
-
-    const effectivePassword = result.password || "";
-    authLogin(effectivePassword);
-    toast({ title: "Access granted" });
-    fetchData(effectivePassword);
-  };
-
-  const handleSetInitialPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newAccountPassword.length < 8) {
-      toast({ title: "Password too short", description: "Use at least 8 characters.", variant: "destructive" });
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const { error: updateErr } = await supabase.auth.updateUser({ password: newAccountPassword });
-      if (updateErr) throw updateErr;
-      setNeedsPasswordSetup(false);
-      await completeAdminLogin();
-    } catch (error: any) {
-      toast({ title: "Could not set password", description: friendlyEdgeMessage(error.message || "Please try again."), variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginEmailPassword,
-      });
-      if (signInErr) throw signInErr;
-      await completeAdminLogin();
-    } catch (error: any) {
-      toast({ title: "Sign in failed", description: friendlyEdgeMessage(error.message || "Unable to sign in. Please try again."), variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
   const [contacts, setContacts] = useState<ContactSubmission[]>([]);
   const [gapAnalyses, setGapAnalyses] = useState<GapAnalysisData[]>([]);
   const [pdfLeads, setPdfLeads] = useState<PdfLead[]>([]);
@@ -486,10 +399,10 @@ const AdminInner = () => {
       if (error) throw new Error(error);
       if (!(data as any)?.authenticated) throw new Error("Invalid password");
 
-      // The backend mints a session token for the shared legacy-admin user
-      // so RLS-gated direct table queries (client lists, prospects, etc.)
-      // see everything, same as a real admin login. Best-effort: password
-      // auth alone still unlocks all edge-function-backed panels.
+      // The backend mints a session token for the shared admin user so
+      // RLS-gated direct table queries (client lists, prospects, etc.) see
+      // everything, same as a real admin login. Best-effort: password auth
+      // alone still unlocks all edge-function-backed panels.
       const tokenHash = (data as any)?.token_hash;
       if (tokenHash) {
         const { error: otpErr } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
@@ -686,41 +599,6 @@ const AdminInner = () => {
 
   // Login screen
   if (!isAuthenticated) {
-    // Landed here via a real invite/recovery link -- set a real password
-    // before anything else.
-    if (needsPasswordSetup) {
-      return (
-        <div className="min-h-screen bg-background">
-          <main className="min-h-screen flex items-center justify-center">
-            <Card className="w-full max-w-md mx-4">
-              <CardHeader className="text-center">
-                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Lock className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle>Set Your Password</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSetInitialPassword} className="space-y-4">
-                  <Input
-                    type="password"
-                    placeholder="New password (min. 8 characters)"
-                    value={newAccountPassword}
-                    onChange={(e) => setNewAccountPassword(e.target.value)}
-                    required
-                    autoComplete="new-password"
-                  />
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Saving..." : "Set Password & Continue"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </main>
-          <Footer />
-        </div>
-      );
-    }
-
     return (
       <div className="min-h-screen bg-background">
         <main className="min-h-screen flex items-center justify-center">
@@ -732,85 +610,29 @@ const AdminInner = () => {
               <CardTitle>Admin Access</CardTitle>
             </CardHeader>
             <CardContent>
-              {loginMode === "email" ? (
-                <form onSubmit={handleEmailLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email">Email</Label>
-                    <Input
-                      id="admin-email"
-                      type="email"
-                      placeholder="you@orangedoormarketing.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      required
-                      autoComplete="email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-login-password">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="admin-login-password"
-                        type={showAdminPassword ? "text" : "password"}
-                        placeholder="Your password"
-                        value={loginEmailPassword}
-                        onChange={(e) => setLoginEmailPassword(e.target.value)}
-                        required
-                        autoComplete="current-password"
-                        className="pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowAdminPassword(v => !v)}
-                        className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
-                      >
-                        {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Signing in..." : "Sign In"}
-                  </Button>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="relative">
+                  <Input
+                    type={showAdminPassword ? "text" : "password"}
+                    placeholder="Enter admin password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className="pr-10"
+                  />
                   <button
                     type="button"
-                    onClick={() => setLoginMode("legacy")}
-                    className="w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                    onClick={() => setShowAdminPassword(v => !v)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                   >
-                    Use legacy access code instead
+                    {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
-                </form>
-              ) : (
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="relative">
-                    <Input
-                      type={showAdminPassword ? "text" : "password"}
-                      placeholder="Enter admin password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      autoComplete="current-password"
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowAdminPassword(v => !v)}
-                      className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
-                    >
-                      {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Checking..." : "Access Dashboard"}
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => setLoginMode("email")}
-                    className="w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-                  >
-                    Sign in with email instead
-                  </button>
-                </form>
-              )}
+                </div>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Checking..." : "Access Dashboard"}
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </main>

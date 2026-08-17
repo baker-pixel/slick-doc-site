@@ -152,7 +152,7 @@ export default function ProspectEnginePanel() {
 
   // All reads/writes go through the `admin` edge function (service role +
   // checkAdminAuth) rather than direct table queries: prospects RLS is
-  // admin-JWT-only now, and a legacy password login carries no JWT -- direct
+  // admin-JWT-only now, and password login carries no JWT -- direct
   // queries would return nothing (or, before the lockdown, leak data).
   const loadClients = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("admin", {

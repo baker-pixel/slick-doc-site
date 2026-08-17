@@ -374,7 +374,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
     try {
       // Routed through the admin edge function (service role) rather than a
       // direct client insert -- content_approvals' RLS requires a real
-      // Supabase Auth session with an admin role, which the legacy
+      // Supabase Auth session with an admin role, which the
       // password-only admin login never establishes.
       const { data, error } = await callAdminApi<{ alreadyQueued?: boolean; status?: string; partialFailure?: boolean }>(
         adminPassword,
