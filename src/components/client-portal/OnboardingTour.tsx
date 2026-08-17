@@ -99,7 +99,7 @@ export function OnboardingTour({ active, onClose, onTabChange }: OnboardingTourP
   return (
     <>
       {/* Overlay */}
-      <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40" onClick={handleSkip} />
+      <div className="fixed inset-0 bg-background/30 z-40" onClick={handleSkip} />
       
       {/* Tour Card */}
       <Card className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-0 overflow-hidden border-0 shadow-2xl shadow-primary/10">
