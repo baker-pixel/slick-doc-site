@@ -116,7 +116,7 @@ const agentItems: NavItem[] = [
   { id: "seo-dashboard", label: "SEO", icon: Search },
   { id: "content-review", label: "Content", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "social-posts", label: "Social", icon: Share2 },
-  { id: "emails", label: "Email", icon: Mail },
+  { id: "emails", label: "Outreach", icon: Mail },
   { id: "reports-review", label: "Reports", icon: BarChart3 },
 ];
 

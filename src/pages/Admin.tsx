@@ -1519,7 +1519,7 @@ const AdminInner = () => {
       "gap-analysis": "Leads",
       "quick-scans": "Leads",
       "pdf-leads": "Leads",
-      emails: "Email Centre",
+      emails: "Client Outreach",
       "social-posts": "Social Media Posts",
       "sales-proposals": "AI Sales Proposals",
       automation: "Automation",

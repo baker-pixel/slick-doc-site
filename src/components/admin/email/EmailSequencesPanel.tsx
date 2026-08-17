@@ -380,8 +380,8 @@ export function EmailSequencesPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Email Sequences</h2>
-          <p className="text-muted-foreground">Manage automated email sequences for different triggers</p>
+          <h2 className="text-2xl font-bold">Marketing Sequences</h2>
+          <p className="text-muted-foreground">Manage Orange Door's own automated nurture sequences (not client outreach)</p>
         </div>
         <div className="flex gap-2">
           <Button 

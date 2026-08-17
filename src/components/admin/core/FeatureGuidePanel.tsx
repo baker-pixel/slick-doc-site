@@ -253,20 +253,20 @@ const features: FeatureInfo[] = [
   // Email
   {
     id: "emails",
-    name: "Email Admin",
+    name: "Client Outreach",
     icon: Send,
     category: "email",
-    description: "Central hub for email management including sending, tracking, and analytics.",
+    description: "Tracks the outreach emails clients send to their own prospects (the drip sequence run on their behalf) -- not Orange Door's own marketing email.",
     capabilities: [
-      "Email sending and tracking",
+      "Per-client outreach queue and sent history",
       "Open and click analytics",
       "Deliverability monitoring",
       "Bounce management"
     ],
     useCases: [
-      "Monitor email performance",
-      "Track engagement metrics",
-      "Manage email health"
+      "Check a client's outreach progress",
+      "Track engagement metrics for a client's prospects",
+      "Manage sending list health"
     ],
     status: "active"
   },
@@ -291,10 +291,10 @@ const features: FeatureInfo[] = [
   },
   {
     id: "sequences",
-    name: "Email Sequences",
+    name: "Marketing Sequences",
     icon: Mail,
     category: "email",
-    description: "Build automated email sequences triggered by specific actions like form submissions or downloads.",
+    description: "Build Orange Door's own automated nurture sequences, triggered by actions like form submissions or downloads -- separate from the Outreach Sequence clients' prospects go through.",
     capabilities: [
       "Multi-step sequences",
       "Trigger-based automation",

@@ -119,6 +119,13 @@ interface ClientAccount {
   email: string;
 }
 
+// run-prospect-drip tags every outreach send this way; Orange Door's own
+// nurture/notification emails (queue-sequence-emails, send-client-notification,
+// manual Schedule Email) share the same tables but never set this, so it's
+// the one reliable signal that a row is a client's outreach to their prospects.
+const isOutreachEmail = (metadata: Json): boolean =>
+  (metadata as { source?: string } | null)?.source === "run-prospect-drip";
+
 export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
   const [emailQueue, setEmailQueue] = useState<EmailQueueItem[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
@@ -371,22 +378,23 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     fetchEmailData();
   }, [password]);
 
-  // Filter data by selected client (must be before filteredQueue/filteredLogs)
+  // Outreach-only base sets -- excludes Orange Door's own marketing/notification
+  // emails, which live in the same tables but aren't sent on a client's behalf.
+  const outreachQueue = useMemo(() => emailQueue.filter((item) => isOutreachEmail(item.metadata)), [emailQueue]);
+  const outreachLogs = useMemo(() => emailLogs.filter((log) => isOutreachEmail(log.metadata)), [emailLogs]);
+  const outreachSequences = useMemo(() => sequences.filter((s) => s.trigger_type === "prospect_outreach"), [sequences]);
+
+  // Filter data by selected client -- the recipient is the client's prospect,
+  // not the client itself, so this keys off metadata.client_id, not recipient_email.
   const clientFilteredQueue = useMemo(() => {
-    if (!selectedClientId || selectedClientId === "all") return emailQueue;
-    const clientEmail = selectedClient?.email?.toLowerCase();
-    return emailQueue.filter(item => 
-      item.recipient_email.toLowerCase() === clientEmail
-    );
-  }, [emailQueue, selectedClientId, selectedClient]);
+    if (!selectedClientId || selectedClientId === "all") return outreachQueue;
+    return outreachQueue.filter((item) => (item.metadata as { client_id?: string } | null)?.client_id === selectedClientId);
+  }, [outreachQueue, selectedClientId]);
 
   const clientFilteredLogs = useMemo(() => {
-    if (!selectedClientId || selectedClientId === "all") return emailLogs;
-    const clientEmail = selectedClient?.email?.toLowerCase();
-    return emailLogs.filter(log => 
-      log.recipient_email.toLowerCase() === clientEmail
-    );
-  }, [emailLogs, selectedClientId, selectedClient]);
+    if (!selectedClientId || selectedClientId === "all") return outreachLogs;
+    return outreachLogs.filter((log) => (log.metadata as { client_id?: string } | null)?.client_id === selectedClientId);
+  }, [outreachLogs, selectedClientId]);
 
   const filteredQueue = useMemo(() => {
     return clientFilteredQueue.filter((item) => {
@@ -512,7 +520,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       days.push({ date: format(date, "MMM d"), sent: 0, queued: 0, failed: 0 });
     }
 
-    emailLogs.forEach((log) => {
+    clientFilteredLogs.forEach((log) => {
       const logDate = format(new Date(log.sent_at), "MMM d");
       const entry = days.find((d) => d.date === logDate);
       if (entry) {
@@ -521,7 +529,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       }
     });
 
-    emailQueue.forEach((item) => {
+    clientFilteredQueue.forEach((item) => {
       const itemDate = format(new Date(item.created_at), "MMM d");
       const entry = days.find((d) => d.date === itemDate);
       if (entry) {
@@ -531,19 +539,19 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     });
 
     return days;
-  }, [emailLogs, emailQueue]);
+  }, [clientFilteredLogs, clientFilteredQueue]);
 
   // Delivery status distribution
   const deliveryStatusData = useMemo(() => {
-    const sent = emailLogs.filter((l) => l.status === "sent").length;
-    const failed = emailLogs.filter((l) => l.status === "failed").length + emailQueue.filter((q) => q.status === "failed").length;
-    const pending = emailQueue.filter((q) => q.status === "pending" || q.status === "scheduled").length;
+    const sent = clientFilteredLogs.filter((l) => l.status === "sent").length;
+    const failed = clientFilteredLogs.filter((l) => l.status === "failed").length + clientFilteredQueue.filter((q) => q.status === "failed").length;
+    const pending = clientFilteredQueue.filter((q) => q.status === "pending" || q.status === "scheduled").length;
     return [
       { name: "Delivered", value: sent, color: "hsl(142, 76%, 36%)" },
       { name: "Failed", value: failed, color: "hsl(0, 84%, 60%)" },
       { name: "Pending", value: pending, color: "hsl(45, 93%, 47%)" },
     ].filter((d) => d.value > 0);
-  }, [emailLogs, emailQueue]);
+  }, [clientFilteredLogs, clientFilteredQueue]);
 
   // Real engagement metrics from tracking
   const engagementData = useMemo(() => {
@@ -561,7 +569,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     }
     
     // Fallback to basic stats if no tracking data
-    const totalSent = emailLogs.filter((l) => l.status === "sent").length;
+    const totalSent = clientFilteredLogs.filter((l) => l.status === "sent").length;
     return {
       totalSent,
       openRate: "0",
@@ -572,32 +580,36 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       uniqueClicks: 0,
       isReal: false,
     };
-  }, [emailLogs, trackingStats]);
+  }, [clientFilteredLogs, trackingStats]);
 
-  // Recent tracking activity
+  // Recent tracking activity (scoped to the outreach/client-filtered logs above)
   const recentActivity = useMemo(() => {
-    return trackingEvents.slice(0, 20).map(event => ({
-      ...event,
-      emailSubject: emailLogs.find(log => log.id === event.email_log_id)?.subject || "Unknown",
-      emailRecipient: emailLogs.find(log => log.id === event.email_log_id)?.recipient_email || "Unknown",
-    }));
-  }, [trackingEvents, emailLogs]);
+    const relevantLogIds = new Set(clientFilteredLogs.map((l) => l.id));
+    return trackingEvents
+      .filter((event) => relevantLogIds.has(event.email_log_id))
+      .slice(0, 20)
+      .map(event => ({
+        ...event,
+        emailSubject: emailLogs.find(log => log.id === event.email_log_id)?.subject || "Unknown",
+        emailRecipient: emailLogs.find(log => log.id === event.email_log_id)?.recipient_email || "Unknown",
+      }));
+  }, [trackingEvents, emailLogs, clientFilteredLogs]);
 
-  // Email by sequence/trigger type
+  // Email by drip step -- shows where a client's prospects sit in the outreach sequence
   const emailsByTrigger = useMemo(() => {
-    const triggers: Record<string, number> = {};
-    emailLogs.forEach((log) => {
-      const meta = log.metadata as { triggerType?: string } | null;
-      const trigger = meta?.triggerType || "manual";
-      triggers[trigger] = (triggers[trigger] || 0) + 1;
+    const steps: Record<string, number> = {};
+    clientFilteredLogs.forEach((log) => {
+      const meta = log.metadata as { drip_step?: number } | null;
+      const step = meta?.drip_step != null ? `Step ${meta.drip_step}` : "Unknown";
+      steps[step] = (steps[step] || 0) + 1;
     });
-    emailQueue.forEach((item) => {
-      const meta = item.metadata as { triggerType?: string } | null;
-      const trigger = meta?.triggerType || "manual";
-      triggers[trigger] = (triggers[trigger] || 0) + 1;
+    clientFilteredQueue.forEach((item) => {
+      const meta = item.metadata as { drip_step?: number } | null;
+      const step = meta?.drip_step != null ? `Step ${meta.drip_step}` : "Unknown";
+      steps[step] = (steps[step] || 0) + 1;
     });
-    return Object.entries(triggers).map(([name, value]) => ({ name: name.replace(/_/g, " "), value }));
-  }, [emailLogs, emailQueue]);
+    return Object.entries(steps).map(([name, value]) => ({ name, value }));
+  }, [clientFilteredLogs, clientFilteredQueue]);
 
   const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -611,7 +623,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
             <div className="flex-1">
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                 <SelectTrigger className="w-full md:w-[300px]">
-                  <SelectValue placeholder="Select a client to filter emails..." />
+                  <SelectValue placeholder="Select a client to view their outreach..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Clients</SelectItem>
@@ -625,7 +637,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
             </div>
             {selectedClient && (
               <div className="text-sm text-muted-foreground">
-                Filtering by: <span className="font-medium text-foreground">{selectedClient.email}</span>
+                Showing outreach for: <span className="font-medium text-foreground">{selectedClient.business_name}</span>
               </div>
             )}
           </div>
@@ -871,7 +883,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
           {/* Emails by Trigger Type */}
           <Card className="bg-card/50 border-border/50">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Emails by Trigger Type</CardTitle>
+              <CardTitle className="text-base">Emails by Drip Step</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[200px]">
@@ -1175,7 +1187,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
           <Card className="bg-card/50 border-border/50">
             <CardHeader className="pb-4">
               <div className="flex justify-between items-center">
-                <CardTitle className="text-lg">Email Sequences</CardTitle>
+                <CardTitle className="text-lg">Outreach Sequence</CardTitle>
                 <Button variant="outline" size="sm" onClick={fetchEmailData} disabled={isLoading}>
                   <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                   Refresh
@@ -1183,11 +1195,14 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
               </div>
             </CardHeader>
             <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Shared drip cadence used for every client's prospect outreach -- toggling it on/off applies to all clients at once.
+              </p>
               <div className="space-y-4">
-                {sequences.length === 0 ? (
-                  <p className="text-center py-8 text-muted-foreground">No sequences configured</p>
+                {outreachSequences.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">No outreach sequence configured</p>
                 ) : (
-                  sequences.map((sequence) => {
+                  outreachSequences.map((sequence) => {
                     const emails = Array.isArray(sequence.emails) ? sequence.emails : [];
                     return (
                       <Card key={sequence.id} className="bg-background/50 border-border/30">
