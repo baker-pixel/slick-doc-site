@@ -369,16 +369,31 @@ serve(async (req) => {
     }
 
     // Kick off image generation for any freshly-drafted slots that need one
-    // (currently Instagram). Using sync-fill-missing-images (a few
-    // synchronous gpt-image-2 calls) rather than the OpenAI Batch API path
-    // (generate-social-images-batch + check-image-batches): the batch
-    // approach is ~50% cheaper when it works, but repeatedly hit
-    // WORKER_RESOURCE_LIMIT crashes downloading/applying batch output files
-    // on this runtime and left real client-facing posts stuck with no
-    // image for hours. generate-social-images-batch is left in place,
-    // unused, in case that gets revisited later -- not deleted, just not
-    // called from here anymore. Best-effort: a failure here shouldn't fail
-    // the whole drafting run.
+    // (currently Instagram). Two paths, in order:
+    //   1. generate-social-images-batch: submits today's crop of missing
+    //      images as one OpenAI Batch API job (~50% cheaper). The
+    //      WORKER_RESOURCE_LIMIT crash that used to make this path stall
+    //      forever was fixed on 2026-07-09 (resumable byte-offset apply in
+    //      check-image-batches) but the call here was never restored -- this
+    //      re-enables it. Each stamped slot gets ~24h for its batch to land
+    //      before sync-fill-missing-images's deadline fallback (below) takes
+    //      over, so batch failure/slowness never blocks a real post.
+    //   2. sync-fill-missing-images: now gated to true-fallback duty (skips
+    //      anything with a batch still in its window) rather than eagerly
+    //      filling everything itself, which used to starve the batch path of
+    //      ever having a slot to apply results to.
+    // Both best-effort: a failure here shouldn't fail the whole drafting run.
+    try {
+      const batchRes = await supabase.functions.invoke("generate-social-images-batch", { body: {} });
+      if (batchRes.error) {
+        console.error("generate-social-images-batch invoke failed:", batchRes.error.message);
+      } else {
+        console.log("Image batch submission result:", JSON.stringify(batchRes.data));
+      }
+    } catch (e) {
+      console.error("Failed to invoke generate-social-images-batch:", e instanceof Error ? e.message : e);
+    }
+
     try {
       const fillRes = await supabase.functions.invoke("sync-fill-missing-images", { body: {} });
       if (fillRes.error) {

@@ -12,16 +12,32 @@ const corsHeaders = {
 // postforme-publish-post's fallback and generate-social-images-batch).
 const TARGET_PLATFORMS = ["instagram"];
 
-// Generates images synchronously, a few at a time, instead of via OpenAI's
-// Batch API. The batch approach (generate-social-images-batch +
-// check-image-batches) is ~50% cheaper when it works, but repeatedly hit a
-// WORKER_RESOURCE_LIMIT crash streaming batch output files on this runtime
-// and made no reliable progress. This is the same per-image call
-// generate-social-image already makes successfully elsewhere (the
-// postforme-publish-post fallback, the admin Social Media Posts panel) --
-// slower to fully drain a big backlog and slightly more expensive, but
-// actually completes instead of getting stuck.
+// Fallback for slots the OpenAI Batch API path (generate-social-images-batch
+// + check-image-batches, submitted daily from fill-scheduled-content) hasn't
+// covered. Only fires for a slot when the batch attempt isn't going to save
+// it in time -- see isFallbackEligible -- so the cheaper batch path (~50%
+// less expensive) gets its full window instead of every slot racing straight
+// to this synchronous, slightly pricier path. This is the same per-image
+// call generate-social-image already makes elsewhere (postforme-publish-post's
+// last-resort fallback, the admin Social Media Posts panel).
 const MAX_PER_RUN = 5;
+// How long a batch-covered slot is left alone before this fallback overrides
+// it regardless of batch status -- a hard guarantee that no post ever goes
+// out with no image, even if OpenAI's batch is still "in_progress" this late.
+const URGENT_WINDOW_MS = 4 * 60 * 60 * 1000;
+// Candidate pool fetched before the eligibility filter below narrows it down
+// to MAX_PER_RUN -- most batch-covered slots will be filtered back out, so
+// this needs enough headroom that a run doesn't go empty while a real
+// fallback candidate sits just past the query's limit.
+const CANDIDATE_POOL_SIZE = 50;
+
+function isFallbackEligible(slot: { metadata: unknown; scheduled_for: string | null }): boolean {
+  const meta = (slot.metadata as Record<string, unknown>) || {};
+  if (!meta.image_batch_id) return true; // never entered a batch -- don't wait on one
+  if (meta.image_batch_status === "failed") return true; // this slot's batch attempt failed
+  if (slot.scheduled_for && new Date(slot.scheduled_for).getTime() - Date.now() <= URGENT_WINDOW_MS) return true; // deadline safety net
+  return false; // still within the batch's window -- leave it alone
+}
 
 async function generateAndPersistImage(supabase: any, openaiKey: string, prompt: string, contentCalendarId: string, platform: string): Promise<string> {
   const base64 = await generateGptImage(openaiKey, prompt, platform);
@@ -65,17 +81,23 @@ serve(async (req) => {
       return json({ filled: 0, message: "No approvals need images" });
     }
 
-    const { data: slots, error: fetchErr } = await supabase
+    const { data: candidates, error: fetchErr } = await supabase
       .from("content_calendar")
-      .select("id, client_account_id, title, content, platform, metadata")
+      .select("id, client_account_id, title, content, platform, metadata, scheduled_for")
       .in("content_id", approvalContentIds)
       .is("metadata->>image_url", null)
-      .limit(MAX_PER_RUN);
+      .limit(CANDIDATE_POOL_SIZE);
 
     if (fetchErr) throw new Error(`Failed to fetch slots needing images: ${fetchErr.message}`);
 
-    if (!slots || slots.length === 0) {
+    if (!candidates || candidates.length === 0) {
       return json({ filled: 0, message: "No slots need images" });
+    }
+
+    const slots = candidates.filter(isFallbackEligible).slice(0, MAX_PER_RUN);
+
+    if (slots.length === 0) {
+      return json({ filled: 0, message: "No slots need fallback yet (batch still within its window)" });
     }
 
     const clientIds = [...new Set(slots.map((s: any) => s.client_account_id))];
