@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI as sharedCallAI } from "../_shared/ai.ts";
+import { callAI as sharedCallAI, MODELS } from "../_shared/ai.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { generateMonthlyReport } from "../run-automation/handlers/ai-automation.ts";
@@ -92,7 +92,7 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
       metadata: {
         generated_at: new Date().toISOString(),
         original_type: contentType,
-        model: "llama-3.3-70b-versatile",
+        model: MODELS.default,
         source: "run-ai-batch",
       },
     })
@@ -142,7 +142,7 @@ Provide a detailed output that can be reviewed by the team.`;
       status: 'completed',
       input_data: { task_id: task.id, task_name: task.name },
       output_data: { result: output },
-      ai_model_used: 'llama-3.3-70b-versatile',
+      ai_model_used: MODELS.default,
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
     })

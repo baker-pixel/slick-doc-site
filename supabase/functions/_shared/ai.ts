@@ -5,9 +5,9 @@ import { serviceClient } from "./supabase.ts";
 
 export const MODELS = {
   /** Default reasoning/content model. */
-  default: "llama-3.3-70b-versatile",
+  default: "openai/gpt-oss-120b",
   /** Cheap/fast model for classification and low-stakes calls. */
-  fast: "llama-3.1-8b-instant",
+  fast: "openai/gpt-oss-20b",
   /**
    * Higher-quality writing/reasoning model for client-facing creative work.
    * Falls back to `default` automatically if ANTHROPIC_API_KEY isn't set —
