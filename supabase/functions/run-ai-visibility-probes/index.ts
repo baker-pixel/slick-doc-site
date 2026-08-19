@@ -58,7 +58,16 @@ serve(async (req) => {
 
       const ctx = (client.context_profile ?? {}) as Record<string, unknown>;
       const industry = client.industry || (typeof ctx.industry === "string" ? ctx.industry : "") || "local business";
-      const location = typeof ctx.location === "string" && ctx.location ? ctx.location : "their local area";
+      // context_profile.location is set by the AI website scan (analyze-website);
+      // context_profile.address is set by the manual onboarding form
+      // (seed-tier-workflow's business_info step) -- every client has gone through
+      // onboarding, not every client has had a scan, so address is the more
+      // reliable field. Falling through to the literal "their local area" produced
+      // a garbage prompt no LLM could answer (confirmed live: 0% mention rate).
+      const location =
+        (typeof ctx.location === "string" && ctx.location) ||
+        (typeof ctx.address === "string" && ctx.address) ||
+        "their local area";
       const services = Array.isArray(ctx.services) ? (ctx.services as string[]).slice(0, 2) : [];
 
       // Reuse existing active prompts for this client so the score tracks
