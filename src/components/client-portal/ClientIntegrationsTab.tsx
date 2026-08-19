@@ -313,6 +313,34 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
             variant: "destructive",
           });
         } else {
+          // A single OAuth grant can return several pages/profiles for one
+          // platform (confirmed live: a LinkedIn auth returned 3 company
+          // pages) with no inherent "the one" until the client picks a
+          // primary. Advancing onboarding immediately here used to race
+          // ahead of that pick every time -- the wizard yanked the client
+          // to "Approve Your First Content Draft" before they'd chosen a
+          // page, with no way back to the picker. Open the picker instead
+          // and let handlePfmPrimarySave complete the step once they've
+          // actually resolved which page to use.
+          const platformAccounts = accounts.filter((a) => a.platform === attempted);
+          const needsPagePick = platformAccounts.length > 1 && !platformAccounts.some((a) => a.is_primary);
+
+          if (needsPagePick) {
+            toast({
+              title: `${platform?.name ?? attempted} connected — choose a page`,
+              description: "This account manages more than one page. Pick which one to publish to.",
+            });
+            // Not openPfmPagePicker() -- it'd default-select the current
+            // primary from this effect's own (possibly stale) pfmAccounts
+            // closure. fetchPfmAccounts() above already pushed the fresh
+            // list into state; leave the radio unselected so the client
+            // picks explicitly instead of silently keeping whatever
+            // happened to land first.
+            setSelectedPfmAccountId("");
+            setPfmPickerPlatform(attempted);
+            return;
+          }
+
           // This is the ONLY place a successful PfM connection is ever
           // detected -- PfM's own post-connect redirect (configured in
           // their dashboard, not in this codebase) doesn't land back on a
@@ -411,6 +439,17 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
         description: `${account?.username ?? "That page"} is now used for publishing.`,
       });
       setPfmPickerPlatform(null);
+
+      // If this pick was what onboarding was waiting on (see the onFocus
+      // handler above), this is what actually advances it now that the
+      // ambiguity is resolved. No-ops harmlessly for a client who's already
+      // past onboarding and is just changing their page later --
+      // completeWorkflowStep only fires on a still-pending step.
+      completeWorkflowStep(clientAccountId, "client_oauth")
+        .then((completed) => {
+          if (completed) onTabChange?.("approvals");
+        })
+        .catch((e) => console.error("Failed to complete OAuth workflow step:", e));
     } catch (err) {
       toast({
         title: "Could not save selection",

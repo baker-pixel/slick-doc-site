@@ -102,6 +102,7 @@ serve(async (req) => {
       client_account_id: client_id,
       title: `Introductory LinkedIn Post — ${client.business_name}`,
       content_type: "linkedin_post",
+      platform: "linkedin",
       content_preview: postPreview,
       full_content: postContent,
       status: "pending",
