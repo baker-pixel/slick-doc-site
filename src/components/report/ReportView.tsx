@@ -13,7 +13,18 @@ import type { ReportData } from "./ReportConfig";
 // all render. One tree fed by one ReportData shape is what makes "what we
 // show" and "what we deliver" the same thing by construction, not two
 // implementations staying in sync by hand.
-export function ReportView({ data, printMode = false }: { data: ReportData; printMode?: boolean }) {
+interface ReportViewProps {
+  data: ReportData;
+  printMode?: boolean;
+  /** Suppress the embedded "Schedule a call" footer -- for pages (QuickAnalysis,
+   *  the gap-analysis result step) that already show their own CTA right below
+   *  the report, so the reader doesn't see the same "book a call" ask twice in
+   *  a row. Stays on for the PDF and the standalone shareable /report/:id page,
+   *  where it's the only CTA present. */
+  hideFooterCta?: boolean;
+}
+
+export function ReportView({ data, printMode = false, hideFooterCta = false }: ReportViewProps) {
   // Locked categories carry a placeholder score of 0 -- they'd always win
   // "weakest" otherwise, even though nothing was actually assessed there.
   const assessedScores = data.categoryScores.filter((c) => !c.locked);
@@ -54,7 +65,7 @@ export function ReportView({ data, printMode = false }: { data: ReportData; prin
 
       {data.actions.length > 0 && <ActionPlanSection actions={data.actions} />}
 
-      <FooterCTA />
+      {!hideFooterCta && <FooterCTA />}
     </PrintModeProvider>
   );
 }

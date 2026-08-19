@@ -456,11 +456,12 @@ const QuickAnalysis = () => {
                     differently-shaped report for what's conceptually the same thing. */}
                 {reportViewData && (
                   <div className="rounded-2xl border border-border overflow-hidden text-left">
-                    <ReportView data={reportViewData} />
+                    <ReportView data={reportViewData} hideFooterCta />
                   </div>
                 )}
 
-                {/* CTA */}
+                {/* CTA -- the only "book a call" ask on this page; ReportView's
+                    own footer CTA is suppressed above so it isn't asked twice in a row. */}
                 <Card className="border-primary/30 bg-primary/5">
                   <CardContent className="p-8 text-center">
                     <h3 className="text-xl font-semibold mb-2">Want us to fix all of this for you?</h3>

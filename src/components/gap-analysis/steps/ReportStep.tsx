@@ -253,10 +253,12 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
       </div>
 
       {/* Report -- same component tree the shareable /report/:id page renders,
-          so this inline view and that page can never show different things. */}
+          so this inline view and that page can never show different things.
+          Footer CTA suppressed here since the "What's Next?" card below already
+          asks to schedule a call -- the shareable page keeps it (it's the only CTA there). */}
       {reportViewData && (
         <div className="rounded-2xl border border-border overflow-hidden">
-          <ReportView data={reportViewData} />
+          <ReportView data={reportViewData} hideFooterCta />
         </div>
       )}
 
