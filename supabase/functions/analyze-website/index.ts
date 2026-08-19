@@ -4,6 +4,7 @@ import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
 import { parseOnPage } from "../_shared/seoSignals.ts";
 import { auditWebsite } from "../_shared/websiteAudit.ts";
+import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
 
 function getTier(score: number): "transformation" | "growth" | "optimization" {
   if (score <= 39) return "transformation";
@@ -272,6 +273,26 @@ Provide your analysis as a valid JSON object.`;
 
     applyDetectedFacts(analysis, signals);
 
+    // Two more SYSTEM categories a page fetch can honestly speak to --
+    // ground-truth detected (regex over the HTML), never LLM-guessed. The
+    // other two SYSTEM categories (Sequence & Nurture, Transaction
+    // Activation) need real business-operations answers no page fetch can
+    // provide, so Quick Analysis's frontend shows those locked rather than
+    // faking a score for them here.
+    analysis.engagement = scoreEngagementRetention(htmlContent);
+    analysis.metrics = scoreMetricsImprovement(htmlContent);
+
+    // Headline score = average of the 4 SYSTEM categories a site scan can
+    // actually assess (Search & Visibility merges seo+technical; Yield is
+    // conversion; Engagement/Metrics are the ground-truth signals above) --
+    // must match what QuickAnalysis.tsx computes and displays, so the score
+    // saved to `prospects` (and used for tier recommendation + the emailed
+    // PDF) never disagrees with the on-screen report for the same scan.
+    const searchVisibilityScore = Math.round((analysis.seo.score + analysis.technical.score) / 2);
+    const systemOverallScore = Math.round(
+      (searchVisibilityScore + analysis.conversion.score + analysis.engagement.score + analysis.metrics.score) / 4,
+    );
+
     if (prospectId) {
       const topWeaknesses = [
         ...analysis.seo.recommendations.slice(0, 1),
@@ -286,9 +307,10 @@ Provide your analysis as a valid JSON object.`;
       const { error: updateError } = await supabase
         .from("prospects")
         .update({
-          gap_score: analysis.overallScore,
+          gap_score: systemOverallScore,
           top_weaknesses: topWeaknesses,
-          recommended_tier: getTier(analysis.overallScore),
+          recommended_tier: getTier(systemOverallScore),
+          analysis_snapshot: analysis,
           ...(contextProfile ? { context_profile: contextProfile } : {}),
         })
         .eq("id", prospectId);

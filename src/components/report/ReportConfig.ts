@@ -13,6 +13,11 @@ export interface ReportData {
     label: string;
     score: number;
     status: "Strong" | "Moderate" | "Weak" | "Critical";
+    /** Category wasn't assessed (e.g. Quick Analysis can't see internal
+     *  business-ops categories from a URL scan alone) -- render as locked
+     *  instead of a fabricated score. */
+    locked?: boolean;
+    lockedReason?: string;
   }[];
   strengths: string[];
   gaps: string[];

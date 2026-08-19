@@ -12,22 +12,39 @@ const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
 
 let resend: Resend;
 
+interface ScoredCategory { score: number; findings: string[]; recommendations: string[]; }
+
+interface AnalysisSnapshot {
+  overallScore: number;
+  seo: ScoredCategory;
+  conversion: ScoredCategory;
+  technical: ScoredCategory;
+  engagement?: ScoredCategory;
+  metrics?: ScoredCategory;
+  quickWins?: { title: string; description: string }[];
+  summary?: string;
+  detectedStrengths?: string[];
+  detectedGaps?: string[];
+}
+
 interface ProspectData {
   name: string;
   email: string;
   website_url: string;
   gap_score: number | null;
   top_weaknesses: string[] | null;
-  seo_score: number | null;
-  conversion_score: number | null;
-  technical_score: number | null;
-  summary: string | null;
-  quick_wins: { title: string; description: string }[] | null;
+  // Full analyze-website output -- see migration 20260819100203. Absent on
+  // prospect rows created before that column existed; renderProspectPdf
+  // falls back to a thinner report (just the headline score + weaknesses)
+  // for those rather than crashing or showing fabricated zeros.
+  analysis_snapshot: AnalysisSnapshot | null;
 }
 
 // --- Same status/priority mapping ReportConfig.ts uses for the web report and the
 // server-rendered PDF, duplicated here since Deno edge functions can't import the
-// site's TSX/React source. Keep in sync with src/components/report/ReportConfig.ts. ---
+// site's TSX/React source. Keep in sync with src/components/report/ReportConfig.ts
+// and src/pages/QuickAnalysis.tsx (buildCategoryScores/computeOverallScore) --
+// this must produce the same numbers for the same scan. ---
 
 function scoreToStatus(score: number): "Strong" | "Moderate" | "Weak" | "Critical" {
   if (score >= 70) return "Strong";
@@ -42,35 +59,61 @@ function getTierLabel(score: number): string {
   return "Optimization";
 }
 
+const LOCKED_SYSTEM_CATEGORIES = [
+  { label: "Sequence & Nurture", reason: "Needs the full Gap Analysis — email/SMS follow-up setup isn't visible from a website scan." },
+  { label: "Transaction Activation", reason: "Needs the full Gap Analysis — sales response time and close rate aren't visible from a website scan." },
+];
+
 // --- PDF: rendered server-side from the exact same <ReportView> component tree the
 // web report and the manual "Download PDF" button use (api/render-report-pdf.ts),
 // instead of the old hand-drawn pdf-lib PDF that had its own divergent layout/colors. ---
 
 async function renderProspectPdf(prospect: ProspectData): Promise<Uint8Array> {
   const domain = prospect.website_url?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "";
+  const snapshot = prospect.analysis_snapshot;
 
-  const reportData = {
-    businessName: prospect.name || domain,
-    clientDomain: domain,
-    reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-    overallScore: prospect.gap_score ?? 0,
-    executiveSummary: prospect.summary ?? undefined,
-    biggestOpportunity: prospect.quick_wins?.[0]?.title,
-    categoryScores: [
-      { label: "SEO & Visibility", score: prospect.seo_score ?? 0, status: scoreToStatus(prospect.seo_score ?? 0) },
-      { label: "Conversion Elements", score: prospect.conversion_score ?? 0, status: scoreToStatus(prospect.conversion_score ?? 0) },
-      { label: "Technical Performance", score: prospect.technical_score ?? 0, status: scoreToStatus(prospect.technical_score ?? 0) },
-    ],
-    // No strengths data is persisted on `prospects` (only computed transiently client-side) --
-    // ReportView renders the strengths/gaps section fine with an empty strengths array.
-    strengths: [] as string[],
-    gaps: prospect.top_weaknesses ?? [],
-    actions: (prospect.quick_wins ?? []).map((w) => ({
-      title: w.title,
-      description: w.description,
-      tag: "Quick Win" as const,
-    })),
-  };
+  const reportData = snapshot
+    ? (() => {
+        const searchVisibilityScore = Math.round((snapshot.seo.score + snapshot.technical.score) / 2);
+        const scored = [
+          { label: "Search & Visibility", score: searchVisibilityScore, status: scoreToStatus(searchVisibilityScore) },
+          { label: "Yield Optimization", score: snapshot.conversion.score, status: scoreToStatus(snapshot.conversion.score) },
+          ...(snapshot.engagement ? [{ label: "Engagement & Retention", score: snapshot.engagement.score, status: scoreToStatus(snapshot.engagement.score) }] : []),
+          ...(snapshot.metrics ? [{ label: "Metrics & Improvement", score: snapshot.metrics.score, status: scoreToStatus(snapshot.metrics.score) }] : []),
+        ];
+        const overallScore = Math.round(scored.reduce((sum, c) => sum + c.score, 0) / scored.length);
+        const gaps = snapshot.detectedGaps?.length
+          ? snapshot.detectedGaps
+          : [...snapshot.seo.recommendations.slice(0, 1), ...snapshot.conversion.recommendations.slice(0, 1), ...snapshot.technical.recommendations.slice(0, 1)];
+
+        return {
+          businessName: prospect.name || domain,
+          clientDomain: domain,
+          reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+          overallScore,
+          executiveSummary: snapshot.summary,
+          biggestOpportunity: snapshot.quickWins?.[0]?.title,
+          categoryScores: [
+            ...scored,
+            ...LOCKED_SYSTEM_CATEGORIES.map((c) => ({ label: c.label, score: 0, status: "Critical" as const, locked: true, lockedReason: c.reason })),
+          ],
+          strengths: (snapshot.detectedStrengths?.length ? snapshot.detectedStrengths : snapshot.seo.findings).slice(0, 4),
+          gaps: gaps.slice(0, 4),
+          actions: (snapshot.quickWins ?? []).map((w) => ({ title: w.title, description: w.description, tag: "Quick Win" as const })),
+        };
+      })()
+    : {
+        // Legacy fallback for a prospect scanned before analysis_snapshot existed --
+        // best-effort single headline number, no per-category breakdown to show.
+        businessName: prospect.name || domain,
+        clientDomain: domain,
+        reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+        overallScore: prospect.gap_score ?? 0,
+        categoryScores: [] as { label: string; score: number; status: "Strong" | "Moderate" | "Weak" | "Critical" }[],
+        strengths: [] as string[],
+        gaps: prospect.top_weaknesses ?? [],
+        actions: [] as { title: string; description: string; tag: "Quick Win" }[],
+      };
 
   const res = await fetch(`${APP_URL}/api/render-report-pdf`, {
     method: "POST",

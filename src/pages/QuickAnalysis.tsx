@@ -28,11 +28,18 @@ interface ActionPlan {
   month2to3: { title: string; tasks: string[] };
 }
 
+interface ScoredCategory { score: number; findings: string[]; recommendations: string[]; }
+
 interface AnalysisResult {
   overallScore: number;
-  seo: { score: number; findings: string[]; recommendations: string[] };
-  conversion: { score: number; findings: string[]; recommendations: string[] };
-  technical: { score: number; findings: string[]; recommendations: string[] };
+  seo: ScoredCategory;
+  conversion: ScoredCategory;
+  technical: ScoredCategory;
+  // Ground-truth detected (not LLM-guessed) -- see systemSignals.ts. Optional
+  // only for backward compat with any cached analysis rows from before these
+  // existed; every fresh analysis has them.
+  engagement?: ScoredCategory;
+  metrics?: ScoredCategory;
   quickWins?: QuickWin[];
   actionPlan?: ActionPlan;
   summary: string;
@@ -40,6 +47,15 @@ interface AnalysisResult {
   detectedStrengths?: string[];
   detectedGaps?: string[];
 }
+
+// The two SYSTEM categories a URL-only scan can't honestly assess (no page
+// fetch reveals CRM setup, follow-up cadence, or sales close rate) -- shown
+// locked rather than guessed, so this report never looks like it's
+// inventing a number the full Gap Analysis form actually earns for real.
+const LOCKED_SYSTEM_CATEGORIES: { label: string; reason: string }[] = [
+  { label: "Sequence & Nurture", reason: "Needs the full Gap Analysis — email/SMS follow-up setup isn't visible from a website scan." },
+  { label: "Transaction Activation", reason: "Needs the full Gap Analysis — sales response time and close rate aren't visible from a website scan." },
+];
 
 const BUSINESS_TYPES = [
   "Restaurant",
@@ -178,7 +194,13 @@ const QuickAnalysis = () => {
   const buildGaps = (r: AnalysisResult): string[] =>
     (r.detectedGaps?.length
       ? r.detectedGaps
-      : [...r.seo.recommendations.slice(0, 1), ...r.conversion.recommendations.slice(0, 1), ...r.technical.recommendations.slice(0, 1)]
+      : [
+          ...r.seo.recommendations.slice(0, 1),
+          ...r.conversion.recommendations.slice(0, 1),
+          ...r.technical.recommendations.slice(0, 1),
+          ...(r.engagement?.recommendations.slice(0, 1) ?? []),
+          ...(r.metrics?.recommendations.slice(0, 1) ?? []),
+        ]
     ).slice(0, 4);
 
   const buildActions = (r: AnalysisResult) => {
@@ -194,21 +216,43 @@ const QuickAnalysis = () => {
       .map((rec, i) => ({ title: rec, description: "", tag: mapPriority("", i) }));
   };
 
-  const buildCategoryScores = (r: AnalysisResult) => [
-    { label: "SEO & Visibility", score: r.seo.score, status: scoreToStatus(r.seo.score) },
-    { label: "Conversion Elements", score: r.conversion.score, status: scoreToStatus(r.conversion.score) },
-    { label: "Technical Performance", score: r.technical.score, status: scoreToStatus(r.technical.score) },
-  ];
+  // Mirrors the full Gap Analysis form's 6 SYSTEM categories -- but only
+  // scores the 4 a website scan can honestly speak to (Search & Visibility
+  // merges the on-page SEO + technical findings; Yield Optimization is the
+  // conversion score; Engagement/Metrics come from ground-truth signals in
+  // systemSignals.ts). Sequence & Nurture and Transaction Activation stay
+  // locked -- they describe internal business operations no page fetch can see.
+  const buildCategoryScores = (r: AnalysisResult) => {
+    const searchVisibilityScore = Math.round((r.seo.score + r.technical.score) / 2);
+    const scored = [
+      { label: "Search & Visibility", score: searchVisibilityScore, status: scoreToStatus(searchVisibilityScore) },
+      { label: "Yield Optimization", score: r.conversion.score, status: scoreToStatus(r.conversion.score) },
+      ...(r.engagement ? [{ label: "Engagement & Retention", score: r.engagement.score, status: scoreToStatus(r.engagement.score) }] : []),
+      ...(r.metrics ? [{ label: "Metrics & Improvement", score: r.metrics.score, status: scoreToStatus(r.metrics.score) }] : []),
+    ];
+    const locked = LOCKED_SYSTEM_CATEGORIES.map((c) => ({
+      label: c.label, score: 0, status: "Critical" as const, locked: true, lockedReason: c.reason,
+    }));
+    return { scored, all: [...scored, ...locked] };
+  };
+
+  // Headline score reflects only what was actually assessed (avoids a
+  // number that can't be reconciled against the visible category cards).
+  const computeOverallScore = (scored: { score: number }[]) =>
+    scored.length > 0 ? Math.round(scored.reduce((sum, c) => sum + c.score, 0) / scored.length) : 0;
+
+  const categoryScores = result ? buildCategoryScores(result) : null;
+  const displayOverallScore = categoryScores ? computeOverallScore(categoryScores.scored) : 0;
 
   const reportViewData: ReportData | null = result
     ? {
         businessName: name || url,
         clientDomain: validatedUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
         reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-        overallScore: result.overallScore,
+        overallScore: displayOverallScore,
         aiReadinessScore,
         executiveSummary: result.summary,
-        categoryScores: buildCategoryScores(result),
+        categoryScores: categoryScores!.all,
         strengths: buildStrengths(result),
         gaps: buildGaps(result),
         actions: buildActions(result),
@@ -398,8 +442,8 @@ const QuickAnalysis = () => {
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 max-w-4xl mx-auto">
                 {/* Download + Tier Badge */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium ${getTierColor(getTier(result.overallScore))}`}>
-                    Recommended: {getTierLabel(getTier(result.overallScore))} Tier
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium ${getTierColor(getTier(displayOverallScore))}`}>
+                    Recommended: {getTierLabel(getTier(displayOverallScore))} Tier
                   </div>
                   <Button onClick={downloadPDF} disabled={isDownloading} variant="outline" className="gap-2">
                     {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}

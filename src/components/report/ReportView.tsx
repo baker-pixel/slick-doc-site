@@ -14,8 +14,11 @@ import type { ReportData } from "./ReportConfig";
 // show" and "what we deliver" the same thing by construction, not two
 // implementations staying in sync by hand.
 export function ReportView({ data, printMode = false }: { data: ReportData; printMode?: boolean }) {
-  const weakestPillar = data.categoryScores.length > 0
-    ? data.categoryScores.reduce((min, c) => (c.score < min.score ? c : min), data.categoryScores[0])
+  // Locked categories carry a placeholder score of 0 -- they'd always win
+  // "weakest" otherwise, even though nothing was actually assessed there.
+  const assessedScores = data.categoryScores.filter((c) => !c.locked);
+  const weakestPillar = assessedScores.length > 0
+    ? assessedScores.reduce((min, c) => (c.score < min.score ? c : min), assessedScores[0])
     : undefined;
 
   return (
