@@ -17,7 +17,7 @@ import {
   Search, CheckCircle2, XCircle, Loader2, AlertTriangle,
   TrendingUp, Lightbulb, RefreshCw,
   Globe, Wand2, ShieldCheck, Info, Zap,
-  Plug,
+  Plug, Sparkles, Lock, MessageSquare,
 } from "lucide-react";
 import { ConnectSitePanel } from "@/components/admin/content/ConnectSitePanel";
 import { SeoScoreCard } from "@/components/admin/shared/SeoScoreCard";
@@ -127,6 +127,30 @@ interface Audit {
   status: string;
   score: number | null;
   results: AuditResult | null;
+}
+
+// ai_visibility_scores — live, ongoing (monthly probe of ChatGPT/Claude for
+// this client's category+location). Gated to growth/transformation tier.
+interface AiVisibilityScore {
+  total_score: number;
+  mention_rate: number;
+  avg_position: number | null;
+  computed_at: string;
+}
+
+// ai_readiness_scores — free heuristic (schema/llms.txt/FAQ/crawlability),
+// but only ever written keyed to the prospect/gap-analysis submission that
+// preceded signup, not recomputed for an active client. So this is a
+// point-in-time snapshot from onboarding, not a live number.
+interface AiReadinessScore {
+  schema_score: number;
+  llms_txt_score: number;
+  faq_structure_score: number;
+  entity_consistency_score: number;
+  crawlability_score: number;
+  fact_density_score: number;
+  total_score: number;
+  computed_at: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -292,6 +316,12 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const [hasWebsiteUrl, setHasWebsiteUrl] = useState(true);
   const autoScanFired = useRef(false);
 
+  // AI search visibility — separate from the Google-facing audit above.
+  const [clientTier, setClientTier] = useState<string | null>(null);
+  const [aiVisibility, setAiVisibility] = useState<AiVisibilityScore | null>(null);
+  const [aiReadiness, setAiReadiness] = useState<AiReadinessScore | null>(null);
+  const [loadingAi, setLoadingAi] = useState(true);
+
   useEffect(() => {
     supabase
       .from("client_accounts")
@@ -299,6 +329,46 @@ export function ClientSeoTab({ clientAccountId }: Props) {
       .eq("id", clientAccountId)
       .maybeSingle()
       .then(({ data }) => setHasWebsiteUrl(!!data?.website_url?.trim()));
+  }, [clientAccountId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingAi(true);
+    (async () => {
+      const { data: client } = await supabase
+        .from("client_accounts")
+        .select("tier, submission_id")
+        .eq("id", clientAccountId)
+        .maybeSingle();
+      if (cancelled) return;
+      setClientTier((client as { tier: string | null } | null)?.tier ?? null);
+
+      const [{ data: visibility }, submissionId] = await Promise.all([
+        supabase
+          .from("ai_visibility_scores")
+          .select("total_score, mention_rate, avg_position, computed_at")
+          .eq("client_id", clientAccountId)
+          .maybeSingle(),
+        Promise.resolve((client as { submission_id: string | null } | null)?.submission_id ?? null),
+      ]);
+      if (!cancelled) setAiVisibility((visibility as AiVisibilityScore | null) ?? null);
+
+      // Readiness is only ever written against the onboarding submission/prospect,
+      // never recomputed for an active client -- so this is a one-time snapshot,
+      // not a tracked metric. Skip the lookup entirely if there's no submission to join through.
+      if (submissionId) {
+        const { data: readiness } = await supabase
+          .from("ai_readiness_scores")
+          .select("schema_score, llms_txt_score, faq_structure_score, entity_consistency_score, crawlability_score, fact_density_score, total_score, computed_at")
+          .eq("submission_id", submissionId)
+          .maybeSingle();
+        if (!cancelled) setAiReadiness((readiness as AiReadinessScore | null) ?? null);
+      } else if (!cancelled) {
+        setAiReadiness(null);
+      }
+      if (!cancelled) setLoadingAi(false);
+    })();
+    return () => { cancelled = true; };
   }, [clientAccountId]);
 
   const loadAudit = useCallback(async () => {
@@ -500,6 +570,89 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
         </div>
+
+        {/* ── AI Search Visibility ──────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI Search Visibility
+              <InfoTip text="Separate from Google rankings: this tracks whether ChatGPT and Claude actually mention your business when someone asks for a recommendation in your category." />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingAi ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : clientTier === "foundation" ? (
+              <div className="flex items-start gap-3 py-2 text-muted-foreground">
+                <Lock className="h-5 w-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Available on Growth &amp; Transformation plans</p>
+                  <p className="text-xs mt-1">We check monthly whether ChatGPT and Claude recommend you when someone asks for a business like yours nearby.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {aiVisibility ? (
+                  <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <ScoreRing score={aiVisibility.total_score} />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className={`text-2xl font-bold ${scoreColor(aiVisibility.total_score)}`}>
+                          {aiVisibility.total_score}
+                        </span>
+                        <span className="text-xs text-muted-foreground">/ 100</span>
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-1.5 w-full text-sm">
+                      <p className="flex items-center gap-1.5">
+                        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        Mentioned in <span className="font-semibold">{Math.round(aiVisibility.mention_rate * 100)}%</span> of test questions this month
+                      </p>
+                      {aiVisibility.avg_position !== null && (
+                        <p className="text-muted-foreground">Average rank when mentioned: #{aiVisibility.avg_position.toFixed(1)}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground/70">Last checked {new Date(aiVisibility.computed_at).toLocaleDateString()} · rechecked monthly</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Your first check is queued — results land within your first monthly cycle.
+                  </p>
+                )}
+
+                {aiReadiness && (
+                  <div className="border-t pt-3">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      From your onboarding scan ({new Date(aiReadiness.computed_at).toLocaleDateString()}) — how legible your site is to AI crawlers:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: "Schema markup", ok: aiReadiness.schema_score >= 15 },
+                        { label: "llms.txt", ok: aiReadiness.llms_txt_score >= 8 },
+                        { label: "FAQ structure", ok: aiReadiness.faq_structure_score >= 14 },
+                        { label: "Crawlable by AI bots", ok: aiReadiness.crawlability_score >= 10 },
+                      ].map((item) => (
+                        <Badge
+                          key={item.label}
+                          variant="secondary"
+                          className={item.ok
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-transparent"
+                            : "bg-red-500/10 text-red-700 dark:text-red-400 border-transparent"}
+                        >
+                          {item.ok ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                          {item.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* ── WordPress Plugin Connection Status ───────────── */}
         {wpSite === undefined ? null : (wpSite === null || wpSite.status === "disconnected") ? (
