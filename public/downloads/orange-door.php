@@ -397,10 +397,28 @@ function od_apply_single_fix( $fix ) {
             ]);
             return is_wp_error( $result ) ? $result->get_error_message() : true;
 
+        case 'schema_jsonld':
+            json_decode( $value );
+            if ( json_last_error() !== JSON_ERROR_NONE ) return 'Invalid JSON-LD payload';
+            update_post_meta( $post_id, '_od_schema_jsonld', $value );
+            return true;
+
         default:
             return 'Unknown field: ' . $field;
     }
 }
+
+// Self-contained output: no assumption about Yoast/RankMath schema graphs
+// (varies by plugin/version), so we render our own <script> block directly.
+function od_output_schema_jsonld() {
+    if ( ! is_singular() ) return;
+    $json = get_post_meta( get_the_ID(), '_od_schema_jsonld', true );
+    if ( empty( $json ) || ! is_string( $json ) ) return;
+    json_decode( $json );
+    if ( json_last_error() !== JSON_ERROR_NONE ) return;
+    echo '<script type="application/ld+json">' . str_ireplace( '</script', '<\/script', $json ) . '</script>' . "\n";
+}
+add_action( 'wp_head', 'od_output_schema_jsonld' );
 
 
 // ─────────────────────────────────────────────

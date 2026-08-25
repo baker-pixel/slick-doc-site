@@ -32,6 +32,7 @@ import { ClientSeoTab } from "@/components/client-portal/ClientSeoTab";
 import ClientProspectsTab from "@/components/client-portal/ClientProspectsTab";
 import { TierGate } from "@/components/client-portal/TierGate";
 import { OnboardingTour } from "@/components/client-portal/OnboardingTour";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface ClientPortalUser {
   id: string;
@@ -477,7 +478,9 @@ export default function ClientPortal() {
           {/* Main Content */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8">
             <div className="animate-fade-in max-w-7xl mx-auto">
-              {renderContent()}
+              <ErrorBoundary key={activeTab} variant="inline">
+                {renderContent()}
+              </ErrorBoundary>
             </div>
           </main>
         </SidebarInset>

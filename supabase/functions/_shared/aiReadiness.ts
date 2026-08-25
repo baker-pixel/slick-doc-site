@@ -88,7 +88,7 @@ function scoreEntityConsistency(blocks: Record<string, unknown>[], textSample: s
   return Math.min(score, 20);
 }
 
-async function scoreCrawlability(origin: string, robots: { ok: boolean; body: string }): Promise<number> {
+async function scoreCrawlability(origin: string, robots: { ok: boolean; body: string }, looksLikeEmptySpa: boolean): Promise<number> {
   let score = 0;
   if (robots.ok) {
     score += 5;
@@ -97,6 +97,10 @@ async function scoreCrawlability(origin: string, robots: { ok: boolean; body: st
   }
   const sitemap = await fetchOk(`${origin}/sitemap.xml`);
   if (sitemap.ok && /<loc>/i.test(sitemap.body)) score += 5;
+  // robots.txt/sitemap permission is moot if the actual content isn't there
+  // for a non-JS-executing crawler to read -- the exact failure mode this
+  // score exists to catch.
+  if (looksLikeEmptySpa) score = Math.floor(score / 2);
   return score;
 }
 
@@ -139,7 +143,7 @@ export async function computeAiReadiness(html: string, url: string, signals: Sig
   const entity_consistency_score = scoreEntityConsistency(blocks, signals.text_sample);
   const fact_density_score = scoreFactDensity(signals);
   const [crawlability_score, llms_txt_score] = origin
-    ? await Promise.all([scoreCrawlability(origin, robots), scoreLlmsTxt(origin, robots.body)])
+    ? await Promise.all([scoreCrawlability(origin, robots, signals.looks_like_empty_spa), scoreLlmsTxt(origin, robots.body)])
     : [0, 0];
 
   const total_score = Math.min(

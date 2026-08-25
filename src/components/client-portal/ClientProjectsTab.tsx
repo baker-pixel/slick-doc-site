@@ -723,7 +723,7 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
 
                 {/* Milestones */}
                 <AnimatePresence>
-                  {isExpanded && projectMilestones.length > 0 && (
+                  {isExpanded && (projectMilestones.length > 0 || project.kind === "social") && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
@@ -752,11 +752,15 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
                                 ) : (
                                   <Sparkles className="h-4 w-4 mr-2" />
                                 )}
-                                Change Topics
+                                {projectMilestones.length > 0 ? "Change Topics" : "Generate Topics"}
                               </Button>
                             )}
                           </div>
-                          {kindMeta[project.kind]?.hint && (
+                          {projectMilestones.length === 0 && project.kind === "social" ? (
+                            <p className="text-xs text-muted-foreground mb-4">
+                              No content pillars yet — click "Generate Topics" to have your Social Agent set your plan's themes now instead of waiting for the weekly refresh.
+                            </p>
+                          ) : kindMeta[project.kind]?.hint && (
                             <p className="text-xs text-muted-foreground mb-4">{kindMeta[project.kind].hint}</p>
                           )}
                           <div className="relative">

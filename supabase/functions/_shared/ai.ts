@@ -2,6 +2,7 @@
 // structured-output handling, and usage logging.
 
 import { serviceClient } from "./supabase.ts";
+import { functionErrorAlert } from "./alerts.ts";
 
 export const MODELS = {
   /** Default reasoning/content model. */
@@ -83,6 +84,13 @@ interface RunLogEntry {
   promptTokens?: number | null;
   completionTokens?: number | null;
   errorMessage?: string;
+}
+
+/** Best-effort admin alert when an AI call exhausts every model/retry. Never throws. */
+function alertOnFinalFailure(source: string, model: string, err: unknown): void {
+  const client = getLogClient();
+  if (!client) return;
+  functionErrorAlert(client, `ai:${source}`, err, { model }).catch(() => {});
 }
 
 /** Best-effort observability write. Never throws — logging must not affect the caller. */
@@ -172,10 +180,19 @@ function throwForStatus(res: Response, bodyText: string, source: string): never 
     throw new AIError(`AI provider error: ${res.status}`, res.status, true);
   }
   // Groq returns 400 json_validate_failed when the model emits malformed
-  // JSON in jsonMode — a sampling flake, not a bad request. Retrying with
-  // the same prompt usually succeeds.
+  // JSON in jsonMode -- usually a sampling flake, retryable. But if it's the
+  // SAME prompt failing this way across every retry and every fallback
+  // model, that's not noise, it's something in the input consistently
+  // breaking JSON-mode -- log the actual rejected output so that's
+  // diagnosable instead of just "invalid JSON" with no detail.
   if (res.status === 400 && bodyText.includes("json_validate_failed")) {
-    throw new AIError("Model produced invalid JSON", 400, true);
+    console.error(`[ai] ${source} json_validate_failed: ${bodyText.slice(0, 800)}`);
+    let detail = "";
+    try {
+      const failedGen = JSON.parse(bodyText)?.error?.failed_generation;
+      if (typeof failedGen === "string") detail = ` -- model output: ${failedGen.slice(0, 200)}`;
+    } catch { /* no failed_generation field -- fall back to the generic message */ }
+    throw new AIError(`Model produced invalid JSON${detail}`, 400, true);
   }
   console.error(`[ai] ${source} non-retryable error ${res.status}: ${bodyText.slice(0, 500)}`);
   const providerMessage = extractProviderErrorMessage(bodyText);
@@ -354,6 +371,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
               latencyMs: Date.now() - callStarted,
               errorMessage: e instanceof Error ? e.message : String(e),
             });
+            alertOnFinalFailure(source, model, e);
             throw e;
           }
           break;
@@ -384,6 +402,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
     latencyMs: Date.now() - callStarted,
     errorMessage: finalError.message,
   });
+  alertOnFinalFailure(source, models[models.length - 1], finalError);
 
   throw finalError;
 }

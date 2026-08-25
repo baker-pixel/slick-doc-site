@@ -34,7 +34,7 @@ export const CHECKS: Record<string, CheckDef> = {
   multiple_h1:          { id: "multiple_h1", category: "on_page", title: "Multiple H1 headings", severity: "warning", impact: 2, effort: 2, wp_applyable: false },
   images_missing_alt:   { id: "images_missing_alt", category: "on_page", title: "Images missing alt text", severity: "warning", impact: 3, effort: 2, wp_applyable: true, fixType: "wp_image_alt" },
   missing_canonical:    { id: "missing_canonical", category: "technical", title: "Missing canonical tag", severity: "warning", impact: 3, effort: 1, wp_applyable: true, fixType: "wp_canonical" },
-  missing_schema:       { id: "missing_schema", category: "technical", title: "No structured data (schema.org)", severity: "warning", impact: 3, effort: 3, wp_applyable: false },
+  missing_schema:       { id: "missing_schema", category: "technical", title: "No structured data (schema.org)", severity: "warning", impact: 3, effort: 3, wp_applyable: true, fixType: "wp_schema_jsonld" },
   missing_viewport:     { id: "missing_viewport", category: "technical", title: "Missing mobile viewport tag", severity: "critical", impact: 4, effort: 1, wp_applyable: false },
   missing_open_graph:   { id: "missing_open_graph", category: "technical", title: "Missing Open Graph tags", severity: "warning", impact: 2, effort: 2, wp_applyable: false },
   thin_content:         { id: "thin_content", category: "content", title: "Thin content", severity: "warning", impact: 3, effort: 4, wp_applyable: false },

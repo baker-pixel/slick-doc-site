@@ -2,6 +2,8 @@ import { Component, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
+  /** "inline" fits inside an existing layout (e.g. a portal tab) instead of taking over the viewport. */
+  variant?: "full" | "inline";
 }
 
 interface State {
@@ -36,12 +38,21 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const isInline = this.props.variant === "inline";
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div
+          className={
+            isInline
+              ? "flex items-center justify-center py-16 px-4"
+              : "min-h-screen flex items-center justify-center bg-background p-4"
+          }
+        >
           <div className="text-center max-w-md">
             <h1 className="text-2xl font-semibold text-foreground mb-2">Something went wrong</h1>
             <p className="text-muted-foreground mb-6 text-sm">
-              An unexpected error occurred. Please refresh the page.
+              {isInline
+                ? "This section hit an error. Try another tab, or refresh the page if it keeps happening."
+                : "An unexpected error occurred. Please refresh the page."}
             </p>
             <button
               onClick={() => window.location.reload()}

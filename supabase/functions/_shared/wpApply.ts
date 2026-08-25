@@ -34,6 +34,7 @@ const TYPE_TO_FIELD: Record<string, string> = {
   wp_canonical: "canonical",
   wp_slug: "slug",
   wp_title: "title",
+  wp_schema_jsonld: "schema_jsonld",
 };
 
 function basicAuthHeader(user: string, pass: string) {
