@@ -28,6 +28,7 @@ serve(async (req) => {
       stale_draft_alert: 0,
       stale_prospect_alert: 0,
       stale_automation_step_alert: 0,
+      stale_client_approval_reenqueued: 0,
     };
 
     // ── Sweep 2: workflow_tasks stuck in "running" ──────────────────────
@@ -333,6 +334,67 @@ serve(async (req) => {
         });
         summary.stale_automation_step_alert = 1;
       }
+    }
+
+    // ── Sweep 9: client_approval unlocked but its draft never got generated ──
+    // completeWorkflowStep.ts flips this step to "pending" directly from the
+    // browser, then fire-and-forgets advance-workflow to run the cascade that
+    // actually enqueues generate-approval-draft (workflowUnlock.ts). If that
+    // request never completes -- tab closed, connection dropped mid-cascade --
+    // the step is left "pending" with no draft and no queued job, and nothing
+    // else here catches it: sweep 5 only touches steps still "locked", and
+    // sweep 8 above explicitly excludes every client_% task type. Found live:
+    // a step sat like this for 14 days with zero alerts before a client saw a
+    // permanent loading spinner. Re-enqueue directly since the fix is known
+    // and cheap; alert either way so it's visible.
+    const STALE_APPROVAL_MINUTES = 30;
+    const staleApprovalCutoff = new Date(now.getTime() - STALE_APPROVAL_MINUTES * 60_000);
+    const { data: pendingApprovalSteps, error: pendingApprovalErr } = await supabase
+      .from("workflow_steps")
+      .select("id, workflow_id, client_id, depends_on")
+      .eq("task_type", "client_approval")
+      .eq("status", "pending");
+
+    if (pendingApprovalErr) throw pendingApprovalErr;
+
+    for (const step of pendingApprovalSteps ?? []) {
+      if (!step.client_id) continue;
+
+      const { data: existingDraft } = await supabase
+        .from("content_approvals")
+        .select("id")
+        .eq("client_account_id", step.client_id)
+        .limit(1)
+        .maybeSingle();
+      if (existingDraft) continue; // draft exists -- just waiting on the client, nothing wrong
+
+      const { data: depStep } = await supabase
+        .from("workflow_steps")
+        .select("completed_at")
+        .eq("id", step.depends_on)
+        .maybeSingle();
+      const unlockedAt = depStep?.completed_at ? new Date(depStep.completed_at) : null;
+      if (!unlockedAt || unlockedAt > staleApprovalCutoff) continue; // give the normal path time to finish first
+
+      const { error: enqueueErr } = await supabase.rpc("agent_jobs_enqueue", {
+        msg: {
+          target: "generate-approval-draft",
+          idempotencyKey: `approval-draft:${step.id}`,
+          body: { client_id: step.client_id, workflow_id: step.workflow_id, step_id: step.id },
+        },
+      });
+
+      await logAlert(supabase, {
+        source: "check-stalled-workflows",
+        alertType: "client_approval_draft_missing",
+        severity: "high",
+        title: "Client approval step unlocked with no draft generated",
+        message: enqueueErr
+          ? `Step ${step.id} (client ${step.client_id}) has been "pending" with no content_approvals row for over ${STALE_APPROVAL_MINUTES}min. Re-enqueue of generate-approval-draft also failed: ${enqueueErr.message}`
+          : `Step ${step.id} (client ${step.client_id}) had been "pending" with no content_approvals row for over ${STALE_APPROVAL_MINUTES}min -- likely the advance-workflow cascade that enqueues generate-approval-draft never completed. Re-enqueued automatically.`,
+        metadata: { step_id: step.id, workflow_id: step.workflow_id, client_id: step.client_id },
+      });
+      if (!enqueueErr) summary.stale_client_approval_reenqueued++;
     }
 
     return jsonResponse({ checked: true, ...summary });
