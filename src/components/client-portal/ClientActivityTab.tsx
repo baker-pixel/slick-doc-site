@@ -427,6 +427,12 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
 
   // Client-facing onboarding steps only (used for progress bar before automation kicks in)
   const clientSteps = useMemo(() => workflowSteps.filter((s) => s.task_type.startsWith("client_")), [workflowSteps]);
+
+  // The intake form (client_form step) is a separate action from the SYSTEM
+  // Score, which comes from the gap analysis quiz. Once the client has
+  // submitted the intake form, never nag them to "complete" it again just
+  // because no gap analysis score exists yet.
+  const intakeCompleted = workflowSteps.some((s) => s.task_type === "client_form" && s.status === "completed");
   const clientStepsDone = useMemo(() => clientSteps.filter((s) => s.status === "completed").length, [clientSteps]);
   const clientStepsTotal = clientSteps.length;
   const onboardingComplete = clientStepsTotal > 0 && clientStepsDone === clientStepsTotal;
@@ -870,7 +876,11 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       );
     }
 
-    // No gap analysis found — prompt the client to fill out the intake form
+    // Already submitted the intake form — no gap analysis score yet, but
+    // there's nothing left for the client to do here.
+    if (intakeCompleted) return null;
+
+    // No gap analysis found and intake not yet submitted — prompt the client
     return (
       <Alert className="border-orange-400/40 bg-orange-500/5">
         <AlertTriangle className="h-4 w-4 text-orange-500" />

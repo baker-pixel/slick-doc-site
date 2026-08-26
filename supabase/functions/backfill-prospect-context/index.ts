@@ -151,6 +151,36 @@ serve(async (req: Request) => {
     // the drip can run without manual email entry.
     let emailsEnriched = 0;
     const hunterKey = Deno.env.get("HUNTER_API_KEY");
+    if (!hunterKey) {
+      const { count: waitingForEmail } = await supabase
+        .from("prospects")
+        .select("id", { count: "exact", head: true })
+        .or("email.is.null,email.eq.")
+        .not("website_url", "is", null)
+        .neq("website_url", "")
+        .in("status", ["discovered", "pending"]);
+
+      if ((waitingForEmail ?? 0) > 0) {
+        const { data: existingAlert } = await supabase
+          .from("automation_alerts")
+          .select("id")
+          .eq("alert_type", "hunter_api_key_missing")
+          .is("acknowledged_at", null)
+          .limit(1)
+          .maybeSingle();
+
+        if (!existingAlert) {
+          await supabase.from("automation_alerts").insert({
+            alert_type: "hunter_api_key_missing",
+            severity: "warning",
+            title: "Prospects stuck without email — HUNTER_API_KEY not configured",
+            message: `${waitingForEmail} discovered prospect(s) have no email and can't be enriched or approved because HUNTER_API_KEY is not set in Supabase edge function secrets.`,
+            source: "backfill-prospect-context",
+            metadata: { waitingForEmail },
+          });
+        }
+      }
+    }
     if (hunterKey) {
       const { data: noEmail } = await supabase
         .from("prospects")

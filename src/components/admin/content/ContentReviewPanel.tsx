@@ -378,7 +378,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
       // password-only admin login never establishes.
       const { data, error } = await callAdminApi<{ alreadyQueued?: boolean; status?: string; partialFailure?: boolean }>(
         adminPassword,
-        { action: "publishContentForApproval", contentId: publishingContent.id },
+        { action: "publishContentForApproval", data: { contentId: publishingContent.id } },
       );
 
       if (error) throw new Error(error);

@@ -263,7 +263,7 @@ serve(async (req) => {
         .from("workflow_steps")
         .update({ status: "completed", completed_at: new Date().toISOString(), result })
         .eq("id", stepId)
-        .eq("status", "in_progress");
+        .in("status", ["in_progress", "failed"]);
 
       await unlockReadySteps(supabase, workflowId, stepNumber ?? null, clientId ?? null);
     }
