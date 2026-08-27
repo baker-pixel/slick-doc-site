@@ -57,6 +57,9 @@ export interface AICallOptions {
    * omit for one-off/ad-hoc calls that don't need tracking.
    */
   promptId?: string;
+  /** Skip the admin automation_alerts write on final failure. Use for
+   * callers that already catch and treat failure as non-fatal. */
+  silent?: boolean;
 }
 
 let logClient: ReturnType<typeof serviceClient> | null | undefined;
@@ -371,7 +374,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
               latencyMs: Date.now() - callStarted,
               errorMessage: e instanceof Error ? e.message : String(e),
             });
-            alertOnFinalFailure(source, model, e);
+            if (!opts.silent) alertOnFinalFailure(source, model, e);
             throw e;
           }
           break;
@@ -402,7 +405,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
     latencyMs: Date.now() - callStarted,
     errorMessage: finalError.message,
   });
-  alertOnFinalFailure(source, models[models.length - 1], finalError);
+  if (!opts.silent) alertOnFinalFailure(source, models[models.length - 1], finalError);
 
   throw finalError;
 }

@@ -31,6 +31,7 @@ export async function critiqueContent(
       maxTokens: 300,
       temperature: 0,
       retries: 0,
+      silent: true,
     });
   } catch (e) {
     console.warn("[content-qa] critique failed (non-fatal):", e instanceof Error ? e.message : e);
@@ -80,6 +81,7 @@ export async function critiqueContentBatch(
       maxTokens: Math.min(300 * items.length, 4000),
       temperature: 0,
       retries: 0,
+      silent: true,
     });
     if (!Array.isArray(result.verdicts) || result.verdicts.length !== items.length) {
       throw new Error(`expected ${items.length} verdicts, got ${result.verdicts?.length ?? 0}`);
