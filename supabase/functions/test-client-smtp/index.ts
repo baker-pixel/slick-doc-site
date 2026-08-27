@@ -20,10 +20,42 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabase = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Caller must be a portal user of this client, or an admin -- same check
+    // every other client-portal edge function does, since verify_jwt is off
+    // and clientId alone would otherwise let anyone probe/trigger sends for
+    // any client's connected mailbox.
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: portalUser } = await supabase
+      .from("client_portal_users")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("client_account_id", clientId)
+      .maybeSingle();
+    if (!portalUser) {
+      const { data: isAdmin } = await supabase.rpc("has_role", { _role: "admin", _user_id: user.id });
+      if (isAdmin !== true) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     const { data: cred } = await supabase
       .from("client_oauth_tokens")
