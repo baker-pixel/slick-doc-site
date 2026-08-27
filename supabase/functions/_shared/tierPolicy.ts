@@ -48,7 +48,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
   foundation: {
     tier: "foundation",
     seo: { crawlPages: 5, reauditCadenceDays: 90, applyMode: "off" },
-    social: { contentTypes: ["google_post"], postsPerMonth: 4 },
+    social: { contentTypes: ["social_post"], postsPerMonth: 4 },
     prospect: { enabled: false, discoveryBatch: 0 },
     aiVisibility: { enabled: false, promptsPerMonth: 0 },
     reporting: { weekly: false, monthly: true },
