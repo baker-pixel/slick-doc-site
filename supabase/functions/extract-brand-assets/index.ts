@@ -491,6 +491,11 @@ Return this exact JSON structure (arrays of strings, all lowercase, no nulls):
       prompt,
       maxTokens: 600,
       temperature: 0.3,
+      // Best-effort enrichment -- the catch below already swallows any
+      // failure and returns [] with zero impact on the rest of brand
+      // extraction, so a Groq JSON-mode flake here shouldn't page anyone.
+      // Same fix as content-qa (b399b5f).
+      silent: true,
     });
 
     const results: BrandVoiceAsset[] = [];
