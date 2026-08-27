@@ -41,16 +41,22 @@ const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: Weekl
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post",   weekFilter: [1, 3] } },
 ];
 
-function buildWeeklyPlan(tier: string | null | undefined): WeeklySlot[] {
+// Candidates for a platform the client has actually connected go first --
+// matters once postsPerMonth budgeting is back on (see git history for the
+// LinkedIn-only-forever bug this ordering fixes).
+// ponytail: postsPerMonth budget cap disabled per request -- every candidate
+// matching the tier's allowed content types gets scheduled, uncapped. Re-add
+// the `c.perMonth > budget` check (removed here) to bring the cap back.
+function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Set<string>): WeeklySlot[] {
   const social = tierPolicy(tier).social;
   const allowed = new Set(social.contentTypes);
-  let budget = social.postsPerMonth;
+  const candidates = [...SLOT_CANDIDATES].sort((a, b) =>
+    Number(connectedPlatforms.has(b.slot.platform)) - Number(connectedPlatforms.has(a.slot.platform))
+  );
   const plan: WeeklySlot[] = [];
-  for (const c of SLOT_CANDIDATES) {
+  for (const c of candidates) {
     if (!allowed.has(c.policyType)) continue;
-    if (c.perMonth > budget) continue;
     plan.push(c.slot);
-    budget -= c.perMonth;
   }
   return plan;
 }
@@ -139,12 +145,23 @@ serve(async (req) => {
       occupied.add(`${slot.client_account_id}:${slot.platform}:${dateKey(new Date(slot.scheduled_for))}`);
     }
 
+    const { data: connectedAccounts } = await supabase
+      .from("client_postforme_accounts")
+      .select("client_id, platform")
+      .in("client_id", clientIds)
+      .eq("status", "connected");
+    const connectedByClient = new Map<string, Set<string>>();
+    for (const acct of connectedAccounts || []) {
+      if (!connectedByClient.has(acct.client_id)) connectedByClient.set(acct.client_id, new Set());
+      connectedByClient.get(acct.client_id)!.add(acct.platform);
+    }
+
     const allRows: any[] = [];
     const summary: { client: string; tier: string; created: number }[] = [];
 
     for (const client of clients) {
       const tier = (client.tier || "foundation").toLowerCase();
-      const plan: WeeklySlot[] = buildWeeklyPlan(tier);
+      const plan: WeeklySlot[] = buildWeeklyPlan(tier, connectedByClient.get(client.id) ?? new Set());
       const clientRows: any[] = [];
 
       for (let week = 0; week < 4; week++) {
