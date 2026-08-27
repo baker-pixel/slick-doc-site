@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logActivity } from "../_shared/activityLog.ts";
+import { sendViaClientEmail } from "../_shared/clientEmailSend.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -402,18 +403,43 @@ const handler = async (req: Request): Promise<Response> => {
         // rules). The unsubscribe fn acts on query params, so an empty-body
         // provider POST works.
         const oneClickUrl = `${supabaseUrl}/functions/v1/unsubscribe?email=${encodeURIComponent(email.recipient_email)}&token=${btoa(email.recipient_email)}&action=unsubscribe`;
-        const emailResponse = await resend.emails.send({
-          from: Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>",
-          to: [email.recipient_email],
-          subject: email.subject,
-          html: trackedHtml,
-          headers: {
-            "List-Unsubscribe": `<${oneClickUrl}>`,
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-          },
-        });
 
-        console.log("Email sent:", emailResponse);
+        // Lead outreach (prospect_outreach drip steps, the only email_queue
+        // rows that carry a client_id) prefers the client's own connected
+        // SMTP mailbox when one exists -- replies land in their inbox and
+        // deliverability rides their domain reputation instead of the shared
+        // no-reply sender. Falls back to Resend below for every other email
+        // type, and for outreach clients who haven't connected a mailbox (or
+        // whose credentials are broken).
+        const emailMeta = email.metadata as Record<string, unknown> | null;
+        let sentVia: string = "resend";
+        let resendId: string | null = null;
+
+        const clientSendResult = emailMeta?.client_id
+          ? await sendViaClientEmail(supabase, emailMeta.client_id as string, {
+              to: email.recipient_email,
+              subject: email.subject,
+              html: trackedHtml,
+              listUnsubscribeUrl: oneClickUrl,
+            })
+          : { sent: false };
+
+        if (clientSendResult.sent) {
+          sentVia = clientSendResult.provider!;
+        } else {
+          const emailResponse = await resend.emails.send({
+            from: Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>",
+            to: [email.recipient_email],
+            subject: email.subject,
+            html: trackedHtml,
+            headers: {
+              "List-Unsubscribe": `<${oneClickUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+          });
+          resendId = emailResponse.data?.id ?? null;
+          console.log("Email sent via Resend:", emailResponse);
+        }
 
         // Update queue status
         await supabase
@@ -427,9 +453,9 @@ const handler = async (req: Request): Promise<Response> => {
           recipient_email: email.recipient_email,
           subject: email.subject,
           status: "sent",
-          resend_id: emailResponse.data?.id,
+          resend_id: resendId,
           tracking_id: trackingId,
-          metadata: email.metadata,
+          metadata: { ...(email.metadata as Record<string, unknown> | null), sent_via: sentVia },
         });
 
         // Prospect-outreach sequence steps carry prospect_id/drip_step in
