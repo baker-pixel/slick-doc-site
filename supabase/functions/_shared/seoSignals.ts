@@ -21,6 +21,16 @@ export interface PageSignals {
   has_viewport: boolean;
   has_canonical: boolean;
   has_schema: boolean;
+  // Narrower than has_schema (which is "any JSON-LD present at all" -- true
+  // even for e.g. a lone BreadcrumbList). These check actual @type values so
+  // the AEO entity/FAQ fixes don't skip a page that has unrelated schema but
+  // no real business-entity or FAQ markup.
+  has_entity_schema: boolean;
+  has_faq_schema: boolean;
+  // Heading-phrased-as-question + its following text, extracted only when
+  // both are genuinely present on the page -- feeds the FAQPage schema fix,
+  // which must never mark up content that isn't actually on the page.
+  qa_pairs: { question: string; answer: string }[];
   has_open_graph: boolean;
   looks_like_empty_spa: boolean;
   text_sample: string;
@@ -194,6 +204,47 @@ async function getPageSpeed(url: string): Promise<PageSpeed | null> {
   }
 }
 
+// ── Structured-data introspection ───────────────────────────────────────────
+// Pulls @type values out of every JSON-LD block so callers can tell "has any
+// schema" apart from "has the specific entity/FAQ schema that matters here."
+function jsonLdTypes(html: string): Set<string> {
+  const types = new Set<string>();
+  for (const m of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(m[1].trim());
+      const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.["@graph"]) ? parsed["@graph"] : [parsed];
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        const t = (item as Record<string, unknown>)["@type"];
+        (Array.isArray(t) ? t : [t]).forEach((x) => { if (typeof x === "string") types.add(x.toLowerCase()); });
+      }
+    } catch {
+      // malformed JSON-LD -- skip it, don't let one bad block sink detection
+    }
+  }
+  return types;
+}
+
+// Extracts real on-page Q&A: a heading phrased as a question, paired with the
+// text that follows it up to the next heading. Only content actually visible
+// on the page qualifies -- this is what makes the FAQPage fix safe to
+// auto-apply (it can't invent a question or answer the business never wrote).
+function extractQaPairs(html: string): { question: string; answer: string }[] {
+  const pairs: { question: string; answer: string }[] = [];
+  const headingRe = /<h[234][^>]*>([\s\S]*?)<\/h[234]>/gi;
+  const matches = [...html.matchAll(headingRe)];
+  for (let i = 0; i < matches.length && pairs.length < 8; i++) {
+    const question = matches[i][1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    if (!question.endsWith("?") || question.length < 10 || question.length > 200) continue;
+    const start = matches[i].index! + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index! : start + 2000;
+    const answer = html.slice(start, end).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+    if (answer.length < 20) continue; // no real answer text -- just a bare heading, don't fabricate one
+    pairs.push({ question, answer });
+  }
+  return pairs;
+}
+
 // ── On-page parse ─────────────────────────────────────────────────────────
 export function parseOnPage(html: string, url: string) {
   const low = html.toLowerCase();
@@ -213,6 +264,9 @@ export function parseOnPage(html: string, url: string) {
   }
   const bodyText = low.match(/<body[\s\S]*<\/body>/)?.[0] ?? low;
   const body_word_count = bodyText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().split(/\s+/).length;
+  const ldTypes = jsonLdTypes(html);
+  const has_entity_schema = [...ldTypes].some((t) => t.includes("localbusiness") || t.includes("organization") || t.includes("professionalservice"));
+  const has_faq_schema = [...ldTypes].some((t) => t.includes("faqpage"));
   return {
     title, meta_description, h1_count, word_count,
     image_count: imgs.length, images_missing_alt,
@@ -220,6 +274,8 @@ export function parseOnPage(html: string, url: string) {
     has_viewport: low.includes('name="viewport"') || low.includes("name='viewport'"),
     has_canonical: low.includes('rel="canonical"') || low.includes("rel='canonical'"),
     has_schema: low.includes('"@type"') || low.includes("application/ld+json"),
+    has_entity_schema, has_faq_schema,
+    qa_pairs: has_faq_schema ? [] : extractQaPairs(html), // already marked up -- nothing to extract for
     has_open_graph: low.includes('property="og:') || low.includes("property='og:"),
     // A rendered page with almost no body text is an un-rendered SPA shell --
     // flagged so it never silently scores low. Historically this required
@@ -244,7 +300,8 @@ export async function gatherPageSignals(url: string, withPageSpeed = true): Prom
       url, reachable: false, fetched_via: via, status_code: status || null,
       title: "", meta_description: "", h1_count: 0, word_count: 0, image_count: 0,
       images_missing_alt: 0, internal_links: 0, external_links: 0, has_viewport: false,
-      has_canonical: false, has_schema: false, has_open_graph: false,
+      has_canonical: false, has_schema: false, has_entity_schema: false, has_faq_schema: false, qa_pairs: [],
+      has_open_graph: false,
       looks_like_empty_spa: false, text_sample: "", performance: null,
     };
   }

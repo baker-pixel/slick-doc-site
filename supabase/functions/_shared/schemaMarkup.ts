@@ -22,3 +22,23 @@ export function buildOrganizationJsonLd(business: BusinessFacts): Record<string,
   if (business.address) schema.address = { "@type": "PostalAddress", streetAddress: business.address };
   return schema;
 }
+
+// FAQPage JSON-LD for the AEO "missing_faq_schema" fix. Built only from Q&A
+// pairs already extracted off the live page (seoSignals.extractQaPairs) --
+// this marks up existing content, it never invents a question or answer.
+export interface FaqItem {
+  question: string;
+  answer: string;
+}
+
+export function buildFaqJsonLd(items: FaqItem[]): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
+  };
+}

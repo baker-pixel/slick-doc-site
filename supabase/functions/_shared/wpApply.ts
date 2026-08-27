@@ -35,7 +35,14 @@ const TYPE_TO_FIELD: Record<string, string> = {
   wp_slug: "slug",
   wp_title: "title",
   wp_schema_jsonld: "schema_jsonld",
+  wp_faq_jsonld: "faq_jsonld",
+  wp_llms_txt: "llms_txt",
 };
+
+// Site-wide fields: describe the business/site as a whole, not one post, so
+// they're applied once with no post/media ID resolution at all. (FAQ schema
+// stays post-scoped -- it must only claim the Q&A that page actually shows.)
+const SITE_LEVEL_FIELDS = new Set(["schema_jsonld", "llms_txt"]);
 
 function basicAuthHeader(user: string, pass: string) {
   return "Basic " + btoa(`${user}:${pass}`);
@@ -78,7 +85,13 @@ export async function applyViaPlugin(
 
   let postId = req.postId ?? null;
   let mediaId = req.mediaId ?? null;
+  const siteLevel = SITE_LEVEL_FIELDS.has(field);
 
+  // Still attempt resolution for site-level fields (best-effort, not
+  // required): a plugin install predating the site-level fix still expects
+  // schema_jsonld tied to a post_id, so sending one when we have it keeps
+  // those installs working via the old post-meta path until they update.
+  // A current plugin ignores the extra post_id and applies it site-wide.
   if (!postId && !mediaId) {
     if (field === "alt_text" && req.imageSrc) {
       mediaId = await resolveMediaId(wpBase, req.imageSrc);
@@ -87,7 +100,7 @@ export async function applyViaPlugin(
     }
   }
 
-  if (!postId && !mediaId) {
+  if (!siteLevel && !postId && !mediaId) {
     throw new Error(`Could not resolve post/media ID from URL: ${req.postUrl || req.imageSrc}`);
   }
 
@@ -113,7 +126,11 @@ export async function applyViaPlugin(
     throw new Error(`Plugin reported failure: ${failed[0]?.error ?? "unknown"}`);
   }
 
-  return { before: {}, after: { value }, postId };
+  // schema_jsonld may now have landed as a site option rather than post meta
+  // (current plugin) -- /verify is post-scoped and has no way to read that
+  // back, so don't hand back a postId that would trigger a guaranteed-false
+  // verify below. FAQ stays genuinely post-scoped, so its postId is real.
+  return { before: {}, after: { value }, postId: field === "schema_jsonld" ? null : postId };
 }
 
 /** Fallback for clients without the plugin installed. */

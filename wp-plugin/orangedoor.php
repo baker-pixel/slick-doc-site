@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Orange Door SEO
  * Description: Connects your WordPress site to Orange Door for automated SEO auditing and fixes.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Orange Door
  */
 
@@ -33,6 +33,10 @@ function od_activate() {
         'headers' => [ 'Content-Type' => 'application/json' ],
         'timeout' => 10,
     ]);
+
+    add_rewrite_rule( '^llms\.txt$', 'index.php?od_llms_txt=1', 'top' );
+    flush_rewrite_rules();
+    update_option( 'od_llms_rewrite_version', OD_LLMS_REWRITE_VERSION );
 }
 
 function od_get_active_seo_plugins() {
@@ -113,7 +117,7 @@ function od_ping() {
     return rest_ensure_response([
         'status'         => 'ok',
         'site_url'       => get_site_url(),
-        'plugin_version' => '1.0.0',
+        'plugin_version' => '1.1.0',
         'wp_version'     => get_bloginfo( 'version' ),
         'yoast_active'   => defined( 'WPSEO_VERSION' ),
         'rankmath_active'=> defined( 'RANK_MATH_VERSION' ),
@@ -325,9 +329,19 @@ function od_apply( WP_REST_Request $request ) {
     ]);
 }
 
+// Fields that describe the business/site as a whole rather than one post --
+// applied once, site-wide, with no post_id required. Kept in sync with
+// SITE_LEVEL_FIELDS in supabase/functions/_shared/wpApply.ts.
+$GLOBALS['od_site_level_fields'] = [ 'schema_jsonld', 'llms_txt' ];
+
 function od_apply_single_fix( $fix ) {
     $field = $fix['field'] ?? '';
     $value = $fix['value'] ?? '';
+
+    // ── Site-level fix (business entity schema, llms.txt) ──
+    if ( in_array( $field, $GLOBALS['od_site_level_fields'], true ) ) {
+        return od_apply_site_level_fix( $field, $value );
+    }
 
     // ── Media fix (alt text) ──
     if ( isset( $fix['media_id'] ) ) {
@@ -397,10 +411,10 @@ function od_apply_single_fix( $fix ) {
             ]);
             return is_wp_error( $result ) ? $result->get_error_message() : true;
 
-        case 'schema_jsonld':
+        case 'faq_jsonld':
             json_decode( $value );
             if ( json_last_error() !== JSON_ERROR_NONE ) return 'Invalid JSON-LD payload';
-            update_post_meta( $post_id, '_od_schema_jsonld', $value );
+            update_post_meta( $post_id, '_od_faq_jsonld', $value );
             return true;
 
         default:
@@ -408,17 +422,93 @@ function od_apply_single_fix( $fix ) {
     }
 }
 
+// Site-level fix: business entity schema and llms.txt aren't tied to any one
+// post, so they're stored as options and applied once for the whole site.
+function od_apply_site_level_fix( $field, $value ) {
+    if ( $field === 'schema_jsonld' ) {
+        json_decode( $value );
+        if ( json_last_error() !== JSON_ERROR_NONE ) return 'Invalid JSON-LD payload';
+        update_option( 'od_org_schema_jsonld', $value );
+        return true;
+    }
+
+    if ( $field === 'llms_txt' ) {
+        if ( empty( $value ) || ! is_string( $value ) ) return 'Empty llms.txt content';
+        update_option( 'od_llms_txt', $value );
+        return true;
+    }
+
+    return 'Unknown site-level field: ' . $field;
+}
+
 // Self-contained output: no assumption about Yoast/RankMath schema graphs
 // (varies by plugin/version), so we render our own <script> block directly.
+// Org/LocalBusiness schema is site-wide (every page, not just is_singular())
+// -- it describes the business, not the current post, so it also covers a
+// homepage that's a posts index rather than a static front page.
 function od_output_schema_jsonld() {
-    if ( ! is_singular() ) return;
-    $json = get_post_meta( get_the_ID(), '_od_schema_jsonld', true );
-    if ( empty( $json ) || ! is_string( $json ) ) return;
-    json_decode( $json );
-    if ( json_last_error() !== JSON_ERROR_NONE ) return;
-    echo '<script type="application/ld+json">' . str_ireplace( '</script', '<\/script', $json ) . '</script>' . "\n";
+    $json = get_option( 'od_org_schema_jsonld' );
+    if ( ! empty( $json ) && is_string( $json ) ) {
+        json_decode( $json );
+        if ( json_last_error() === JSON_ERROR_NONE ) {
+            echo '<script type="application/ld+json">' . str_ireplace( '</script', '<\/script', $json ) . '</script>' . "\n";
+        }
+    }
+
+    // FAQ schema stays post-scoped -- it must only claim the Q&A that
+    // specific page actually shows.
+    if ( is_singular() ) {
+        $faq = get_post_meta( get_the_ID(), '_od_faq_jsonld', true );
+        if ( ! empty( $faq ) && is_string( $faq ) ) {
+            json_decode( $faq );
+            if ( json_last_error() === JSON_ERROR_NONE ) {
+                echo '<script type="application/ld+json">' . str_ireplace( '</script', '<\/script', $faq ) . '</script>' . "\n";
+            }
+        }
+    }
 }
 add_action( 'wp_head', 'od_output_schema_jsonld' );
+
+
+// ─────────────────────────────────────────────
+// 6b. LLMS.TXT — virtual file served from the stored option
+// ─────────────────────────────────────────────
+// WP can't write to the site root, so /llms.txt is served dynamically via a
+// rewrite rule rather than an actual file -- same pattern WP itself uses for
+// a virtual robots.txt.
+
+define( 'OD_LLMS_REWRITE_VERSION', '1' );
+
+add_action( 'init', 'od_maybe_add_llms_rewrite' );
+function od_maybe_add_llms_rewrite() {
+    add_rewrite_rule( '^llms\.txt$', 'index.php?od_llms_txt=1', 'top' );
+    // Rewrite rules only take effect after a flush. Sites that already had
+    // the plugin active before this rule existed won't get one just from
+    // this deploy landing -- flush once, keyed off a version bump, so
+    // existing installs pick it up without the client having to reactivate
+    // the plugin or visit Settings -> Permalinks themselves.
+    if ( get_option( 'od_llms_rewrite_version' ) !== OD_LLMS_REWRITE_VERSION ) {
+        flush_rewrite_rules();
+        update_option( 'od_llms_rewrite_version', OD_LLMS_REWRITE_VERSION );
+    }
+}
+
+add_filter( 'query_vars', function( $vars ) {
+    $vars[] = 'od_llms_txt';
+    return $vars;
+});
+
+add_action( 'template_redirect', function() {
+    if ( ! get_query_var( 'od_llms_txt' ) ) return;
+    $content = get_option( 'od_llms_txt' );
+    if ( empty( $content ) || ! is_string( $content ) ) {
+        status_header( 404 );
+        exit;
+    }
+    header( 'Content-Type: text/plain; charset=utf-8' );
+    echo $content;
+    exit;
+});
 
 
 // ─────────────────────────────────────────────
@@ -445,6 +535,9 @@ function od_verify( WP_REST_Request $request ) {
         $canonical  = get_post_meta( $post_id, '_yoast_wpseo_canonical', true ) ?: '';
     }
 
+    // Not gated behind an SEO plugin -- this is our own post meta.
+    $faq_jsonld = get_post_meta( $post_id, '_od_faq_jsonld', true ) ?: '';
+
     // 'saved' used to be hardcoded true regardless of what was actually in
     // the DB -- callers were trusting it as confirmation a write landed,
     // when it confirmed nothing. Now it only reports true when the caller
@@ -458,6 +551,7 @@ function od_verify( WP_REST_Request $request ) {
         'meta_desc'     => $meta_desc,
         'focus_keyword' => $focus_kw,
         'canonical'     => $canonical,
+        'faq_jsonld'    => $faq_jsonld,
     ];
     $saved = $expected_field && isset( $current_by_field[ $expected_field ] )
         ? trim( $current_by_field[ $expected_field ] ) === trim( (string) $expected_value )
@@ -471,6 +565,7 @@ function od_verify( WP_REST_Request $request ) {
         'meta_desc'     => $meta_desc,
         'focus_keyword' => $focus_kw,
         'canonical'     => $canonical,
+        'faq_jsonld'    => $faq_jsonld,
         'saved'         => $saved,
     ]);
 }

@@ -5,7 +5,8 @@ import { callAI, MODELS } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
 import { upsertSeoProject } from "../_shared/seoProject.ts";
-import { buildOrganizationJsonLd } from "../_shared/schemaMarkup.ts";
+import { buildOrganizationJsonLd, buildFaqJsonLd } from "../_shared/schemaMarkup.ts";
+import { buildLlmsTxt } from "../_shared/llmsTxt.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { recordOutcome } from "../_shared/outcomes.ts";
@@ -81,7 +82,10 @@ function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">> {
   else if (s.meta_description.length < 120 || s.meta_description.length > 160) out.push(mk(CHECKS.meta_desc_length, p, "The Google summary text is a bit off-length.", `Meta description is ${s.meta_description.length} chars (aim 150–160).`, { len: s.meta_description.length }, { type: "wp_meta_description", payload: {}, expected_baseline: s.meta_description }));
 
   if (!s.has_canonical) out.push(mk(CHECKS.missing_canonical, p, "No canonical tag, which can cause duplicate-content confusion.", "No rel=canonical link.", { has_canonical: false }, { type: "wp_canonical", payload: { value: s.url }, expected_baseline: null }));
-  if (!s.has_schema) out.push(mk(CHECKS.missing_schema, p, "Missing structured data that helps Google -- and AI answer engines like ChatGPT and Claude -- understand who you are.", "No JSON-LD / schema.org markup detected.", { has_schema: false }, { type: "wp_schema_jsonld", payload: {}, expected_baseline: null }));
+  // Checks the actual @type, not just "any JSON-LD present" -- a page with
+  // only e.g. BreadcrumbList schema still needs real entity markup.
+  if (!s.has_entity_schema) out.push(mk(CHECKS.missing_schema, p, "Missing structured data that helps Google -- and AI answer engines like ChatGPT and Claude -- understand who you are.", "No Organization/LocalBusiness JSON-LD detected.", { has_entity_schema: false }, { type: "wp_schema_jsonld", payload: {}, expected_baseline: null }));
+  if (!s.has_faq_schema && s.qa_pairs.length >= 2) out.push(mk(CHECKS.missing_faq_schema, p, "This page already answers real questions in its headings, but that's not marked up as FAQPage schema -- the exact format answer engines like ChatGPT and Perplexity look for to quote you directly.", `${s.qa_pairs.length} question-style heading(s) with answer text found, no FAQPage schema.`, { qa_count: s.qa_pairs.length }, { type: "wp_faq_jsonld", payload: {}, expected_baseline: null }));
   if (!s.has_viewport) out.push(mk(CHECKS.missing_viewport, p, "No mobile viewport tag — the page may not display well on phones.", "No viewport meta tag.", { has_viewport: false }));
   if (!s.has_open_graph) out.push(mk(CHECKS.missing_open_graph, p, "No Open Graph tags, so shared links look plain on social media.", "No og: tags.", { has_open_graph: false }));
 
@@ -215,6 +219,45 @@ serve(async (req) => {
       if (f.fix?.type === "wp_schema_jsonld") {
         f.fix.payload = { value: schemaJsonLd, post_url: f.pages[0] };
       }
+    }
+
+    // ── FAQ schema fix payload (deterministic, extracted from on-page Q&A
+    // this same crawl already found -- never invented) ──
+    for (const f of findings) {
+      if (f.fix?.type !== "wp_faq_jsonld") continue;
+      const sig = signals.find((s) => s.url === f.pages[0]);
+      if (sig && sig.qa_pairs.length > 0) {
+        f.fix.payload = { value: JSON.stringify(buildFaqJsonLd(sig.qa_pairs)), post_url: f.pages[0] };
+      }
+    }
+
+    // ── llms.txt fix (site-level, once per audit, not per page) ──
+    // Same deterministic-facts-only rule as the schema fix: built from the
+    // client's own name/url/summary plus the real page titles this crawl
+    // found, nothing invented.
+    try {
+      const origin = new URL(client.website_url).origin;
+      const llmsRes = await fetch(`${origin}/llms.txt`, { signal: AbortSignal.timeout(6000) }).catch(() => null);
+      const llmsBody = llmsRes?.ok ? await llmsRes.text() : "";
+      if (!llmsRes?.ok || llmsBody.trim().length < 50) {
+        const llmsTxt = buildLlmsTxt({
+          name: client.business_name,
+          url: client.website_url,
+          description: typeof ctx.business_summary === "string" ? ctx.business_summary : null,
+          pages: signals.filter((s) => s.reachable && s.title).map((s) => ({ title: s.title, url: s.url })),
+        });
+        const homepage = signals.find((s) => s.reachable)?.url ?? client.website_url;
+        findings.push({
+          ...mk(CHECKS.missing_llms_txt, homepage,
+            "No llms.txt file -- a growing convention AI crawlers check for a clean, structured summary of the site.",
+            "No /llms.txt found (or it was near-empty).",
+            { llms_txt_present: false },
+            { type: "wp_llms_txt", payload: { value: llmsTxt, post_url: homepage }, expected_baseline: null }),
+          id: await findingId(CHECKS.missing_llms_txt.id, homepage), status: "open",
+        });
+      }
+    } catch (e) {
+      console.error("llms.txt check failed:", e instanceof Error ? e.message : e);
     }
 
     // ── LLM rewrites for applyable title/meta findings (bounded, untrusted) ──

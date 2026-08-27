@@ -29,8 +29,10 @@ type WeeklySlot = {
 // what fill-scheduled-content's prompt switch expects.
 // google_post and email_newsletter candidates removed -- both only ever
 // published via n8n (now fully removed, see git history), and neither has a
-// replacement publisher. Social platforms are additionally filtered per
-// client to only those with a connected Post for Me account.
+// replacement publisher. Social platforms are scheduled regardless of Post
+// for Me connection status -- content generation shouldn't be blocked on
+// that, publishing (publish-scheduled-content) fails safely per-post if the
+// platform isn't connected by the time a post is due.
 const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: WeeklySlot }> = [
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" } },
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" } },
@@ -39,10 +41,7 @@ const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: Weekl
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post",   weekFilter: [1, 3] } },
 ];
 
-// Platforms that require a connected Post for Me account to ever publish.
-const PFM_PLATFORMS = new Set(["facebook", "instagram", "twitter", "linkedin"]);
-
-function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Set<string>): WeeklySlot[] {
+function buildWeeklyPlan(tier: string | null | undefined): WeeklySlot[] {
   const social = tierPolicy(tier).social;
   const allowed = new Set(social.contentTypes);
   let budget = social.postsPerMonth;
@@ -50,9 +49,6 @@ function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Se
   for (const c of SLOT_CANDIDATES) {
     if (!allowed.has(c.policyType)) continue;
     if (c.perMonth > budget) continue;
-    // Don't schedule social platforms the client can't publish to — an
-    // approved post that can only fail is worse than no slot.
-    if (PFM_PLATFORMS.has(c.slot.platform) && !connectedPlatforms.has(c.slot.platform)) continue;
     plan.push(c.slot);
     budget -= c.perMonth;
   }
@@ -143,24 +139,12 @@ serve(async (req) => {
       occupied.add(`${slot.client_account_id}:${slot.platform}:${dateKey(new Date(slot.scheduled_for))}`);
     }
 
-    // Connected Post for Me accounts per client (one query, all clients).
-    const { data: pfmAccounts } = await supabase
-      .from("client_postforme_accounts")
-      .select("client_id, platform")
-      .in("client_id", clientIds)
-      .eq("status", "connected");
-    const connectedByClient = new Map<string, Set<string>>();
-    for (const a of pfmAccounts || []) {
-      if (!connectedByClient.has(a.client_id)) connectedByClient.set(a.client_id, new Set());
-      connectedByClient.get(a.client_id)!.add(a.platform);
-    }
-
     const allRows: any[] = [];
     const summary: { client: string; tier: string; created: number }[] = [];
 
     for (const client of clients) {
       const tier = (client.tier || "foundation").toLowerCase();
-      const plan: WeeklySlot[] = buildWeeklyPlan(tier, connectedByClient.get(client.id) ?? new Set());
+      const plan: WeeklySlot[] = buildWeeklyPlan(tier);
       const clientRows: any[] = [];
 
       for (let week = 0; week < 4; week++) {
