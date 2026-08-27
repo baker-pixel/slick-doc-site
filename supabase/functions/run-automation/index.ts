@@ -220,6 +220,15 @@ serve(async (req) => {
         });
         if (!res.ok) {
           const text = await res.text();
+          // 422 = the target site itself couldn't be scraped (unreachable, blocked,
+          // timed out, SSRF-guarded) -- expected/recoverable, not a bug in our code.
+          // Onboarding is explicitly designed to let the client upload brand assets
+          // from scratch at the next step, so don't hard-fail and wedge the workflow;
+          // only genuine server errors (5xx) should raise an alert + block progress.
+          if (res.status === 422) {
+            result = { skipped: "scrape_failed", detail: text };
+            break;
+          }
           throw new Error(`extract-brand-assets failed (${res.status}): ${text}`);
         }
         result = await res.json();
