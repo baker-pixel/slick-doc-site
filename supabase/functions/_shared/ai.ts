@@ -25,6 +25,16 @@ function isAnthropicModel(model: string): boolean {
   return model.startsWith("claude-");
 }
 
+// gpt-oss models are reasoning models -- Groq defaults reasoning_effort to
+// "medium", which burns max_tokens on hidden reasoning before any answer
+// text is emitted. On tight budgets (short social copy: 120-700 tokens)
+// that leaves message.content empty and the whole call fails with "AI
+// returned empty response". Capped low here since these are short
+// copywriting tasks, not multi-step reasoning problems.
+function isGptOssModel(model: string): boolean {
+  return model.startsWith("openai/gpt-oss-");
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -230,6 +240,7 @@ async function attemptGroqOnce(
         ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
         ...(opts.jsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...(isGptOssModel(model) ? { reasoning_effort: "low" } : {}),
       }),
     });
   } catch (e) {
