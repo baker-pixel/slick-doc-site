@@ -133,11 +133,17 @@ function logRun(entry: RunLogEntry): void {
 export class AIError extends Error {
   status: number | null;
   retryable: boolean;
-  constructor(message: string, status: number | null, retryable: boolean) {
+  /** True when the model hit max_tokens with no answer text yet -- e.g. a
+   * reasoning model (gpt-oss) burning the whole budget on hidden reasoning.
+   * callAI grows maxTokens on retry when this is set, since retrying at the
+   * same budget would just reproduce the same truncation. */
+  truncated: boolean;
+  constructor(message: string, status: number | null, retryable: boolean, truncated = false) {
     super(message);
     this.name = "AIError";
     this.status = status;
     this.retryable = retryable;
+    this.truncated = truncated;
   }
 }
 
@@ -253,8 +259,23 @@ async function attemptGroqOnce(
   }
 
   const data = await res.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new AIError("AI returned empty response", null, true);
+  const choice = data.choices?.[0];
+  const text = choice?.message?.content;
+  if (!text) {
+    // finish_reason "length" + no content = max_tokens was hit before any
+    // answer text came out -- on a reasoning model that means the budget
+    // went entirely to hidden reasoning. Retrying at the same maxTokens
+    // would just reproduce it, so flag it for callAI to grow the budget.
+    const truncated = choice?.finish_reason === "length";
+    throw new AIError(
+      truncated
+        ? "AI returned empty response (reasoning consumed the token budget before any answer text)"
+        : "AI returned empty response",
+      null,
+      true,
+      truncated,
+    );
+  }
   return { text, usage: data.usage ?? null };
 }
 
@@ -300,7 +321,17 @@ async function attemptAnthropicOnce(
 
   const data = await res.json();
   const text = data.content?.[0]?.text;
-  if (!text) throw new AIError("AI returned empty response", null, true);
+  if (!text) {
+    const truncated = data.stop_reason === "max_tokens";
+    throw new AIError(
+      truncated
+        ? "AI returned empty response (hit max_tokens before any answer text)"
+        : "AI returned empty response",
+      null,
+      true,
+      truncated,
+    );
+  }
   const usage = data.usage
     ? { prompt_tokens: data.usage.input_tokens, completion_tokens: data.usage.output_tokens }
     : null;
@@ -330,6 +361,12 @@ export async function callAI(opts: AICallOptions): Promise<string> {
 
   let lastError: unknown = null;
   let totalAttempts = 0;
+  // Grows only on a "truncated" failure (max_tokens hit with no answer text
+  // yet, e.g. a reasoning model burning the budget on hidden reasoning) --
+  // retrying at the original budget would just reproduce the same
+  // truncation. Capped so a pathological prompt can't run away on cost.
+  let currentMaxTokens = opts.maxTokens;
+  const MAX_TOKENS_CEILING = 4000;
 
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const model = models[modelIndex];
@@ -339,7 +376,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
       totalAttempts++;
       const started = Date.now();
       try {
-        const { text, usage } = await attemptOnce(model, messages, opts);
+        const { text, usage } = await attemptOnce(model, messages, { ...opts, maxTokens: currentMaxTokens });
         const fallbackUsed = model !== models[0];
         console.log(
           `[ai] ok source=${source} model=${model} ms=${Date.now() - started}` +
@@ -389,6 +426,9 @@ export async function callAI(opts: AICallOptions): Promise<string> {
             throw e;
           }
           break;
+        }
+        if (e instanceof AIError && e.truncated && currentMaxTokens) {
+          currentMaxTokens = Math.min(currentMaxTokens * 2, MAX_TOKENS_CEILING);
         }
         if (attempt < retries) {
           const retryAfter = (e as { retryAfter?: number | null }).retryAfter;
