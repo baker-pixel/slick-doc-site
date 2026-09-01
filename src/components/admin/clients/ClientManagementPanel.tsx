@@ -82,6 +82,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const [sendingInvite, setSendingInvite] = useState(false);
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
+  const [updatingTierIds, setUpdatingTierIds] = useState<Set<string>>(new Set());
   
   const [newClient, setNewClient] = useState({
     email: "",
@@ -150,6 +151,31 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     }
   };
 
+
+  const updateClientTier = async (client: ClientAccount, tier: string) => {
+    if (tier === client.tier) return;
+    setUpdatingTierIds((prev) => new Set(prev).add(client.id));
+    // plan_tier is a legacy duplicate column nothing enforces off of, but
+    // it's still read as a display fallback (`plan_tier || tier`) -- keep
+    // it in lockstep so it can't silently diverge from the real tier again.
+    const { error } = await callAdminApi(adminPassword, {
+      action: "update",
+      table: "client_accounts",
+      id: client.id,
+      data: { tier, plan_tier: tier },
+    });
+    setUpdatingTierIds((prev) => {
+      const next = new Set(prev);
+      next.delete(client.id);
+      return next;
+    });
+    if (error) {
+      toast.error("Failed to update tier: " + error);
+    } else {
+      toast.success(`${client.business_name} moved to ${tier}`);
+      fetchClients();
+    }
+  };
 
   const isValidUrl = (url: string) => {
     return /^https?:\/\/[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/.test(url);
@@ -736,7 +762,24 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                           <div className="text-xs text-muted-foreground">{client.email}</div>
                         </TableCell>
                         <TableCell>
-                          <TierBadge tier={client.plan_tier || client.tier} />
+                          <Select
+                            value={client.tier}
+                            onValueChange={(v) => updateClientTier(client, v)}
+                            disabled={updatingTierIds.has(client.id)}
+                          >
+                            <SelectTrigger className="h-8 w-[150px]">
+                              {updatingTierIds.has(client.id) ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <SelectValue />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="foundation">Foundation</SelectItem>
+                              <SelectItem value="growth">Growth</SelectItem>
+                              <SelectItem value="transformation">Transformation</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusColor(client.status)}>
