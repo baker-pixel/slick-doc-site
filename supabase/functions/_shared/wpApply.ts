@@ -133,6 +133,14 @@ export async function applyViaPlugin(
   return { before: {}, after: { value }, postId: field === "schema_jsonld" ? null : postId };
 }
 
+// Fields with no generic WP REST equivalent: nothing in core reads an
+// arbitrary post-meta key back into rendered <head> markup or a site-root
+// file, so writing one via Basic Auth would return 200 while producing no
+// visible schema/FAQ markup or reachable /llms.txt -- a fix that silently
+// does nothing is worse than one that fails loudly. Only the OrangeDoor
+// plugin's own /apply endpoint (applyViaPlugin) can actually deliver these.
+const PLUGIN_ONLY_FIELDS = new Set(["schema_jsonld", "faq_jsonld", "llms_txt"]);
+
 /** Fallback for clients without the plugin installed. */
 export async function applyViaBasicAuth(
   wpBase: string,
@@ -140,6 +148,13 @@ export async function applyViaBasicAuth(
   appPassword: string,
   req: WpFixRequest,
 ): Promise<WpApplyResult> {
+  const field = TYPE_TO_FIELD[req.fixType] ?? req.fixType.replace("wp_", "");
+  if (PLUGIN_ONLY_FIELDS.has(field)) {
+    throw new Error(
+      "This fix requires the OrangeDoor WordPress plugin -- Basic Auth can't write schema/FAQ markup or llms.txt to your site. Install the plugin to apply it.",
+    );
+  }
+
   const auth = basicAuthHeader(username, appPassword);
   const postUrl = req.postUrl ?? wpBase;
 
