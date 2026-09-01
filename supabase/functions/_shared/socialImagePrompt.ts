@@ -105,11 +105,13 @@ export function buildSocialImagePrompt(client: ImagePromptClient, post: ImagePro
         : `Depict the offering itself, tied to the post's topic.`,
       `Strong subjects: the product or report as a clean screen/document mockup, charts and diagrams that represent the concept, or a premium conceptual 3D/isometric render of the service in action.`,
       `Do not show generic office workers, posed businesspeople, or stock-photo meeting scenes unless the post is explicitly about people or teams.`,
+      `Render with realistic materials, lighting, and reflections -- avoid a flat, plasticky, or uncanny CGI look.`,
     );
   } else {
     parts.push(
       services ? `Show the work itself -- ${services} -- its craft, setting, or results.` : `Show the work itself: its craft, setting, or results.`,
-      `Photorealistic, natural lighting, editorial business-photography style, not stock-photo stiff.`,
+      `Photorealistic, shot like a real camera photo -- natural light, true-to-life skin and material texture, shallow depth of field, candid editorial business-photography style, not stock-photo stiff.`,
+      `Avoid the telltale AI-generated look: no waxy/plastic skin, no over-smoothed or airbrushed surfaces, no warped or extra fingers, no uncanny faces, no oversaturated HDR glow.`,
     );
     if (location) parts.push(`Could plausibly be set in or near ${location}.`);
   }
