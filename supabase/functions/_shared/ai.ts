@@ -9,21 +9,9 @@ export const MODELS = {
   default: "openai/gpt-oss-120b",
   /** Cheap/fast model for classification and low-stakes calls. */
   fast: "openai/gpt-oss-20b",
-  /**
-   * Higher-quality writing/reasoning model for client-facing creative work.
-   * Falls back to `default` automatically if ANTHROPIC_API_KEY isn't set —
-   * safe to reference everywhere even before the key is configured.
-   */
-  quality: "claude-sonnet-5",
 } as const;
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
-
-function isAnthropicModel(model: string): boolean {
-  return model.startsWith("claude-");
-}
 
 // gpt-oss models are reasoning models -- Groq defaults reasoning_effort to
 // "medium", which burns max_tokens on hidden reasoning before any answer
@@ -279,75 +267,6 @@ async function attemptGroqOnce(
   return { text, usage: data.usage ?? null };
 }
 
-async function attemptAnthropicOnce(
-  model: string,
-  messages: ChatMessage[],
-  opts: AICallOptions,
-): Promise<{ text: string; usage: Record<string, number> | null }> {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) throw new AIError("ANTHROPIC_API_KEY is not configured", null, false);
-
-  const finalMessages = withJsonHint(messages, opts.jsonMode);
-  const systemMessages = finalMessages.filter((m) => m.role === "system").map((m) => m.content);
-  const conversation = finalMessages
-    .filter((m) => m.role !== "system")
-    .map((m) => ({ role: m.role, content: m.content }));
-
-  let res: Response;
-  try {
-    res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: opts.maxTokens ?? 1024,
-        ...(systemMessages.length ? { system: systemMessages.join("\n\n") } : {}),
-        messages: conversation,
-        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-      }),
-    });
-  } catch (e) {
-    throw new AIError(`AI request failed (network): ${e instanceof Error ? e.message : e}`, null, true);
-  }
-
-  if (!res.ok) {
-    const bodyText = await res.text().catch(() => "");
-    throwForStatus(res, bodyText, opts.source ?? "unknown");
-  }
-
-  const data = await res.json();
-  const text = data.content?.[0]?.text;
-  if (!text) {
-    const truncated = data.stop_reason === "max_tokens";
-    throw new AIError(
-      truncated
-        ? "AI returned empty response (hit max_tokens before any answer text)"
-        : "AI returned empty response",
-      null,
-      true,
-      truncated,
-    );
-  }
-  const usage = data.usage
-    ? { prompt_tokens: data.usage.input_tokens, completion_tokens: data.usage.output_tokens }
-    : null;
-  return { text, usage };
-}
-
-function attemptOnce(
-  model: string,
-  messages: ChatMessage[],
-  opts: AICallOptions,
-): Promise<{ text: string; usage: Record<string, number> | null }> {
-  return isAnthropicModel(model)
-    ? attemptAnthropicOnce(model, messages, opts)
-    : attemptGroqOnce(model, messages, opts);
-}
-
 /**
  * Call the LLM with retry + backoff and optional model fallback.
  * Returns the raw text of the completion.
@@ -376,7 +295,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
       totalAttempts++;
       const started = Date.now();
       try {
-        const { text, usage } = await attemptOnce(model, messages, { ...opts, maxTokens: currentMaxTokens });
+        const { text, usage } = await attemptGroqOnce(model, messages, { ...opts, maxTokens: currentMaxTokens });
         const fallbackUsed = model !== models[0];
         console.log(
           `[ai] ok source=${source} model=${model} ms=${Date.now() - started}` +
@@ -406,10 +325,9 @@ export async function callAI(opts: AICallOptions): Promise<string> {
           e instanceof Error ? e.message : e,
         );
         if (!retryable) {
-          // A non-retryable error on this model (bad key, model unavailable,
-          // 4xx) shouldn't abort the whole call if there's another model
-          // left in the chain -- e.g. Claude tiering must cascade to the
-          // Groq fallback when ANTHROPIC_API_KEY isn't configured yet.
+          // A non-retryable error on this model (model unavailable, 4xx)
+          // shouldn't abort the whole call if there's another model left in
+          // the fallback chain.
           if (isLastModel) {
             logRun({
               source,

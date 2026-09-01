@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-import { callAIJson, MODELS } from "../_shared/ai.ts";
+import { callAIJson } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 import { fetchHtml, parseOnPage } from "../_shared/seoSignals.ts";
@@ -205,8 +205,6 @@ Omit any field that does not need a fix. The keyword used in meta_title and meta
   try {
     const result = await callAIJson<AiFixResult>({
       source: "scan-wordpress-site",
-      model: MODELS.quality,
-      fallbackModels: [MODELS.default],
       system: systemPrompt,
       prompt: userPrompt,
       maxTokens: 512,
@@ -335,10 +333,8 @@ serve(async (req) => {
       .eq("site_id", siteId)
       .in("status", ["pending", "failed"]);
 
-    // 6. Generate AI fixes for pages with issues. MODELS.quality (Claude)
-    // needs ANTHROPIC_API_KEY; it falls back to the Groq default automatically
-    // if that's not set, so either key unlocks this.
-    const hasLlmKey = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("GROQ_API_KEY");
+    // 6. Generate AI fixes for pages with issues.
+    const hasLlmKey = Deno.env.get("GROQ_API_KEY");
     let fixesGenerated = 0;
 
     if (hasLlmKey && clientId && scanRecord) {

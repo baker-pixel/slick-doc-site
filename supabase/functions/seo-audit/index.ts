@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { callAI, MODELS } from "../_shared/ai.ts";
+import { callAI } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
 import { upsertSeoProject } from "../_shared/seoProject.ts";
@@ -283,13 +283,6 @@ serve(async (req) => {
             source: "seo-audit",
             clientId,
             maxTokens: 200,
-            // Every observed failure (empty completion, both with and without
-            // JSON mode) was on Groq's gpt-oss-120b/20b -- confirmed live
-            // across several runs, not tied to page content or JSON mode.
-            // Claude sidesteps it entirely; gpt-oss-120b stays as the
-            // fallback for when ANTHROPIC_API_KEY isn't configured.
-            model: MODELS.quality,
-            fallbackModels: [MODELS.default],
             promptId: "seo-rewrite.v1",
             // Best-effort copy draft -- the catch below already treats a
             // failure as non-fatal (finding just ships without pre-drafted
