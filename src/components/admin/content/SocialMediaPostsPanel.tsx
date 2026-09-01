@@ -374,6 +374,56 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
+  // Generate a full round of posts for the selected client in one go:
+  // ensure this month's slots exist, draft them with AI, then force-generate
+  // any missing Instagram images right now instead of waiting on the batch
+  // window.
+  const generateAllForClient = useMutation({
+    mutationFn: async () => {
+      if (!selectedClient) throw new Error("Select a client first");
+
+      const scheduleRes = await supabase.functions.invoke("auto-schedule-content", {
+        body: { client_id: selectedClient },
+      });
+      if (scheduleRes.error || scheduleRes.data?.error) {
+        const msg = await getEdgeErrorMessage(scheduleRes.error, scheduleRes.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to schedule content slots");
+      }
+
+      const fillRes = await supabase.functions.invoke("fill-scheduled-content", {
+        body: { client_id: selectedClient, limit: 50 },
+      });
+      if (fillRes.error || fillRes.data?.error) {
+        const msg = await getEdgeErrorMessage(fillRes.error, fillRes.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to draft content");
+      }
+
+      const imagesRes = await supabase.functions.invoke("sync-fill-missing-images", {
+        body: { client_id: selectedClient, force: true, password: adminPassword },
+      });
+      if (imagesRes.error || imagesRes.data?.error) {
+        const msg = await getEdgeErrorMessage(imagesRes.error, imagesRes.data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to generate images");
+      }
+
+      return {
+        created: scheduleRes.data?.total_created ?? 0,
+        drafted: fillRes.data?.successful ?? 0,
+        imagesFilled: imagesRes.data?.filled ?? 0,
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["social-posts"] });
+      toast({
+        title: "Generated posts for client",
+        description: `${data.created} new slot(s) scheduled · ${data.drafted} drafted with AI · ${data.imagesFilled} image(s) generated`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Generate all failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Trigger publish now
   const triggerPublishNow = useMutation({
     mutationFn: async () => {
@@ -744,6 +794,20 @@ export default function SocialMediaPostsPanel() {
           )}
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateAllForClient.mutate()}
+            disabled={!selectedClient || generateAllForClient.isPending}
+            title="Schedule, draft, and generate images for this client's social posts right now"
+          >
+            {generateAllForClient.isPending ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Wand2 className="h-4 w-4 mr-2" />
+            )}
+            Generate All Posts
+          </Button>
           <Button
             variant="outline"
             size="sm"

@@ -73,7 +73,10 @@ serve(async (req) => {
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door <hello@orangedoormarketing.com>";
-  const PORTAL_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
+  // Must be the client. subdomain -- getAppMode() only boots ClientApp (which
+  // has the /portal route) there. APP_URL points at the marketing root domain,
+  // which 404s on /portal (MarketingApp has no such route).
+  const PORTAL_URL = Deno.env.get("CLIENT_PORTAL_URL") || "https://client.orangedoormarketing.com";
 
   if (!RESEND_API_KEY) {
     return new Response(JSON.stringify({ error: "RESEND_API_KEY not configured" }), {

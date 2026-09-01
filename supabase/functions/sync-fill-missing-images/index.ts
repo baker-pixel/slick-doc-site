@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
+import { checkAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +22,10 @@ const TARGET_PLATFORMS = ["instagram"];
 // call generate-social-image already makes elsewhere (postforme-publish-post's
 // last-resort fallback, the admin Social Media Posts panel).
 const MAX_PER_RUN = 5;
+// Cap for an admin-triggered, single-client, forced run (see client_id/force
+// below) -- higher than the cron's MAX_PER_RUN since it's bounded to one
+// client's backlog instead of racing every client's slots for a shared quota.
+const ADMIN_MAX_PER_RUN = 20;
 // How long a batch-covered slot is left alone before this fallback overrides
 // it regardless of batch status -- a hard guarantee that no post ever goes
 // out with no image, even if OpenAI's batch is still "in_progress" this late.
@@ -58,9 +63,27 @@ serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    // Internal cron-only endpoint (same posture as fill-scheduled-content /
-    // publish-scheduled-content) -- no per-call auth to gate, the same as
-    // generate-social-images-batch's original design intent.
+    const body = await req.json().catch(() => ({}));
+    const clientId: string | undefined = body.client_id;
+    // Explicit admin action ("generate images now" for one client) --
+    // bypasses the batch-window wait since there's no cron cadence to
+    // protect here, just this one client's backlog.
+    const force: boolean = !!body.force;
+
+    // Internal cron-only endpoint by default (same posture as
+    // fill-scheduled-content / publish-scheduled-content) -- no auth to gate
+    // when called with no client_id, same as generate-social-images-batch's
+    // original design intent. A client_id turns this into an admin-facing
+    // action, so it needs the same admin auth those get.
+    if (clientId) {
+      const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+      const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!isServer) {
+        const auth = await checkAdminAuth(req, supabase, body.password);
+        if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
+      }
+    }
+
     if (!openaiKey) {
       return json({ error: "OPENAI_API_KEY is not configured" }, 503);
     }
@@ -68,11 +91,14 @@ serve(async (req) => {
     // Only content actually sitting in a client's approval queue -- same
     // targeting as generate-social-images-batch, so no cycles spent on
     // orphaned content_calendar rows nobody will ever see.
-    const { data: linkedApprovals, error: apprErr } = await supabase
+    let approvalsQuery = supabase
       .from("content_approvals")
       .select("content_id")
       .in("platform", TARGET_PLATFORMS)
       .not("content_id", "is", null);
+    if (clientId) approvalsQuery = approvalsQuery.eq("client_account_id", clientId);
+
+    const { data: linkedApprovals, error: apprErr } = await approvalsQuery;
 
     if (apprErr) throw new Error(`Failed to fetch approvals needing images: ${apprErr.message}`);
 
@@ -81,12 +107,15 @@ serve(async (req) => {
       return json({ filled: 0, message: "No approvals need images" });
     }
 
-    const { data: candidates, error: fetchErr } = await supabase
+    let candidatesQuery = supabase
       .from("content_calendar")
       .select("id, client_account_id, title, content, platform, metadata, scheduled_for")
       .in("content_id", approvalContentIds)
       .is("metadata->>image_url", null)
-      .limit(CANDIDATE_POOL_SIZE);
+      .limit(clientId ? ADMIN_MAX_PER_RUN : CANDIDATE_POOL_SIZE);
+    if (clientId) candidatesQuery = candidatesQuery.eq("client_account_id", clientId);
+
+    const { data: candidates, error: fetchErr } = await candidatesQuery;
 
     if (fetchErr) throw new Error(`Failed to fetch slots needing images: ${fetchErr.message}`);
 
@@ -94,7 +123,8 @@ serve(async (req) => {
       return json({ filled: 0, message: "No slots need images" });
     }
 
-    const slots = candidates.filter(isFallbackEligible).slice(0, MAX_PER_RUN);
+    const runCap = clientId ? ADMIN_MAX_PER_RUN : MAX_PER_RUN;
+    const slots = (force ? candidates : candidates.filter(isFallbackEligible)).slice(0, runCap);
 
     if (slots.length === 0) {
       return json({ filled: 0, message: "No slots need fallback yet (batch still within its window)" });

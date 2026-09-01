@@ -420,6 +420,19 @@ serve(async (req) => {
           .update({ status: batch.status, completed_at: new Date().toISOString() })
           .eq("id", job.id);
 
+        // Whole batch never produced results -- mark every slot still
+        // waiting on it so sync-fill-missing-images treats them as eligible
+        // for fallback immediately instead of waiting on URGENT_WINDOW_MS.
+        const { data: strandedSlots } = await supabase
+          .from("content_calendar")
+          .select("id, metadata")
+          .eq("metadata->>image_batch_id", job.openai_batch_id)
+          .or("metadata->>image_batch_status.is.null,metadata->>image_batch_status.not.in.(completed,failed)");
+
+        for (const slot of strandedSlots || []) {
+          await markBatchStatus(supabase, slot.id, (slot.metadata as Record<string, unknown>) || {}, "failed");
+        }
+
         try {
           await supabase.from("automation_alerts").insert({
             alert_type: "content_publish_failure",

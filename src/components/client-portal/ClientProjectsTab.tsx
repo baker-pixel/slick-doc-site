@@ -909,9 +909,12 @@ export default function ClientProjectsTab({ clientAccountId, onNavigateToTab }: 
                 </AnimatePresence>
 
                 {!isExpanded && projectMilestones.length > 0 && (
-                  <div className="px-6 pb-4">
-                    <p className="text-xs text-muted-foreground text-center">Click to view {projectMilestones.length} milestones</p>
-                  </div>
+                  <button
+                    onClick={() => setExpandedProject(project.id)}
+                    className="w-full px-6 pb-4 text-xs text-muted-foreground text-center hover:text-foreground transition-colors"
+                  >
+                    Click to view {projectMilestones.length} milestones
+                  </button>
                 )}
               </ModernCard>
             </motion.div>

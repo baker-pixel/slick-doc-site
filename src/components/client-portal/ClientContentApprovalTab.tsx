@@ -589,21 +589,36 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
       // made at approval-creation time, since images are often still
       // generating (via the nightly image batch) when the approval is
       // first created.
+      //
+      // publish_status is the same story: handle-approval sets it to
+      // "queued" once and nothing ever updates it again -- the real outcome
+      // (published/failed) only ever lands on content_calendar.status. Same
+      // live join, so the badge doesn't get stuck on "Publishing..." forever.
       const contentIds = [...new Set(rows.map((r) => r.content_id).filter(Boolean))] as string[];
       let imageByContentId: Record<string, string> = {};
+      let liveStatusByContentId: Record<string, string> = {};
       if (contentIds.length > 0) {
         const { data: calRows } = await supabase
           .from("content_calendar")
-          .select("content_id, metadata")
+          .select("content_id, metadata, status")
           .in("content_id", contentIds);
         imageByContentId = Object.fromEntries(
           (calRows || [])
             .map((c: any) => [c.content_id, (c.metadata as { image_url?: string } | null)?.image_url])
             .filter(([, url]) => !!url)
         );
+        liveStatusByContentId = Object.fromEntries(
+          (calRows || [])
+            .filter((c: any) => c.status === "published" || c.status === "failed")
+            .map((c: any) => [c.content_id, c.status])
+        );
       }
 
-      setApprovals(rows.map((r) => ({ ...r, image_url: r.content_id ? imageByContentId[r.content_id] : undefined })));
+      setApprovals(rows.map((r) => ({
+        ...r,
+        image_url: r.content_id ? imageByContentId[r.content_id] : undefined,
+        publish_status: (r.content_id && liveStatusByContentId[r.content_id]) || r.publish_status,
+      })));
     } catch (error) {
       console.error("Error fetching approvals:", error);
     } finally {
@@ -776,6 +791,9 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
   const getStatusBadge = (status: string, publishStatus?: string | null) => {
     if (publishStatus === "published") {
       return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Published</Badge>;
+    }
+    if (publishStatus === "failed") {
+      return <Badge className="bg-red-100 text-red-800 border-red-200">Publish Failed</Badge>;
     }
     if (status === "approved" && publishStatus === "queued") {
       return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Publishing...</Badge>;
