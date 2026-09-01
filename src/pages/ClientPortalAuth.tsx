@@ -37,6 +37,14 @@ export default function ClientPortalAuth() {
   const processingInviteRef = useRef(false);
   // Ref so SIGNED_IN handler can synchronously check recovery mode before redirecting
   const isPasswordRecoveryRef = useRef(false);
+  // The onAuthStateChange SIGNED_IN handler and the initial getSession()
+  // check both call checkClientPortalAccess on a normal page load (Supabase
+  // fires SIGNED_IN on session restore too), racing two seed-tier-workflow
+  // calls before either's guard-check read commits -- confirmed live, this
+  // produced near-duplicate workflow batches seconds apart. One attempt per
+  // mount is enough; seed-tier-workflow's own guard already covers retries
+  // across separate logins.
+  const seedAttemptedRef = useRef(false);
 
   useEffect(() => {
     // Handle Supabase error hash (e.g. expired OTP)
@@ -195,6 +203,8 @@ export default function ClientPortalAuth() {
 
   /** Fire-and-forget workflow seeding. Never blocks portal access. */
   const seedWorkflowSafe = async (clientAccountId: string) => {
+    if (seedAttemptedRef.current) return;
+    seedAttemptedRef.current = true;
     try {
       const { error } = await supabase.functions.invoke("seed-tier-workflow", {
         body: { client_id: clientAccountId },

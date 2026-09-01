@@ -209,17 +209,25 @@ serve(async (req) => {
       });
     }
 
-    // Check for existing active workflow
+    // Check for an existing workflow -- active OR already completed. Callers
+    // like ClientPortalAuth fire this on every portal login treating 409 as
+    // "already seeded, fine" -- but the old guard only checked status=active,
+    // so once workflowUnlock flips a finished workflow to "completed" this
+    // silently fell through and re-seeded a brand-new empty 10-step batch on
+    // every subsequent login. Confirmed live: one client accumulated 22
+    // duplicate workflows this way after finishing onboarding once.
     const { data: existing } = await supabase
       .from("client_workflows")
       .select("id")
       .eq("client_id", client_id)
-      .eq("status", "active")
+      .in("status", ["active", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existing) {
       return new Response(
-        JSON.stringify({ error: "Active workflow already exists", workflow_id: existing.id }),
+        JSON.stringify({ error: "Workflow already exists for this client", workflow_id: existing.id }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
