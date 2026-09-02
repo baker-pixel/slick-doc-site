@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI } from "../_shared/ai.ts";
+import { callAI, MODELS } from "../_shared/ai.ts";
 import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
 import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { getSocialPillars } from "../_shared/socialStrategy.ts";
@@ -477,6 +477,13 @@ async function generateContent(
     prompt: user,
     maxTokens,
     temperature: 0.75,
+    // MODELS.default (gpt-oss-120b) intermittently still burns the whole
+    // token budget on hidden reasoning even after max_tokens growth --
+    // 24 final failures ("AI returned empty response") over the last 2
+    // weeks. fallbackModels was already supported by callAI but no caller
+    // ever set it, so a stuck primary model just retried itself. MODELS.fast
+    // (gpt-oss-20b) is smaller and less prone to the same runaway reasoning.
+    fallbackModels: [MODELS.fast],
   })).trim();
   if (!content) throw new Error("No content returned from AI");
   const originalLength = content.length;
