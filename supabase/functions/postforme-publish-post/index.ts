@@ -5,6 +5,11 @@ import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { notifyClientBlocked } from "../_shared/clientAlerts.ts";
+
+function platformLabel(platform: string): string {
+  return platform.charAt(0).toUpperCase() + platform.slice(1);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -196,6 +201,13 @@ serve(async (req) => {
         existingMeta,
         `No Post for Me account connected for "${item.platform}". Connect one in Social & Accounts.`,
       );
+      // The pipeline is fine -- this is the client's own account being
+      // disconnected, so it's the one blocker they (not us) have to clear.
+      await notifyClientBlocked(supabase, item.client_account_id, {
+        notificationType: "integration_disconnected",
+        title: `Your ${platformLabel(item.platform)} account isn't connected`,
+        description: `We have posts ready to publish, but no ${platformLabel(item.platform)} account is connected yet, so publishing is paused. Connect it in your portal's Social & Accounts tab to get your content posting again.`,
+      });
       return json({ error: `No PfM account for ${item.platform}`, success: false }, 422);
     }
 
