@@ -37,6 +37,22 @@ interface ProspectEmail {
   drip_step: number | null;
 }
 
+interface SequenceStep {
+  step_number: number;
+  delay_days: number;
+  cumulative_days: number;
+}
+
+// Mirrors the step themes run-prospect-drip actually writes into each
+// prospect's personalized email (see stepThemes in that function) --
+// client-facing summaries of the same four goals, not the raw AI prompt.
+const SEQUENCE_STEP_LABELS: Record<number, { title: string; description: string }> = {
+  1: { title: "Introduction", description: "A warm, personalized first note referencing something specific about the lead's business." },
+  2: { title: "Follow-up", description: "Speaks to a pain point common in the lead's space and how you solve it." },
+  3: { title: "What working with you looks like", description: "Concrete services and what sets you apart, aimed at booking a call." },
+  4: { title: "Final check-in", description: "Short, low-pressure close asking if a quick call is worth it." },
+};
+
 const STATUS_STYLES: Record<string, string> = {
   discovered: "bg-orange-100 text-orange-800 border-orange-200",
   pending:    "bg-blue-100 text-blue-800 border-blue-200",
@@ -64,6 +80,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [nextEmail, setNextEmail] = useState<{ subject: string; scheduled_for: string } | null>(null);
   const [icpLocal, setIcpLocal] = useState(true);
   const [findingLeads, setFindingLeads] = useState(false);
+  const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[] | null>(null);
 
   const loadProspects = async () => {
     setLoading(true);
@@ -84,6 +101,9 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         const icp = data?.icp as { local?: boolean } | null;
         if (icp && typeof icp.local === "boolean") setIcpLocal(icp.local);
       });
+    (supabase.rpc as any)("client_get_outreach_sequence").then(({ data }: { data: SequenceStep[] | null }) => {
+      setSequenceSteps(data ?? []);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientAccountId]);
 
@@ -166,6 +186,33 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           {findingLeads ? "Searching..." : "Find leads now"}
         </Button>
       </div>
+
+      {sequenceSteps && sequenceSteps.length > 0 && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center gap-2 font-medium text-sm">
+            <Mail className="w-4 h-4 text-primary" />
+            Your outreach sequence
+          </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Every matched lead automatically goes through these {sequenceSteps.length} emails, personalized per business — this is the campaign running on your behalf, before any lead reaches a given step.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {sequenceSteps.map((s) => {
+              const label = SEQUENCE_STEP_LABELS[s.step_number];
+              return (
+                <div key={s.step_number} className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Step {s.step_number}</span>
+                    <Badge variant="outline" className="text-xs">Day {s.cumulative_days}</Badge>
+                  </div>
+                  <div className="text-sm font-medium">{label?.title ?? `Step ${s.step_number}`}</div>
+                  <p className="text-xs text-muted-foreground">{label?.description ?? ""}</p>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       <Card>
         {loading ? (
