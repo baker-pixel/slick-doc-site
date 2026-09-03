@@ -594,9 +594,20 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
       // "queued" once and nothing ever updates it again -- the real outcome
       // (published/failed) only ever lands on content_calendar.status. Same
       // live join, so the badge doesn't get stuck on "Publishing..." forever.
+      //
+      // Two link paths exist because handle-approval has two: rows that came
+      // through fill-scheduled-content carry a content_id FK, but rows with
+      // no generated_content backing it (generate-approval-draft's intro
+      // post, run-ai-batch's automated output) never get one -- handle-approval
+      // links those to content_calendar via metadata.content_approval_id
+      // instead. Skipping that second path here is exactly what left old
+      // approvals stuck on "Publishing..." forever.
       const contentIds = [...new Set(rows.map((r) => r.content_id).filter(Boolean))] as string[];
+      const approvalIdsWithoutContentId = rows.filter((r) => !r.content_id).map((r) => r.id);
       let imageByContentId: Record<string, string> = {};
       let liveStatusByContentId: Record<string, string> = {};
+      let imageByApprovalId: Record<string, string> = {};
+      let liveStatusByApprovalId: Record<string, string> = {};
       if (contentIds.length > 0) {
         const { data: calRows } = await supabase
           .from("content_calendar")
@@ -613,11 +624,30 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
             .map((c: any) => [c.content_id, c.status])
         );
       }
+      if (approvalIdsWithoutContentId.length > 0) {
+        const { data: calRowsByApproval } = await supabase
+          .from("content_calendar")
+          .select("metadata, status")
+          .in("metadata->>content_approval_id", approvalIdsWithoutContentId);
+        imageByApprovalId = Object.fromEntries(
+          (calRowsByApproval || [])
+            .map((c: any) => [(c.metadata as { content_approval_id?: string } | null)?.content_approval_id, (c.metadata as { image_url?: string } | null)?.image_url])
+            .filter(([id, url]) => !!id && !!url)
+        );
+        liveStatusByApprovalId = Object.fromEntries(
+          (calRowsByApproval || [])
+            .filter((c: any) => c.status === "published" || c.status === "failed")
+            .map((c: any) => [(c.metadata as { content_approval_id?: string } | null)?.content_approval_id, c.status])
+        );
+      }
 
       setApprovals(rows.map((r) => ({
         ...r,
-        image_url: r.content_id ? imageByContentId[r.content_id] : undefined,
-        publish_status: (r.content_id && liveStatusByContentId[r.content_id]) || r.publish_status,
+        image_url: (r.content_id ? imageByContentId[r.content_id] : imageByApprovalId[r.id]) ?? undefined,
+        publish_status:
+          (r.content_id && liveStatusByContentId[r.content_id]) ||
+          liveStatusByApprovalId[r.id] ||
+          r.publish_status,
       })));
     } catch (error) {
       console.error("Error fetching approvals:", error);
