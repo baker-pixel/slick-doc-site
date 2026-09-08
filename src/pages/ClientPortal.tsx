@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -93,6 +93,7 @@ const tabDescriptions: Record<PortalTab, string> = {
 
 export default function ClientPortal() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -319,6 +320,11 @@ export default function ClientPortal() {
     // Clear any in-flight OAuth attribution so a different client logging in
     // on this browser can't inherit it
     localStorage.removeItem("pfm_oauth_client_id");
+    // The query cache is a module-level singleton (src/apps/ClientApp.tsx) that
+    // survives this component unmounting, keyed by clientAccountId in most
+    // places but not guaranteed everywhere -- wipe it so a different account
+    // logging in on this browser/tab can't see stale data from this session.
+    queryClient.clear();
     await supabase.auth.signOut();
     // onAuthStateChange SIGNED_OUT fires → setShouldRedirect(true) → navigate("/portal/auth")
   };
