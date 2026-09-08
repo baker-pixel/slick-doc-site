@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { AdminAuthProvider, useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Header } from "@/components/Header";
@@ -216,6 +217,7 @@ interface QuickScanLead {
 
 const AdminInner = () => {
   const { adminPassword: storedPassword, isAuthenticated, login: authLogin, logout: authLogout } = useAdminAuth();
+  const queryClient = useQueryClient();
   const [password, setPassword] = useState("");
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -1600,7 +1602,7 @@ const AdminInner = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} onLogout={() => { supabase.auth.signOut(); authLogout(); }} />
+        <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} onLogout={() => { queryClient.clear(); supabase.auth.signOut(); authLogout(); }} />
         
         <SidebarInset>
           <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background px-4">
