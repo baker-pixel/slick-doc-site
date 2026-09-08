@@ -143,15 +143,18 @@ serve(async (req) => {
       }
     }
 
-    // Feedback loop: batch-fetch recent rejection reasons across all clients
-    // in this run so drafts stop repeating issues admin/client already
-    // flagged. Same table/shape as _shared/contentFeedback.ts's per-client
-    // helper, queried in bulk here since we already have all clientIds.
+    // Feedback loop: batch-fetch recent hard-rejection reasons across all
+    // clients in this run so drafts stop repeating issues admin/client
+    // already flagged. Same table/shape as _shared/contentFeedback.ts's
+    // per-client helper, queried in bulk here since we already have all
+    // clientIds. "changes_requested" is deliberately excluded -- that
+    // feedback goes into auto-revising the flagged post itself (see
+    // handle-approval), not into unrelated future drafts.
     const { data: recentFeedbackRows } = await supabase
       .from("generated_content")
       .select("client_id, content_type, title, rejection_reason")
       .in("client_id", clientIds)
-      .in("status", ["rejected", "changes_requested"])
+      .in("status", ["rejected"])
       .not("rejection_reason", "is", null)
       .order("updated_at", { ascending: false })
       .limit(clientIds.length * 5);

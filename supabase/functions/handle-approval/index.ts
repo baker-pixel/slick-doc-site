@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, MODELS } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -296,40 +297,90 @@ serve(async (req) => {
       })
       .eq("id", approval_id);
 
-    // Sync status back to generated_content so admin sees changes were requested,
-    // and carry the reason with it -- content_approvals rows are ephemeral
-    // (cascade on generated_content delete), this is the durable copy the
-    // next generation call reads back via _shared/contentFeedback.ts.
+    // 2. Actually act on the feedback: rewrite this specific post with AI right
+    // now instead of just flagging it and hoping someone notices. Falls back to
+    // the old "flag it, needs a human" behavior if the rewrite fails, so a
+    // transient model error never silently eats the client's feedback.
     const generatedContentIdForChanges: string | null = approval.content_id || null;
-    if (generatedContentIdForChanges) {
-      await supabase
-        .from("generated_content")
-        .update({ status: "changes_requested", rejection_reason: feedback, updated_at: new Date().toISOString() })
-        .eq("id", generatedContentIdForChanges);
-    }
+    let revised = false;
 
-    // 2. Insert automation alert
-    await supabase.from("automation_alerts").insert({
-      alert_type: "changes_requested",
-      title: `Changes requested: ${approval.title}`,
-      message: `Client requested changes on ${approval.content_type}: ${feedback}`,
-      severity: "medium",
-      source: "handle-approval",
-      source_id: approval_id,
-    });
+    if (generatedContentIdForChanges) {
+      try {
+        const [{ data: genRecord }, { data: client }] = await Promise.all([
+          supabase.from("generated_content").select("metadata").eq("id", generatedContentIdForChanges).maybeSingle(),
+          supabase.from("client_accounts").select("business_name, industry").eq("id", clientId).maybeSingle(),
+        ]);
+
+        const original = approval.full_content || approval.content_preview || "";
+        const prompt = `You wrote this ${approval.content_type || "social"} post${approval.platform ? ` for ${approval.platform}` : ""} for ${client?.business_name || "the business"}${client?.industry ? ` (${client.industry} industry)` : ""}:
+
+"""
+${original}
+"""
+
+The client reviewed it and requested changes:
+"${feedback.trim()}"
+
+Rewrite the post to directly address this feedback. Keep the same topic, platform conventions, and roughly the same length. Return ONLY the revised post content -- no preamble, no explanation, no quotes.`;
+
+        const revisedContent = await callAI({
+          prompt,
+          model: MODELS.default,
+          maxTokens: 600,
+          source: "handle-approval-regenerate",
+          clientId,
+          promptId: "content-revision.v1",
+        });
+
+        await supabase
+          .from("generated_content")
+          .update({
+            content: revisedContent.trim(),
+            status: "pending_admin_review",
+            metadata: {
+              ...((genRecord?.metadata as Record<string, unknown>) || {}),
+              last_revision_feedback: feedback.trim(),
+              last_revised_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", generatedContentIdForChanges);
+
+        revised = true;
+      } catch (err) {
+        console.error("Auto-revision failed after changes_requested:", err);
+
+        // Fall back to the old behavior: just flag it, a human has to fix it.
+        await supabase
+          .from("generated_content")
+          .update({ status: "changes_requested", rejection_reason: feedback, updated_at: new Date().toISOString() })
+          .eq("id", generatedContentIdForChanges);
+
+        await supabase.from("automation_alerts").insert({
+          alert_type: "content_revision_failed",
+          title: `Auto-revision failed: ${approval.title}`,
+          message: `Client requested changes but the automatic rewrite failed -- needs a manual fix. Feedback: ${feedback}`,
+          severity: "error",
+          source: "handle-approval",
+          source_id: approval_id,
+        });
+      }
+    }
 
     // Log activity
     await supabase.from("activity_feed").insert({
       client_account_id: clientId,
       activity_type: "content_changes_requested",
       title: `Changes requested: ${approval.title}`,
-      description: feedback,
+      description: revised
+        ? `${feedback} — revised draft is back in admin review.`
+        : feedback,
       icon: "edit-3",
-      metadata: { approval_id, content_type: approval.content_type },
+      metadata: { approval_id, content_type: approval.content_type, revised },
     });
 
     return new Response(
-      JSON.stringify({ success: true, action: "changes_requested" }),
+      JSON.stringify({ success: true, action: "changes_requested", revised }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

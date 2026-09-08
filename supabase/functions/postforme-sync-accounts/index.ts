@@ -122,6 +122,10 @@ serve(async (req) => {
     }
 
     let resolvedAccounts: PfmAccount[] = [];
+    // True once we've done a full listing of this client's PfM accounts (as opposed to
+    // the narrow "just these IDs" fast path) — only then is it safe to treat the result
+    // as the full current state and prune local rows PfM no longer reports.
+    let isFullClientSnapshot = false;
 
     if (accountIds && accountIds.length > 0) {
       // Fast path: fetch only the accounts that were just connected.
@@ -136,6 +140,7 @@ serve(async (req) => {
       if (clientId) {
         console.log(`Fetching PfM accounts with external_id=${clientId}`);
         resolvedAccounts = await fetchAllAccounts(pfmApiKey, clientId);
+        isFullClientSnapshot = true;
       }
 
       // Fallback 2: if still nothing, pull ALL accounts and filter in JS by external_id
@@ -145,6 +150,7 @@ serve(async (req) => {
         const allAccounts = await fetchAllAccounts(pfmApiKey);
         resolvedAccounts = allAccounts.filter((a) => a.external_id === clientId);
         console.log(`Local filter found ${resolvedAccounts.length} accounts for clientId=${clientId}`);
+        isFullClientSnapshot = true;
       }
     }
 
@@ -185,8 +191,38 @@ serve(async (req) => {
       return json({ error: upsertErr.message }, 500);
     }
 
+    let pruned = 0;
+    if (isFullClientSnapshot && clientId) {
+      // resolvedAccounts is now the full, current set of this client's PfM accounts —
+      // remove any local rows for accounts PfM no longer reports (disconnected/deleted
+      // on PfM's or the platform's side, outside our own disconnect button), so stale
+      // pages don't linger forever in the page picker.
+      const liveIds = new Set(resolvedAccounts.map((a) => a.id));
+      const { data: localRows } = await supabase
+        .from("client_postforme_accounts")
+        .select("postforme_account_id")
+        .eq("client_id", clientId);
+      const staleIds = (localRows ?? [])
+        .map((r) => r.postforme_account_id)
+        .filter((id) => !liveIds.has(id));
+
+      if (staleIds.length > 0) {
+        const { error: pruneErr } = await supabase
+          .from("client_postforme_accounts")
+          .delete()
+          .eq("client_id", clientId)
+          .in("postforme_account_id", staleIds);
+        if (pruneErr) {
+          console.error("Prune error:", pruneErr.message);
+        } else {
+          pruned = staleIds.length;
+          console.log(`Pruned ${pruned} stale PfM accounts for client=${clientId}`);
+        }
+      }
+    }
+
     console.log(`Synced ${upsertRows.length} PfM accounts for client=${clientId}`);
-    return json({ synced: upsertRows.length, accounts: upsertRows });
+    return json({ synced: upsertRows.length, pruned, accounts: upsertRows });
   } catch (err: unknown) {
     console.error("postforme-sync-accounts error:", err);
     return json({ error: err instanceof Error ? err.message : "Unknown error" }, 500);

@@ -6,13 +6,16 @@ export interface ContentFeedbackItem {
   reason: string;
 }
 
-const REJECTED_STATUSES = ["rejected", "changes_requested"];
+// "changes_requested" is deliberately excluded -- that feedback is now used
+// to auto-revise the flagged post itself (see handle-approval), not injected
+// into unrelated future drafts.
+const REJECTED_STATUSES = ["rejected"];
 
 /**
- * Most recent rejection/changes-requested reasons for a client, so the next
- * generation call can avoid repeating known issues instead of starting from
- * zero every time. Best-effort: callers should treat failures as "no
- * feedback available" rather than blocking generation.
+ * Most recent hard-rejection reasons for a client, so the next generation
+ * call can avoid repeating known issues instead of starting from zero every
+ * time. Best-effort: callers should treat failures as "no feedback
+ * available" rather than blocking generation.
  */
 export async function getRecentContentFeedback(
   supabase: SupabaseClient,
