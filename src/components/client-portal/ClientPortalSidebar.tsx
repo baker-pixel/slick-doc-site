@@ -246,7 +246,7 @@ export function ClientPortalSidebar({
               variant="ghost"
               size="icon"
               onClick={onSignOut}
-              className="h-7 w-7 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:hidden"
+              className="h-7 w-7 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
               aria-label="Sign out"
             >
               <LogOut className="h-3.5 w-3.5" />
