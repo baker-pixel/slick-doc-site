@@ -67,7 +67,14 @@ serve(async (req) => {
       accountId = row?.postforme_account_id ?? null;
     }
 
-    // Revoke on PfM side — best effort (don't fail if PfM rejects)
+    // Revoke on PfM side — best effort (don't fail if PfM rejects). Tracked
+    // and returned to the caller: if this fails, the underlying LinkedIn (or
+    // other provider) authorization is likely still live, so the account can
+    // reappear on the next sync even though it's gone from our own DB --
+    // that "auto-reconnects on its own" is a real client-reported confusion,
+    // not a bug in the resync itself, so surface it honestly instead of
+    // reporting a clean "Disconnected" every time.
+    let remoteRevoked: boolean | null = null;
     if (accountId && pfmApiKey) {
       const pfmRes = await fetch(`${PFM_API}/v1/social-accounts/${accountId}`, {
         method: "DELETE",
@@ -76,9 +83,10 @@ serve(async (req) => {
       if (!pfmRes.ok) {
         const text = await pfmRes.text();
         console.warn(`PfM DELETE /v1/social-accounts/${accountId} returned ${pfmRes.status}: ${text}`);
-        // Don't hard-fail — still remove locally so UI is consistent
+        remoteRevoked = false;
       } else {
         console.log(`PfM account ${accountId} revoked`);
+        remoteRevoked = true;
       }
     }
 
@@ -95,7 +103,7 @@ serve(async (req) => {
     }
 
     console.log(`Disconnected ${platform} for client ${clientId}`);
-    return json({ success: true });
+    return json({ success: true, remoteRevoked });
   } catch (err: unknown) {
     console.error("postforme-disconnect-account error:", err);
     return json({ error: err instanceof Error ? err.message : "Unknown error" }, 500);

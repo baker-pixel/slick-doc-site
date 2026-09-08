@@ -638,7 +638,19 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Unknown error");
       }
       await fetchPfmAccounts();
-      toast({ title: "Disconnected" });
+      // remoteRevoked === false means the provider-side authorization likely
+      // wasn't actually revoked -- the account can silently reappear on the
+      // next sync even though it's gone from our DB right now. Say so instead
+      // of a clean "Disconnected" that looks like a bug ("it reconnects on
+      // its own") when it resurfaces.
+      if (data?.remoteRevoked === false) {
+        toast({
+          title: "Disconnected here, but may reappear",
+          description: "Removed from Orange Door, but the provider may still show it as authorized. If it comes back after the next sync, revoke access directly from that platform's own app/connection settings.",
+        });
+      } else {
+        toast({ title: "Disconnected" });
+      }
     } catch (err: unknown) {
       toast({ title: "Disconnect failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
