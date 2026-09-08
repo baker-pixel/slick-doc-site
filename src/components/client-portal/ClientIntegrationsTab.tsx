@@ -261,6 +261,11 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
   // OAuth completing but no linked Business account existing to attach).
   const attemptedPlatformRef = useRef<string | null>(null);
   const connectPopupRef = useRef<Window | null>(null);
+  // Snapshot of this platform's connected account IDs taken right before the
+  // OAuth popup opens. Without this, cancelling on LinkedIn's (or any
+  // provider's) own consent screen still reads as "connected" below purely
+  // because an older, unrelated account already existed for that platform.
+  const preConnectAccountIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     // Handle OAuth callback return
@@ -352,7 +357,15 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
       if (attempted && (!popup || popup.closed)) {
         attemptedPlatformRef.current = null;
         connectPopupRef.current = null;
-        const connected = accounts.some((a) => a.platform === attempted && a.status === "connected");
+        // Require an account ID that wasn't there before this popup opened --
+        // otherwise cancelling on the provider's own consent screen reads as
+        // "connected" purely because an older, unrelated account already
+        // existed for this platform (e.g. a previous test connection).
+        const preExistingIds = preConnectAccountIdsRef.current;
+        preConnectAccountIdsRef.current = null;
+        const connected = accounts.some(
+          (a) => a.platform === attempted && a.status === "connected" && !preExistingIds?.has(a.postforme_account_id)
+        );
         const platform = PLATFORMS.find((p) => p.id === attempted);
         if (!connected) {
           toast({
@@ -458,11 +471,17 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
   const getPfmAccountsForPlatform = (platformId: string) =>
     pfmAccounts.filter((a) => a.platform === platformId);
 
-  // The one used for publishing: the client's explicit pick if they've made
-  // one, else the first connected (stable — query is ordered by created_at).
+  // The one used for publishing: the client's explicit pick. With exactly one
+  // connected account there's no ambiguity to resolve, so that one counts as
+  // "the" account too -- but with several and no explicit pick yet, this
+  // deliberately returns null rather than silently defaulting to whichever
+  // came first. That silent-first-pick used to read as "it connected to the
+  // wrong page on its own" (a client-reported bug) since nothing ever
+  // prompted a real choice.
   const getPfmAccount = (platformId: string) => {
     const accounts = getPfmAccountsForPlatform(platformId);
-    return accounts.find((a) => a.is_primary) ?? accounts[0] ?? null;
+    if (accounts.length === 0) return null;
+    return accounts.find((a) => a.is_primary) ?? (accounts.length === 1 ? accounts[0] : null);
   };
 
   const openPfmPagePicker = (platformId: string) => {
@@ -513,6 +532,9 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
 
   const handleConnect = async (platform: (typeof PLATFORMS)[number]) => {
     setConnecting(platform.id);
+    preConnectAccountIdsRef.current = new Set(
+      getPfmAccountsForPlatform(platform.id).map((a) => a.postforme_account_id)
+    );
     try {
       const { data, error } = await supabase.functions.invoke("postforme-connect-account", {
         body: {
@@ -594,15 +616,21 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
   };
 
   const handleDisconnectPfm = async (platformId: string) => {
+    // No single resolved account when several pages are connected with no
+    // primary chosen yet (the ambiguous "needs selection" state) -- still
+    // worth letting the client disconnect everything for this platform and
+    // start over. The edge function's local delete isn't scoped to one
+    // account ID anyway; pfmAccountId here only narrows which one gets
+    // revoked on PfM's side when it's known.
     const pfmAccount = getPfmAccount(platformId);
-    if (!pfmAccount) return;
+    if (!pfmAccount && getPfmAccountsForPlatform(platformId).length === 0) return;
     setDisconnecting(platformId);
     try {
       const { data, error } = await supabase.functions.invoke("postforme-disconnect-account", {
         body: {
           clientId: clientAccountId,
           platform: platformId,
-          pfmAccountId: pfmAccount.postforme_account_id,
+          ...(pfmAccount ? { pfmAccountId: pfmAccount.postforme_account_id } : {}),
         },
       });
       if (error || data?.error) {
@@ -1066,9 +1094,14 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
         {PLATFORMS.map((platform) => {
           const pfmAccount = getPfmAccount(platform.id);
           const token = getToken(platform.id);
+          const pfmAccountsForThisPlatform = getPfmAccountsForPlatform(platform.id);
+          // getPfmAccount() returns null both when nothing's connected and when
+          // several pages are connected with no explicit pick yet -- tell those
+          // apart so the latter prompts a choice instead of showing "Not connected".
+          const pfmNeedsSelection = !pfmAccount && pfmAccountsForThisPlatform.length > 1;
           const connected = !!pfmAccount || (!!token && !isExpired(token.expires_at));
           const expired = !pfmAccount && !!token && isExpired(token.expires_at);
-          const selectionRequired = !pfmAccount && token?.token_metadata?.selection_required === true;
+          const selectionRequired = pfmNeedsSelection || (!pfmAccount && token?.token_metadata?.selection_required === true);
           const needsAction = !connected || expired;
           const Icon = platform.icon;
           const pageName = pfmAccount?.username
@@ -1079,7 +1112,6 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
           const linkedInPageOptions = platform.id === "linkedin" && !pfmAccount
             ? parseLinkedInOrganizations(token?.token_metadata?.organization_options)
             : [];
-          const pfmAccountsForThisPlatform = getPfmAccountsForPlatform(platform.id);
 
           return (
             <Card
@@ -1214,6 +1246,27 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
                       <RefreshCw className={cn("h-3.5 w-3.5", connecting === platform.id && "animate-spin")} />
                       Reconnect
                     </Button>
+                  ) : pfmNeedsSelection ? (
+                    <>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 rounded-lg"
+                        onClick={() => openPfmPagePicker(platform.id)}
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                        Choose page
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
+                        onClick={() => handleDisconnectPfm(platform.id)}
+                        disabled={disconnecting === platform.id}
+                      >
+                        <Unlink className="h-3.5 w-3.5" />
+                        {disconnecting === platform.id ? "Disconnecting..." : "Disconnect"}
+                      </Button>
+                    </>
                   ) : selectionRequired && platform.id === "linkedin" ? (
                     <Button
                       size="sm"
