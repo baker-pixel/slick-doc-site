@@ -110,8 +110,10 @@ export function buildSocialImagePrompt(client: ImagePromptClient, post: ImagePro
   } else {
     parts.push(
       services ? `Show the work itself -- ${services} -- its craft, setting, or results.` : `Show the work itself: its craft, setting, or results.`,
-      `Photorealistic, shot like a real camera photo -- natural light, true-to-life skin and material texture, shallow depth of field, candid editorial business-photography style, not stock-photo stiff.`,
-      `Avoid the telltale AI-generated look: no waxy/plastic skin, no over-smoothed or airbrushed surfaces, no warped or extra fingers, no uncanny faces, no oversaturated HDR glow.`,
+      `If people appear, make them read as real, specific individuals caught in a genuine moment: natural facial asymmetry, realistic skin texture with visible pores and minor imperfections, candid unposed expressions and body language, correct hand/limb anatomy, real fabric wrinkles.`,
+      `Shot like a real camera photo -- natural/ambient light, true-to-life color and material texture, shallow depth of field, slight grain, candid editorial photojournalism style, not stock-photo stiff.`,
+      `Contemporary setting and styling -- current clothing, decor, signage, and equipment, not dated or generic stock-photo staging.`,
+      `Avoid the telltale AI-generated look: no waxy/plastic skin, no over-smoothed or airbrushed surfaces, no perfectly symmetrical or vacant faces, no warped or extra fingers/limbs, no oversaturated HDR glow, no generic stock-photo grin.`,
     );
     if (location) parts.push(`Could plausibly be set in or near ${location}.`);
   }
