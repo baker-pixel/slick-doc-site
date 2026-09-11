@@ -99,11 +99,11 @@ export default function ClientPortalAuth() {
             if (inv) {
               finalizePortalSetup(session.user.id, session.user.email, inv);
             } else {
-              checkClientPortalAccess(session.user.id);
+              checkClientPortalAccess(session.user.id, session.user.email);
             }
           }, 0);
         } else {
-          checkClientPortalAccess(session.user.id);
+          checkClientPortalAccess(session.user.id, session.user.email);
         }
       }
     });
@@ -116,7 +116,7 @@ export default function ClientPortalAuth() {
     // is the only thing that should drive what happens next in that case.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session && !isPasswordRecoveryRef.current && !inviteToken) {
-        checkClientPortalAccess(session.user.id);
+        checkClientPortalAccess(session.user.id, session.user.email);
       }
     });
 
@@ -201,6 +201,51 @@ export default function ClientPortalAuth() {
     }
   };
 
+  // Self-heal: the invite-accept flow can leave an auth user created and
+  // email-confirmed but the client_portal_users row never written -- e.g. a
+  // corporate email-security scanner (Safe Links, Proofpoint) pre-visits and
+  // consumes the one-time confirmation link before the real click, or the
+  // confirmation opens on a different device/tab than the invite flow
+  // started on, so finalizePortalSetup's SIGNED_IN handler never runs. The
+  // client can then authenticate but has no portal link and no obvious next
+  // step. Their still-open invitation (by email) is enough to finish the
+  // linking here instead of dead-ending them (confirmed live: exactly this
+  // happened for support@innermetrix.com).
+  const tryLinkPendingInvitation = async (userId: string, userEmail: string | null | undefined): Promise<boolean> => {
+    if (!userEmail) return false;
+    const { data: inv } = await supabase
+      .from("client_invitations")
+      .select("id, client_account_id, first_name, last_name")
+      .ilike("email", userEmail)
+      .is("accepted_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!inv) return false;
+
+    const { error: portalError } = await supabase
+      .from("client_portal_users")
+      .insert({
+        user_id: userId,
+        client_account_id: inv.client_account_id,
+        first_name: inv.first_name,
+        last_name: inv.last_name,
+        invited_by: "admin",
+        last_login_at: new Date().toISOString(),
+      });
+    if (portalError && portalError.code !== "23505") {
+      console.error("Self-heal portal user creation error:", portalError);
+      return false;
+    }
+
+    await supabase.from("user_roles").upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
+    await supabase.from("client_invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
+    await seedWorkflowSafe(inv.client_account_id);
+    return true;
+  };
+
   /** Fire-and-forget workflow seeding. Never blocks portal access. */
   const seedWorkflowSafe = async (clientAccountId: string) => {
     if (seedAttemptedRef.current) return;
@@ -226,7 +271,7 @@ export default function ClientPortalAuth() {
     }
   };
 
-  const checkClientPortalAccess = async (userId: string) => {
+  const checkClientPortalAccess = async (userId: string, userEmail?: string | null) => {
     const { data } = await supabase
       .from("client_portal_users")
       .select("id, client_account_id")
@@ -237,6 +282,15 @@ export default function ClientPortalAuth() {
       // Ensure the workflow is seeded — idempotent (409 if already exists)
       // Guards against network failures on first login that silently skipped seeding
       seedWorkflowSafe(data.client_account_id);
+      navigate("/portal");
+      return;
+    }
+
+    // No portal link yet — try self-heal from a still-open invitation before
+    // giving up. Stays silent if that also finds nothing: this path also
+    // fires for an unrelated pre-existing session with no invite in play
+    // (see the comment on the getSession call below).
+    if (await tryLinkPendingInvitation(userId, userEmail)) {
       navigate("/portal");
     }
   };
@@ -357,18 +411,21 @@ export default function ClientPortalAuth() {
         .maybeSingle();
 
       if (!portalUser) {
-        toast({
-          title: "No Portal Access",
-          description: "Your account isn't linked to a client portal yet. If you were invited, please use the invitation link from your email. Otherwise, contact your account manager.",
-          variant: "destructive",
-        });
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
+        const linked = await tryLinkPendingInvitation(data.user.id, data.user.email);
+        if (!linked) {
+          toast({
+            title: "No Portal Access",
+            description: "Your account isn't linked to a client portal yet. If you were invited, please use the invitation link from your email. Otherwise, contact your account manager.",
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          setLoading(false);
+          return;
+        }
+      } else {
+        supabase.from("client_portal_users").update({ last_login_at: new Date().toISOString() }).eq("id", portalUser.id)
+          .then(({ error: loginErr }) => { if (loginErr) console.error("last_login_at update failed:", loginErr.message); });
       }
-
-      supabase.from("client_portal_users").update({ last_login_at: new Date().toISOString() }).eq("id", portalUser.id)
-        .then(({ error: loginErr }) => { if (loginErr) console.error("last_login_at update failed:", loginErr.message); });
 
       navigate("/portal");
     } catch (error: any) {
