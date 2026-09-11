@@ -11,6 +11,7 @@ interface ConnectBody {
   site_url: string;
   token: string;
   wp_version?: string;
+  plugin_version?: string;
   plugins?: string[];
 }
 
@@ -24,7 +25,7 @@ serve(async (req) => {
     );
 
     const body = (await req.json()) as ConnectBody;
-    const { site_url, token, wp_version, plugins = [] } = body;
+    const { site_url, token, wp_version, plugin_version, plugins = [] } = body;
 
     if (!site_url || !token) {
       return new Response(JSON.stringify({ error: "site_url and token required" }), {
@@ -84,7 +85,7 @@ serve(async (req) => {
       yoast_active:    yoastActive,
       rankmath_active: rankmathActive,
       wp_version:      wp_version ?? null,
-      plugin_version:  "1.0.0",
+      plugin_version:  plugin_version ?? "1.0.0",
       updated_at:      new Date().toISOString(),
     };
     if (clientId) upsertPayload.client_id = clientId;

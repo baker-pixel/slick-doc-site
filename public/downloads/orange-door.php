@@ -2,19 +2,40 @@
 /**
  * Plugin Name: Orange Door SEO
  * Description: Connects your WordPress site to Orange Door for automated SEO auditing and fixes.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Orange Door
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 // ─────────────────────────────────────────────
-// 1. ACTIVATION — generate token + ping OD backend
+// 1. CONNECT — generate token + ping OD backend
 // ─────────────────────────────────────────────
+// The activation hook only fires on an inactive→active transition, and
+// wp_remote_post can fail silently (network hiccup, host firewall, slow
+// TLS handshake) with nothing surfacing to the admin. So activation isn't
+// the only trigger: od_maybe_connect() also runs on admin_init, throttled,
+// until a connection is confirmed -- self-healing the same way a plugin
+// that was already active before install, or whose first POST failed,
+// still connects the next time an admin loads wp-admin.
 
-register_activation_hook( __FILE__, 'od_activate' );
+register_activation_hook( __FILE__, 'od_attempt_connect' );
+add_action( 'admin_init', 'od_maybe_connect' );
 
-function od_activate() {
+function od_maybe_connect() {
+    if ( get_option( 'od_connect_status' ) === 'connected' ) return;
+
+    // Throttle retries so a broken connection doesn't hammer the backend
+    // on every wp-admin page load.
+    $last_attempt = (int) get_option( 'od_connect_last_attempt', 0 );
+    if ( time() - $last_attempt < 60 ) return;
+
+    od_attempt_connect();
+}
+
+function od_attempt_connect() {
+    update_option( 'od_connect_last_attempt', time() );
+
     $token = get_option( 'od_secret_token' );
     if ( ! $token ) {
         $token = 'od_' . wp_generate_password( 32, false );
@@ -23,16 +44,28 @@ function od_activate() {
 
     $backend_url = 'https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1/connect-site';
 
-    wp_remote_post( $backend_url, [
+    $response = wp_remote_post( $backend_url, [
         'body'    => json_encode([
-            'site_url'    => get_site_url(),
-            'token'       => $token,
-            'wp_version'  => get_bloginfo( 'version' ),
-            'plugins'     => od_get_active_seo_plugins(),
+            'site_url'       => get_site_url(),
+            'token'          => $token,
+            'wp_version'     => get_bloginfo( 'version' ),
+            'plugin_version' => '1.1.1',
+            'plugins'        => od_get_active_seo_plugins(),
         ]),
         'headers' => [ 'Content-Type' => 'application/json' ],
         'timeout' => 10,
     ]);
+
+    if ( is_wp_error( $response ) ) {
+        update_option( 'od_connect_status', 'error' );
+        update_option( 'od_connect_error', $response->get_error_message() );
+    } elseif ( wp_remote_retrieve_response_code( $response ) >= 300 ) {
+        update_option( 'od_connect_status', 'error' );
+        update_option( 'od_connect_error', wp_remote_retrieve_body( $response ) );
+    } else {
+        update_option( 'od_connect_status', 'connected' );
+        update_option( 'od_connect_error', '' );
+    }
 
     add_rewrite_rule( '^llms\.txt$', 'index.php?od_llms_txt=1', 'top' );
     flush_rewrite_rules();
@@ -117,7 +150,7 @@ function od_ping() {
     return rest_ensure_response([
         'status'         => 'ok',
         'site_url'       => get_site_url(),
-        'plugin_version' => '1.1.0',
+        'plugin_version' => '1.1.1',
         'wp_version'     => get_bloginfo( 'version' ),
         'yoast_active'   => defined( 'WPSEO_VERSION' ),
         'rankmath_active'=> defined( 'RANK_MATH_VERSION' ),
@@ -588,7 +621,15 @@ function od_admin_menu() {
 }
 
 function od_admin_page() {
-    $token = get_option( 'od_secret_token', 'Not generated yet' );
+    $token  = get_option( 'od_secret_token', 'Not generated yet' );
+    $status = get_option( 'od_connect_status', 'pending' );
+    $error  = get_option( 'od_connect_error', '' );
+
+    if ( isset( $_POST['od_retry_connect'] ) && check_admin_referer( 'od_retry_connect' ) ) {
+        od_attempt_connect();
+        $status = get_option( 'od_connect_status', 'pending' );
+        $error  = get_option( 'od_connect_error', '' );
+    }
     ?>
     <div class="wrap">
         <h1>Orange Door SEO</h1>
@@ -610,7 +651,18 @@ function od_admin_page() {
                 <td><code><?php echo esc_html( get_site_url() ); ?>/wp-json/orangedoor/v1/scan</code></td>
             </tr>
         </table>
-        <p>This plugin is connected to <strong>Orange Door</strong>. Fixes are applied automatically when approved in your Orange Door dashboard.</p>
+
+        <?php if ( $status === 'connected' ) : ?>
+            <p>&#10003; Connected to <strong>Orange Door</strong>. Fixes are applied automatically when approved in your Orange Door dashboard.</p>
+        <?php else : ?>
+            <p style="color:#b32d2e;">
+                &#10007; Not connected yet<?php echo $error ? ': ' . esc_html( $error ) : '.'; ?>
+            </p>
+            <form method="post">
+                <?php wp_nonce_field( 'od_retry_connect' ); ?>
+                <button type="submit" name="od_retry_connect" value="1" class="button button-primary">Retry Connection</button>
+            </form>
+        <?php endif; ?>
     </div>
     <?php
 }
