@@ -363,9 +363,26 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
         // existed for this platform (e.g. a previous test connection).
         const preExistingIds = preConnectAccountIdsRef.current;
         preConnectAccountIdsRef.current = null;
-        const connected = accounts.some(
-          (a) => a.platform === attempted && a.status === "connected" && !preExistingIds?.has(a.postforme_account_id)
-        );
+        const isNewlyConnected = (list: PfmAccount[]) =>
+          list.some(
+            (a) => a.platform === attempted && a.status === "connected" && !preExistingIds?.has(a.postforme_account_id)
+          );
+
+        // PfM's account sync can lag a couple seconds behind the popup
+        // closing (webhook/API not caught up yet) — confirmed live, clients
+        // saw "didn't connect" toasts for LinkedIn/Facebook/Instagram/X that
+        // were actually just this check running too early. Retry a couple
+        // times before concluding it genuinely failed.
+        let connected = isNewlyConnected(accounts);
+        for (let attempt = 0; !connected && attempt < 2; attempt++) {
+          await new Promise((r) => setTimeout(r, 2500));
+          try {
+            await supabase.functions.invoke("postforme-sync-accounts", { body: { clientId: clientAccountId } });
+          } catch { /* fall through to a fresh DB read below regardless */ }
+          accounts = await fetchPfmAccounts();
+          connected = isNewlyConnected(accounts);
+        }
+
         const platform = PLATFORMS.find((p) => p.id === attempted);
         if (!connected) {
           toast({
