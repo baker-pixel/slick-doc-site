@@ -40,6 +40,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { scoreToStatus, getStatusColor } from "@/components/report/ReportConfig";
 import { tierFromScore } from "@/lib/inviteLeadToPortal";
+import { StatCard } from "./PortalUI";
 
 interface ClientActivityTabProps {
   clientAccountId: string;
@@ -328,6 +329,37 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         return new Date(byEmail.created_at) >= new Date(byBusiness.created_at) ? byEmail : byBusiness;
       }
       return byEmail?.overall_score != null ? byEmail : byBusiness ?? byEmail;
+    },
+  });
+
+  // Latest traffic snapshot (admin-entered client_analytics) for the Home performance card
+  const { data: latestAnalytics } = useQuery({
+    queryKey: ["client-home-traffic", clientAccountId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("client_analytics")
+        .select("period_start, period_end, metrics")
+        .eq("client_account_id", clientAccountId)
+        .order("period_end", { ascending: false })
+        .limit(2);
+      return (data || []) as { period_start: string; period_end: string; metrics: { website_visits?: number } }[];
+    },
+  });
+
+  // Home checklist: onboarded / SEO connected / social connected / content generated
+  const { data: statusChecklist } = useQuery({
+    queryKey: ["client-status-checklist", clientAccountId],
+    queryFn: async () => {
+      const [seoRes, socialRes, contentRes] = await Promise.all([
+        supabase.from("connected_sites").select("id").eq("client_id", clientAccountId).eq("status", "connected").limit(1).maybeSingle(),
+        supabase.from("client_oauth_tokens").select("id", { count: "exact", head: true }).eq("client_id", clientAccountId),
+        supabase.from("content_calendar").select("id", { count: "exact", head: true }).eq("client_account_id", clientAccountId),
+      ]);
+      return {
+        seoConnected: !!seoRes.data,
+        socialConnected: (socialRes.count || 0) > 0,
+        contentGenerated: (contentRes.count || 0) > 0,
+      };
     },
   });
 
@@ -730,6 +762,76 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     );
   }
 
+  const checklistItems: { label: string; done: boolean; tab?: string }[] = [
+    { label: "Onboarded", done: onboardingComplete || allDone },
+    { label: "SEO Connected", done: !!statusChecklist?.seoConnected, tab: "seo" },
+    { label: "Social Connected", done: !!statusChecklist?.socialConnected, tab: "social" },
+    { label: "Content Generated", done: !!statusChecklist?.contentGenerated },
+  ];
+  const checklistDoneCount = checklistItems.filter((i) => i.done).length;
+
+  // Steps-completed label: workflow step count once a workflow exists, else legacy task count
+  const stepsLabel = hasWorkflow
+    ? `${wfCompleted} of ${wfTotal} steps complete`
+    : totalCount > 0
+      ? `${completedCount} of ${totalCount} steps complete`
+      : null;
+
+  const [currentPeriod, previousPeriod] = latestAnalytics || [];
+  const currentVisits = currentPeriod?.metrics?.website_visits;
+  const previousVisits = previousPeriod?.metrics?.website_visits;
+  const visitsTrend = currentVisits != null && previousVisits != null && previousVisits !== 0
+    ? Math.round(((currentVisits - previousVisits) / previousVisits) * 100)
+    : undefined;
+  const formatVisits = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toString());
+
+  const performanceSection = (
+    <div className="space-y-4">
+      {currentVisits != null && (
+        <StatCard
+          label="Website Traffic"
+          value={formatVisits(currentVisits)}
+          icon={Eye}
+          trend={visitsTrend}
+          trendLabel={`${format(new Date(currentPeriod.period_start), "MMM d")} – ${format(new Date(currentPeriod.period_end), "MMM d, yyyy")}`}
+          className="max-w-xs"
+        />
+      )}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Setup Checklist</h3>
+          <span className="text-xs text-muted-foreground">
+            {checklistDoneCount} of {checklistItems.length} done{stepsLabel ? ` · ${stepsLabel}` : ""}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {checklistItems.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => item.tab && !item.done && onTabChange?.(item.tab)}
+              disabled={!item.tab || item.done}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                item.done ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-muted/30",
+                item.tab && !item.done && "cursor-pointer hover:bg-muted/50",
+              )}
+            >
+              {item.done ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+              ) : (
+                <Circle className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
+              )}
+              <span className={cn("text-xs font-medium", item.done ? "text-foreground" : "text-muted-foreground")}>
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   if (!hasWorkflow && totalCount === 0) {
     const placeholderSteps = [
       "Confirm Business Information",
@@ -740,6 +842,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     ];
     return (
       <div className="max-w-2xl mx-auto space-y-6">
+        {performanceSection}
         {/* Intake form prompt */}
         <Alert className="border-orange-400/40 bg-orange-500/5">
           <AlertTriangle className="h-4 w-4 text-orange-500" />
@@ -905,6 +1008,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   if (hasWorkflow) {
     return (
       <div className="max-w-2xl mx-auto space-y-8">
+        {performanceSection}
         {/* Expired token alert */}
         {expiredTokenAlert && (
           <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
@@ -1159,6 +1263,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   // Fallback: Legacy task-based view
   return (
     <div className="max-w-2xl mx-auto space-y-8">
+      {performanceSection}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold tracking-tight">Your Progress</h2>
