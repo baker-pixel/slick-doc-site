@@ -29,6 +29,7 @@ import {
   ChevronDown,
   Target,
   CalendarDays,
+  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -69,6 +70,7 @@ interface Message {
 
 interface Project {
   id: string;
+  kind: string;
   name: string;
   description: string | null;
   status: string;
@@ -108,6 +110,7 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
   const [newMessage, setNewMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [triggeringDiscovery, setTriggeringDiscovery] = useState(false);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
   useEffect(() => {
@@ -274,6 +277,27 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       const msg = await getEdgeErrorMessage(res.error, res.data);
       toast({ title: "Failed to update progress", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
+  };
+
+  // Manually jump-starts prospect discovery for this client instead of
+  // waiting for the daily 9am UTC auto-discover-prospects cron -- useful
+  // right after onboarding so the "Lead Generation Plan" project doesn't
+  // sit at awaiting_setup for up to 24h.
+  const triggerProspectDiscovery = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTriggeringDiscovery(true);
+    const res = await supabase.functions.invoke("auto-discover-prospects", {
+      body: { client_id: client.id, password: adminPassword },
+    });
+    const outcome = res.data?.results?.[client.id];
+    if (!res.error && !res.data?.error && !outcome?.startsWith("error")) {
+      toast({ title: "Prospect discovery triggered", description: outcome ?? "Running now" });
+      fetchProjects();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data) ?? outcome;
+      toast({ title: "Failed to trigger discovery", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
+    setTriggeringDiscovery(false);
   };
 
   const sendMessage = async () => {
@@ -664,8 +688,24 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                                   >
                                     {project.status.replace("_", " ")}
                                   </Badge>
+                                  {project.kind === "prospect" && client.tier !== "foundation" && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 gap-1.5 text-xs shrink-0"
+                                      disabled={triggeringDiscovery}
+                                      onClick={triggerProspectDiscovery}
+                                    >
+                                      {triggeringDiscovery ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Radar className="w-3 h-3" />
+                                      )}
+                                      {project.status === "awaiting_setup" ? "Set Up Now" : "Run Discovery Now"}
+                                    </Button>
+                                  )}
                                 </div>
-                                
+
                                 {project.description && (
                                   <p className="text-sm text-muted-foreground ml-8 line-clamp-2">
                                     {project.description}
