@@ -254,8 +254,12 @@ export default function ClientPortalAuth() {
       const { error } = await supabase.functions.invoke("seed-tier-workflow", {
         body: { client_id: clientAccountId },
       });
-      // 409 (workflow already exists) is fine — ignore
-      if (error && !String(error.message || "").includes("409")) {
+      // 409 (workflow already exists) is fine — ignore. FunctionsHttpError's
+      // `message` is always the generic "non-2xx status code" string, never
+      // the actual status, so the real code has to come from `context`
+      // (the raw Response) -- checking `message` here always misses, which
+      // fired this toast on every single login for an already-onboarded client.
+      if (error && (error as { context?: Response }).context?.status !== 409) {
         console.warn("seed-tier-workflow failed:", error);
         toast({
           title: "Setup pending",
