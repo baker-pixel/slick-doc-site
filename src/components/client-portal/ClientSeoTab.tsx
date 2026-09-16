@@ -353,19 +353,24 @@ export function ClientSeoTab({ clientAccountId }: Props) {
       ]);
       if (!cancelled) setAiVisibility((visibility as AiVisibilityScore | null) ?? null);
 
-      // Readiness is only ever written against the onboarding submission/prospect,
-      // never recomputed for an active client -- so this is a one-time snapshot,
-      // not a tracked metric. Skip the lookup entirely if there's no submission to join through.
-      if (submissionId) {
-        const { data: readiness } = await supabase
+      // seo-audit now recomputes readiness every run, keyed by client_id, so
+      // prefer that tracked row; fall back to the one-time onboarding
+      // submission/prospect snapshot for a client whose seo-audit hasn't run
+      // since this was wired up.
+      const readinessCols = "schema_score, llms_txt_score, faq_structure_score, entity_consistency_score, crawlability_score, fact_density_score, total_score, computed_at";
+      let readiness = (await supabase
+        .from("ai_readiness_scores")
+        .select(readinessCols)
+        .eq("client_id", clientAccountId)
+        .maybeSingle()).data;
+      if (!readiness && submissionId) {
+        readiness = (await supabase
           .from("ai_readiness_scores")
-          .select("schema_score, llms_txt_score, faq_structure_score, entity_consistency_score, crawlability_score, fact_density_score, total_score, computed_at")
+          .select(readinessCols)
           .eq("submission_id", submissionId)
-          .maybeSingle();
-        if (!cancelled) setAiReadiness((readiness as AiReadinessScore | null) ?? null);
-      } else if (!cancelled) {
-        setAiReadiness(null);
+          .maybeSingle()).data;
       }
+      if (!cancelled) setAiReadiness((readiness as AiReadinessScore | null) ?? null);
       if (!cancelled) setLoadingAi(false);
     })();
     return () => { cancelled = true; };

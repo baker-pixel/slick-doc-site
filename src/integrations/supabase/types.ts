@@ -894,6 +894,7 @@ export type Database = {
           created_at: string
           email: string
           first_name: string | null
+          ga4_property_id: string | null
           google_place_id: string | null
           google_review_url: string | null
           icp: Json | null
@@ -925,6 +926,7 @@ export type Database = {
           created_at?: string
           email: string
           first_name?: string | null
+          ga4_property_id?: string | null
           google_place_id?: string | null
           google_review_url?: string | null
           icp?: Json | null
@@ -956,6 +958,7 @@ export type Database = {
           created_at?: string
           email?: string
           first_name?: string | null
+          ga4_property_id?: string | null
           google_place_id?: string | null
           google_review_url?: string | null
           icp?: Json | null

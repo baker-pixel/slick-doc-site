@@ -6,21 +6,40 @@ import { functionErrorAlert } from "./alerts.ts";
 
 export const MODELS = {
   /** Default reasoning/content model. */
-  default: "openai/gpt-oss-120b",
+  default: "gpt-5-mini",
   /** Cheap/fast model for classification and low-stakes calls. */
-  fast: "openai/gpt-oss-20b",
+  fast: "gpt-4o-mini",
 } as const;
 
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-// gpt-oss models are reasoning models -- Groq defaults reasoning_effort to
-// "medium", which burns max_tokens on hidden reasoning before any answer
-// text is emitted. On tight budgets (short social copy: 120-700 tokens)
-// that leaves message.content empty and the whole call fails with "AI
-// returned empty response". Capped low here since these are short
-// copywriting tasks, not multi-step reasoning problems.
+// OpenAI is primary. Groq's gpt-oss models are the fallback tier (see
+// OPENAI_TO_GROQ_FALLBACK below) -- kept after the August incident where
+// Groq deprecated the models 24+ functions depended on with no warning;
+// a second provider means one vendor's outage/deprecation doesn't take
+// every AI-backed feature down at once.
+const OPENAI_TO_GROQ_FALLBACK: Record<string, string> = {
+  "gpt-5-mini": "openai/gpt-oss-120b",
+  "gpt-4o-mini": "openai/gpt-oss-20b",
+};
+
+// gpt-oss (Groq) and gpt-5* (OpenAI) are reasoning models -- left at their
+// provider's default reasoning effort, they burn max_tokens on hidden
+// reasoning before any answer text is emitted. On tight budgets (short
+// social copy: 120-700 tokens) that leaves message.content empty and the
+// whole call fails with "AI returned empty response". Capped low here
+// since these are short copywriting/extraction tasks, not multi-step
+// reasoning problems.
 function isGptOssModel(model: string): boolean {
   return model.startsWith("openai/gpt-oss-");
+}
+
+// gpt-5* models reject `temperature`/`top_p` outright (400) and use
+// `max_completion_tokens` instead of `max_tokens` -- unlike gpt-4o-mini and
+// Groq's gpt-oss, which both take the classic chat-completions shape.
+function isOpenAIReasoningModel(model: string): boolean {
+  return model.startsWith("gpt-5");
 }
 
 export interface ChatMessage {
@@ -267,6 +286,73 @@ async function attemptGroqOnce(
   return { text, usage: data.usage ?? null };
 }
 
+async function attemptOpenAIOnce(
+  model: string,
+  messages: ChatMessage[],
+  opts: AICallOptions,
+): Promise<{ text: string; usage: Record<string, number> | null }> {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new AIError("OPENAI_API_KEY is not configured", null, false);
+
+  const finalMessages = withJsonHint(messages, opts.jsonMode);
+  const reasoning = isOpenAIReasoningModel(model);
+
+  let res: Response;
+  try {
+    res = await fetch(OPENAI_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: finalMessages,
+        ...(opts.maxTokens
+          ? reasoning ? { max_completion_tokens: opts.maxTokens } : { max_tokens: opts.maxTokens }
+          : {}),
+        ...(!reasoning && opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(opts.jsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...(reasoning ? { reasoning_effort: "low" } : {}),
+      }),
+    });
+  } catch (e) {
+    throw new AIError(`AI request failed (network): ${e instanceof Error ? e.message : e}`, null, true);
+  }
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => "");
+    throwForStatus(res, bodyText, opts.source ?? "unknown");
+  }
+
+  const data = await res.json();
+  const choice = data.choices?.[0];
+  const text = choice?.message?.content;
+  if (!text) {
+    const truncated = choice?.finish_reason === "length";
+    throw new AIError(
+      truncated
+        ? "AI returned empty response (reasoning consumed the token budget before any answer text)"
+        : "AI returned empty response",
+      null,
+      true,
+      truncated,
+    );
+  }
+  return { text, usage: data.usage ?? null };
+}
+
+/** Routes to the right provider based on model name -- gpt-oss-* goes to
+ * Groq (its only host), everything else (gpt-5*, gpt-4o-mini, ...) to
+ * OpenAI directly. */
+function attemptModelOnce(
+  model: string,
+  messages: ChatMessage[],
+  opts: AICallOptions,
+): Promise<{ text: string; usage: Record<string, number> | null }> {
+  return isGptOssModel(model) ? attemptGroqOnce(model, messages, opts) : attemptOpenAIOnce(model, messages, opts);
+}
+
 /**
  * Call the LLM with retry + backoff and optional model fallback.
  * Returns the raw text of the completion.
@@ -275,6 +361,14 @@ export async function callAI(opts: AICallOptions): Promise<string> {
   const messages = buildMessages(opts);
   const retries = opts.retries ?? 2;
   const models = [opts.model ?? MODELS.default, ...(opts.fallbackModels ?? [])];
+  // Auto-append the Groq gpt-oss equivalent of the primary model as a last
+  // resort, so every one of ai.ts's ~30 callers gets cross-provider
+  // resilience for free -- not just the one caller that already passes an
+  // explicit fallbackModels list.
+  const groqFallback = OPENAI_TO_GROQ_FALLBACK[models[0]];
+  if (groqFallback && !models.includes(groqFallback) && Deno.env.get("GROQ_API_KEY")) {
+    models.push(groqFallback);
+  }
   const source = opts.source ?? "unknown";
   const callStarted = Date.now();
 
@@ -295,7 +389,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
       totalAttempts++;
       const started = Date.now();
       try {
-        const { text, usage } = await attemptGroqOnce(model, messages, { ...opts, maxTokens: currentMaxTokens });
+        const { text, usage } = await attemptModelOnce(model, messages, { ...opts, maxTokens: currentMaxTokens });
         const fallbackUsed = model !== models[0];
         console.log(
           `[ai] ok source=${source} model=${model} ms=${Date.now() - started}` +

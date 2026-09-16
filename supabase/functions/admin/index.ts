@@ -379,6 +379,46 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "get_client_engagement_stats": {
+        // Real leads/opens/clicks for one client + period, sourced from
+        // prospects (client_id, created_at, opened_at, clicked_at) instead
+        // of the hand-typed numbers ClientAnalyticsAdminPanel used to
+        // require -- prospects RLS requires an admin JWT this password
+        // login doesn't have, so this proxy (service role) is the only way
+        // the panel can read them.
+        const { client_id, period_start, period_end } = data || {};
+        if (!client_id || !period_start || !period_end) {
+          return new Response(
+            JSON.stringify({ error: "data.client_id, period_start and period_end are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const periodEndExclusive = new Date(new Date(period_end).getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+        const [leadsRes, opensRes, clicksRes] = await Promise.all([
+          supabase.from("prospects").select("id", { count: "exact", head: true })
+            .eq("client_id", client_id).gte("created_at", period_start).lt("created_at", periodEndExclusive),
+          supabase.from("prospects").select("id", { count: "exact", head: true })
+            .eq("client_id", client_id).gte("opened_at", period_start).lt("opened_at", periodEndExclusive),
+          supabase.from("prospects").select("id", { count: "exact", head: true })
+            .eq("client_id", client_id).gte("clicked_at", period_start).lt("clicked_at", periodEndExclusive),
+        ]);
+        if (leadsRes.error) throw leadsRes.error;
+        if (opensRes.error) throw opensRes.error;
+        if (clicksRes.error) throw clicksRes.error;
+
+        return new Response(
+          JSON.stringify({
+            data: {
+              leads_generated: leadsRes.count ?? 0,
+              email_opens: opensRes.count ?? 0,
+              email_clicks: clicksRes.count ?? 0,
+            },
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "update": {
         if (!data || Object.keys(data).length === 0) {
           console.log("Update called with empty data object");

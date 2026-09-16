@@ -34,6 +34,7 @@ import {
   FileText,
   Send,
   Activity,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
@@ -342,22 +343,31 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         .eq("client_account_id", clientAccountId)
         .order("period_end", { ascending: false })
         .limit(2);
-      return (data || []) as { period_start: string; period_end: string; metrics: { website_visits?: number } }[];
+      return (data || []) as { period_start: string; period_end: string; metrics: { website_visits?: number; leads_generated?: number } }[];
     },
   });
 
-  // Home checklist: onboarded / SEO connected / social connected / content generated
+  // Home checklist: onboarded / SEO connected / social connected / content generated.
+  // Every item here answers "is this true right now", not "did this ever
+  // happen once" -- otherwise a client can see "Social Connected" checked
+  // while the expired-token alert right above it says the connection is
+  // dead. So socialConnected excludes expired tokens the same way
+  // expiredTokenAlert below does, instead of just checking a row exists.
   const { data: statusChecklist } = useQuery({
     queryKey: ["client-status-checklist", clientAccountId],
     queryFn: async () => {
       const [seoRes, socialRes, contentRes] = await Promise.all([
         supabase.from("connected_sites").select("id").eq("client_id", clientAccountId).eq("status", "connected").limit(1).maybeSingle(),
-        supabase.from("client_oauth_tokens").select("id", { count: "exact", head: true }).eq("client_id", clientAccountId),
+        supabase.from("client_oauth_tokens").select("expires_at").eq("client_id", clientAccountId),
         supabase.from("content_calendar").select("id", { count: "exact", head: true }).eq("client_account_id", clientAccountId),
       ]);
+      const now = Date.now();
+      const socialConnected = (socialRes.data || []).some(
+        (t) => !t.expires_at || new Date(t.expires_at).getTime() > now
+      );
       return {
         seoConnected: !!seoRes.data,
-        socialConnected: (socialRes.count || 0) > 0,
+        socialConnected,
         contentGenerated: (contentRes.count || 0) > 0,
       };
     },
@@ -783,51 +793,163 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
   const visitsTrend = currentVisits != null && previousVisits != null && previousVisits !== 0
     ? Math.round(((currentVisits - previousVisits) / previousVisits) * 100)
     : undefined;
+  const currentLeads = currentPeriod?.metrics?.leads_generated;
+  const previousLeads = previousPeriod?.metrics?.leads_generated;
+  const leadsTrend = currentLeads != null && previousLeads != null && previousLeads !== 0
+    ? Math.round(((currentLeads - previousLeads) / previousLeads) * 100)
+    : undefined;
   const formatVisits = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toString());
+  const periodLabel = currentPeriod
+    ? `${format(new Date(currentPeriod.period_start), "MMM d")} – ${format(new Date(currentPeriod.period_end), "MMM d, yyyy")}`
+    : undefined;
+
+  // Single highest-priority action, shown in the same spot and same style
+  // every time -- replaces what used to be three separately-placed alerts
+  // (expired-token here, "complete your intake form" duplicated in both
+  // renderScoreCard and the empty-state branch) with one canonical banner,
+  // in priority order: something broken > onboarding gate > current
+  // client-actionable step > content waiting on approval.
+  let nextBestAction: {
+    tone: "urgent" | "action";
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    description: string;
+    ctaLabel: string;
+    onCta: () => void;
+  } | null = null;
+
+  if (expiredTokenAlert) {
+    const platformNames = expiredTokenAlert.platforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ");
+    nextBestAction = {
+      tone: "urgent",
+      icon: RefreshCw,
+      title: `${platformNames} disconnected — ${expiredTokenAlert.failedCount} post${expiredTokenAlert.failedCount > 1 ? "s" : ""} couldn't publish`,
+      description: `Your ${expiredTokenAlert.platforms.join(", ")} connection expired. Reconnect to resume your content calendar.`,
+      ctaLabel: "Reconnect",
+      onCta: () => onTabChange?.("social"),
+    };
+  } else if (!intakeCompleted && gapScore?.overall_score == null) {
+    nextBestAction = {
+      tone: "action",
+      icon: FileEdit,
+      title: "Complete your intake form",
+      description: "Your personalized content can't be created until we know more about your business. It takes about 2 minutes.",
+      ctaLabel: "Start Intake Form",
+      onCta: () => openBusinessForm(STANDALONE_INTAKE),
+    };
+  } else if (
+    currentStep &&
+    currentStep.task_type !== "client_form" &&
+    CTA_CONFIG[currentStep.task_type] &&
+    (stepStates[currentStepIdx] === "current" || stepStates[currentStepIdx] === "available")
+  ) {
+    const cta = CTA_CONFIG[currentStep.task_type];
+    const step = currentStep;
+    nextBestAction = {
+      tone: "action",
+      icon: cta.icon,
+      title: step.step_name,
+      description: getStepDescription(step),
+      ctaLabel: cta.label,
+      onCta: () => handleStepAction(step),
+    };
+  } else if (onboardingComplete && !wfAllDone && (ongoingStats?.pendingApprovals ?? 0) > 0) {
+    const pending = ongoingStats!.pendingApprovals;
+    nextBestAction = {
+      tone: "action",
+      icon: FileCheck,
+      title: `${pending} piece${pending > 1 ? "s" : ""} of content awaiting your approval`,
+      description: "Review and approve so it can go out on schedule.",
+      ctaLabel: "Review",
+      onCta: () => onTabChange?.("approvals"),
+    };
+  }
 
   const performanceSection = (
     <div className="space-y-4">
-      {currentVisits != null && (
-        <StatCard
-          label="Website Traffic"
-          value={formatVisits(currentVisits)}
-          icon={Eye}
-          trend={visitsTrend}
-          trendLabel={`${format(new Date(currentPeriod.period_start), "MMM d")} – ${format(new Date(currentPeriod.period_end), "MMM d, yyyy")}`}
-          className="max-w-xs"
-        />
-      )}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Setup Checklist</h3>
-          <span className="text-xs text-muted-foreground">
-            {checklistDoneCount} of {checklistItems.length} done{stepsLabel ? ` · ${stepsLabel}` : ""}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {checklistItems.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => item.tab && !item.done && onTabChange?.(item.tab)}
-              disabled={!item.tab || item.done}
+      {(hasWorkflow || totalCount > 0) && nextBestAction && (
+        <Alert
+          variant={nextBestAction.tone === "urgent" ? "destructive" : undefined}
+          className={cn(
+            nextBestAction.tone === "urgent"
+              ? "border-red-500/30 bg-red-500/5"
+              : "border-orange-400/40 bg-orange-500/5"
+          )}
+        >
+          <nextBestAction.icon className={cn("h-4 w-4", nextBestAction.tone === "action" && "text-orange-500")} />
+          <AlertTitle className={cn(nextBestAction.tone === "action" && "text-orange-700 dark:text-orange-400")}>
+            {nextBestAction.title}
+          </AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
+            <span className="text-sm text-muted-foreground">{nextBestAction.description}</span>
+            <Button
+              size="sm"
+              variant={nextBestAction.tone === "urgent" ? "outline" : "default"}
               className={cn(
-                "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                item.done ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-muted/30",
-                item.tab && !item.done && "cursor-pointer hover:bg-muted/50",
+                "gap-1.5 shrink-0",
+                nextBestAction.tone === "urgent"
+                  ? "border-red-500/30 hover:bg-red-500/10"
+                  : "bg-primary hover:bg-orange-dark text-white"
               )}
+              onClick={nextBestAction.onCta}
             >
-              {item.done ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-              ) : (
-                <Circle className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
-              )}
-              <span className={cn("text-xs font-medium", item.done ? "text-foreground" : "text-muted-foreground")}>
-                {item.label}
-              </span>
-            </button>
-          ))}
+              <nextBestAction.icon className="h-3.5 w-3.5" />
+              {nextBestAction.ctaLabel}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {(currentVisits != null || currentLeads != null) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+          {currentVisits != null && (
+            <StatCard
+              label="Website Traffic"
+              value={formatVisits(currentVisits)}
+              icon={Eye}
+              trend={visitsTrend}
+              trendLabel={periodLabel}
+            />
+          )}
+          {currentLeads != null && (
+            <StatCard
+              label="New Leads"
+              value={currentLeads}
+              icon={Users}
+              trend={leadsTrend}
+              trendLabel={periodLabel}
+            />
+          )}
         </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide shrink-0">
+          Setup · {checklistDoneCount}/{checklistItems.length}
+        </span>
+        {checklistItems.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => item.tab && !item.done && onTabChange?.(item.tab)}
+            disabled={!item.tab || item.done}
+            className={cn(
+              "flex items-center gap-1.5 text-xs font-medium",
+              item.done ? "text-foreground" : "text-muted-foreground",
+              item.tab && !item.done && "cursor-pointer hover:text-foreground hover:underline underline-offset-2",
+            )}
+          >
+            {item.done ? (
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+            ) : (
+              <Circle className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0" />
+            )}
+            {item.label}
+          </button>
+        ))}
+        {stepsLabel && (
+          <span className="text-xs text-muted-foreground sm:ml-auto shrink-0">{stepsLabel}</span>
+        )}
       </div>
     </div>
   );
@@ -979,29 +1101,10 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       );
     }
 
-    // Already submitted the intake form — no gap analysis score yet, but
-    // there's nothing left for the client to do here.
-    if (intakeCompleted) return null;
-
-    // No gap analysis found and intake not yet submitted — prompt the client
-    return (
-      <Alert className="border-orange-400/40 bg-orange-500/5">
-        <AlertTriangle className="h-4 w-4 text-orange-500" />
-        <AlertTitle className="text-orange-700 dark:text-orange-400">Action required: Complete your intake form</AlertTitle>
-        <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-1">
-          <span className="text-sm text-muted-foreground">
-            Your personalized content can't be created until we know more about your business. Tell us a bit about it — it takes about 2 minutes.
-          </span>
-          <Button
-            size="sm"
-            className="gap-2 shrink-0 bg-primary hover:bg-orange-dark text-white"
-            onClick={() => openBusinessForm(STANDALONE_INTAKE)}
-          >
-            Start Intake Form
-          </Button>
-        </AlertDescription>
-      </Alert>
-    );
+    // No score yet -- the "complete your intake form" nudge, when it
+    // applies, lives in the Next Best Action banner above instead of being
+    // duplicated here.
+    return null;
   };
 
   // Render workflow-based progress
@@ -1009,27 +1112,6 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     return (
       <div className="max-w-2xl mx-auto space-y-8">
         {performanceSection}
-        {/* Expired token alert */}
-        {expiredTokenAlert && (
-          <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>{expiredTokenAlert.platforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")} Posts Failed — Token Expired</AlertTitle>
-            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                Your {expiredTokenAlert.platforms.join(", ")} connection expired. {expiredTokenAlert.failedCount} post{expiredTokenAlert.failedCount > 1 ? "s" : ""} couldn't be published. Reconnect to reschedule them.
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 shrink-0 border-red-500/30 hover:bg-red-500/10"
-                onClick={() => onTabChange?.("social")}
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Reconnect
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
         {/* SYSTEM Score Card */}
         {renderScoreCard()}
         {/* Progress header */}

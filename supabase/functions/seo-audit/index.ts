@@ -7,6 +7,7 @@ import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory,
 import { upsertSeoProject } from "../_shared/seoProject.ts";
 import { buildOrganizationJsonLd, buildFaqJsonLd } from "../_shared/schemaMarkup.ts";
 import { buildLlmsTxt } from "../_shared/llmsTxt.ts";
+import { auditWebsite } from "../_shared/websiteAudit.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { recordOutcome } from "../_shared/outcomes.ts";
@@ -258,6 +259,27 @@ serve(async (req) => {
       }
     } catch (e) {
       console.error("llms.txt check failed:", e instanceof Error ? e.message : e);
+    }
+
+    // ── AEO/AI-readiness score (site-level, recomputed every run) ──
+    // Previously only ever written once, at onboarding, by the marketing
+    // site's gap-analysis scan (keyed by submission_id/prospect_id) -- so a
+    // client's AEO score never moved again even as they fixed schema/llms.txt
+    // issues through this same audit. Recompute it here too, keyed by
+    // client_id, reusing the exact fetch+parse+score helper the onboarding
+    // scan uses so the two numbers stay comparable.
+    try {
+      const homepageUrl = signals.find((s) => s.reachable)?.url ?? client.website_url;
+      const audit = await auditWebsite(homepageUrl);
+      if (audit) {
+        const { error: readinessErr } = await supabase.from("ai_readiness_scores").upsert(
+          { client_id: clientId, ...audit.readiness },
+          { onConflict: "client_id" },
+        );
+        if (readinessErr) console.error("ai_readiness_scores upsert failed:", readinessErr.message);
+      }
+    } catch (e) {
+      console.error("AEO readiness check failed:", e instanceof Error ? e.message : e);
     }
 
     // ── LLM rewrites for applyable title/meta findings (bounded, untrusted) ──

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,14 +9,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Edit, BarChart3 } from "lucide-react";
+import { Plus, Trash2, Edit, BarChart3, RefreshCw, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface ClientAccount {
   id: string;
   business_name: string;
+  ga4_property_id?: string | null;
 }
 
 interface ClientAnalytics {
@@ -66,13 +68,92 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
     queryFn: async () => {
       const { data, error } = await supabase
         .from('client_accounts')
-        .select('id, business_name')
+        .select('id, business_name, ga4_property_id')
         .order('business_name');
 
       if (error) throw error;
       return data as ClientAccount[];
     },
   });
+
+  const selectedClient = clientId ? clients?.find((c) => c.id === clientId) : undefined;
+  const [ga4Input, setGa4Input] = useState('');
+  const [savingGa4, setSavingGa4] = useState(false);
+  const [syncingGa4, setSyncingGa4] = useState(false);
+  const [syncingEngagement, setSyncingEngagement] = useState(false);
+
+  useEffect(() => {
+    setGa4Input(selectedClient?.ga4_property_id || '');
+  }, [selectedClient?.ga4_property_id]);
+
+  const saveGa4PropertyId = async () => {
+    if (!clientId) return;
+    setSavingGa4(true);
+    const { error } = await supabase
+      .from('client_accounts')
+      .update({ ga4_property_id: ga4Input.trim() || null })
+      .eq('id', clientId);
+    setSavingGa4(false);
+    if (error) {
+      toast.error("Failed to save GA4 property ID");
+      return;
+    }
+    toast.success("GA4 property ID saved");
+    queryClient.invalidateQueries({ queryKey: ['client-accounts-list'] });
+  };
+
+  const syncGa4Now = async () => {
+    if (!clientId) return;
+    setSyncingGa4(true);
+    const res = await supabase.functions.invoke("sync-ga4-analytics", {
+      body: { client_id: clientId, password: adminPassword },
+    });
+    const outcome = res.data?.results?.[clientId];
+    if (!res.error && !res.data?.error && !outcome?.startsWith("error")) {
+      toast.success("Traffic synced from GA4", { description: outcome ?? "Done" });
+      queryClient.invalidateQueries({ queryKey: ['admin-client-analytics'] });
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data) ?? outcome;
+      toast.error("GA4 sync failed", { description: msg ? friendlyEdgeMessage(msg) : "Something went wrong" });
+    }
+    setSyncingGa4(false);
+  };
+
+  // Pulls real leads/opens/clicks for the selected client+period from
+  // prospects (created_at/opened_at/clicked_at) instead of relying on
+  // whatever an admin guesses -- see admin/index.ts::get_client_engagement_stats.
+  const syncRealEngagement = async () => {
+    if (!formData.client_account_id || !formData.period_start || !formData.period_end) {
+      toast.error("Select a client and both period dates first");
+      return;
+    }
+    setSyncingEngagement(true);
+    const res = await supabase.functions.invoke("admin", {
+      body: {
+        action: "get_client_engagement_stats",
+        password: adminPassword,
+        data: {
+          client_id: formData.client_account_id,
+          period_start: formData.period_start,
+          period_end: formData.period_end,
+        },
+      },
+    });
+    setSyncingEngagement(false);
+    if (res.error || res.data?.error) {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast.error("Failed to pull real numbers", { description: msg ? friendlyEdgeMessage(msg) : undefined });
+      return;
+    }
+    const stats = res.data?.data;
+    setFormData((f) => ({
+      ...f,
+      leads_generated: String(stats?.leads_generated ?? 0),
+      email_opens: String(stats?.email_opens ?? 0),
+      email_clicks: String(stats?.email_clicks ?? 0),
+    }));
+    toast.success("Pulled real leads/opens/clicks for this period");
+  };
 
   const sendNotification = async (clientId: string, periodStart: string, periodEnd: string, metrics: Record<string, number>) => {
     try {
@@ -293,6 +374,12 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
                   <Input type="date" value={formData.period_end} onChange={(e) => setFormData({ ...formData, period_end: e.target.value })} />
                 </div>
               </div>
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" size="sm" onClick={syncRealEngagement} disabled={syncingEngagement}>
+                  {syncingEngagement ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Pull Real Leads/Opens/Clicks
+                </Button>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Website Visits</Label>
@@ -338,6 +425,34 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
         </Dialog>
       </div>
 
+      {clientId && (
+        <Card>
+          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1 space-y-2">
+              <Label>GA4 Property ID (website traffic source)</Label>
+              <Input
+                value={ga4Input}
+                onChange={(e) => setGa4Input(e.target.value)}
+                placeholder="properties/123456789"
+              />
+              <p className="text-xs text-muted-foreground">
+                Grant this project's GA4 service account "Viewer" access on the client's GA4 property, then paste the property ID here. Website Visits sync automatically every Monday.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={saveGa4PropertyId} disabled={savingGa4 || ga4Input.trim() === (selectedClient?.ga4_property_id || '')}>
+                {savingGa4 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Save
+              </Button>
+              <Button onClick={syncGa4Now} disabled={syncingGa4 || !selectedClient?.ga4_property_id}>
+                {syncingGa4 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                Sync Now
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -347,6 +462,8 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
                 <TableHead>Period</TableHead>
                 <TableHead>Visits</TableHead>
                 <TableHead>Leads</TableHead>
+                <TableHead>Opens</TableHead>
+                <TableHead>Clicks</TableHead>
                 <TableHead>Conversions</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -354,7 +471,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
             <TableBody>
               {displayedAnalytics?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No analytics data yet. Add your first snapshot to get started.
                   </TableCell>
                 </TableRow>
@@ -367,6 +484,8 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
                     </TableCell>
                     <TableCell>{item.metrics?.website_visits || 0}</TableCell>
                     <TableCell>{item.metrics?.leads_generated || 0}</TableCell>
+                    <TableCell>{item.metrics?.email_opens || 0}</TableCell>
+                    <TableCell>{item.metrics?.email_clicks || 0}</TableCell>
                     <TableCell>{item.metrics?.conversions || 0}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
