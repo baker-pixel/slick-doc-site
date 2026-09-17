@@ -53,6 +53,8 @@ export function IntegrationConfigPanel() {
     api_key: "",
     settings: "{}",
     is_active: true,
+    ga4_client_email: "",
+    ga4_private_key: "",
   });
 
   useEffect(() => {
@@ -81,12 +83,32 @@ export function IntegrationConfigPanel() {
       return;
     }
 
-    let settings = {};
-    try {
-      settings = JSON.parse(formData.settings);
-    } catch {
-      toast.error("Invalid JSON in settings");
-      return;
+    let settings: Record<string, unknown> = {};
+    if (formData.integration_type === "google_analytics") {
+      // Dedicated fields, not a hand-typed JSON blob -- a pasted PEM private
+      // key has real newlines, which break JSON.parse unless the admin
+      // manually escapes them. Assembling the object in code sidesteps that
+      // entirely (JSON.stringify escapes it correctly on save).
+      if (!formData.ga4_client_email.trim()) {
+        toast.error("Service account email is required");
+        return;
+      }
+      if (!formData.ga4_private_key.trim() && !editingIntegration) {
+        toast.error("Private key is required");
+        return;
+      }
+      settings = {
+        client_email: formData.ga4_client_email.trim(),
+        // Blank on edit means "keep the existing key" (same convention as API Key below).
+        private_key: formData.ga4_private_key.trim() || (editingIntegration?.settings as { private_key?: string })?.private_key,
+      };
+    } else {
+      try {
+        settings = JSON.parse(formData.settings);
+      } catch {
+        toast.error("Invalid JSON in settings");
+        return;
+      }
     }
 
     const payload = {
@@ -143,12 +165,23 @@ export function IntegrationConfigPanel() {
   const testConnection = async (integration: IntegrationConfig) => {
     setTestingId(integration.id);
     try {
-      const { data, error } = await supabase.functions.invoke("test-api-key", {
-        body: {
-          integrationType: integration.integration_type,
-          apiKey: integration.api_key_encrypted,
-        },
-      });
+      // GA4 credentials live in `settings`, not api_key_encrypted, and
+      // test-api-key only checks an unrelated hardcoded secret -- it can
+      // never actually validate this integration. Mint a real Google token
+      // (and probe the property, if one's been saved for any client yet).
+      const { data, error } = integration.integration_type === "google_analytics"
+        ? await supabase.functions.invoke("test-ga4-connection", {
+            body: {
+              client_email: (integration.settings as { client_email?: string })?.client_email,
+              private_key: (integration.settings as { private_key?: string })?.private_key,
+            },
+          })
+        : await supabase.functions.invoke("test-api-key", {
+            body: {
+              integrationType: integration.integration_type,
+              apiKey: integration.api_key_encrypted,
+            },
+          });
 
       if (error) {
         const msg = await getEdgeErrorMessage(error, data);
@@ -175,6 +208,8 @@ export function IntegrationConfigPanel() {
       api_key: "", // Don't show existing API key
       settings: JSON.stringify(integration.settings, null, 2),
       is_active: integration.is_active,
+      ga4_client_email: (integration.settings as { client_email?: string })?.client_email || "",
+      ga4_private_key: "", // Don't show existing private key
     });
     setDialogOpen(true);
   };
@@ -187,6 +222,8 @@ export function IntegrationConfigPanel() {
       api_key: "",
       settings: "{}",
       is_active: true,
+      ga4_client_email: "",
+      ga4_private_key: "",
     });
   };
 
@@ -248,35 +285,63 @@ export function IntegrationConfigPanel() {
                   placeholder="e.g., Main GHL Account"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>API Key {editingIntegration && "(leave blank to keep existing)"}</Label>
-                <div className="relative">
-                  <Input
-                    type={showApiKey ? "text" : "password"}
-                    value={formData.api_key}
-                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                    placeholder="Enter API key"
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(v => !v)}
-                    className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                  >
-                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Settings (JSON)</Label>
-                <Textarea
-                  value={formData.settings}
-                  onChange={(e) => setFormData({ ...formData, settings: e.target.value })}
-                  placeholder='{"locationId": "xxx", "workflows": {}}'
-                  rows={4}
-                  className="font-mono text-sm"
-                />
-              </div>
+              {formData.integration_type === "google_analytics" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Service Account Email</Label>
+                    <Input
+                      value={formData.ga4_client_email}
+                      onChange={(e) => setFormData({ ...formData, ga4_client_email: e.target.value })}
+                      placeholder="xxx@yyy.iam.gserviceaccount.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Private Key {editingIntegration && "(leave blank to keep existing)"}</Label>
+                    <Textarea
+                      value={formData.ga4_private_key}
+                      onChange={(e) => setFormData({ ...formData, ga4_private_key: e.target.value })}
+                      placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                      rows={5}
+                      className="font-mono text-xs"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Paste the full key from the service account's JSON credentials file, including the BEGIN/END lines. Share each client's GA4 property with this service account as a Viewer.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>API Key {editingIntegration && "(leave blank to keep existing)"}</Label>
+                    <div className="relative">
+                      <Input
+                        type={showApiKey ? "text" : "password"}
+                        value={formData.api_key}
+                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                        placeholder="Enter API key"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(v => !v)}
+                        className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Settings (JSON)</Label>
+                    <Textarea
+                      value={formData.settings}
+                      onChange={(e) => setFormData({ ...formData, settings: e.target.value })}
+                      placeholder='{"locationId": "xxx", "workflows": {}}'
+                      rows={4}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </>
+              )}
               <div className="flex items-center gap-2">
                 <Switch
                   checked={formData.is_active}
@@ -335,7 +400,9 @@ export function IntegrationConfigPanel() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {integration.api_key_encrypted ? (
+                    {(integration.integration_type === "google_analytics"
+                      ? !!(integration.settings as { client_email?: string })?.client_email
+                      : !!integration.api_key_encrypted) ? (
                       <span className="text-sm text-muted-foreground">••••••••</span>
                     ) : (
                       <span className="text-sm text-yellow-500">Not set</span>
@@ -347,7 +414,9 @@ export function IntegrationConfigPanel() {
                         size="sm"
                         variant="outline"
                         onClick={() => testConnection(integration)}
-                        disabled={testingId === integration.id || !integration.api_key_encrypted}
+                        disabled={testingId === integration.id || (integration.integration_type === "google_analytics"
+                          ? !(integration.settings as { client_email?: string })?.client_email
+                          : !integration.api_key_encrypted)}
                       >
                         {testingId === integration.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
