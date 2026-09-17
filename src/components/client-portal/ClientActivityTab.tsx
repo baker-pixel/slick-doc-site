@@ -120,6 +120,7 @@ const CLIENT_VISIBLE_ACTIVITY_TYPES = new Set([
   "content_approved",
   "content_sent_for_approval",
   "message_created",
+  "weekly_recap_sent",
 ]);
 
 const ACTIVITY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -348,7 +349,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
         .eq("client_account_id", clientAccountId)
         .order("period_end", { ascending: false })
         .limit(2);
-      return (data || []) as { period_start: string; period_end: string; metrics: { website_visits?: number; leads_generated?: number } }[];
+      return (data || []) as { period_start: string; period_end: string; metrics: { website_visits?: number; leads_generated?: number; email_opens?: number } }[];
     },
   });
 
@@ -831,6 +832,11 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
   const leadsTrend = currentLeads != null && previousLeads != null && previousLeads !== 0
     ? Math.round(((currentLeads - previousLeads) / previousLeads) * 100)
     : undefined;
+  const currentOpens = currentPeriod?.metrics?.email_opens;
+  const previousOpens = previousPeriod?.metrics?.email_opens;
+  const opensTrend = currentOpens != null && previousOpens != null && previousOpens !== 0
+    ? Math.round(((currentOpens - previousOpens) / previousOpens) * 100)
+    : undefined;
   const formatVisits = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toString());
   const periodLabel = currentPeriod
     ? `${format(new Date(currentPeriod.period_start), "MMM d")} – ${format(new Date(currentPeriod.period_end), "MMM d, yyyy")}`
@@ -944,8 +950,11 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
         </Alert>
       )}
 
-      {(currentVisits != null || currentLeads != null) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+      {(currentVisits != null || currentLeads != null || currentOpens != null) && (
+        <div className={cn(
+          "grid grid-cols-1 sm:grid-cols-2 gap-4",
+          currentVisits != null && currentLeads != null && currentOpens != null ? "lg:grid-cols-3 max-w-2xl" : "max-w-lg"
+        )}>
           {currentVisits != null && (
             <StatCard
               label="Website Traffic"
@@ -961,6 +970,15 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
               value={currentLeads}
               icon={Users}
               trend={leadsTrend}
+              trendLabel={periodLabel}
+            />
+          )}
+          {currentOpens != null && (
+            <StatCard
+              label="Email Opens"
+              value={currentOpens}
+              icon={Mail}
+              trend={opensTrend}
               trendLabel={periodLabel}
             />
           )}

@@ -2,14 +2,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import { logActivity } from "../_shared/activityLog.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
-// Weekly cron (see migration 20260917170000): Monday 8am UTC, after the
-// 5am sync-ga4-analytics pull. Emails each active client a real recap --
-// website traffic (from client_analytics, GA4-sourced) and new leads (from
-// prospects) -- unless every portal user on that account has turned the
-// toggle off (client_portal_preferences.weekly_recap_email, default true).
+// Weekly cron (see migration 20260917170000): Monday 8am UTC, three hours
+// after sync-ga4-analytics. Two jobs in one pass over active clients:
+//
+// 1. Persist real leads_generated + email_opens into the SAME
+//    client_analytics period row sync-ga4-analytics just wrote (same
+//    trailing-7-day window, so both metrics land together) -- this runs
+//    for every active client regardless of the email toggle, because the
+//    Home tab's stat cards read this table directly and shouldn't go stale
+//    just because someone opted out of the email.
+// 2. Email the recap, skipped only when every portal user on the account
+//    has turned client_portal_preferences.weekly_recap_email off (no
+//    preference row at all defaults to opted-in).
+//
 // A request naming a single `client_id` is an admin manually resending one
 // client's recap, same shape as sync-ga4-analytics' manual-trigger mode.
 
@@ -21,6 +30,10 @@ interface ClientRow {
 
 function formatVisits(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 Deno.serve(async (req) => {
@@ -59,44 +72,58 @@ Deno.serve(async (req) => {
     }
 
     const portalUrl = "https://client.orangedoormarketing.com";
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Same trailing-7-day window as sync-ga4-analytics (yesterday back 6
+    // days), so this upsert lands on the exact same period row.
+    const periodEnd = new Date();
+    periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);
+    const periodStart = new Date(periodEnd);
+    periodStart.setUTCDate(periodStart.getUTCDate() - 6);
+    const periodStartStr = isoDate(periodStart);
+    const periodEndStr = isoDate(periodEnd);
+    const periodStartIso = periodStart.toISOString();
+    const periodEndIsoExclusive = new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
     for (const client of (clients ?? []) as ClientRow[]) {
       try {
-        // No preference row at all means nobody's touched the toggle --
-        // default to opted-in, same as the column's own DB default.
+        const [leadsRes, opensRes, existingRes] = await Promise.all([
+          supabase.from("prospects").select("id", { count: "exact", head: true })
+            .eq("client_id", client.id).gte("created_at", periodStartIso).lt("created_at", periodEndIsoExclusive),
+          supabase.from("prospects").select("id", { count: "exact", head: true })
+            .eq("client_id", client.id).gte("opened_at", periodStartIso).lt("opened_at", periodEndIsoExclusive),
+          supabase.from("client_analytics").select("id, metrics")
+            .eq("client_account_id", client.id).eq("period_start", periodStartStr).eq("period_end", periodEndStr)
+            .maybeSingle(),
+        ]);
+
+        const leadsGenerated = leadsRes.count ?? 0;
+        const emailOpens = opensRes.count ?? 0;
+        const existingMetrics = (existingRes.data?.metrics as Record<string, number>) ?? {};
+        const mergedMetrics = { ...existingMetrics, leads_generated: leadsGenerated, email_opens: emailOpens };
+
+        if (existingRes.data) {
+          await supabase.from("client_analytics").update({ metrics: mergedMetrics }).eq("id", existingRes.data.id);
+        } else {
+          await supabase.from("client_analytics").insert({
+            client_account_id: client.id,
+            period_start: periodStartStr,
+            period_end: periodEndStr,
+            metrics: mergedMetrics,
+          });
+        }
+
+        const websiteVisits = mergedMetrics.website_visits as number | undefined;
+
+        // Respect the toggle for the email itself only -- the metrics above
+        // are persisted either way. No preference row at all means nobody's
+        // touched it, which defaults to opted-in.
         const { data: prefRows } = await supabase
           .from("client_portal_preferences")
           .select("weekly_recap_email")
           .eq("client_account_id", client.id);
         const optedIn = !prefRows || prefRows.length === 0 || prefRows.some((p: { weekly_recap_email: boolean }) => p.weekly_recap_email !== false);
         if (!optedIn) {
-          results[client.id] = "skipped: opted out";
-          continue;
-        }
-
-        const [analyticsRes, leadsRes] = await Promise.all([
-          supabase
-            .from("client_analytics")
-            .select("metrics")
-            .eq("client_account_id", client.id)
-            .order("period_end", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from("prospects")
-            .select("id", { count: "exact", head: true })
-            .eq("client_id", client.id)
-            .gte("created_at", sevenDaysAgo),
-        ]);
-
-        const websiteVisits = (analyticsRes.data?.metrics as { website_visits?: number } | undefined)?.website_visits;
-        const leadsGenerated = leadsRes.count ?? 0;
-
-        // Never send a recap with nothing real to say -- e.g. no GA4
-        // property connected yet and no prospects this week.
-        if (websiteVisits == null && leadsGenerated === 0) {
-          results[client.id] = "skipped: no real data to report yet";
+          results[client.id] = `metrics saved, email skipped: opted out (leads=${leadsGenerated}, opens=${emailOpens})`;
           continue;
         }
 
@@ -111,7 +138,7 @@ Deno.serve(async (req) => {
         const html = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #1a1a1a;">Your weekly recap</h1>
-            <p>Here's how ${client.business_name} did this past week.</p>
+            <p>Here's how ${client.business_name} did this past week (${periodStartStr} to ${periodEndStr}).</p>
             <div style="display:flex;gap:12px;margin:20px 0;">${statCards}</div>
             <a href="${portalUrl}" style="display: inline-block; background: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Full Dashboard</a>
             <p style="color: #888; margin-top: 30px; font-size: 12px;">You're getting this because weekly recap emails are on for your portal account. Manage this anytime in Settings.</p>
@@ -134,10 +161,21 @@ Deno.serve(async (req) => {
             client_account_id: client.id,
             website_visits: websiteVisits ?? null,
             leads_generated: leadsGenerated,
+            email_opens: emailOpens,
           },
         });
 
-        results[client.id] = `sent: traffic=${websiteVisits ?? "n/a"}, leads=${leadsGenerated}`;
+        // Client-visible confirmation that the recap actually went out --
+        // shows up in the Home tab's Recent Activity feed.
+        await logActivity(supabase, client.id, {
+          type: "weekly_recap_sent",
+          title: "Weekly recap emailed",
+          description: `${leadsGenerated} new lead${leadsGenerated === 1 ? "" : "s"}${websiteVisits != null ? `, ${formatVisits(websiteVisits)} website visits` : ""} this week`,
+          icon: "send",
+          metadata: { website_visits: websiteVisits ?? null, leads_generated: leadsGenerated, email_opens: emailOpens },
+        });
+
+        results[client.id] = `sent: traffic=${websiteVisits ?? "n/a"}, leads=${leadsGenerated}, opens=${emailOpens}`;
       } catch (e) {
         results[client.id] = `error: ${e instanceof Error ? e.message : String(e)}`;
       }
