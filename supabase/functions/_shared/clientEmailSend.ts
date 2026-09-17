@@ -83,7 +83,11 @@ export async function sendViaClientEmail(
         setTimeout(() => reject(new Error("SMTP send timed out after 15s")), SEND_TIMEOUT_MS)
       ),
     ]);
-    await client.close().catch(() => {});
+    try {
+      await client.close();
+    } catch {
+      // best-effort cleanup -- the send already succeeded above
+    }
 
     return { sent: true, provider: "smtp" };
   } catch (err) {
