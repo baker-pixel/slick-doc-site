@@ -58,22 +58,32 @@ export async function sendViaClientEmail(
 
     const fromHeader = meta.from_name ? `${meta.from_name} <${cred.page_id}>` : cred.page_id;
 
-    await client.send({
-      from: fromHeader,
-      to: args.to,
-      subject: args.subject,
-      content: "auto",
-      html: args.html,
-      ...(args.listUnsubscribeUrl
-        ? {
-            headers: {
-              "List-Unsubscribe": `<${args.listUnsubscribeUrl}>`,
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            },
-          }
-        : {}),
-    });
-    await client.close();
+    // denomailer's send() has no built-in timeout -- a stalled handshake
+    // (bad host/port/TLS combo) hangs until the platform kills the whole
+    // function, which returns a bare 503 with no CORS header instead of
+    // our own JSON error. Race it so a stuck connection fails fast instead.
+    const SEND_TIMEOUT_MS = 15_000;
+    await Promise.race([
+      client.send({
+        from: fromHeader,
+        to: args.to,
+        subject: args.subject,
+        content: "auto",
+        html: args.html,
+        ...(args.listUnsubscribeUrl
+          ? {
+              headers: {
+                "List-Unsubscribe": `<${args.listUnsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              },
+            }
+          : {}),
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("SMTP send timed out after 15s")), SEND_TIMEOUT_MS)
+      ),
+    ]);
+    await client.close().catch(() => {});
 
     return { sent: true, provider: "smtp" };
   } catch (err) {
