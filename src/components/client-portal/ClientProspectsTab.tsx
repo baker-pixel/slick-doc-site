@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick } from "lucide-react";
+import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick, ChevronDown, ChevronUp } from "lucide-react";
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
+import { OutreachSettingsCard } from "./OutreachSettingsCard";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
@@ -31,10 +32,12 @@ interface Prospect {
 }
 
 interface ProspectEmail {
-  subject: string;
-  status: string;
-  sent_at: string;
   drip_step: number | null;
+  subject: string;
+  html_content: string;
+  status: string;
+  scheduled_for: string;
+  sent_at: string | null;
 }
 
 interface SequenceStep {
@@ -77,7 +80,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [selected, setSelected] = useState<Prospect | null>(null);
   const [emails, setEmails] = useState<ProspectEmail[] | null>(null);
   const [emailsLoading, setEmailsLoading] = useState(false);
-  const [nextEmail, setNextEmail] = useState<{ subject: string; scheduled_for: string } | null>(null);
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const [icpLocal, setIcpLocal] = useState(true);
   const [findingLeads, setFindingLeads] = useState(false);
   const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[] | null>(null);
@@ -129,20 +132,13 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const openDetail = async (p: Prospect) => {
     setSelected(p);
     setEmails(null);
-    setNextEmail(null);
+    setExpandedStep(null);
     setEmailsLoading(true);
-    const [{ data, error }, { data: nextData }] = await Promise.all([
-      (supabase.rpc as any)("client_get_prospect_emails", {
-        p_client_account_id: clientAccountId,
-        p_prospect_id: p.id,
-      }),
-      (supabase.rpc as any)("client_get_prospect_next_email", {
-        p_client_account_id: clientAccountId,
-        p_prospect_id: p.id,
-      }),
-    ]);
+    const { data, error } = await (supabase.rpc as any)("client_get_prospect_emails", {
+      p_client_account_id: clientAccountId,
+      p_prospect_id: p.id,
+    });
     setEmails(error ? [] : (data as ProspectEmail[]));
-    setNextEmail((nextData?.[0] as { subject: string; scheduled_for: string }) ?? null);
     setEmailsLoading(false);
   };
 
@@ -160,6 +156,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     <div className="space-y-6">
       <ProspectIcpCard clientAccountId={clientAccountId} />
       <CompanyContextCard clientAccountId={clientAccountId} />
+      <OutreachSettingsCard clientAccountId={clientAccountId} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {stats.map((s) => (
@@ -350,42 +347,55 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                 <div className="space-y-2 border-t pt-3">
                   <div className="flex items-center gap-2 font-medium text-xs uppercase tracking-wide text-muted-foreground">
                     <Mail className="w-3.5 h-3.5" />
-                    Outreach sent
+                    Email thread
                   </div>
                   {emailsLoading ? (
                     <div className="flex items-center justify-center py-6">
                       <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                     </div>
                   ) : !emails || emails.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Nothing sent yet — this lead is still in the queue.</p>
+                    <p className="text-xs text-muted-foreground">Nothing queued yet — this lead hasn't entered the sequence.</p>
                   ) : (
                     <ul className="space-y-2">
-                      {emails.map((e, i) => (
-                        <li key={i} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-xs">
-                          <div>
-                            <div className="font-medium">{e.subject}</div>
-                            <div className="text-muted-foreground">
-                              {e.drip_step ? `Step ${e.drip_step} · ` : ""}{format(new Date(e.sent_at), "MMM d, yyyy")}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="text-xs capitalize shrink-0">{e.status}</Badge>
-                        </li>
-                      ))}
+                      {emails.map((e, i) => {
+                        const isSent = e.status === "sent" && e.sent_at;
+                        const isOpen = expandedStep === i;
+                        return (
+                          <li key={i} className="rounded-lg border bg-background text-xs overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedStep(isOpen ? null : i)}
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{e.subject}</div>
+                                <div className="text-muted-foreground">
+                                  {e.drip_step ? `Step ${e.drip_step} · ` : ""}
+                                  {isSent
+                                    ? format(new Date(e.sent_at!), "MMM d, yyyy")
+                                    : `Scheduled ${format(new Date(e.scheduled_for), "MMM d, yyyy")}`}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <Badge variant="outline" className="text-xs capitalize">{e.status}</Badge>
+                                {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                              </div>
+                            </button>
+                            {isOpen && (
+                              <iframe
+                                title={`${e.subject} preview`}
+                                sandbox=""
+                                srcDoc={e.html_content}
+                                className="w-full border-t bg-white"
+                                style={{ height: 380 }}
+                              />
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
-
-                {!emailsLoading && nextEmail && (
-                  <div className="space-y-1 border-t pt-3">
-                    <div className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Next scheduled</div>
-                    <div className="rounded-lg border border-dashed bg-background px-3 py-2 text-xs">
-                      <div className="font-medium">{nextEmail.subject}</div>
-                      <div className="text-muted-foreground">
-                        {format(new Date(nextEmail.scheduled_for), "MMM d, yyyy 'at' h:mm a")}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           )}

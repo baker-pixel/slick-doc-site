@@ -906,6 +906,7 @@ export type Database = {
           lead_id: string | null
           level: number | null
           onboarded_at: string | null
+          outreach_settings: Json
           plan_tier: string | null
           posting_preferences: Json | null
           review_qr_image_url: string | null
@@ -938,6 +939,7 @@ export type Database = {
           lead_id?: string | null
           level?: number | null
           onboarded_at?: string | null
+          outreach_settings?: Json
           plan_tier?: string | null
           posting_preferences?: Json | null
           review_qr_image_url?: string | null
@@ -970,6 +972,7 @@ export type Database = {
           lead_id?: string | null
           level?: number | null
           onboarded_at?: string | null
+          outreach_settings?: Json
           plan_tier?: string | null
           posting_preferences?: Json | null
           review_qr_image_url?: string | null
@@ -5117,6 +5120,8 @@ export type Database = {
         Args: { p_client_account_id: string; p_prospect_id: string }
         Returns: {
           drip_step: number
+          html_content: string
+          scheduled_for: string
           sent_at: string
           status: string
           subject: string
@@ -5142,6 +5147,10 @@ export type Database = {
       }
       client_update_icp: {
         Args: { p_client_account_id: string; p_icp: Json }
+        Returns: undefined
+      }
+      client_update_outreach_settings: {
+        Args: { p_client_account_id: string; p_settings: Json }
         Returns: undefined
       }
       create_project_with_milestones: {

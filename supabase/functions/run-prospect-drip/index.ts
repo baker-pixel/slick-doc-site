@@ -41,6 +41,25 @@ interface ClientAccount {
   industry?: string | null;
   context_profile?: Record<string, unknown> | null;
   brand_voice?: Record<string, unknown> | null;
+  outreach_settings?: {
+    signature?: { name?: string; title?: string } | null;
+    cta?: { label?: string; url?: string } | null;
+  } | null;
+}
+
+// "— {name}, {title}" when the client's set a signature, falling back to
+// the business name (the only signoff that existed before this setting).
+function getSignOff(client: ClientAccount): string {
+  const name = client.outreach_settings?.signature?.name?.trim();
+  if (!name) return client.business_name;
+  const title = client.outreach_settings?.signature?.title?.trim();
+  return title ? `${name}, ${title}` : name;
+}
+
+function getCta(client: ClientAccount): { url: string; label: string } {
+  const url = client.outreach_settings?.cta?.url?.trim() || client.website_url || "https://orangedoormarketing.com/schedule";
+  const label = client.outreach_settings?.cta?.label?.trim() || url;
+  return { url, label };
 }
 
 interface SequenceStep {
@@ -67,8 +86,8 @@ const wrapHtml = (body: string, unsubEmail: string = "") => `
 </body></html>`;
 
 function buildClientCtaButton(client: ClientAccount): string {
-  const url = client.website_url || "https://orangedoormarketing.com/schedule";
-  return `<p><a href="${url}">${url}</a></p>`;
+  const { url, label } = getCta(client);
+  return `<p><a href="${url}">${label}</a></p>`;
 }
 
 // Generic fallback — only fires if the AI call fails. No placeholders.
@@ -80,6 +99,7 @@ function buildStaticOutreachEmail(
   const firstName = getFirstName(prospect.name);
   const bizType = prospect.business_type || "your industry";
   const clientName = client.business_name;
+  const signOff = getSignOff(client);
   const cta = buildClientCtaButton(client);
 
   switch (step) {
@@ -92,7 +112,7 @@ function buildStaticOutreachEmail(
           <p>We're <strong>${clientName}</strong> and we help businesses like yours grow and operate more efficiently. I'd love to hear a bit about what you're working on and see if we can add any value.</p>
           <p>No pitch — just a quick conversation.</p>
           ${cta}
-          <p>Talk soon,<br><strong>${clientName}</strong></p>
+          <p>Talk soon,<br><strong>${signOff}</strong></p>
         `, prospect.email),
       };
 
@@ -104,7 +124,7 @@ function buildStaticOutreachEmail(
           <p>Just following up on my last note. One thing we hear from a lot of ${bizType} owners is that they know what they need to do to grow — they just don't have the bandwidth to do it all.</p>
           <p>That's where we come in. <strong>${clientName}</strong> works alongside businesses like yours to take things off your plate and help you move faster. Happy to share some examples of what that looks like in practice.</p>
           ${cta}
-          <p>Best,<br><strong>${clientName}</strong></p>
+          <p>Best,<br><strong>${signOff}</strong></p>
         `, prospect.email),
       };
 
@@ -117,7 +137,7 @@ function buildStaticOutreachEmail(
           <p>We partner with ${bizType} businesses to help them grow. Everything we do is hands-on, results-focused, and tailored to what your business actually needs — not a one-size-fits-all package.</p>
           <p>If you're curious whether there's a fit, the fastest way to find out is a short call.</p>
           ${cta}
-          <p>Cheers,<br><strong>${clientName}</strong></p>
+          <p>Cheers,<br><strong>${signOff}</strong></p>
         `, prospect.email),
       };
 
@@ -130,7 +150,7 @@ function buildStaticOutreachEmail(
           <p>If growing your business is something you're actively thinking about, even a 15-minute call with us tends to be worth it. No obligation, no pressure.</p>
           ${cta}
           <p>Either way, best of luck — hope things are going well.</p>
-          <p>— <strong>${clientName}</strong></p>
+          <p>— <strong>${signOff}</strong></p>
         `, prospect.email),
       };
 
@@ -181,7 +201,8 @@ async function buildPersonalizedOutreachEmail(
     ? brandVoice.tone
     : "professional but warm and direct";
 
-  const ctaUrl = client.website_url || "https://orangedoormarketing.com/schedule";
+  const { url: ctaUrl, label: ctaLabel } = getCta(client);
+  const signOff = getSignOff(client);
 
   const stepThemes: Record<number, string> = {
     1: `Warm intro from the sender. Hook on one specific thing about the prospect's business — their industry, what they likely do for customers, or a common challenge in that space. Goal: start a conversation. One clear CTA. Under 150 words.`,
@@ -222,14 +243,14 @@ ${prospectBlock}
 EMAIL GOAL FOR STEP ${step}:
 ${theme}
 
-Link to reference (only if it fits naturally, e.g. "you can see more at ${ctaUrl}"): ${ctaUrl}
+Link to reference (only if it fits naturally, e.g. "you can see more at ${ctaUrl}"), call it "${ctaLabel}": ${ctaUrl}
 
 RULES:
 - Write ONLY the email body HTML — no <html>/<head>/<body> tags, no colors, no buttons, no divs — just plain <p> paragraphs like a real person typed in their email client
-- If a link belongs, write it as a plain inline <a href="${ctaUrl}">link</a> in a sentence, never a styled button
+- If a link belongs, write it as a plain inline <a href="${ctaUrl}">${ctaLabel}</a> in a sentence, never a styled button
 - Sound like a thoughtful human, not a template or a marketing email — reference at least one specific thing about the prospect
 - Never use placeholder brackets like [X] or [Y] — if you don't know a detail, write around it naturally
-- End with: <p>— ${client.business_name}</p>
+- End with: <p>— ${signOff}</p>
 
 Return ONLY valid JSON on one line: { "subject": "...", "html": "..." }`;
 
@@ -350,7 +371,7 @@ serve(async (req) => {
     if (clientIds.length > 0) {
       const { data: clientRows, error: clientRowsErr } = await supabase
         .from("client_accounts")
-        .select("id, business_name, email, website_url, industry, context_profile, brand_voice, tier")
+        .select("id, business_name, email, website_url, industry, context_profile, brand_voice, tier, outreach_settings")
         .in("id", clientIds)
         .eq("status", "active");
       if (clientRowsErr) {
