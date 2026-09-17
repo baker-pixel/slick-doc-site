@@ -5,9 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick, ChevronRight } from "lucide-react";
+import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick, ChevronRight, ChevronLeft } from "lucide-react";
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
 import { OutreachSettingsCard } from "./OutreachSettingsCard";
@@ -301,9 +300,52 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         )}
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          {selected && (
+      <Dialog
+        open={!!selected}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelected(null);
+            setViewingEmail(null);
+          }
+        }}
+      >
+        <DialogContent
+          className={
+            viewingEmail
+              ? "sm:max-w-2xl h-[85vh] flex flex-col p-0 gap-0"
+              : "max-w-lg max-h-[85vh] overflow-y-auto"
+          }
+        >
+          {selected && viewingEmail ? (
+            <>
+              <DialogHeader className="p-5 pb-4 border-b space-y-2 text-left shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewingEmail(null)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Back to {selected.name}
+                </button>
+                <DialogTitle className="text-base leading-snug pr-6">{viewingEmail.subject}</DialogTitle>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {viewingEmail.drip_step && <span>Step {viewingEmail.drip_step} of 4</span>}
+                  <Badge variant="outline" className="text-xs capitalize">{viewingEmail.status}</Badge>
+                  <span>
+                    {viewingEmail.status === "sent" && viewingEmail.sent_at
+                      ? `Sent ${format(new Date(viewingEmail.sent_at), "MMM d, yyyy 'at' h:mm a")}`
+                      : `Scheduled for ${format(new Date(viewingEmail.scheduled_for), "MMM d, yyyy 'at' h:mm a")}`}
+                  </span>
+                </div>
+              </DialogHeader>
+              <iframe
+                title={viewingEmail.subject}
+                sandbox=""
+                srcDoc={viewingEmail.html_content}
+                className="flex-1 w-full bg-white"
+              />
+            </>
+          ) : selected && (
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -417,33 +459,6 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           )}
         </DialogContent>
       </Dialog>
-
-      <Sheet open={!!viewingEmail} onOpenChange={(open) => !open && setViewingEmail(null)}>
-        <SheetContent className="w-full sm:max-w-xl p-0 gap-0 flex flex-col data-[state=open]:duration-200 data-[state=closed]:duration-150">
-          {viewingEmail && (
-            <>
-              <SheetHeader className="p-5 pr-10 pb-4 border-b space-y-2 text-left shrink-0">
-                <SheetTitle className="text-base leading-snug pr-2">{viewingEmail.subject}</SheetTitle>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {viewingEmail.drip_step && <span>Step {viewingEmail.drip_step} of 4</span>}
-                  <Badge variant="outline" className="text-xs capitalize">{viewingEmail.status}</Badge>
-                  <span>
-                    {viewingEmail.status === "sent" && viewingEmail.sent_at
-                      ? `Sent ${format(new Date(viewingEmail.sent_at), "MMM d, yyyy 'at' h:mm a")}`
-                      : `Scheduled for ${format(new Date(viewingEmail.scheduled_for), "MMM d, yyyy 'at' h:mm a")}`}
-                  </span>
-                </div>
-              </SheetHeader>
-              <iframe
-                title={viewingEmail.subject}
-                sandbox=""
-                srcDoc={viewingEmail.html_content}
-                className="flex-1 w-full bg-white"
-              />
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
