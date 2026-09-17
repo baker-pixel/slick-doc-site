@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import { Target, Save, Loader2 } from "lucide-react";
 import { TagEditor } from "./CompanyContextCard";
+import { CollapsibleCard } from "./CollapsibleCard";
 
 interface ClientICP {
   industries: string[];
@@ -95,19 +96,16 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
   }
 
   return (
-    <Card className="border-0 bg-muted/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Target className="h-5 w-5 text-primary" />
-          Ideal Customer Profile
-        </CardTitle>
-        <CardDescription>
-          Who Orange Door should find leads for. {hasStoredIcp
-            ? "Edit and save to refine who gets discovered and how fit is scored."
-            : "This gets generated automatically once discovery runs — you can edit it any time after."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
+    <CollapsibleCard
+      icon={<Target className="h-5 w-5 text-primary" />}
+      title="Ideal Customer Profile"
+      description={
+        hasStoredIcp
+          ? "Who Orange Door should find leads for. Edit and save to refine who gets discovered and how fit is scored."
+          : "Who Orange Door should find leads for. This gets generated automatically once discovery runs."
+      }
+    >
+      <div className="space-y-5">
         <div className="space-y-1.5">
           <Label className="text-sm font-medium">One-line summary</Label>
           <Textarea
@@ -176,7 +174,7 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </CollapsibleCard>
   );
 }

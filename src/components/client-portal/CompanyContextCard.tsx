@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { CollapsibleCard } from "./CollapsibleCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -207,17 +208,12 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
   }
 
   return (
-    <Card className="border-0 bg-muted/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-primary" />
-          Company Context
-        </CardTitle>
-        <CardDescription>
-          This information is used by AI when generating your content. Keep it accurate for the best results.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <CollapsibleCard
+      icon={<Building2 className="h-5 w-5 text-primary" />}
+      title="Company Context"
+      description="Used by AI when generating your content. Keep it accurate for the best results."
+    >
+      <div className="space-y-6">
 
         {/* Read-only business name */}
         <div className="space-y-1.5">
@@ -332,7 +328,7 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </CollapsibleCard>
   );
 }

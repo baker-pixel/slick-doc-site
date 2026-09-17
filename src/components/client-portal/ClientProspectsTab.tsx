@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick, ChevronRight } from "lucide-react";
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
 import { OutreachSettingsCard } from "./OutreachSettingsCard";
@@ -74,13 +75,20 @@ const STATUS_LABELS: Record<string, string> = {
   exhausted:  "Sequence Complete",
 };
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 export default function ClientProspectsTab({ clientAccountId }: { clientAccountId: string }) {
   const [allProspects, setAllProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Prospect | null>(null);
   const [emails, setEmails] = useState<ProspectEmail[] | null>(null);
   const [emailsLoading, setEmailsLoading] = useState(false);
-  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const [viewingEmail, setViewingEmail] = useState<ProspectEmail | null>(null);
   const [icpLocal, setIcpLocal] = useState(true);
   const [findingLeads, setFindingLeads] = useState(false);
   const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[] | null>(null);
@@ -132,7 +140,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const openDetail = async (p: Prospect) => {
     setSelected(p);
     setEmails(null);
-    setExpandedStep(null);
+    setViewingEmail(null);
     setEmailsLoading(true);
     const { data, error } = await (supabase.rpc as any)("client_get_prospect_emails", {
       p_client_account_id: clientAccountId,
@@ -154,10 +162,6 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
 
   return (
     <div className="space-y-6">
-      <ProspectIcpCard clientAccountId={clientAccountId} />
-      <CompanyContextCard clientAccountId={clientAccountId} />
-      <OutreachSettingsCard clientAccountId={clientAccountId} />
-
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
@@ -170,6 +174,12 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
             </div>
           </Card>
         ))}
+      </div>
+
+      <div className="space-y-3">
+        <ProspectIcpCard clientAccountId={clientAccountId} />
+        <CompanyContextCard clientAccountId={clientAccountId} />
+        <OutreachSettingsCard clientAccountId={clientAccountId} />
       </div>
 
       <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
@@ -211,7 +221,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         </Card>
       )}
 
-      <Card>
+      <Card className="overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -225,51 +235,55 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="p-3 text-left text-xs font-medium text-muted-foreground">Business</th>
-                  <th className="p-3 text-left text-xs font-medium text-muted-foreground">Type</th>
-                  <th className="p-3 text-left text-xs font-medium text-muted-foreground">City</th>
-                  <th className="p-3 text-left text-xs font-medium text-muted-foreground">Fit</th>
-                  <th className="p-3 text-left text-xs font-medium text-muted-foreground">Status</th>
-                  <th className="p-3 text-left text-xs font-medium text-muted-foreground">Found</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => openDetail(p)}
-                    className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
-                  >
-                    <td className="p-3 font-medium">{p.name}</td>
-                    <td className="p-3 text-muted-foreground text-xs">{p.business_type ?? "—"}</td>
-                    <td className="p-3 text-muted-foreground text-xs">{p.city ?? "—"}</td>
-                    <td className="p-3 text-xs text-muted-foreground">
-                      {p.icp_fit_score != null ? `${p.icp_fit_score}/100` : "—"}
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-1.5">
-                        {p.clicked_at ? (
-                          <MousePointerClick className="w-3.5 h-3.5 text-emerald-600"><title>Clicked a link</title></MousePointerClick>
-                        ) : p.opened_at ? (
-                          <Eye className="w-3.5 h-3.5 text-blue-500"><title>Opened an email</title></Eye>
-                        ) : null}
-                        <Badge variant="outline" className={`text-xs ${STATUS_STYLES[p.status] ?? ""}`}>
-                          {STATUS_LABELS[p.status] ?? p.status}
-                        </Badge>
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">
-                      {format(new Date(p.created_at), "MMM d, yyyy")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
+              <span className="text-xs font-medium text-muted-foreground">{visible.length} lead{visible.length === 1 ? "" : "s"}</span>
+              <span className="hidden sm:block text-xs text-muted-foreground">Fit score · Status · Found</span>
+            </div>
+            <div className="divide-y">
+              {visible.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => openDetail(p)}
+                  className="flex w-full items-center gap-3 sm:gap-4 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {initials(p.name)}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm truncate">{p.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {p.business_type ?? "Business"}{p.city ? ` · ${p.city}` : ""}
+                    </div>
+                  </div>
+
+                  <div className="hidden md:flex flex-col items-end w-14 shrink-0 tabular-nums">
+                    <span className="text-sm font-medium">{p.icp_fit_score != null ? p.icp_fit_score : "—"}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Fit</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {p.clicked_at ? (
+                      <MousePointerClick className="w-3.5 h-3.5 text-emerald-600" aria-label="Clicked a link" />
+                    ) : p.opened_at ? (
+                      <Eye className="w-3.5 h-3.5 text-blue-500" aria-label="Opened an email" />
+                    ) : null}
+                    <Badge variant="outline" className={`text-xs whitespace-nowrap ${STATUS_STYLES[p.status] ?? ""}`}>
+                      {STATUS_LABELS[p.status] ?? p.status}
+                    </Badge>
+                  </div>
+
+                  <span className="hidden lg:block w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+                    {format(new Date(p.created_at), "MMM d, yyyy")}
+                  </span>
+
+                  <ChevronRight className="hidden sm:block h-4 w-4 shrink-0 text-muted-foreground/40" />
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </Card>
 
@@ -356,18 +370,17 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                   ) : !emails || emails.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Nothing queued yet — this lead hasn't entered the sequence.</p>
                   ) : (
-                    <ul className="space-y-2">
+                    <ul className="space-y-1.5">
                       {emails.map((e, i) => {
                         const isSent = e.status === "sent" && e.sent_at;
-                        const isOpen = expandedStep === i;
                         return (
-                          <li key={i} className="rounded-lg border bg-background text-xs overflow-hidden">
+                          <li key={i}>
                             <button
                               type="button"
-                              onClick={() => setExpandedStep(isOpen ? null : i)}
-                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                              onClick={() => setViewingEmail(e)}
+                              className="flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2 text-left text-xs hover:bg-muted/40 transition-colors"
                             >
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <div className="font-medium truncate">{e.subject}</div>
                                 <div className="text-muted-foreground">
                                   {e.drip_step ? `Step ${e.drip_step} · ` : ""}
@@ -376,20 +389,9 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                                     : `Scheduled ${format(new Date(e.scheduled_for), "MMM d, yyyy")}`}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <Badge variant="outline" className="text-xs capitalize">{e.status}</Badge>
-                                {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                              </div>
+                              <Badge variant="outline" className="text-xs capitalize shrink-0">{e.status}</Badge>
+                              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
                             </button>
-                            {isOpen && (
-                              <iframe
-                                title={`${e.subject} preview`}
-                                sandbox=""
-                                srcDoc={e.html_content}
-                                className="w-full border-t bg-white"
-                                style={{ height: 380 }}
-                              />
-                            )}
                           </li>
                         );
                       })}
@@ -401,6 +403,33 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           )}
         </DialogContent>
       </Dialog>
+
+      <Sheet open={!!viewingEmail} onOpenChange={(open) => !open && setViewingEmail(null)}>
+        <SheetContent className="w-full sm:max-w-xl p-0 gap-0 flex flex-col">
+          {viewingEmail && (
+            <>
+              <SheetHeader className="p-5 pr-10 pb-4 border-b space-y-2 text-left shrink-0">
+                <SheetTitle className="text-base leading-snug pr-2">{viewingEmail.subject}</SheetTitle>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {viewingEmail.drip_step && <span>Step {viewingEmail.drip_step} of 4</span>}
+                  <Badge variant="outline" className="text-xs capitalize">{viewingEmail.status}</Badge>
+                  <span>
+                    {viewingEmail.status === "sent" && viewingEmail.sent_at
+                      ? `Sent ${format(new Date(viewingEmail.sent_at), "MMM d, yyyy 'at' h:mm a")}`
+                      : `Scheduled for ${format(new Date(viewingEmail.scheduled_for), "MMM d, yyyy 'at' h:mm a")}`}
+                  </span>
+                </div>
+              </SheetHeader>
+              <iframe
+                title={viewingEmail.subject}
+                sandbox=""
+                srcDoc={viewingEmail.html_content}
+                className="flex-1 w-full bg-white"
+              />
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
