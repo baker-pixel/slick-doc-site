@@ -57,29 +57,43 @@ const SEQUENCE_STEP_LABELS: Record<number, { title: string; description: string 
   4: { title: "Final check-in", description: "Short, low-pressure close asking if a quick call is worth it." },
 };
 
+// Covers every value run-prospect-drip and the admin review-queue action
+// actually write to prospects.status -- a status missing here fell back to
+// an unstyled badge showing the raw DB value (e.g. "replied" rendering as
+// a blank outline pill next to colored ones for every other status).
 const STATUS_STYLES: Record<string, string> = {
-  discovered: "bg-orange-100 text-orange-800 border-orange-200",
-  pending:    "bg-blue-100 text-blue-800 border-blue-200",
-  nurture:    "bg-purple-100 text-purple-800 border-purple-200",
-  converted:  "bg-green-100 text-green-800 border-green-200",
-  rejected:   "bg-gray-100 text-gray-500 border-gray-200",
-  exhausted:  "bg-gray-100 text-gray-500 border-gray-200",
+  discovered:    "bg-orange-100 text-orange-800 border-orange-200",
+  pending:       "bg-blue-100 text-blue-800 border-blue-200",
+  nurture:       "bg-purple-100 text-purple-800 border-purple-200",
+  replied:       "bg-emerald-100 text-emerald-800 border-emerald-200",
+  converted:     "bg-green-100 text-green-800 border-green-200",
+  paused:        "bg-amber-100 text-amber-800 border-amber-200",
+  rejected:      "bg-gray-100 text-gray-500 border-gray-200",
+  unsubscribed:  "bg-gray-100 text-gray-500 border-gray-200",
+  bounced:       "bg-gray-100 text-gray-500 border-gray-200",
+  exhausted:     "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  discovered: "Reviewing",
-  pending:    "Queued",
-  nurture:    "In Outreach",
-  converted:  "Converted",
-  rejected:   "Skipped",
-  exhausted:  "Sequence Complete",
+  discovered:    "Reviewing",
+  pending:       "Queued",
+  nurture:       "In Outreach",
+  replied:       "Replied",
+  converted:     "Converted",
+  paused:        "Paused",
+  rejected:      "Skipped",
+  unsubscribed:  "Unsubscribed",
+  bounced:       "Bounced",
+  exhausted:     "Sequence Complete",
 };
 
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+  // Skip non-alphabetic tokens ("&", "-") so "Trumble & Partners" reads as
+  // "TP", not "T&".
+  const words = name.trim().split(/\s+/).filter((w) => /[a-zA-Z]/.test(w));
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
 }
 
 export default function ClientProspectsTab({ clientAccountId }: { clientAccountId: string }) {
@@ -405,7 +419,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
       </Dialog>
 
       <Sheet open={!!viewingEmail} onOpenChange={(open) => !open && setViewingEmail(null)}>
-        <SheetContent className="w-full sm:max-w-xl p-0 gap-0 flex flex-col">
+        <SheetContent className="w-full sm:max-w-xl p-0 gap-0 flex flex-col data-[state=open]:duration-200 data-[state=closed]:duration-150">
           {viewingEmail && (
             <>
               <SheetHeader className="p-5 pr-10 pb-4 border-b space-y-2 text-left shrink-0">
