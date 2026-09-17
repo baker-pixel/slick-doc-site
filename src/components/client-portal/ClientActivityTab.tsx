@@ -35,7 +35,9 @@ import {
   Send,
   Activity,
   Users,
+  Mail,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "@/hooks/use-toast";
@@ -46,6 +48,9 @@ import { StatCard } from "./PortalUI";
 interface ClientActivityTabProps {
   clientAccountId: string;
   clientEmail?: string;
+  firstName?: string | null;
+  businessName?: string | null;
+  userId?: string;
   onTabChange?: (tab: string) => void;
 }
 
@@ -173,7 +178,7 @@ function computeStepState(step: WorkflowStep, stepsMap: Map<number, WorkflowStep
   return "available";
 }
 
-export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }: ClientActivityTabProps) {
+export function ClientActivityTab({ clientAccountId, clientEmail, firstName, businessName, userId, onTabChange }: ClientActivityTabProps) {
   const queryClient = useQueryClient();
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
@@ -437,6 +442,34 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
       };
     },
   });
+
+  // Weekly recap email opt-in (send-weekly-recap reads this same column).
+  // No row yet just means nobody's touched the toggle -- default to on,
+  // matching the column's own DB default.
+  const { data: weeklyRecapEnabled = true } = useQuery({
+    queryKey: ["weekly-recap-pref", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("client_portal_preferences")
+        .select("weekly_recap_email")
+        .eq("user_id", userId)
+        .maybeSingle();
+      return data?.weekly_recap_email ?? true;
+    },
+  });
+
+  const handleToggleWeeklyRecap = useCallback(async (checked: boolean) => {
+    if (!userId) return;
+    queryClient.setQueryData(["weekly-recap-pref", userId], checked);
+    const { error } = await supabase
+      .from("client_portal_preferences")
+      .upsert({ user_id: userId, client_account_id: clientAccountId, weekly_recap_email: checked }, { onConflict: "user_id" });
+    if (error) {
+      queryClient.setQueryData(["weekly-recap-pref", userId], !checked);
+      toast({ title: "Couldn't save that", description: "Please try again.", variant: "destructive" });
+    }
+  }, [userId, clientAccountId, queryClient]);
 
   const isLoading = wfLoading || tasksLoading;
   const hasWorkflow = workflowSteps.length > 0;
@@ -865,8 +898,19 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     };
   }
 
+  const greeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 18 ? "Good afternoon" : "Good evening";
+
   const performanceSection = (
     <div className="space-y-4">
+      {firstName && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{greeting}, {firstName}</h1>
+          {businessName && (
+            <p className="text-sm text-muted-foreground mt-0.5">Here's how {businessName} is doing this week.</p>
+          )}
+        </div>
+      )}
+
       {(hasWorkflow || totalCount > 0) && nextBestAction && (
         <Alert
           variant={nextBestAction.tone === "urgent" ? "destructive" : undefined}
@@ -954,6 +998,23 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
     </div>
   );
 
+  const weeklyDigestFooter = userId ? (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+      <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="text-sm text-muted-foreground flex-1 min-w-[200px]">
+        You get this recap by email every Monday at 8am.
+      </span>
+      <Switch checked={weeklyRecapEnabled} onCheckedChange={handleToggleWeeklyRecap} />
+      <button
+        type="button"
+        onClick={() => onTabChange?.("settings")}
+        className="text-xs text-primary hover:underline underline-offset-2 shrink-0"
+      >
+        Manage in Settings
+      </button>
+    </div>
+  ) : null;
+
   if (!hasWorkflow && totalCount === 0) {
     const placeholderSteps = [
       "Confirm Business Information",
@@ -1018,6 +1079,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           </CardContent>
         </Card>
 
+        {weeklyDigestFooter}
         {bizFormDialog}
       </div>
     );
@@ -1336,6 +1398,8 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
         </>
         )}
 
+        {weeklyDigestFooter}
+
         {/* Business confirmation Dialog */}
         {bizFormDialog}
       </div>
@@ -1441,6 +1505,8 @@ export function ClientActivityTab({ clientAccountId, clientEmail, onTabChange }:
           );
         })}
       </div>
+
+      {weeklyDigestFooter}
 
       {/* Business confirmation Dialog */}
       {bizFormDialog}

@@ -44,6 +44,7 @@ export interface PortalPreferences {
   notify_on_deliverables: boolean;
   notify_on_invoices: boolean;
   notify_on_meetings: boolean;
+  weekly_recap_email: boolean;
   activity_widget_types: string[];
   show_analytics_summary: boolean;
   show_quick_actions: boolean;
@@ -63,6 +64,7 @@ const defaultPreferences: PortalPreferences = {
   notify_on_deliverables: true,
   notify_on_invoices: true,
   notify_on_meetings: true,
+  weekly_recap_email: true,
   activity_widget_types: ["messages", "approvals", "projects", "deliverables"],
   show_analytics_summary: true,
   show_quick_actions: true,
@@ -143,6 +145,7 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
           notify_on_deliverables: data.notify_on_deliverables,
           notify_on_invoices: data.notify_on_invoices,
           notify_on_meetings: data.notify_on_meetings,
+          weekly_recap_email: data.weekly_recap_email,
           activity_widget_types: data.activity_widget_types || [],
           show_analytics_summary: data.show_analytics_summary,
           show_quick_actions: data.show_quick_actions,
@@ -332,6 +335,7 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
                     { key: "notify_on_deliverables" as const, label: "New Deliverables" },
                     { key: "notify_on_invoices" as const, label: "Invoice Updates" },
                     { key: "notify_on_meetings" as const, label: "Meeting Reminders" },
+                    { key: "weekly_recap_email" as const, label: "Weekly Performance Recap" },
                   ].map(({ key, label }) => (
                     <div key={key} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                       <Label className="text-sm">{label}</Label>

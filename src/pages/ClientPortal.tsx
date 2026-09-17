@@ -370,7 +370,14 @@ export default function ClientPortal() {
     switch (activeTab) {
       case "activity":
         return (
-          <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />
+          <ClientActivityTab
+            clientAccountId={portalUser.client_account_id}
+            clientEmail={clientAccount?.email}
+            firstName={portalUser.first_name}
+            businessName={clientAccount?.business_name}
+            userId={portalUser.user_id}
+            onTabChange={(tab) => handleTabChange(tab as PortalTab)}
+          />
         );
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;
@@ -413,7 +420,16 @@ export default function ClientPortal() {
       case "learning":
         return gate("growth", "Learning Hub", "Guides and resources to get the most out of your marketing.", <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />);
       default:
-        return <ClientActivityTab clientAccountId={portalUser.client_account_id} clientEmail={clientAccount?.email} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
+        return (
+          <ClientActivityTab
+            clientAccountId={portalUser.client_account_id}
+            clientEmail={clientAccount?.email}
+            firstName={portalUser.first_name}
+            businessName={clientAccount?.business_name}
+            userId={portalUser.user_id}
+            onTabChange={(tab) => handleTabChange(tab as PortalTab)}
+          />
+        );
     }
   };
 
