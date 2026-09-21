@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson } from "../_shared/ai.ts";
+import { callAIJson, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface FixRequest {
@@ -96,6 +96,7 @@ Return ONLY the JSON. No markdown, no fences, no preamble.`;
 
     const parsed = await callAIJson<Record<string, unknown>>({
       source: "generate-fix-plan",
+      system: `You are an expert consultant writing a fix plan for a real client issue.${NO_FABRICATION_GUARDRAIL}`,
       prompt,
       maxTokens: 1200,
     });

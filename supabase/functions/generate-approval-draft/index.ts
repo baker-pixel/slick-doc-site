@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI } from "../_shared/ai.ts";
+import { callAI, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
 
 function json(data: unknown, status = 200) {
@@ -82,7 +82,7 @@ serve(async (req) => {
       postContent = (await callAI({
         source: "generate-approval-draft",
         system:
-          "You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.",
+          `You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
         prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
         maxTokens: 400,
       })).trim();

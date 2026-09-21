@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { callAIJson, AIError } from "../_shared/ai.ts";
+import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface RequestBody {
@@ -67,7 +67,7 @@ Include 3-4 metrics relevant to ${client.industry || "this business"}.`;
     try {
       outline = await callAIJson<CaseStudyOutline>({
         source: "generate-case-study",
-        system: "You are a marketing agency copywriter drafting a case study outline. Return valid JSON only.",
+        system: `You are a marketing agency copywriter drafting a case study outline. Return valid JSON only.${NO_FABRICATION_GUARDRAIL} Metrics are explicitly placeholders (labeled as such) for a human to replace with real numbers — everything else (challenge, solution) must still be grounded in the client facts given.`,
         prompt,
         maxTokens: 1000,
         temperature: 0.6,

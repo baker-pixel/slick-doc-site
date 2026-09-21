@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI as sharedCallAI, MODELS } from "../_shared/ai.ts";
+import { callAI as sharedCallAI, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { generateMonthlyReport } from "../run-automation/handlers/ai-automation.ts";
@@ -120,7 +120,7 @@ async function generateContent(supabase: any, client: ClientData & { context_pro
 // one never had.
 
 async function processAutomatedTask(supabase: any, client: ClientData, task: any): Promise<any> {
-  const systemPrompt = `You are an AI assistant helping ${client.business_name} with marketing tasks. Complete the following task professionally.`;
+  const systemPrompt = `You are an AI assistant helping ${client.business_name} with marketing tasks. Complete the following task professionally.${NO_FABRICATION_GUARDRAIL}`;
   
   const prompt = `Complete this marketing task for ${client.business_name}:
 Task: ${task.name}

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI, AIError } from "../_shared/ai.ts";
+import { callAI, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 
 serve(async (req) => {
@@ -84,7 +84,7 @@ Return ONLY the post content. No quotes, no explanations.`;
     try {
       rawContent = (await callAI({
         source: "generate-social-content",
-        system: "You are a professional social media copywriter. Write platform-native content that feels authentic and drives engagement. Return ONLY the post text — no commentary, no quotes around the post.",
+        system: `You are a professional social media copywriter. Write platform-native content that feels authentic and drives engagement. Return ONLY the post text — no commentary, no quotes around the post.${NO_FABRICATION_GUARDRAIL}`,
         prompt,
         maxTokens: 1024,
       })).trim();

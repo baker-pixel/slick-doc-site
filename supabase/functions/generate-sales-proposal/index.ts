@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { callAIJson, AIError } from "../_shared/ai.ts";
+import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 
 interface RequestBody {
@@ -83,7 +83,7 @@ Include 3-4 proposed_services, 3 timeline phases, and 3-5 pricing_breakdown item
     try {
       proposal = await callAIJson<ProposalDraft>({
         source: "generate-sales-proposal",
-        system: "You are a marketing agency sales strategist drafting a custom proposal. Return valid JSON only.",
+        system: `You are a marketing agency sales strategist drafting a custom proposal. Return valid JSON only.${NO_FABRICATION_GUARDRAIL} ROI/pricing figures must stay realistic estimates for the stated industry/size, never invented specifics presented as fact.`,
         prompt,
         maxTokens: 1500,
         temperature: 0.6,

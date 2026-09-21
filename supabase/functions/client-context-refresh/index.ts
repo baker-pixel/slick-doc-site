@@ -5,6 +5,7 @@ import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/soci
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
+import { dueForRegen } from "../_shared/billingPeriod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,10 +15,15 @@ const corsHeaders = {
 // The pull-based maintenance pass (blackboard feedback model). Per client, on
 // a cadence, it:
 //   1. refines the shared context from recent outcomes (the feedback loop),
-//   2. ensures a Social Media Plan exists (pull, not onboarding-triggered).
+//   2. ensures a Social Media Plan exists (pull, not onboarding-triggered),
+//   3. regenerates its pillars once PILLAR_REGEN_DAYS has passed since they
+//      were last generated -- anchored to whenever that client's plan was
+//      created (their own signup date), not the calendar 1st, same as
+//      tierPolicy.seo.reauditCadenceDays.
 // It writes only to context/projects and triggers no downstream work -- every
 // agent independently picks up the refined context on its own next run.
 const MAX_PER_RUN = 8;
+const PILLAR_REGEN_DAYS = 30;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -28,7 +34,7 @@ serve(async (req) => {
   try {
     const { data: rawClients } = await supabase
       .from("client_accounts")
-      .select("id, business_name, industry, tier, context_profile")
+      .select("id, business_name, industry, tier, context_profile, onboarded_at, created_at")
       .eq("status", "active")
       .not("context_profile", "is", null)
       .limit(MAX_PER_RUN);
@@ -49,15 +55,22 @@ serve(async (req) => {
       }
       try {
         const { data: existing } = await supabase
-          .from("client_projects").select("id").eq("client_account_id", c.id).eq("kind", "social").maybeSingle();
+          .from("client_projects").select("id, pillars_generated_at")
+          .eq("client_account_id", c.id).eq("kind", "social").maybeSingle();
         if (!existing) {
           const res = await upsertSocialStrategy(supabase, c, tierPolicy(c.tier));
           social = res.projectId ? "created" : "failed";
+        } else if (dueForRegen(existing.pillars_generated_at, PILLAR_REGEN_DAYS)) {
+          const res = await upsertSocialStrategy(supabase, c, tierPolicy(c.tier));
+          social = res.projectId ? "regenerated" : "failed";
         } else {
-          // Existing plan: keep its progress honest on the weekly cadence
+          // Not due yet: keep progress honest on the weekly cadence
           // (publish-time refreshes cover the common path; this catches
-          // month rollover, where progress resets to a new denominator).
-          await refreshSocialPlanProgress(supabase, c.id, tierPolicy(c.tier).social.postsPerMonth);
+          // billing-period rollover, where progress resets to a new
+          // denominator on the client's own signup anniversary).
+          await refreshSocialPlanProgress(
+            supabase, c.id, tierPolicy(c.tier).social.postsPerMonth, c.onboarded_at ?? c.created_at,
+          );
         }
       } catch (e) {
         console.error("social strategy ensure failed", c.id, e);

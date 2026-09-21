@@ -16,9 +16,12 @@ function json(data: unknown, status = 200) {
 }
 
 // Client-triggered re-run of the social strategy LLM call. Unlike
-// client-context-refresh's cron path (which only ever generates pillars once,
-// the first time a client has no project), this always regenerates -- the
-// client wants different/refreshed topics, not just a progress-percent tick.
+// client-context-refresh's cron path (which only regenerates once its own
+// ~30d cadence is due, see PILLAR_REGEN_DAYS there), this always regenerates
+// on demand -- the client wants different/refreshed topics right now, gated
+// only by the cooldown below. A manual regen here also resets that cadence
+// clock (upsertSocialStrategy stamps pillars_generated_at), so the cron pass
+// won't immediately re-regenerate on top of it.
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -36,7 +39,7 @@ serve(async (req) => {
 
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("id, business_name, industry, tier, context_profile")
+      .select("id, business_name, industry, tier, context_profile, onboarded_at, created_at")
       .eq("id", client_id)
       .single();
     if (clientErr || !client) return json({ error: "Client not found" }, 404);

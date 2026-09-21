@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson, AIError } from "../_shared/ai.ts";
+import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { parseOnPage } from "../_shared/seoSignals.ts";
 import { auditWebsite } from "../_shared/websiteAudit.ts";
 import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
@@ -144,10 +144,15 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { html: htmlContent, signals, readiness } = audit;
-    console.log("Fetched HTML length:", htmlContent.length);
+    const { html: htmlContent, signals, readiness, additionalPages } = audit;
+    console.log("Fetched HTML length:", htmlContent.length, "| additional pages found:", additionalPages.length);
 
     const truncatedHtml = htmlContent.substring(0, 50000);
+
+    const additionalPagesBlock = additionalPages.length
+      ? `\n\nADDITIONAL REAL PAGES FOUND ON THIS SITE (use these ONLY to make context_profile more accurate and specific -- real services, differentiators, location, audience. Do not treat their presence/absence as an SEO signal, and do not invent anything beyond what's written here):\n` +
+        additionalPages.map((p) => `--- ${p.url} ---\n${p.text}`).join("\n\n")
+      : "";
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) {
@@ -219,7 +224,7 @@ Return your analysis as a JSON object with this exact structure:
   }
 }
 
-Additionally, extract a context_profile object from the website with the fields shown above. Be specific about services — list actual offerings, not generic terms.
+Additionally, extract a context_profile object from the website with the fields shown above. Be specific about services — list actual offerings, not generic terms. Every field must come from something actually present on the page(s) — if a field genuinely isn't determinable from the content given, leave it empty rather than guessing or inventing a plausible-sounding value. This context_profile becomes the source of truth other tools use to write marketing copy about this business, so it must never contain a claim the site itself doesn't make.
 
 SCORING RUBRIC (be strict):
 - 85-100: ONLY if you find: proper meta tags, schema markup, multiple CTAs, testimonials, proper heading hierarchy
@@ -228,7 +233,7 @@ SCORING RUBRIC (be strict):
 - 30-49: Significant issues (missing h1, no clear conversion path)
 - 0-29: Critical failures (broken structure, no SEO elements at all)
 
-Reference SPECIFIC elements from the HTML to justify each score. Any item flagged MISSING in the DETECTED FACTS block below is confirmed absent — always name it explicitly in the relevant findings, never omit it.`;
+Reference SPECIFIC elements from the HTML to justify each score. Any item flagged MISSING in the DETECTED FACTS block below is confirmed absent — always name it explicitly in the relevant findings, never omit it.${NO_FABRICATION_GUARDRAIL}`;
 
     const userPrompt = `Analyze this website HTML for SEO, conversion optimization, and technical performance:
 
@@ -239,6 +244,7 @@ ${factsSummary(signals)}
 
 HTML Content:
 ${truncatedHtml}
+${additionalPagesBlock}
 
 Provide your analysis as a valid JSON object.`;
 

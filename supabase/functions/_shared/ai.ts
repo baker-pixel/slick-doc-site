@@ -11,6 +11,15 @@ export const MODELS = {
   fast: "gpt-4o-mini",
 } as const;
 
+// Append to any system prompt that draws on real client business facts
+// (context_profile, brand kit, etc.) and produces copy a lead/client will
+// actually see -- stops the model from inventing a claim, stat, credential,
+// or guarantee the business never gave us. Same pattern already proven in
+// ai-automation.ts's report prompt (added after a placeholder metric like
+// "[+15% MoM]" shipped in a real client email) and contextRefine.ts.
+export const NO_FABRICATION_GUARDRAIL =
+  " Use ONLY the business facts explicitly provided -- never invent a service, credential, guarantee, statistic, award, or claim that isn't in the given data. Write around a gap rather than fabricating a specific.";
+
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
