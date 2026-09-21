@@ -4,14 +4,6 @@ import { corsHeaders } from "../_shared/http.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { generateVisibilityPrompts, probeOpenAI, probeClaude } from "../_shared/aiVisibilityProbe.ts";
 import { logAlert } from "../_shared/alerts.ts";
-import { dueForRegen } from "../_shared/billingPeriod.ts";
-
-// Cron now runs daily (see migration 20260921120000) instead of firing every
-// client on the calendar 1st. Each client is only actually probed once
-// PROBE_CADENCE_DAYS have passed since their last score, so the real cadence
-// staggers by whenever each client was first probed -- their own signup
-// date -- instead of bursting everyone on one day.
-const PROBE_CADENCE_DAYS = 30;
 
 /** How much a mention is worth toward the rollup score, by rank. A mention
  * with no parseable position (prose answer, not a numbered list) still
@@ -63,13 +55,6 @@ serve(async (req) => {
     for (const client of clients ?? []) {
       const policy = tierPolicy(client.tier as string | null);
       if (!policy.aiVisibility.enabled) continue;
-
-      const { data: existingScore } = await supabase
-        .from("ai_visibility_scores")
-        .select("computed_at")
-        .eq("client_id", client.id)
-        .maybeSingle();
-      if (!dueForRegen(existingScore?.computed_at ?? null, PROBE_CADENCE_DAYS)) continue;
 
       const ctx = (client.context_profile ?? {}) as Record<string, unknown>;
       const industry = client.industry || (typeof ctx.industry === "string" ? ctx.industry : "") || "local business";
