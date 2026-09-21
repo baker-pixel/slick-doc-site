@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
+import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 
@@ -9,9 +9,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Only platforms that attach images today (kept in sync with
-// postforme-publish-post's fallback and generate-social-images-batch).
-const TARGET_PLATFORMS = ["instagram"];
+// Platforms that attach images today (kept in sync with
+// postforme-publish-post's fallback and generate-social-images-batch). Which
+// individual non-instagram posts actually get one is decided per-post by
+// shouldGenerateImage.
+const TARGET_PLATFORMS = IMAGE_ELIGIBLE_PLATFORMS;
 
 // Fallback for slots the OpenAI Batch API path (generate-social-images-batch
 // + check-image-batches, submitted daily from fill-scheduled-content) hasn't
@@ -112,6 +114,7 @@ serve(async (req) => {
       .select("id, client_account_id, title, content, platform, metadata, scheduled_for")
       .in("content_id", approvalContentIds)
       .is("metadata->>image_url", null)
+      .is("metadata->>image_skip", null)
       .limit(clientId ? ADMIN_MAX_PER_RUN : CANDIDATE_POOL_SIZE);
     if (clientId) candidatesQuery = candidatesQuery.eq("client_account_id", clientId);
 
@@ -123,8 +126,22 @@ serve(async (req) => {
       return json({ filled: 0, message: "No slots need images" });
     }
 
+    // Skip stamped permanently for posts this alternating pick excludes --
+    // otherwise they'd re-enter every future run's candidate pool.
+    const imageEligible = [];
+    for (const c of candidates as any[]) {
+      if (shouldGenerateImage(c.platform, c.id)) {
+        imageEligible.push(c);
+      } else {
+        await supabase
+          .from("content_calendar")
+          .update({ metadata: { ...(c.metadata || {}), image_skip: true } })
+          .eq("id", c.id);
+      }
+    }
+
     const runCap = clientId ? ADMIN_MAX_PER_RUN : MAX_PER_RUN;
-    const slots = (force ? candidates : candidates.filter(isFallbackEligible)).slice(0, runCap);
+    const slots = (force ? imageEligible : imageEligible.filter(isFallbackEligible)).slice(0, runCap);
 
     if (slots.length === 0) {
       return json({ filled: 0, message: "No slots need fallback yet (batch still within its window)" });

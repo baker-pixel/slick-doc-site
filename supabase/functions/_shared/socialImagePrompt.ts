@@ -39,6 +39,23 @@ export function imageSizeForPlatform(platform: string): string {
   return PLATFORM_SIZE[platform?.toLowerCase?.() || ""] || "1024x1024";
 }
 
+// Platforms that ever attach images. Instagram gets one every time; the
+// rest get one every other post (see shouldGenerateImage) -- images cost
+// real OpenAI spend per post, and IG is the platform where a bare-text post
+// actually reads as broken.
+export const IMAGE_ELIGIBLE_PLATFORMS = ["instagram", "facebook", "linkedin", "twitter"];
+
+// Deterministic by post id, not run state, so generate-social-images-batch,
+// sync-fill-missing-images, and postforme-publish-post's fallback all agree
+// on the same posts without sharing any counter.
+export function shouldGenerateImage(platform: string, contentCalendarId: string): boolean {
+  const p = platform?.toLowerCase?.() || "";
+  if (p === "instagram") return true;
+  if (!IMAGE_ELIGIBLE_PLATFORMS.includes(p)) return false;
+  const lastHexDigit = contentCalendarId.replace(/-/g, "").slice(-1);
+  return parseInt(lastHexDigit, 16) % 2 === 0;
+}
+
 // Always the highest quality gpt-image-1 offers, on every platform.
 export function imageQualityForPlatform(_platform: string): "medium" | "high" {
   return "high";

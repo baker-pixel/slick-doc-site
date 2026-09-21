@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
+import { buildSocialImagePrompt, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
@@ -232,7 +232,7 @@ serve(async (req) => {
     // generate-social-images-batch (daily, alongside drafting) should normally
     // have already populated metadata.image_url well before publish time.
     let imageUrl = (item.metadata as { image_url?: string } | null)?.image_url ?? null;
-    if (!imageUrl && item.platform === "instagram") {
+    if (!imageUrl && shouldGenerateImage(item.platform, contentCalendarId)) {
       const { data: clientRow } = await supabase
         .from("client_accounts")
         .select("business_name, industry, context_profile")
@@ -247,7 +247,7 @@ serve(async (req) => {
       // {images: string[]} -- called here with the service role bearer this
       // function already holds, which generate-social-image's isServer check accepts.
       const imgRes = await supabase.functions.invoke("generate-social-image", {
-        body: { prompt, platform: "instagram", count: 1 },
+        body: { prompt, platform: item.platform, count: 1 },
       });
       if (!imgRes.error && !imgRes.data?.error) {
         imageUrl = imgRes.data?.images?.[0] ?? null;

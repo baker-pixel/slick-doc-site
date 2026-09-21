@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { buildSocialImagePrompt } from "../_shared/socialImagePrompt.ts";
+import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { buildGptImageRequestBody } from "../_shared/gptImage.ts";
 
 const corsHeaders = {
@@ -11,10 +11,11 @@ const corsHeaders = {
 
 const OPENAI_API = "https://api.openai.com/v1";
 
-// Only platforms that actually attach images today (kept in sync with the
-// synchronous fallback in postforme-publish-post). Extend here if other
-// platforms start getting images too.
-const BATCH_PLATFORMS = ["instagram"];
+// Platforms that ever attach images (kept in sync with the synchronous
+// fallbacks in sync-fill-missing-images and postforme-publish-post). Which
+// individual posts on the non-instagram platforms actually get one is
+// decided per-post by shouldGenerateImage.
+const BATCH_PLATFORMS = IMAGE_ELIGIBLE_PLATFORMS;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -71,6 +72,7 @@ serve(async (req) => {
       .in("content_id", approvalContentIds)
       .is("metadata->>image_url", null)
       .is("metadata->>image_batch_id", null)
+      .is("metadata->>image_skip", null)
       .limit(20);
 
     if (fetchErr) throw new Error(`Failed to fetch slots needing images: ${fetchErr.message}`);
@@ -90,6 +92,16 @@ serve(async (req) => {
     const includedSlotIds: string[] = [];
 
     for (const slot of slots) {
+      if (!shouldGenerateImage(slot.platform, slot.id)) {
+        // Skip stamped permanently so this alternating pick stays stable --
+        // otherwise it'd re-enter every future run's candidate pool.
+        await supabase
+          .from("content_calendar")
+          .update({ metadata: { ...((slot as any).metadata || {}), image_skip: true } })
+          .eq("id", slot.id);
+        continue;
+      }
+
       const client = clientMap[slot.client_account_id];
       if (!client) continue;
 
