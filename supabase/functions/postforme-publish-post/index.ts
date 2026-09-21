@@ -295,9 +295,14 @@ serve(async (req) => {
         icon: "send",
         metadata: { calendar_id: contentCalendarId, platform: item.platform, pfm_post_id: pfmPost.id },
       });
-      const { data: tierRow } = await supabase
-        .from("client_accounts").select("tier").eq("id", item.client_account_id).maybeSingle();
-      await refreshSocialPlanProgress(supabase, item.client_account_id, tierPolicy(tierRow?.tier).social.postsPerMonth);
+      const { data: clientRow } = await supabase
+        .from("client_accounts").select("tier, onboarded_at, created_at").eq("id", item.client_account_id).maybeSingle();
+      await refreshSocialPlanProgress(
+        supabase,
+        item.client_account_id,
+        tierPolicy(clientRow?.tier).social.postsPerMonth,
+        clientRow?.onboarded_at ?? clientRow?.created_at ?? new Date(),
+      );
     } catch (e) {
       console.error("post-publish bookkeeping failed:", e instanceof Error ? e.message : e);
     }

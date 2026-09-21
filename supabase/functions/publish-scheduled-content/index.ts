@@ -38,9 +38,14 @@ async function recordPublish(
       icon: "send",
       metadata: { calendar_id: item.id, platform: item.platform },
     });
-    const { data: tierRow } = await supabase
-      .from("client_accounts").select("tier").eq("id", item.client_account_id).maybeSingle();
-    await refreshSocialPlanProgress(supabase, item.client_account_id, tierPolicy(tierRow?.tier).social.postsPerMonth);
+    const { data: clientRow } = await supabase
+      .from("client_accounts").select("tier, onboarded_at, created_at").eq("id", item.client_account_id).maybeSingle();
+    await refreshSocialPlanProgress(
+      supabase,
+      item.client_account_id,
+      tierPolicy(clientRow?.tier).social.postsPerMonth,
+      clientRow?.onboarded_at ?? clientRow?.created_at ?? new Date(),
+    );
   } catch (e) {
     console.error("recordPublish bookkeeping failed:", e instanceof Error ? e.message : e);
   }
