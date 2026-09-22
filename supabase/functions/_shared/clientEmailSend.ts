@@ -32,7 +32,7 @@ export async function sendViaClientEmail(
   supabase: any,
   clientId: string,
   args: SendArgs,
-): Promise<{ sent: boolean; provider?: string }> {
+): Promise<{ sent: boolean; provider?: string; error?: string }> {
   try {
     const { data: row } = await supabase
       .from("client_oauth_tokens")
@@ -44,7 +44,7 @@ export async function sendViaClientEmail(
     const cred = row as SmtpCredentialRow | null;
     const meta = cred?.token_metadata;
     if (!cred?.access_token || !cred.page_id || !meta?.host || !meta?.port || !meta?.username) {
-      return { sent: false };
+      return { sent: false, error: "No SMTP credentials saved for this client" };
     }
 
     const client = new SMTPClient({
@@ -62,27 +62,45 @@ export async function sendViaClientEmail(
     // (bad host/port/TLS combo) hangs until the platform kills the whole
     // function, which returns a bare 503 with no CORS header instead of
     // our own JSON error. Race it so a stuck connection fails fast instead.
+    // Racing alone isn't enough: Promise.race only stops US waiting, it
+    // doesn't cancel the dangling client.send() call. If we don't also
+    // force-close the socket on timeout, the abandoned connection keeps the
+    // isolate alive until the platform kills it anyway -- same bare 503.
     const SEND_TIMEOUT_MS = 15_000;
-    await Promise.race([
-      client.send({
-        from: fromHeader,
-        to: args.to,
-        subject: args.subject,
-        content: "auto",
-        html: args.html,
-        ...(args.listUnsubscribeUrl
-          ? {
-              headers: {
-                "List-Unsubscribe": `<${args.listUnsubscribeUrl}>`,
-                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-              },
-            }
-          : {}),
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("SMTP send timed out after 15s")), SEND_TIMEOUT_MS)
-      ),
-    ]);
+    let timedOut = false;
+    try {
+      await Promise.race([
+        client.send({
+          from: fromHeader,
+          to: args.to,
+          subject: args.subject,
+          content: "auto",
+          html: args.html,
+          ...(args.listUnsubscribeUrl
+            ? {
+                headers: {
+                  "List-Unsubscribe": `<${args.listUnsubscribeUrl}>`,
+                  "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                },
+              }
+            : {}),
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => {
+            timedOut = true;
+            reject(new Error("SMTP send timed out after 15s"));
+          }, SEND_TIMEOUT_MS)
+        ),
+      ]);
+    } finally {
+      if (timedOut) {
+        try {
+          await client.close();
+        } catch {
+          // best-effort -- we're abandoning this connection either way
+        }
+      }
+    }
     try {
       await client.close();
     } catch {
@@ -92,6 +110,6 @@ export async function sendViaClientEmail(
     return { sent: true, provider: "smtp" };
   } catch (err) {
     console.error("[clientEmailSend] SMTP send failed, caller should fall back to Resend:", err);
-    return { sent: false };
+    return { sent: false, error: err instanceof Error ? err.message : "Unknown SMTP error" };
   }
 }

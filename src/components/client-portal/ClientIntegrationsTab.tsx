@@ -730,6 +730,10 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
             username,
             secure: smtpForm.secure,
             from_name: smtpForm.fromName || null,
+            // Reset on every save -- new/changed credentials haven't been
+            // proven to actually send yet. Set to true only by a successful
+            // test-client-smtp run.
+            verified: false,
           },
         },
         { onConflict: "client_id,platform" },
@@ -1347,9 +1351,13 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
                   </div>
                   <div>
                     <CardTitle className="text-base">SMTP Email Sender</CardTitle>
-                    {smtpToken ? (
+                    {smtpToken && meta.verified === true ? (
                       <Badge variant="outline" className="mt-1 text-xs bg-green-500/10 text-green-600 border-green-500/20 gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Connected
+                        <CheckCircle2 className="h-3 w-3" /> Connected & verified
+                      </Badge>
+                    ) : smtpToken ? (
+                      <Badge variant="outline" className="mt-1 text-xs bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
+                        <AlertTriangle className="h-3 w-3" /> Needs verification -- send a test email
                       </Badge>
                     ) : (
                       <p className="text-xs text-muted-foreground mt-1">Not connected</p>
@@ -1366,6 +1374,12 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                     <span className="text-muted-foreground">Sending as:</span>
                     <span className="font-medium truncate">{typeof meta.from_name === "string" && meta.from_name ? `${meta.from_name} <${mailbox}>` : mailbox}</span>
+                  </div>
+                )}
+                {smtpToken && meta.verified !== true && typeof meta.last_test_error === "string" && (
+                  <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 text-sm text-amber-700">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>Last test failed: {meta.last_test_error}</span>
                   </div>
                 )}
                 <div className="flex gap-2 pt-1">

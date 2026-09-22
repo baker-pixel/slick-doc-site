@@ -59,7 +59,7 @@ serve(async (req) => {
 
     const { data: cred } = await supabase
       .from("client_oauth_tokens")
-      .select("page_id")
+      .select("page_id, token_metadata")
       .eq("client_id", clientId)
       .eq("platform", "smtp")
       .maybeSingle();
@@ -78,8 +78,28 @@ serve(async (req) => {
       html: "<p>This is a test email confirming your SMTP connection works. Lead outreach emails will now send from this address.</p>",
     });
 
+    // Record verification status on the row itself so the portal can show
+    // "needs verification" instead of a bare "Connected" for a mailbox that
+    // has never actually been proven to send/receive (see the bad from-email
+    // bounce this was added for -- saving a row never confirmed deliverability).
+    const meta = { ...(cred.token_metadata as Record<string, unknown> ?? {}) };
+    if (result.sent) {
+      meta.verified = true;
+      meta.verified_at = new Date().toISOString();
+      delete meta.last_test_error;
+    } else {
+      meta.verified = false;
+      meta.last_test_error = result.error ?? "Send failed";
+      meta.last_tested_at = new Date().toISOString();
+    }
+    await supabase
+      .from("client_oauth_tokens")
+      .update({ token_metadata: meta })
+      .eq("client_id", clientId)
+      .eq("platform", "smtp");
+
     if (!result.sent) {
-      return new Response(JSON.stringify({ error: "Send failed — check host, port, username, and password" }), {
+      return new Response(JSON.stringify({ error: result.error ? `Send failed: ${result.error}` : "Send failed — check host, port, username, and password" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
