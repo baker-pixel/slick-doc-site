@@ -1,5 +1,13 @@
 {
   "version": "5",
+  "specifiers": {
+    "jsr:@bobbyg603/deno-imap@*": "0.2.1"
+  },
+  "jsr": {
+    "@bobbyg603/deno-imap@0.2.1": {
+      "integrity": "d9ce65ab5cf58462c951d44beff35128649258e04e451322902a3a6c49ca9652"
+    }
+  },
   "redirects": {
     "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.110.0",
     "https://esm.sh/@types/react@~19.0.7/index.d.ts": "https://esm.sh/@types/react@19.0.14/index.d.ts"

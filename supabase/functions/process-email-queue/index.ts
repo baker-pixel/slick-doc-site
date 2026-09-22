@@ -421,6 +421,7 @@ const handler = async (req: Request): Promise<Response> => {
               subject: email.subject,
               html: trackedHtml,
               listUnsubscribeUrl: oneClickUrl,
+              trackingId,
             })
           : { sent: false };
 

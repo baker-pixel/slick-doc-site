@@ -17,6 +17,10 @@ interface SendArgs {
   subject: string;
   html: string;
   listUnsubscribeUrl?: string;
+  // Tags the outbound Message-ID so a reply/bounce landing back in the
+  // client's own mailbox can be matched to this send via the standard
+  // In-Reply-To/References headers -- see _shared/clientMailboxPoll.ts.
+  trackingId?: string;
 }
 
 /**
@@ -57,6 +61,13 @@ export async function sendViaClientEmail(
     });
 
     const fromHeader = meta.from_name ? `${meta.from_name} <${cred.page_id}>` : cred.page_id;
+    const sendDomain = cred.page_id.split("@")[1] || "orangedoormarketing.com";
+    const extraHeaders: Record<string, string> = {};
+    if (args.trackingId) extraHeaders["Message-ID"] = `<odm-${args.trackingId}@${sendDomain}>`;
+    if (args.listUnsubscribeUrl) {
+      extraHeaders["List-Unsubscribe"] = `<${args.listUnsubscribeUrl}>`;
+      extraHeaders["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+    }
 
     // denomailer's send() has no built-in timeout -- a stalled handshake
     // (bad host/port/TLS combo) hangs until the platform kills the whole
@@ -76,14 +87,7 @@ export async function sendViaClientEmail(
           subject: args.subject,
           content: "auto",
           html: args.html,
-          ...(args.listUnsubscribeUrl
-            ? {
-                headers: {
-                  "List-Unsubscribe": `<${args.listUnsubscribeUrl}>`,
-                  "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-                },
-              }
-            : {}),
+          ...(Object.keys(extraHeaders).length ? { headers: extraHeaders } : {}),
         }),
         new Promise((_, reject) =>
           setTimeout(() => {
