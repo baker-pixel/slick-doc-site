@@ -11,8 +11,8 @@ const corsHeaders = {
 
 interface RequestBody {
   client_id: string;
-  /** "suggest": return ICP + discovery query suggestions. "check": validate a manual query against the ICP. */
-  action: "suggest" | "check";
+  /** "suggest": return ICP + discovery query suggestions. "check": validate a manual query against the ICP. "regenerate": force a fresh ICP from the client's current context_profile (the cached one is otherwise never re-derived, even after the client's business info changes) then re-suggest. */
+  action: "suggest" | "check" | "regenerate";
   query?: string;
   location?: string;
   password?: string;
@@ -47,7 +47,7 @@ serve(async (req) => {
 
     if (clientErr || !client) return json({ error: "Client not found" }, 404);
 
-    const icp = await ensureClientICP(supabase, client);
+    const icp = await ensureClientICP(supabase, client, body.action === "regenerate");
     if (!icp) {
       return json({ error: "Could not derive an ICP for this client -- fill in its context profile first" }, 422);
     }
@@ -77,13 +77,15 @@ Return ONLY valid JSON: { "fit": true|false, "reason": "<one short sentence>" }`
       return json({ icp, fit: verdict.fit === true, reason: verdict.reason || "" });
     }
 
-    // action === "suggest"
+    // action === "suggest" or "regenerate" -- both return fresh suggestions,
+    // "regenerate" additionally forced the ICP itself to be re-derived above.
     const suggestions = await suggestDiscoveryQueries(client.id, icp);
 
     return json({
       icp,
       maps_suitable: icp.local,
       suggestions,
+      regenerated: body.action === "regenerate",
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

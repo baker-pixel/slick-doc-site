@@ -46,6 +46,15 @@ interface FoundCompany {
 const OPENAI_API = "https://api.openai.com/v1";
 const APOLLO_API = "https://api.apollo.io/api/v1";
 
+// Apollo's location matcher wants plain city/state/country terms ("texas",
+// "tokyo" -- verified against docs.apollo.io/reference/organization-search),
+// but the ICP's geography string is LLM-generated and can carry a trailing
+// qualifier like "Knoxville, TN metro" that isn't a term Apollo recognizes.
+// Strip the common ones rather than sending it through unmatched.
+function normalizeGeographyForApollo(geography: string): string {
+  return geography.replace(/\s*(metro area|metro|region)\s*$/i, "").trim();
+}
+
 // "10-200 employees" / "10 to 200" -> "10,200" (Apollo's range format).
 // Returns undefined for "any" or anything unparseable -- an omitted filter
 // searches all sizes, which is the safer default over guessing wrong.
@@ -63,12 +72,18 @@ async function apolloSearchCompanies(
   maxResults: number,
   focus?: string,
 ): Promise<FoundCompany[]> {
+  // Note: Apollo's organization search has no keyword/tag exclusion filter
+  // (only organization_not_locations / not_organization_websites_list) --
+  // verified against docs.apollo.io/reference/organization-search. ICP
+  // disqualifiers can't be applied at the source; they're applied downstream
+  // in scoreProspectFit once a prospect has real context to judge against
+  // (this search response only returns name + domain, too thin to self-filter).
   const body: Record<string, unknown> = {
     q_organization_keyword_tags: focus?.trim() ? [...icp.industries, focus.trim()] : icp.industries,
     per_page: Math.min(maxResults, 100),
     page: 1,
   };
-  if (!/global/i.test(geography)) body.organization_locations = [geography];
+  if (!/global/i.test(geography)) body.organization_locations = [normalizeGeographyForApollo(geography)];
   const employeeRange = parseEmployeeRange(icp.company_size);
   if (employeeRange) body.organization_num_employees_ranges = [employeeRange];
 

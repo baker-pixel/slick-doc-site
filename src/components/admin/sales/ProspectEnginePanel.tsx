@@ -270,7 +270,7 @@ export default function ProspectEnginePanel() {
     setThreadLoading(false);
   };
 
-  const suggestFromIcp = async () => {
+  const suggestFromIcp = async (action: "suggest" | "regenerate" = "suggest") => {
     if (!discClientId) {
       toast({ title: "Select a client first", variant: "destructive" });
       return;
@@ -279,7 +279,7 @@ export default function ProspectEnginePanel() {
     setIcpInfo(null);
     try {
       const { data, error } = await supabase.functions.invoke("prospect-icp", {
-        body: { client_id: discClientId, action: "suggest", password: adminPassword },
+        body: { client_id: discClientId, action, password: adminPassword },
       });
       if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);
@@ -291,9 +291,10 @@ export default function ProspectEnginePanel() {
         suggestions: data.suggestions ?? [],
       });
       if (data.maps_suitable === false) setDiscSource("web");
+      if (action === "regenerate") toast({ title: "ICP regenerated from current client context" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "ICP suggestion failed", description: msg, variant: "destructive" });
+      toast({ title: action === "regenerate" ? "ICP regeneration failed" : "ICP suggestion failed", description: msg, variant: "destructive" });
     } finally {
       setSuggesting(false);
     }
@@ -770,12 +771,22 @@ export default function ProspectEnginePanel() {
           <div className="flex flex-wrap gap-2 mt-3">
             <Button
               variant="outline"
-              onClick={suggestFromIcp}
+              onClick={() => suggestFromIcp("suggest")}
               disabled={suggesting || !discClientId}
               className="gap-2"
             >
               {suggesting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
               Suggest
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => suggestFromIcp("regenerate")}
+              disabled={suggesting || !discClientId}
+              className="gap-2"
+              title="Re-derive the ICP from the client's current business context -- otherwise it's generated once and never updates"
+            >
+              <RefreshCw className={`w-4 h-4 ${suggesting ? "animate-spin" : ""}`} />
+              Regenerate ICP
             </Button>
             <Button
               onClick={runDiscovery}

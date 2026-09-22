@@ -29,7 +29,7 @@ serve(async (req: Request) => {
     // 1. Have last_activity_at older than threshold
     // 2. Are not already customers (pipeline stage != Customer)
     // 3. Haven't already received the inactive_lead sequence recently
-    const { data: inactiveLeads, error: fetchError } = await supabase
+    const { data: rawInactiveLeads, error: fetchError } = await supabase
       .from("contact_submissions")
       .select(`
         id,
@@ -42,13 +42,23 @@ serve(async (req: Request) => {
         pipeline_stages(name)
       `)
       .or(`last_activity_at.is.null,last_activity_at.lt.${thresholdDate.toISOString()}`)
-      .neq("status", "converted")
-      .filter("pipeline_stages.name", "neq", "Customer");
+      .neq("status", "converted");
 
     if (fetchError) {
       console.error("Error fetching inactive leads:", fetchError);
       throw fetchError;
     }
+
+    // `.filter("pipeline_stages.name", ...)` on a non-!inner embedded
+    // resource filters which nested row PostgREST attaches, not which parent
+    // rows match -- it never actually excluded Customer-stage leads. Filter
+    // in JS instead, where it's unambiguous.
+    const inactiveLeads = (rawInactiveLeads ?? []).filter(
+      (lead: { pipeline_stages: { name: string } | { name: string }[] | null }) => {
+        const stage = Array.isArray(lead.pipeline_stages) ? lead.pipeline_stages[0] : lead.pipeline_stages;
+        return stage?.name !== "Customer";
+      },
+    );
 
     console.log(`Found ${inactiveLeads?.length || 0} inactive leads`);
 

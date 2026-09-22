@@ -38,8 +38,9 @@ export async function ensureClientICP(
     icp?: unknown;
     context_profile?: Record<string, unknown> | null;
   },
+  force = false,
 ): Promise<ClientICP | null> {
-  if (hasValidICP(client.icp)) return client.icp;
+  if (!force && hasValidICP(client.icp)) return client.icp;
   if (!hasBusinessContext(client)) return null;
 
   const ctx = client.context_profile || {};

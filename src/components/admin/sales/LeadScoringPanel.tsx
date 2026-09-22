@@ -114,8 +114,10 @@ const calculateScores = (signals: { type: string; weight: number }[], source: st
     (urgencyScore * 0.25 + budgetScore * 0.2 + intentScore * 0.3 + sentimentScore * 0.15 + sourceBonus)
   ));
   
-  const conversionProbability = Math.min(95, Math.round(overallScore * 0.9 + Math.random() * 10));
-  
+  // Deterministic -- tied directly to the real signal-weighted score, no
+  // randomized jitter pretending to be a separate AI-computed probability.
+  const conversionProbability = Math.min(95, Math.round(overallScore * 0.9));
+
   return { urgencyScore, budgetScore, intentScore, sentimentScore, overallScore, conversionProbability };
 };
 
@@ -125,13 +127,21 @@ const getTier = (score: number): "hot" | "warm" | "cold" => {
   return "cold";
 };
 
-const generateAction = (tier: "hot" | "warm" | "cold"): string => {
+const generateAction = (
+  tier: "hot" | "warm" | "cold",
+  scores: { urgencyScore: number; budgetScore: number; intentScore: number },
+): string => {
   const actions = {
     hot: ["Schedule call within 24 hours", "Send personalized proposal", "Direct sales outreach", "Priority follow-up required"],
     warm: ["Add to nurture sequence", "Send case study", "Schedule discovery call", "Follow up within 48 hours"],
     cold: ["Add to newsletter", "Send educational content", "Monitor engagement", "Qualify further before outreach"]
   };
-  return actions[tier][Math.floor(Math.random() * actions[tier].length)];
+  // Pick by whichever signal actually dominated this lead's score, so the
+  // recommendation reflects why it scored that way instead of a coin flip.
+  const { urgencyScore, budgetScore, intentScore } = scores;
+  const top = Math.max(urgencyScore, budgetScore, intentScore);
+  const index = top === urgencyScore ? 0 : top === budgetScore ? 1 : top === intentScore ? 2 : 3;
+  return actions[tier][index];
 };
 
 export default function LeadScoringPanel() {
@@ -175,7 +185,7 @@ export default function LeadScoringPanel() {
           ...scores,
           signals: signals as ScoredLead["signals"],
           aiSummary: "",
-          recommendedAction: generateAction(tier),
+          recommendedAction: generateAction(tier, scores),
           tier
         });
       });
@@ -197,7 +207,7 @@ export default function LeadScoringPanel() {
           ...scores,
           signals: signals as ScoredLead["signals"],
           aiSummary: "",
-          recommendedAction: generateAction(tier),
+          recommendedAction: generateAction(tier, scores),
           tier
         });
       });
@@ -218,7 +228,7 @@ export default function LeadScoringPanel() {
           ...scores,
           signals,
           aiSummary: "",
-          recommendedAction: generateAction(tier),
+          recommendedAction: generateAction(tier, scores),
           tier
         });
       });
@@ -269,8 +279,7 @@ export default function LeadScoringPanel() {
 
   const rescoreAllLeads = async () => {
     setIsScoring(true);
-    toast.info("Re-scoring all leads with AI...");
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    toast.info("Re-scoring leads...");
     await fetchAndScoreLeads();
     setIsScoring(false);
     toast.success("Lead scoring complete!");
