@@ -84,12 +84,17 @@ function isAbstractOffering(client: ImagePromptClient): boolean {
 // get the same laptop-with-charts composition on every post. Any option that
 // implies on-screen UI explicitly tells the model to render that text as
 // blurred/abstract shapes -- gpt-image-1 invents garbled fake words otherwise.
+// Each variant demands grounding in the client's actual services (injected
+// separately below) -- without that, the model falls back to the same
+// handful of universal "AI/business" stock clichés (glowing brain, scales of
+// justice, lightbulb, gears) regardless of what the client actually does,
+// which is generic and uninformative on every platform, not just one client.
 const ABSTRACT_SUBJECTS = [
-  `the product or report as a clean screen/document mockup, with any on-screen text rendered as soft blurred shapes and color blocks -- never legible words, letters, or numbers`,
-  `a premium conceptual 3D/isometric render of the service in action -- abstract objects and icons, no screens, no legible text`,
-  `a symbolic still-life of physical objects and materials that represent the concept, considered composition, no screens, no legible text`,
-  `an abstract macro/close-up shot of a texture, material, or object that evokes the concept, no screens, no legible text`,
-  `a wide architectural or environmental shot of the kind of space this work happens in, empty of people and screens, evoking the concept through setting alone`,
+  `the product or report as a clean screen/document mockup, with any on-screen text rendered as soft blurred shapes and color blocks -- never legible words, letters, or numbers. Let the layout itself (chart shapes, data blocks, color-coded sections, a dashboard's structure) visually suggest what their specific offering shows or measures.`,
+  `a premium conceptual 3D/isometric render of the service in action, built from objects and icons drawn from what they specifically do -- no screens, no legible text`,
+  `a still-life composed ONLY of real objects, tools, or materials literally tied to their specific work -- considered composition, no screens, no legible text`,
+  `an abstract macro/close-up shot of a texture, material, or object drawn from their specific work -- no screens, no legible text`,
+  `a wide architectural or environmental shot of the kind of space this specific work happens in, empty of people and screens, evoking their work through setting alone`,
 ];
 
 function pickAbstractSubject(post: ImagePromptPost): string {
@@ -140,12 +145,15 @@ export function buildSocialImagePrompt(client: ImagePromptClient, post: ImagePro
   if (abstract) {
     subject.push(
       services
-        ? `Depict the offering itself, drawn from what they sell: ${services}.`
-        : `Depict the offering itself, tied to the post's topic.`,
+        ? `Depict the offering itself using ONLY real objects, imagery, or visual metaphors drawn specifically from what they sell: ${services}. Every element in frame must trace back to something on this list -- do not substitute a generic symbol instead.`
+        : `Depict the offering itself, tied to the post's topic -- grounded in specifics, not generic symbols.`,
       `Strong subject: ${pickAbstractSubject(post)}.`,
     );
     details.push(`Realistic materials, lighting, and reflections -- avoid a flat, plasticky, or uncanny CGI look.`);
-    constraints.push(`Do not show generic office workers, posed businesspeople, or stock-photo meeting scenes unless the post is explicitly about people or teams.`);
+    constraints.push(
+      `Do not show generic office workers, posed businesspeople, or stock-photo meeting scenes unless the post is explicitly about people or teams.`,
+      `Never fall back on generic AI/business stock clichés that could represent literally any company: no glowing or mechanical brain, no scales of justice, no lightbulb-as-idea, no gears/cogs, no handshake close-up, no circuit-board overlay on a head or body, no DNA helix, no floating abstract geometry with no real-world referent. If an object wouldn't plausibly be sitting on this specific business's desk or in their product, it doesn't belong in frame.`,
+    );
   } else {
     subject.push(
       services ? `Show the work itself -- ${services} -- its craft, setting, or results.` : `Show the work itself: its craft, setting, or results.`,
