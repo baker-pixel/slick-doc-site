@@ -28,9 +28,9 @@ serve(async (req) => {
       );
     }
 
-    if (!["approved", "changes_requested"].includes(action)) {
+    if (!["approved", "changes_requested", "rejected"].includes(action)) {
       return new Response(
-        JSON.stringify({ error: "action must be 'approved' or 'changes_requested'" }),
+        JSON.stringify({ error: "action must be 'approved', 'changes_requested', or 'rejected'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -274,6 +274,47 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, action: "approved", publish_status: "queued" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "rejected") {
+      // A flat decline, distinct from "changes_requested": no feedback to act
+      // on, so no AI rewrite -- just mark it dead. Feedback is optional here
+      // (unlike changes_requested, which needs real text to rewrite from).
+      await supabase
+        .from("content_approvals")
+        .update({
+          status: "rejected",
+          publish_status: "rejected",
+          feedback: feedback?.trim() || null,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", approval_id);
+
+      const generatedContentIdForReject: string | null = approval.content_id || null;
+      if (generatedContentIdForReject) {
+        await supabase
+          .from("generated_content")
+          .update({
+            status: "rejected",
+            rejection_reason: feedback?.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", generatedContentIdForReject);
+      }
+
+      await supabase.from("activity_feed").insert({
+        client_account_id: clientId,
+        activity_type: "content_rejected",
+        title: `Content rejected: ${approval.title}`,
+        description: feedback?.trim() || "Declined, no reason given.",
+        icon: "x-circle",
+        metadata: { approval_id, content_type: approval.content_type },
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, action: "rejected" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

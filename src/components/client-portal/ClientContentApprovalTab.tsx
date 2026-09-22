@@ -776,10 +776,11 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
 
     try {
       const trimmedFeedback = feedback.trim() || undefined;
+      const action = trimmedFeedback ? "changes_requested" : "rejected";
       const { data, error } = await supabase.functions.invoke("handle-approval", {
         body: {
           approval_id: selectedApproval.id,
-          action: "changes_requested",
+          action,
           feedback: trimmedFeedback,
         },
       });
@@ -793,7 +794,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
       setApprovals((prev) =>
         prev.map((a) =>
           a.id === selectedApproval.id
-            ? { ...a, status: "changes_requested", publish_status: "changes_requested", feedback: trimmedFeedback ?? null, reviewed_at: new Date().toISOString() }
+            ? { ...a, status: action, publish_status: action, feedback: trimmedFeedback ?? null, reviewed_at: new Date().toISOString() }
             : a
         )
       );
