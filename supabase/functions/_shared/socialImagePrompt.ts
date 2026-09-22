@@ -80,6 +80,25 @@ function isAbstractOffering(client: ImagePromptClient): boolean {
   return ABSTRACT_OFFERING_HINTS.some((hint) => text.includes(hint));
 }
 
+// Rotated (not always the dashboard mockup) so abstract-offering clients don't
+// get the same laptop-with-charts composition on every post. Any option that
+// implies on-screen UI explicitly tells the model to render that text as
+// blurred/abstract shapes -- gpt-image-1 invents garbled fake words otherwise.
+const ABSTRACT_SUBJECTS = [
+  `the product or report as a clean screen/document mockup, with any on-screen text rendered as soft blurred shapes and color blocks -- never legible words, letters, or numbers`,
+  `a premium conceptual 3D/isometric render of the service in action -- abstract objects and icons, no screens, no legible text`,
+  `a symbolic still-life of physical objects and materials that represent the concept, considered composition, no screens, no legible text`,
+  `an abstract macro/close-up shot of a texture, material, or object that evokes the concept, no screens, no legible text`,
+  `a wide architectural or environmental shot of the kind of space this work happens in, empty of people and screens, evoking the concept through setting alone`,
+];
+
+function pickAbstractSubject(post: ImagePromptPost): string {
+  const seed = `${post.title || ""}${post.content}`;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return ABSTRACT_SUBJECTS[hash % ABSTRACT_SUBJECTS.length];
+}
+
 const VAGUE_LOCATIONS = new Set(["global", "worldwide", "online", "remote", "international"]);
 
 /**
@@ -105,44 +124,55 @@ export function buildSocialImagePrompt(client: ImagePromptClient, post: ImagePro
   const location = ctx?.location && !VAGUE_LOCATIONS.has(ctx.location.toLowerCase()) ? ctx.location : undefined;
   const abstract = isAbstractOffering(client);
 
-  const whoLine = summary
-    ? `Social media image for ${client.business_name}. ${summary}`
-    : `Social media image for ${client.business_name}, a ${industry} business.`;
+  const scene = [
+    summary
+      ? `Social media image for ${client.business_name}. ${summary}`
+      : `Social media image for ${client.business_name}, a ${industry} business.`,
+    post.title
+      ? `The post this accompanies: "${post.title}". Content gist: ${post.content.slice(0, 220)}`
+      : `Content gist: ${post.content.slice(0, 220)}`,
+  ];
 
-  const subjectLine = post.title
-    ? `The post this accompanies: "${post.title}". Content gist: ${post.content.slice(0, 220)}`
-    : `Content gist: ${post.content.slice(0, 220)}`;
-
-  const parts: string[] = [whoLine, subjectLine];
+  const subject: string[] = [];
+  const details: string[] = [];
+  const constraints: string[] = [];
 
   if (abstract) {
-    parts.push(
+    subject.push(
       services
         ? `Depict the offering itself, drawn from what they sell: ${services}.`
         : `Depict the offering itself, tied to the post's topic.`,
-      `Strong subjects: the product or report as a clean screen/document mockup, charts and diagrams that represent the concept, or a premium conceptual 3D/isometric render of the service in action.`,
-      `Do not show generic office workers, posed businesspeople, or stock-photo meeting scenes unless the post is explicitly about people or teams.`,
-      `Render with realistic materials, lighting, and reflections -- avoid a flat, plasticky, or uncanny CGI look.`,
+      `Strong subject: ${pickAbstractSubject(post)}.`,
     );
+    details.push(`Realistic materials, lighting, and reflections -- avoid a flat, plasticky, or uncanny CGI look.`);
+    constraints.push(`Do not show generic office workers, posed businesspeople, or stock-photo meeting scenes unless the post is explicitly about people or teams.`);
   } else {
-    parts.push(
+    subject.push(
       services ? `Show the work itself -- ${services} -- its craft, setting, or results.` : `Show the work itself: its craft, setting, or results.`,
-      `If people appear, make them read as real, specific individuals caught in a genuine moment: natural facial asymmetry, realistic skin texture with visible pores and minor imperfections, candid unposed expressions and body language, correct hand/limb anatomy, real fabric wrinkles.`,
+      `If people appear: real, specific individuals caught in a genuine moment -- natural facial asymmetry, realistic skin texture with visible pores and minor imperfections, candid unposed expressions and body language, correct hand/limb anatomy, real fabric wrinkles, full bodies/hands framed naturally rather than cropped or posed for camera.`,
+    );
+    details.push(
       `Shot like a real camera photo -- natural/ambient light, true-to-life color and material texture, shallow depth of field, slight grain, candid editorial photojournalism style, not stock-photo stiff.`,
       `Contemporary setting and styling -- current clothing, decor, signage, and equipment, not dated or generic stock-photo staging.`,
-      `Avoid the telltale AI-generated look: no waxy/plastic skin, no over-smoothed or airbrushed surfaces, no perfectly symmetrical or vacant faces, no warped or extra fingers/limbs, no oversaturated HDR glow, no generic stock-photo grin.`,
     );
-    if (location) parts.push(`Could plausibly be set in or near ${location}.`);
+    constraints.push(`Avoid the telltale AI-generated look: no waxy/plastic skin, no over-smoothed or airbrushed surfaces, no perfectly symmetrical or vacant faces, no warped or extra fingers/limbs, no oversaturated HDR glow, no generic stock-photo grin.`);
+    if (location) details.push(`Could plausibly be set in or near ${location}.`);
   }
 
-  if (differentiator) parts.push(`Subtly reflect what sets them apart: ${differentiator}.`);
-  if (audience) parts.push(`Made to appeal to ${audience} (aimed at them, not necessarily depicting them).`);
+  if (differentiator) details.push(`Subtly reflect what sets them apart: ${differentiator}.`);
+  if (audience) details.push(`Made to appeal to ${audience} (aimed at them, not necessarily depicting them).`);
+  details.push(`Mood: ${mood}. Modern, premium, uncluttered.`);
 
-  parts.push(
-    `Mood: ${mood}. Modern, premium, uncluttered.`,
+  constraints.push(
     `Composition: clean negative space suitable for a text overlay.`,
-    `No text, no logos, no watermarks, no illegible signage.`,
+    `No extra text of any kind -- no on-screen copy, no logos, no watermarks, no illegible or garbled signage, no lettering on clothing/uniforms/props/buildings. If the subject would naturally include text (a screen, a sign, a page, a shirt), render it as soft out-of-focus shapes and color blocks, never as invented words or letters.`,
+    `The business name, post title, and content gist above are background context only -- never render any of that wording as literal text, caption, or logo lettering anywhere in the image.`,
   );
 
-  return parts.filter(Boolean).join(" ");
+  return [
+    `Scene: ${scene.join(" ")}`,
+    `Subject: ${subject.join(" ")}`,
+    `Details: ${details.join(" ")}`,
+    `Constraints: ${constraints.join(" ")}`,
+  ].join("\n");
 }

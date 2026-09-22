@@ -211,7 +211,12 @@ serve(async (req) => {
       return json({ error: `No PfM account for ${item.platform}`, success: false }, 422);
     }
 
-    const caption = enforceCharLimit(item.content || "", item.platform);
+    if (!item.content?.trim() || /^\[auto-generated placeholder/i.test(item.content.trim())) {
+      await markFailed(contentCalendarId, existingMeta, "Post content is empty or still a placeholder -- AI content generation never filled this slot.");
+      return json({ error: "Placeholder or empty content", success: false }, 422);
+    }
+
+    const caption = enforceCharLimit(item.content, item.platform);
 
     if (item.platform === "twitter" && caption.length > 280) {
       await markFailed(contentCalendarId, existingMeta, `Tweet too long after truncation (${caption.length} chars).`);
