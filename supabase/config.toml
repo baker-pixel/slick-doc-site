@@ -1,5 +1,8 @@
 project_id = "axbeaqpjyzzmbvyaofbn"
 
+[functions.test-client-smtp]
+verify_jwt = false
+
 [functions.signup]
 verify_jwt = false
 
