@@ -7,7 +7,6 @@ import { format } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { PageHeader, StatCard, ModernCard, EmptyState, CollapsibleSection } from "./PortalUI";
 
 interface AnalyticsMetrics {
@@ -95,52 +94,109 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
       const previousPeriod = analytics[1];
       const metrics = latestPeriod?.metrics || {};
       const previousMetrics = previousPeriod?.metrics || {};
-      
-      doc.setFontSize(24);
-      doc.setTextColor(33, 33, 33);
-      doc.text("Performance Report", 20, 25);
-      
-      doc.setFontSize(12);
-      doc.setTextColor(100, 100, 100);
-      doc.text(businessName || "Client Report", 20, 35);
-      
+
+      // Brand orange (hsl(24 95% 53%) from index.css --primary), matches the portal's own accent.
+      const BRAND: [number, number, number] = [249, 112, 21];
+      const INK: [number, number, number] = [33, 33, 33];
+      const MUTED: [number, number, number] = [110, 110, 110];
+      const PAGE_W = 210;
+      const MARGIN = 20;
+
+      // Header band
+      doc.setFillColor(...BRAND);
+      doc.rect(0, 0, PAGE_W, 38, "F");
+      doc.setFontSize(22);
+      doc.setTextColor(255, 255, 255);
+      doc.text("Performance Report", MARGIN, 19);
+      doc.setFontSize(11);
+      doc.text(businessName || "Client Report", MARGIN, 28);
       if (latestPeriod) {
-        doc.text(`Period: ${format(new Date(latestPeriod.period_start), "MMM d")} - ${format(new Date(latestPeriod.period_end), "MMM d, yyyy")}`, 20, 42);
+        doc.setFontSize(9);
+        doc.text(
+          `${format(new Date(latestPeriod.period_start), "MMM d")} – ${format(new Date(latestPeriod.period_end), "MMM d, yyyy")}`,
+          MARGIN,
+          34,
+        );
       }
-      
-      doc.text(`Generated: ${format(new Date(), "MMMM d, yyyy")}`, 20, 49);
-      doc.setDrawColor(200, 200, 200);
-      doc.line(20, 55, 190, 55);
-      
-      doc.setFontSize(16);
-      doc.setTextColor(33, 33, 33);
-      doc.text("Key Metrics", 20, 68);
-      
-      const getTrendText = (current: number | undefined, previous: number | undefined) => {
+
+      doc.setFontSize(15);
+      doc.setTextColor(...INK);
+      doc.text("Key Metrics", MARGIN, 52);
+
+      const getTrend = (current: number | undefined, previous: number | undefined) => {
         const trend = calculateTrend(current, previous);
-        if (trend === null) return "—";
-        return `${trend >= 0 ? "+" : ""}${trend.toFixed(0)}%`;
+        if (trend === null) return null;
+        return { text: `${trend >= 0 ? "▲" : "▼"} ${Math.abs(trend).toFixed(0)}%`, positive: trend >= 0 };
       };
-      
-      const metricsData = [
-        ["Metric", "Current", "Previous", "Change"],
-        ["Website Visits", formatNumber(metrics.website_visits), formatNumber(previousMetrics.website_visits), getTrendText(metrics.website_visits, previousMetrics.website_visits)],
-        ["Leads Generated", formatNumber(metrics.leads_generated), formatNumber(previousMetrics.leads_generated), getTrendText(metrics.leads_generated, previousMetrics.leads_generated)],
-        ["Email Opens", formatNumber(metrics.email_opens), formatNumber(previousMetrics.email_opens), getTrendText(metrics.email_opens, previousMetrics.email_opens)],
-        ["Email Clicks", formatNumber(metrics.email_clicks), formatNumber(previousMetrics.email_clicks), getTrendText(metrics.email_clicks, previousMetrics.email_clicks)],
-        ["Social Reach", formatNumber(metrics.social_reach), formatNumber(previousMetrics.social_reach), getTrendText(metrics.social_reach, previousMetrics.social_reach)],
-        ["Conversions", formatNumber(metrics.conversions), formatNumber(previousMetrics.conversions), getTrendText(metrics.conversions, previousMetrics.conversions)],
+
+      const metricDefs: { label: string; value: number | undefined; previous: number | undefined }[] = [
+        { label: "Website Visits", value: metrics.website_visits, previous: previousMetrics.website_visits },
+        { label: "Leads Generated", value: metrics.leads_generated, previous: previousMetrics.leads_generated },
+        { label: "Email Opens", value: metrics.email_opens, previous: previousMetrics.email_opens },
+        { label: "Email Clicks", value: metrics.email_clicks, previous: previousMetrics.email_clicks },
+        { label: "Social Reach", value: metrics.social_reach, previous: previousMetrics.social_reach },
+        { label: "Conversions", value: metrics.conversions, previous: previousMetrics.conversions },
       ];
-      
-      autoTable(doc, {
-        head: [metricsData[0]],
-        body: metricsData.slice(1),
-        startY: 75,
-        theme: "striped",
-        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
-        styles: { fontSize: 10 },
+
+      const GUTTER = 7;
+      const BOX_W = (PAGE_W - 2 * MARGIN - 2 * GUTTER) / 3;
+      const BOX_H = 30;
+      const GRID_TOP = 58;
+
+      metricDefs.forEach((m, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const x = MARGIN + col * (BOX_W + GUTTER);
+        const y = GRID_TOP + row * (BOX_H + GUTTER);
+
+        doc.setFillColor(247, 247, 248);
+        doc.setDrawColor(230, 230, 230);
+        doc.roundedRect(x, y, BOX_W, BOX_H, 2, 2, "FD");
+
+        doc.setFontSize(8.5);
+        doc.setTextColor(...MUTED);
+        doc.text(m.label.toUpperCase(), x + 5, y + 9);
+
+        doc.setFontSize(17);
+        doc.setTextColor(...INK);
+        doc.text(formatNumber(m.value), x + 5, y + 20);
+
+        const trend = getTrend(m.value, m.previous);
+        if (trend) {
+          doc.setFontSize(9);
+          doc.setTextColor(...(trend.positive ? [22, 163, 74] : [220, 38, 38]));
+          doc.text(trend.text, x + 5, y + 26);
+        }
       });
-      
+
+      let cursorY = GRID_TOP + 2 * (BOX_H + GUTTER) + 6;
+
+      const highlightItems = latestPeriod?.highlights?.items?.filter(Boolean) ?? [];
+      if (highlightItems.length > 0) {
+        doc.setFontSize(15);
+        doc.setTextColor(...INK);
+        doc.text("Highlights", MARGIN, cursorY);
+        cursorY += 8;
+
+        doc.setFontSize(10);
+        doc.setTextColor(60, 60, 60);
+        const maxWidth = PAGE_W - 2 * MARGIN - 6;
+        for (const item of highlightItems) {
+          const lines = doc.splitTextToSize(`•  ${item}`, maxWidth);
+          doc.text(lines, MARGIN, cursorY);
+          cursorY += lines.length * 5.5 + 2;
+        }
+        cursorY += 4;
+      }
+
+      // Footer
+      doc.setDrawColor(225, 225, 225);
+      doc.line(MARGIN, 280, PAGE_W - MARGIN, 280);
+      doc.setFontSize(8.5);
+      doc.setTextColor(...MUTED);
+      doc.text(`${businessName || "Client"} · Orange Door Marketing`, MARGIN, 286);
+      doc.text(`Generated ${format(new Date(), "MMMM d, yyyy")}`, PAGE_W - MARGIN, 286, { align: "right" });
+
       const fileName = `performance-report-${format(new Date(), "yyyy-MM-dd")}.pdf`;
       doc.save(fileName);
       toast({ title: "Report Downloaded", description: "Your performance report has been saved." });

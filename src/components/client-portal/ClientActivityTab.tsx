@@ -975,7 +975,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
           )}
           {currentOpens != null && (
             <StatCard
-              label="Emails Sent"
+              label="Email Opens"
               value={currentOpens}
               icon={Mail}
               trend={opensTrend}
