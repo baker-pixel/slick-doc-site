@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
 import { buildSocialImagePrompt, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
@@ -248,11 +249,18 @@ serve(async (req) => {
         ? buildSocialImagePrompt(clientRow, { content: item.content || "", title: item.title, platform: item.platform })
         : `Professional marketing image for a business on ${item.platform}.`;
 
+      const kit = await getClientBrandKit(supabase, item.client_account_id);
+      const brand = {
+        businessName: kit.business.name,
+        logoUrl: kit.visual.primary_logo_url,
+        colorHex: kit.visual.color_palette[0] ?? null,
+      };
+
       // generate-social-image expects {prompt, platform, count} and returns
       // {images: string[]} -- called here with the service role bearer this
       // function already holds, which generate-social-image's isServer check accepts.
       const imgRes = await supabase.functions.invoke("generate-social-image", {
-        body: { prompt, platform: item.platform, count: 1 },
+        body: { prompt, platform: item.platform, count: 1, brand },
       });
       if (!imgRes.error && !imgRes.data?.error) {
         imageUrl = imgRes.data?.images?.[0] ?? null;

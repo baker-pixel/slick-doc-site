@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { persistGeneratedImage } from "../_shared/gptImage.ts";
+import { getClientBrandKit } from "../_shared/brandKit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -194,20 +196,6 @@ async function scanForNextMatch(
   return { found, resumeOffset, eof };
 }
 
-async function persistBase64Image(supabase: any, base64: string, contentCalendarId: string): Promise<string> {
-  const imageBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  const fileName = `social/batch/${contentCalendarId}_${Date.now()}.png`;
-
-  const { error: uploadErr } = await supabase.storage
-    .from("generated-images")
-    .upload(fileName, imageBytes, { contentType: "image/png", upsert: true });
-
-  if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
-
-  const { data: publicData } = supabase.storage.from("generated-images").getPublicUrl(fileName);
-  return publicData.publicUrl;
-}
-
 async function markBatchStatus(supabase: any, contentCalendarId: string, existingMeta: Record<string, unknown>, status: string) {
   await supabase
     .from("content_calendar")
@@ -220,7 +208,7 @@ async function applyResultLine(supabase: any, line: BatchOutputLine) {
 
   const { data: slot } = await supabase
     .from("content_calendar")
-    .select("metadata")
+    .select("metadata, client_account_id")
     .eq("id", contentCalendarId)
     .maybeSingle();
 
@@ -248,7 +236,12 @@ async function applyResultLine(supabase: any, line: BatchOutputLine) {
   }
 
   try {
-    const imageUrl = await persistBase64Image(supabase, b64, contentCalendarId);
+    const kit = slot?.client_account_id ? await getClientBrandKit(supabase, slot.client_account_id) : null;
+    const brand = kit
+      ? { businessName: kit.business.name, logoUrl: kit.visual.primary_logo_url, colorHex: kit.visual.color_palette[0] ?? null }
+      : undefined;
+    const fileName = `social/batch/${contentCalendarId}_${Date.now()}.png`;
+    const imageUrl = await persistGeneratedImage(supabase, b64, fileName, brand);
     await supabase
       .from("content_calendar")
       .update({ metadata: { ...existingMeta, image_url: imageUrl, image_batch_status: "completed" } })

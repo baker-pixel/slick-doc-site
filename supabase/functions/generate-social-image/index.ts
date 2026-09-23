@@ -41,7 +41,7 @@ serve(async (req) => {
     });
 
   try {
-    const { prompt, platform = "instagram", count = 1, password } = await req.json();
+    const { prompt, platform = "instagram", count = 1, password, brand } = await req.json();
 
     // Server-to-server callers (postforme-publish-post, generate-social-images-batch)
     // invoke this with the service role key and no admin session/password --
@@ -70,7 +70,7 @@ serve(async (req) => {
       Array.from({ length: requested }, async () => {
         const base64 = await generateGptImage(openaiKey, finalPrompt, platform);
         const fileName = `social/${platform}/${crypto.randomUUID()}_${Date.now()}.png`;
-        return persistGeneratedImage(supabase, base64, fileName);
+        return persistGeneratedImage(supabase, base64, fileName, brand);
       }),
     );
 

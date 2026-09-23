@@ -2,7 +2,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
+import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
+import type { OverlayBrand } from "../_shared/imageOverlay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,10 +48,10 @@ function isFallbackEligible(slot: { metadata: unknown; scheduled_for: string | n
   return false; // still within the batch's window -- leave it alone
 }
 
-async function generateAndPersistImage(supabase: any, openaiKey: string, prompt: string, contentCalendarId: string, platform: string): Promise<string> {
+async function generateAndPersistImage(supabase: any, openaiKey: string, prompt: string, contentCalendarId: string, platform: string, brand?: OverlayBrand): Promise<string> {
   const base64 = await generateGptImage(openaiKey, prompt, platform);
   const fileName = `social/sync/${contentCalendarId}_${Date.now()}.png`;
-  return persistGeneratedImage(supabase, base64, fileName);
+  return persistGeneratedImage(supabase, base64, fileName, brand);
 }
 
 serve(async (req) => {
@@ -154,6 +156,14 @@ serve(async (req) => {
       .in("id", clientIds);
     const clientMap = Object.fromEntries((clients || []).map((c: any) => [c.id, c]));
 
+    const brandKits = await Promise.all(clientIds.map((id) => getClientBrandKit(supabase, id)));
+    const brandMap: Record<string, OverlayBrand> = Object.fromEntries(
+      brandKits.map((kit) => [
+        kit.client_id,
+        { businessName: kit.business.name, logoUrl: kit.visual.primary_logo_url, colorHex: kit.visual.color_palette[0] ?? null },
+      ]),
+    );
+
     let filled = 0;
     const failures: { id: string; error: string }[] = [];
 
@@ -163,7 +173,7 @@ serve(async (req) => {
 
       try {
         const prompt = buildSocialImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
-        const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform);
+        const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, brandMap[slot.client_account_id]);
 
         await supabase
           .from("content_calendar")
