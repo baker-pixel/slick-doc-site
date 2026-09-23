@@ -13,9 +13,13 @@ export async function runAdvancedSeo(supabase: any, client: ClientData, inputDat
   const systemPrompt = `You are an enterprise SEO strategist. Create a comprehensive SEO program.
 Output valid JSON only.`;
 
+  const icp = client.icp as Record<string, unknown> | undefined;
+
   const userPrompt = `Create an advanced SEO program for ${client.business_name}.
 Industry: ${client.industry || "local services"}
 Website: ${client.website_url || "N/A"}
+Brand tone: ${client.tone || "professional"}
+Ideal customer: ${(icp?.summary as string) || client.industry || "not specified"}${icp?.buyer_persona ? ` (buyer persona: ${icp.buyer_persona})` : ""}
 Competitors: ${competitors?.map((c: any) => c.name).join(", ") || "not specified"}
 
 Return JSON:

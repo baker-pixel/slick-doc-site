@@ -108,6 +108,9 @@ ${c.name} (${c.url}):
 `).join("\n")}
 
 INDUSTRY: ${client.industry || "General"}
+IDEAL CUSTOMER: ${((client.icp as Record<string, unknown> | undefined)?.summary as string) || client.industry || "not specified"}
+
+Prioritize keyword opportunities that would actually attract this ideal customer, not just any traffic.
 
 Return a JSON object with this exact structure:
 {

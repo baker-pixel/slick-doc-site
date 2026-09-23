@@ -63,4 +63,5 @@ export interface ClientData {
   website_summary?: string;
   context_profile?: Record<string, unknown>;
   tone?: string;
+  icp?: Record<string, unknown>;
 }
