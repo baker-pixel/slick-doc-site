@@ -223,11 +223,19 @@ function throwForStatus(res: Response, bodyText: string, source: string): never 
   if (res.status === 400 && bodyText.includes("json_validate_failed")) {
     console.error(`[ai] ${source} json_validate_failed: ${bodyText.slice(0, 800)}`);
     let detail = "";
+    let hitTokenLimit = false;
     try {
       const failedGen = JSON.parse(bodyText)?.error?.failed_generation;
-      if (typeof failedGen === "string") detail = ` -- model output: ${failedGen.slice(0, 200)}`;
+      if (typeof failedGen === "string") {
+        detail = ` -- model output: ${failedGen.slice(0, 200)}`;
+        hitTokenLimit = /max completion tokens reached/i.test(failedGen);
+      }
     } catch { /* no failed_generation field -- fall back to the generic message */ }
-    throw new AIError(`Model produced invalid JSON${detail}`, 400, true);
+    // "max completion tokens reached" means the model ran out of budget
+    // mid-document, same as finish_reason=length -- mark it truncated so the
+    // caller's budget-doubling retry (see callAI) kicks in instead of
+    // retrying at the same maxTokens and failing identically.
+    throw new AIError(`Model produced invalid JSON${detail}`, 400, true, hitTokenLimit);
   }
   console.error(`[ai] ${source} non-retryable error ${res.status}: ${bodyText.slice(0, 500)}`);
   const providerMessage = extractProviderErrorMessage(bodyText);

@@ -207,7 +207,7 @@ Omit any field that does not need a fix. The keyword used in meta_title and meta
       source: "scan-wordpress-site",
       system: systemPrompt,
       prompt: userPrompt,
-      maxTokens: 512,
+      maxTokens: 1000,
     });
     // Trimming the requested schema above is a prompt, not a contract --
     // strip skipped fields here too rather than trusting the model to have
