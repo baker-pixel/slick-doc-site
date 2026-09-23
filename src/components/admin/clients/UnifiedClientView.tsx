@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
@@ -30,6 +31,7 @@ import {
   Target,
   CalendarDays,
   Radar,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -100,12 +102,23 @@ interface Meeting {
   meeting_type: string;
 }
 
+interface Competitor {
+  id: string;
+  name: string;
+  domain: string;
+  notes: string | null;
+}
+
 export function UnifiedClientView({ client, adminPassword, onNavigateToSection }: UnifiedClientViewProps) {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
+  const [newCompetitorName, setNewCompetitorName] = useState("");
+  const [addingCompetitor, setAddingCompetitor] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [newMessage, setNewMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -125,6 +138,7 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
       fetchProjects(),
       fetchMilestones(),
       fetchMeetings(),
+      fetchCompetitors(),
     ]);
     setIsLoading(false);
   };
@@ -220,6 +234,62 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
     } else {
       const msg = await getEdgeErrorMessage(res.error, res.data);
       toast({ title: "Failed to load meetings", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
+  };
+
+  const fetchCompetitors = async () => {
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_competitors", password: adminPassword },
+    });
+
+    if (!res.error) {
+      const rows = (res.data?.data || []) as Competitor[];
+      setCompetitors(rows.filter((c: any) => c.client_account_id === client.id));
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to load competitors", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
+  };
+
+  const addCompetitor = async () => {
+    if (!newCompetitorDomain.trim()) return;
+    setAddingCompetitor(true);
+
+    const res = await supabase.functions.invoke("admin", {
+      body: {
+        action: "create",
+        table: "client_competitors",
+        data: {
+          client_account_id: client.id,
+          name: newCompetitorName.trim() || newCompetitorDomain.trim(),
+          domain: newCompetitorDomain.trim(),
+        },
+        password: adminPassword,
+      },
+    });
+
+    if (!res.error) {
+      setNewCompetitorDomain("");
+      setNewCompetitorName("");
+      fetchCompetitors();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to add competitor", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+    }
+
+    setAddingCompetitor(false);
+  };
+
+  const removeCompetitor = async (competitorId: string) => {
+    const res = await supabase.functions.invoke("admin", {
+      body: { action: "delete", table: "client_competitors", id: competitorId, password: adminPassword },
+    });
+
+    if (!res.error) {
+      fetchCompetitors();
+    } else {
+      const msg = await getEdgeErrorMessage(res.error, res.data);
+      toast({ title: "Failed to remove competitor", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
     }
   };
 
@@ -446,6 +516,48 @@ export function UnifiedClientView({ client, adminPassword, onNavigateToSection }
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Competitors */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Competitors
+                </CardTitle>
+                <CardDescription className="text-xs">Used for keyword gap analysis</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {competitors.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No competitors added yet</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {competitors.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{c.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{c.domain}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => removeCompetitor(c.id)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 pt-2 border-t">
+                  <Input
+                    placeholder="Domain (e.g. competitor.com)"
+                    value={newCompetitorDomain}
+                    onChange={(e) => setNewCompetitorDomain(e.target.value)}
+                    className="h-9 text-sm"
+                    onKeyDown={(e) => e.key === "Enter" && addCompetitor()}
+                  />
+                  <Button size="sm" onClick={addCompetitor} disabled={addingCompetitor || !newCompetitorDomain.trim()}>
+                    {addingCompetitor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 

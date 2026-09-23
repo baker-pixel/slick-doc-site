@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       "generated_content", "client_reports", "sop_documents",
       "client_documents", "client_notifications", "case_studies",
       "team_members", "ai_fixes", "wp_fix_queue", "prospects", "seo_audits",
-      "sales_proposals", "before_after_showcases",
+      "sales_proposals", "before_after_showcases", "client_competitors",
     ]);
     if (table && !ALLOWED_TABLES.has(table)) {
       console.warn(`Admin action blocked: table "${table}" not in whitelist`);
