@@ -61,7 +61,7 @@ serve(async (req) => {
 
     const { data: item } = await supabase
       .from("content_calendar")
-      .select("id, status, metadata, client_account_id, platform")
+      .select("id, status, metadata, client_account_id, platform, title")
       .eq("postforme_post_id", result.post_id)
       .maybeSingle();
 
@@ -107,7 +107,7 @@ serve(async (req) => {
         message: `PfM accepted the post but the platform rejected it: ${errorMsg}`,
         source: "postforme-webhook",
         source_id: item.id,
-        metadata: { client_account_id: item.client_account_id, pfm_post_id: result.post_id },
+        metadata: { client_account_id: item.client_account_id, title: item.title, pfm_post_id: result.post_id },
       });
       console.error(`Publish failed on platform: calendar=${item.id} error=${errorMsg}`);
     }

@@ -28,6 +28,28 @@ export default function AutomationAlertsPanel() {
   const [alerts, setAlerts] = useState<AutomationAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAcknowledged, setShowAcknowledged] = useState(false);
+  const [clientNames, setClientNames] = useState<Record<string, string>>({});
+
+  // Resolve client_account_id -> business_name for whichever alerts carry one,
+  // so the panel can show *who* an alert is about instead of just a raw id.
+  const loadClientNames = async (rows: AutomationAlert[]) => {
+    const ids = Array.from(
+      new Set(
+        rows
+          .map((a) => (a.metadata as Record<string, unknown> | null)?.client_account_id)
+          .filter((id): id is string => typeof id === "string")
+      )
+    ).filter((id) => !(id in clientNames));
+    if (ids.length === 0) return;
+
+    const { data } = await supabase.from("client_accounts").select("id, business_name").in("id", ids);
+    if (data?.length) {
+      setClientNames((prev) => ({
+        ...prev,
+        ...Object.fromEntries(data.map((c) => [c.id, c.business_name])),
+      }));
+    }
+  };
 
   useEffect(() => {
     fetchAlerts();
@@ -45,6 +67,7 @@ export default function AutomationAlertsPanel() {
         (payload) => {
           const newAlert = payload.new as AutomationAlert;
           setAlerts((prev) => [newAlert, ...prev]);
+          loadClientNames([newAlert]);
           toast.error(newAlert.title, {
             description: newAlert.message,
           });
@@ -67,6 +90,7 @@ export default function AutomationAlertsPanel() {
 
       if (error) throw error;
       setAlerts(data || []);
+      loadClientNames(data || []);
     } catch (error) {
       console.error("Error fetching alerts:", error);
       toast.error("Failed to load alerts");
@@ -185,7 +209,13 @@ export default function AutomationAlertsPanel() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {displayedAlerts.map((alert) => (
+          {displayedAlerts.map((alert) => {
+            const meta = (alert.metadata as Record<string, unknown> | null) || {};
+            const clientId = typeof meta.client_account_id === "string" ? meta.client_account_id : null;
+            const clientName = clientId ? clientNames[clientId] : null;
+            const postTitle = typeof meta.title === "string" ? meta.title : null;
+            const platform = typeof meta.platform === "string" ? meta.platform : null;
+            return (
             <Card
               key={alert.id}
               className={alert.acknowledged_at ? "opacity-60" : ""}
@@ -208,6 +238,19 @@ export default function AutomationAlertsPanel() {
                       <p className="text-sm text-muted-foreground mt-1">
                         {alert.message}
                       </p>
+                      {(clientName || clientId || postTitle || platform) && (
+                        <p className="text-xs mt-1">
+                          {(clientName || clientId) && (
+                            <span className="font-medium text-foreground">
+                              {clientName ?? `Client ${clientId}`}
+                            </span>
+                          )}
+                          {(clientName || clientId) && (postTitle || platform) && " • "}
+                          {postTitle && `"${postTitle}"`}
+                          {postTitle && platform && " "}
+                          {platform && `(${platform})`}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground mt-2">
                         {format(new Date(alert.created_at), "MMM d, yyyy h:mm a")}
                         {alert.source && ` • Source: ${alert.source}`}
@@ -242,7 +285,8 @@ export default function AutomationAlertsPanel() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

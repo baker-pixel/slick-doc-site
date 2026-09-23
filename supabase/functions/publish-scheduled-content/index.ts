@@ -5,6 +5,7 @@ import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logAlert } from "../_shared/alerts.ts";
+import { extractEdgeBody } from "../_shared/edgeError.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,7 +65,7 @@ async function recordPublish(
 const MAX_PUBLISH_ATTEMPTS = 3;
 async function markFailed(
   supabase: any,
-  item: { id: string; platform: string; metadata?: unknown },
+  item: { id: string; platform: string; title?: string | null; client_account_id?: string; metadata?: unknown },
   msg: string,
   retryable = false,
 ): Promise<void> {
@@ -94,7 +95,7 @@ async function markFailed(
     title: `Publish failed: ${item.platform}`,
     message: msg,
     sourceId: item.id,
-    metadata: { platform: item.platform },
+    metadata: { platform: item.platform, title: item.title, client_account_id: item.client_account_id },
   });
 }
 
@@ -131,7 +132,7 @@ serve(async (req) => {
       .update({ status: "scheduled", updated_at: new Date().toISOString() })
       .eq("status", "processing")
       .lt("updated_at", twoHoursAgo)
-      .select("id, platform, title");
+      .select("id, platform, title, client_account_id");
 
     if (stuckPosts?.length) {
       console.log(`Reset ${stuckPosts.length} stuck posts back to scheduled for retry`);
@@ -143,6 +144,7 @@ serve(async (req) => {
           message: `Post "${post.title}" (${post.platform}) was stuck processing for 2h — reset to scheduled.`,
           source: "publish-scheduled-content",
           source_id: post.id,
+          metadata: { platform: post.platform, title: post.title, client_account_id: post.client_account_id },
         });
       }
     }
@@ -181,7 +183,7 @@ serve(async (req) => {
             });
 
             if (pfmRes.error) {
-              const msg = pfmRes.error.message || "Invoke error";
+              const msg = (await extractEdgeBody(pfmRes.error)) || pfmRes.error.message || "Invoke error";
               console.error(`PfM invoke error for ${item.id}:`, msg);
               await markFailed(supabase, item, msg);
               results.push({ id: item.id, platform: item.platform, success: false, error: msg });
@@ -284,7 +286,7 @@ serve(async (req) => {
           title: `Publish failed: ${item.platform || "unknown"}`,
           message: msg,
           sourceId: item.id,
-          metadata: { platform: item.platform },
+          metadata: { platform: item.platform, title: item.title, client_account_id: item.client_account_id },
         });
         results.push({ id: item.id, platform: item.platform || "unknown", success: false, error: msg });
       }

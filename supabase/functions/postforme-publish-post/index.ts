@@ -74,7 +74,13 @@ serve(async (req) => {
   // Transient ones (PfM 5xx, rate-limit exhaustion, network) go back to
   // "scheduled" so the 15-min publish cron retries, up to MAX_PUBLISH_ATTEMPTS.
   const MAX_PUBLISH_ATTEMPTS = 3;
-  const markFailed = async (id: string, meta: Record<string, unknown>, errorMsg: string, retryable = false) => {
+  const markFailed = async (
+    id: string,
+    meta: Record<string, unknown>,
+    errorMsg: string,
+    retryable = false,
+    alertMeta: Record<string, unknown> = {},
+  ) => {
     claimed = false; // we're handling it — no reset needed
     const attempts = (Number(meta.publish_attempts) || 0) + 1;
     if (retryable && attempts < MAX_PUBLISH_ATTEMPTS) {
@@ -96,6 +102,7 @@ serve(async (req) => {
       message: errorMsg,
       source: "postforme-publish-post",
       source_id: id,
+      metadata: alertMeta,
     });
   };
 
@@ -201,6 +208,8 @@ serve(async (req) => {
         contentCalendarId,
         existingMeta,
         `No Post for Me account connected for "${item.platform}". Connect one in Social & Accounts.`,
+        false,
+        { platform: item.platform, title: item.title, client_account_id: item.client_account_id },
       );
       // The pipeline is fine -- this is the client's own account being
       // disconnected, so it's the one blocker they (not us) have to clear.
@@ -213,14 +222,14 @@ serve(async (req) => {
     }
 
     if (!item.content?.trim() || /^\[auto-generated placeholder/i.test(item.content.trim())) {
-      await markFailed(contentCalendarId, existingMeta, "Post content is empty or still a placeholder -- AI content generation never filled this slot.");
+      await markFailed(contentCalendarId, existingMeta, "Post content is empty or still a placeholder -- AI content generation never filled this slot.", false, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
       return json({ error: "Placeholder or empty content", success: false }, 422);
     }
 
     const caption = enforceCharLimit(item.content, item.platform);
 
     if (item.platform === "twitter" && caption.length > 280) {
-      await markFailed(contentCalendarId, existingMeta, `Tweet too long after truncation (${caption.length} chars).`);
+      await markFailed(contentCalendarId, existingMeta, `Tweet too long after truncation (${caption.length} chars).`, false, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
       return json({ error: "Tweet too long", success: false }, 422);
     }
 
@@ -291,7 +300,7 @@ serve(async (req) => {
       // 5xx and rate-limit exhaustion are transient; 4xx (bad content, auth,
       // disconnected account) won't fix themselves on retry.
       const retryable = pfmRes.status >= 500 || pfmRes.status === 429;
-      await markFailed(contentCalendarId, existingMeta, friendlyErr, retryable);
+      await markFailed(contentCalendarId, existingMeta, friendlyErr, retryable, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
       return json({ error: friendlyErr, success: false }, 502);
     }
 
