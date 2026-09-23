@@ -23,7 +23,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, FileText, TrendingUp, Mail, Loader2, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban } from "lucide-react";
+import { Plus, FileText, TrendingUp, Mail, Loader2, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban, Play } from "lucide-react";
 import { format } from "date-fns";
 import { TierBadge } from "../core/TierBadge";
 import { callAdminApi } from "@/lib/admin-api";
@@ -83,6 +83,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
   const [updatingTierIds, setUpdatingTierIds] = useState<Set<string>>(new Set());
+  const [togglingPauseIds, setTogglingPauseIds] = useState<Set<string>>(new Set());
   
   const [newClient, setNewClient] = useState({
     email: "",
@@ -173,6 +174,33 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
       toast.error("Failed to update tier: " + error);
     } else {
       toast.success(`${client.business_name} moved to ${tier}`);
+      fetchClients();
+    }
+  };
+
+  // Pauses/resumes all automated agent activity for this client (SEO
+  // re-audits, GA4 sync, prospect drip, WP scans, scheduled content
+  // generation + publishing) — every engine sweep filters on
+  // client_accounts.status = 'active', so flipping this is a real stop,
+  // not cosmetic.
+  const togglePauseClient = async (client: ClientAccount) => {
+    const nextStatus = client.status === "paused" ? "active" : "paused";
+    setTogglingPauseIds((prev) => new Set(prev).add(client.id));
+    const { error } = await callAdminApi(adminPassword, {
+      action: "update",
+      table: "client_accounts",
+      id: client.id,
+      data: { status: nextStatus },
+    });
+    setTogglingPauseIds((prev) => {
+      const next = new Set(prev);
+      next.delete(client.id);
+      return next;
+    });
+    if (error) {
+      toast.error("Failed to update status: " + error);
+    } else {
+      toast.success(`${client.business_name} ${nextStatus === "paused" ? "paused" : "resumed"}.`);
       fetchClients();
     }
   };
@@ -848,6 +876,22 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <TrendingUp className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => togglePauseClient(client)}
+                              disabled={togglingPauseIds.has(client.id) || client.status === "cancelled"}
+                              title={client.status === "paused" ? "Resume Automation" : "Pause Automation"}
+                              className={client.status === "paused" ? "text-yellow-700 border-yellow-300" : ""}
+                            >
+                              {togglingPauseIds.has(client.id) ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : client.status === "paused" ? (
+                                <Play className="h-4 w-4" />
+                              ) : (
+                                <Ban className="h-4 w-4" />
                               )}
                             </Button>
                           </div>

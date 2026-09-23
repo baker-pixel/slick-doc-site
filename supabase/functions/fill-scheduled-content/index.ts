@@ -93,7 +93,8 @@ serve(async (req) => {
     const { data: rawClients } = await supabase
       .from("client_accounts")
       .select("id, business_name, tier, industry, website_url, context_profile, intake_completed_at")
-      .in("id", clientIds);
+      .in("id", clientIds)
+      .eq("status", "active");
 
     // Skip clients whose portal invite was never accepted -- these slots
     // (e.g. from before this gate existed, or created manually) have nobody

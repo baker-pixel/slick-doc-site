@@ -168,7 +168,20 @@ serve(async (req) => {
 
     const results: { id: string; platform: string; success: boolean; skipped?: boolean; error?: string }[] = [];
 
+    // A paused client (client_accounts.status = 'paused') should not have
+    // already-queued content auto-publish out from under them -- skip and
+    // leave the item "scheduled" so it resumes once unpaused.
+    const dueClientIds = [...new Set((scheduledContent || []).map((i: any) => i.client_account_id))];
+    const { data: pausedClients } = dueClientIds.length
+      ? await supabase.from("client_accounts").select("id").in("id", dueClientIds).neq("status", "active")
+      : { data: [] };
+    const pausedClientIds = new Set((pausedClients || []).map((c: any) => c.id));
+
     for (const item of scheduledContent || []) {
+      if (pausedClientIds.has(item.client_account_id)) {
+        results.push({ id: item.id, platform: item.platform, success: false, skipped: true });
+        continue;
+      }
       try {
         switch (item.platform) {
 
