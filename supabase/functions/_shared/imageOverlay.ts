@@ -1,25 +1,12 @@
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
-// gpt-image-2 reliably garbles any brand name or logo it's asked to render
-// inside the prompt (see socialImagePrompt.ts) -- so instead of asking the
-// model for it, this stamps the client's REAL name/logo onto the finished
-// image afterward. Guaranteed correct and legible, at the cost of a fixed
-// bottom bar on every generated image.
+// gpt-image-2 reliably garbles any logo it's asked to render inside the
+// prompt (see socialImagePrompt.ts) -- so instead of asking the model for
+// it, this stamps the client's REAL logo onto the finished image afterward.
 export interface OverlayBrand {
   businessName: string;
   logoUrl?: string | null;
   colorHex?: string | null;
-}
-
-const FONT_URL = "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf";
-let cachedFont: Uint8Array | null = null;
-
-async function loadFont(): Promise<Uint8Array> {
-  if (cachedFont) return cachedFont;
-  const res = await fetch(FONT_URL);
-  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`);
-  cachedFont = new Uint8Array(await res.arrayBuffer());
-  return cachedFont;
 }
 
 function hexToOpaqueInt(hex: string | null | undefined): number | null {
@@ -30,14 +17,13 @@ function hexToOpaqueInt(hex: string | null | undefined): number | null {
 }
 
 /**
- * Stamps a bottom brand bar (real business name + logo, if available) onto a
- * generated image. Best-effort throughout -- a bad/unreachable logo, a font
- * fetch failure, or any decode error falls back to returning the original
- * image untouched rather than leaving a post with no image at all.
+ * Stamps a bottom brand bar with the client's logo onto a generated image.
+ * No-ops when there's no logo. Best-effort throughout -- a bad/unreachable
+ * logo or any decode error falls back to returning the original image
+ * untouched rather than leaving a post with no image at all.
  */
 export async function applyBrandOverlay(pngBytes: Uint8Array, brand: OverlayBrand): Promise<Uint8Array> {
-  const name = brand.businessName?.trim();
-  if (!name) return pngBytes;
+  if (!brand.logoUrl) return pngBytes;
 
   try {
     const image = await Image.decode(pngBytes);
@@ -60,38 +46,17 @@ export async function applyBrandOverlay(pngBytes: Uint8Array, brand: OverlayBran
 
     const padding = Math.round(barHeight * 0.28);
     const contentHeight = barHeight - padding * 2;
-    let textX = padding;
 
-    // Logo is a nice-to-have, never a blocker -- an unsupported format (SVG,
-    // corrupt file) just gets skipped and we fall back to name-only.
-    if (brand.logoUrl) {
-      try {
-        const logoRes = await fetch(brand.logoUrl);
-        if (logoRes.ok) {
-          const logo = await Image.decode(new Uint8Array(await logoRes.arrayBuffer()));
-          logo.resize(Image.RESIZE_AUTO, contentHeight);
-          image.composite(logo, textX, image.height - barHeight + padding);
-          textX += logo.width + padding;
-        }
-      } catch (e) {
-        console.warn("Brand overlay: logo skipped:", e instanceof Error ? e.message : e);
-      }
+    try {
+      const logoRes = await fetch(brand.logoUrl);
+      if (!logoRes.ok) return pngBytes;
+      const logo = await Image.decode(new Uint8Array(await logoRes.arrayBuffer()));
+      logo.resize(Image.RESIZE_AUTO, contentHeight);
+      image.composite(logo, padding, image.height - barHeight + padding);
+    } catch (e) {
+      console.warn("Brand overlay: logo skipped:", e instanceof Error ? e.message : e);
+      return pngBytes;
     }
-
-    const font = await loadFont();
-    let scale = Math.round(contentHeight * 0.85);
-    let text = Image.renderText(font, scale, name, 0xffffffff);
-
-    // Shrink to fit in one pass if the name is too wide for the remaining
-    // space -- good enough without a full iterative wrap/fit loop.
-    const maxTextWidth = image.width - textX - padding;
-    if (text.width > maxTextWidth && maxTextWidth > 0) {
-      scale = Math.max(10, Math.round(scale * (maxTextWidth / text.width)));
-      text = Image.renderText(font, scale, name, 0xffffffff);
-    }
-
-    const textY = image.height - barHeight + Math.round((barHeight - text.height) / 2);
-    image.composite(text, textX, textY);
 
     return await image.encode();
   } catch (e) {
