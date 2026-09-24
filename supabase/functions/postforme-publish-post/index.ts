@@ -74,13 +74,19 @@ serve(async (req) => {
   // Transient ones (PfM 5xx, rate-limit exhaustion, network) go back to
   // "scheduled" so the 15-min publish cron retries, up to MAX_PUBLISH_ATTEMPTS.
   const MAX_PUBLISH_ATTEMPTS = 3;
+  // Returns whether this was the final, non-retryable failure -- callers use
+  // that to gate anything that should only fire once retries are actually
+  // exhausted (e.g. flagging an account as needing reauth), not on a single
+  // blip. Confirmed live: a PfM 401 on one attempt succeeded on a plain
+  // retry seconds later with the same account and no reconnection, so a
+  // first-occurrence 401/403 is not reliable evidence of a broken grant.
   const markFailed = async (
     id: string,
     meta: Record<string, unknown>,
     errorMsg: string,
     retryable = false,
     alertMeta: Record<string, unknown> = {},
-  ) => {
+  ): Promise<{ final: boolean }> => {
     claimed = false; // we're handling it — no reset needed
     const attempts = (Number(meta.publish_attempts) || 0) + 1;
     if (retryable && attempts < MAX_PUBLISH_ATTEMPTS) {
@@ -89,7 +95,7 @@ serve(async (req) => {
         .from("content_calendar")
         .update({ status: "scheduled", metadata: { ...meta, publish_attempts: attempts, last_error: errorMsg } })
         .eq("id", id);
-      return;
+      return { final: false };
     }
     await supabase
       .from("content_calendar")
@@ -104,6 +110,7 @@ serve(async (req) => {
       source_id: id,
       metadata: alertMeta,
     });
+    return { final: true };
   };
 
   const markPublished = async (id: string, meta: object, pfmPostId: string, charsLen: number) => {
@@ -297,19 +304,22 @@ serve(async (req) => {
       let friendlyErr = `PfM API error ${pfmRes.status}`;
       try { friendlyErr = JSON.parse(text)?.message || friendlyErr; } catch { /* ignore */ }
       console.error("PfM publish error:", pfmRes.status, text);
-      // 5xx and rate-limit exhaustion are transient; 4xx (bad content, auth,
-      // disconnected account) won't fix themselves on retry.
-      const retryable = pfmRes.status >= 500 || pfmRes.status === 429;
-      await markFailed(contentCalendarId, existingMeta, friendlyErr, retryable, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
+      // 5xx and rate-limit exhaustion are transient, as expected. 401/403 are
+      // ALSO given the normal retry budget rather than failing immediately --
+      // confirmed live that a PfM 401 can be a one-off blip that succeeds on
+      // plain retry with the same account. Only a 401/403 that survives the
+      // full retry budget is treated as a genuinely broken grant below.
+      const retryable = pfmRes.status >= 500 || pfmRes.status === 429 || pfmRes.status === 401 || pfmRes.status === 403;
+      const { final } = await markFailed(contentCalendarId, existingMeta, friendlyErr, retryable, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
 
-      // A 401/403 here means PfM itself rejected the request -- the account
-      // *looks* connected in our DB (it has a row), but its underlying grant
-      // is missing the posting permission or was revoked. That's silent
-      // otherwise: it only ever surfaces as a failed scheduled post, never as
-      // something the client sees on the integration itself. Flag the
-      // account row and tell the client to reconnect, same as a fully
-      // disconnected one.
-      if (pfmRes.status === 401 || pfmRes.status === 403) {
+      // A 401/403 that persisted through every retry means PfM consistently
+      // rejects this account, not a passing blip -- the account *looks*
+      // connected in our DB, but its underlying grant is missing the posting
+      // permission or was revoked. That's silent otherwise: it only ever
+      // surfaces as a failed scheduled post, never as something the client
+      // sees on the integration itself. Flag the account row and tell the
+      // client to reconnect, same as a fully disconnected one.
+      if (final && (pfmRes.status === 401 || pfmRes.status === 403)) {
         await supabase
           .from("client_postforme_accounts")
           .update({ status: "needs_reauth" })
