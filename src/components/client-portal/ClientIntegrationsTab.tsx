@@ -478,7 +478,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
       .from("client_postforme_accounts")
       .select("id, platform, postforme_account_id, username, profile_photo_url, status, is_primary")
       .eq("client_id", clientAccountId)
-      .eq("status", "connected")
+      .in("status", ["connected", "needs_reauth"])
       .order("created_at", { ascending: true });
     const accounts = (data as PfmAccount[]) || [];
     setPfmAccounts(accounts);
@@ -1132,10 +1132,16 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
           // several pages are connected with no explicit pick yet -- tell those
           // apart so the latter prompts a choice instead of showing "Not connected".
           const pfmNeedsSelection = !pfmAccount && pfmAccountsForThisPlatform.length > 1;
-          const connected = !!pfmAccount || (!!token && !isExpired(token.expires_at));
+          // A row can exist but be unusable: PfM rejected the last publish
+          // attempt with 401/403 (see postforme-publish-post), meaning the
+          // account *looks* connected but its grant is missing the posting
+          // permission or was revoked. Treat that like "not connected" here
+          // and give it its own badge/CTA instead of silently disappearing.
+          const needsReauth = pfmAccount?.status === "needs_reauth";
+          const connected = (!!pfmAccount && !needsReauth) || (!!token && !isExpired(token.expires_at));
           const expired = !pfmAccount && !!token && isExpired(token.expires_at);
           const selectionRequired = pfmNeedsSelection || (!pfmAccount && token?.token_metadata?.selection_required === true);
-          const needsAction = !connected || expired;
+          const needsAction = !connected || expired || needsReauth;
           const Icon = platform.icon;
           const pageName = pfmAccount?.username
             || (typeof token?.token_metadata?.page_name === "string" ? token.token_metadata.page_name : token?.page_id)
@@ -1188,6 +1194,11 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
                         <Badge variant="outline" className="mt-1 text-xs bg-red-500/10 text-red-600 border-red-500/20 gap-1">
                           <AlertTriangle className="h-3 w-3" />
                           Token expired
+                        </Badge>
+                      ) : needsReauth ? (
+                        <Badge variant="outline" className="mt-1 text-xs bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Needs reconnection
                         </Badge>
                       ) : (
                         <p className="text-xs text-muted-foreground mt-1">Not connected</p>
@@ -1269,7 +1280,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
                         {disconnecting === platform.id ? "Disconnecting..." : "Disconnect"}
                       </Button>
                     </>
-                  ) : expired ? (
+                  ) : expired || needsReauth ? (
                     <Button
                       size="sm"
                       className="gap-1.5 rounded-lg"

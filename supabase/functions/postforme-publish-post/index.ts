@@ -301,6 +301,28 @@ serve(async (req) => {
       // disconnected account) won't fix themselves on retry.
       const retryable = pfmRes.status >= 500 || pfmRes.status === 429;
       await markFailed(contentCalendarId, existingMeta, friendlyErr, retryable, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
+
+      // A 401/403 here means PfM itself rejected the request -- the account
+      // *looks* connected in our DB (it has a row), but its underlying grant
+      // is missing the posting permission or was revoked. That's silent
+      // otherwise: it only ever surfaces as a failed scheduled post, never as
+      // something the client sees on the integration itself. Flag the
+      // account row and tell the client to reconnect, same as a fully
+      // disconnected one.
+      if (pfmRes.status === 401 || pfmRes.status === 403) {
+        await supabase
+          .from("client_postforme_accounts")
+          .update({ status: "needs_reauth" })
+          .eq("client_id", item.client_account_id)
+          .eq("postforme_account_id", pfmAccount.postforme_account_id);
+
+        await notifyClientBlocked(supabase, item.client_account_id, {
+          notificationType: "integration_needs_reauth",
+          title: `Your ${platformLabel(item.platform)} connection needs to be reconnected`,
+          description: `We tried to publish to ${platformLabel(item.platform)} but the connection was rejected. Disconnect and reconnect it in your portal's Social & Accounts tab, making sure to grant all requested permissions this time, to get your content posting again.`,
+        });
+      }
+
       return json({ error: friendlyErr, success: false }, 502);
     }
 
