@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Info, Radar, TrendingUp, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles, Eye, MousePointerClick, ChevronRight, ChevronLeft } from "lucide-react";
+import {
+  Loader2, Info, Radar, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles,
+  Eye, MousePointerClick, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Search, Reply,
+  XCircle, Clock, Send, Settings2,
+} from "lucide-react";
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
 import { OutreachSettingsCard } from "./OutreachSettingsCard";
@@ -86,6 +92,9 @@ const STATUS_LABELS: Record<string, string> = {
   exhausted:     "Sequence Complete",
 };
 
+type SortKey = "name" | "fit" | "status" | "created";
+type SortDir = "asc" | "desc";
+
 function initials(name: string): string {
   // Skip non-alphabetic tokens ("&", "-") so "Trumble & Partners" reads as
   // "TP", not "T&".
@@ -93,6 +102,10 @@ function initials(name: string): string {
   if (words.length === 0) return "?";
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function pct(numerator: number, denominator: number): number {
+  return denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
 }
 
 export default function ClientProspectsTab({ clientAccountId }: { clientAccountId: string }) {
@@ -105,6 +118,11 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [icpLocal, setIcpLocal] = useState(true);
   const [findingLeads, setFindingLeads] = useState(false);
   const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[] | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("created");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const loadProspects = async () => {
     setLoading(true);
@@ -164,41 +182,89 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   };
 
   const visible = allProspects.filter((p) => p.status !== "discovered");
-  const count = (status: string) => allProspects.filter((p) => p.status === status).length;
+
+  // Campaign-level stats, computed from what's already fetched -- no new RPC
+  // needed. "Emailed" excludes leads still sitting in the pre-send queue.
+  const emailed = visible.filter((p) => p.status !== "pending").length;
+  const opened = visible.filter((p) => p.opened_at).length;
+  const repliedOrConverted = visible.filter((p) => p.status === "replied" || p.status === "converted").length;
+  const bounced = visible.filter((p) => p.status === "bounced").length;
+  const converted = visible.filter((p) => p.status === "converted").length;
 
   const stats = [
-    { label: "Discovered",  value: count("discovered"), icon: Radar,       color: "text-orange-500" },
-    { label: "In Outreach", value: count("nurture"),     icon: TrendingUp,  color: "text-purple-600" },
-    { label: "Converted",   value: count("converted"),   icon: CheckCircle2,color: "text-green-600"  },
-    { label: "Queued",      value: count("pending"),     icon: Users,       color: "text-blue-600"   },
+    { label: "Total leads", value: visible.length, icon: Users, color: "text-blue-600" },
+    { label: "Emailed", value: emailed, icon: Send, color: "text-indigo-600" },
+    { label: "Open rate", value: `${pct(opened, emailed)}%`, icon: Eye, color: "text-sky-600" },
+    { label: "Reply rate", value: `${pct(repliedOrConverted, emailed)}%`, icon: Reply, color: "text-emerald-600" },
+    { label: "Bounced", value: bounced, icon: XCircle, color: "text-gray-500" },
+    { label: "Converted", value: converted, icon: CheckCircle2, color: "text-green-600" },
   ];
+
+  // Only surface tabs for statuses actually present, so a client with (say)
+  // no bounces yet isn't shown an empty "Bounced" tab.
+  const statusTabs = useMemo(() => {
+    const present = new Set(visible.map((p) => p.status));
+    return ["all", ...Object.keys(STATUS_LABELS).filter((s) => present.has(s))];
+  }, [visible]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = visible.filter((p) => statusFilter === "all" || p.status === statusFilter);
+    if (q) {
+      rows = rows.filter((p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.business_type ?? "").toLowerCase().includes(q) ||
+        (p.city ?? "").toLowerCase().includes(q));
+    }
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      switch (sortKey) {
+        case "name": return a.name.localeCompare(b.name) * dir;
+        case "fit": return ((a.icp_fit_score ?? -1) - (b.icp_fit_score ?? -1)) * dir;
+        case "status": return a.status.localeCompare(b.status) * dir;
+        default: return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+      }
+    });
+  }, [visible, statusFilter, search, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "created" ? "desc" : "asc");
+    }
+  };
+
+  const SortHeader = ({ column, label, className }: { column: SortKey; label: string; className?: string }) => (
+    <TableHead className={className}>
+      <button type="button" onClick={() => toggleSort(column)} className="flex items-center gap-1 hover:text-foreground">
+        {label}
+        {sortKey === column && (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+      </button>
+    </TableHead>
+  );
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
         {stats.map((s) => (
-          <Card key={s.label} className="p-4">
-            <div className="flex items-center gap-3">
-              <s.icon className={`w-5 h-5 ${s.color}`} />
-              <div>
-                <div className="text-2xl font-bold">{s.value}</div>
-                <div className="text-xs text-muted-foreground">{s.label}</div>
+          <Card key={s.label} className="p-3">
+            <div className="flex items-center gap-2">
+              <s.icon className={`w-4 h-4 shrink-0 ${s.color}`} />
+              <div className="min-w-0">
+                <div className="text-lg font-bold leading-tight">{s.value}</div>
+                <div className="text-[11px] text-muted-foreground truncate">{s.label}</div>
               </div>
             </div>
           </Card>
         ))}
       </div>
 
-      <div className="space-y-3">
-        <ProspectIcpCard clientAccountId={clientAccountId} />
-        <CompanyContextCard clientAccountId={clientAccountId} />
-        <OutreachSettingsCard clientAccountId={clientAccountId} />
-      </div>
-
       <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary/60" />
         <span className="flex-1">
-          Orange Door is running outreach on your behalf, based on the ideal customer profile above. Click a lead
+          Orange Door is running outreach on your behalf, based on your ideal customer profile. Click a lead
           below to see why it was matched and what's been sent.
         </span>
         <Button size="sm" variant="outline" className="gap-2 shrink-0" onClick={findLeadsNow} disabled={findingLeads}>
@@ -206,33 +272,6 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           {findingLeads ? "Searching..." : "Find leads now"}
         </Button>
       </div>
-
-      {sequenceSteps && sequenceSteps.length > 0 && (
-        <Card className="p-4 space-y-3">
-          <div className="flex items-center gap-2 font-medium text-sm">
-            <Mail className="w-4 h-4 text-primary" />
-            Your outreach sequence
-          </div>
-          <p className="text-xs text-muted-foreground -mt-2">
-            Every matched lead automatically goes through these {sequenceSteps.length} emails, personalized per business — this is the campaign running on your behalf, before any lead reaches a given step.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {sequenceSteps.map((s) => {
-              const label = SEQUENCE_STEP_LABELS[s.step_number];
-              return (
-                <div key={s.step_number} className="rounded-lg border bg-muted/30 p-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Step {s.step_number}</span>
-                    <Badge variant="outline" className="text-xs">Day {s.cumulative_days}</Badge>
-                  </div>
-                  <div className="text-sm font-medium">{label?.title ?? `Step ${s.step_number}`}</div>
-                  <p className="text-xs text-muted-foreground">{label?.description ?? ""}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
 
       <Card className="overflow-hidden">
         {loading ? (
@@ -249,54 +288,157 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
-              <span className="text-xs font-medium text-muted-foreground">{visible.length} lead{visible.length === 1 ? "" : "s"}</span>
-              <span className="hidden sm:block text-xs text-muted-foreground">Fit score · Status · Found</span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-2.5 border-b bg-muted/30">
+              <div className="flex items-center gap-1 overflow-x-auto">
+                {statusTabs.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(s)}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                      statusFilter === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {s === "all" ? "All" : STATUS_LABELS[s]}
+                    <span className="ml-1 opacity-70">{s === "all" ? visible.length : visible.filter((p) => p.status === s).length}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="relative sm:ml-auto sm:w-56">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search leads..."
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
             </div>
-            <div className="divide-y">
-              {visible.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => openDetail(p)}
-                  className="flex w-full items-center gap-3 sm:gap-4 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {initials(p.name)}
-                  </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm truncate">{p.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {p.business_type ?? "Business"}{p.city ? ` · ${p.city}` : ""}
-                    </div>
-                  </div>
-
-                  <div className="hidden md:flex flex-col items-end w-14 shrink-0 tabular-nums">
-                    <span className="text-sm font-medium">{p.icp_fit_score != null ? p.icp_fit_score : "—"}</span>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Fit</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {p.clicked_at ? (
-                      <MousePointerClick className="w-3.5 h-3.5 text-emerald-600" aria-label="Clicked a link" />
-                    ) : p.opened_at ? (
-                      <Eye className="w-3.5 h-3.5 text-blue-500" aria-label="Opened an email" />
-                    ) : null}
-                    <Badge variant="outline" className={`text-xs whitespace-nowrap ${STATUS_STYLES[p.status] ?? ""}`}>
-                      {STATUS_LABELS[p.status] ?? p.status}
-                    </Badge>
-                  </div>
-
-                  <span className="hidden lg:block w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-                    {format(new Date(p.created_at), "MMM d, yyyy")}
-                  </span>
-
-                  <ChevronRight className="hidden sm:block h-4 w-4 shrink-0 text-muted-foreground/40" />
-                </button>
-              ))}
-            </div>
+            {filtered.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">No leads match this filter.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortHeader column="name" label="Lead" />
+                    <SortHeader column="fit" label="Fit" className="hidden md:table-cell w-16" />
+                    <TableHead className="hidden sm:table-cell">Activity</TableHead>
+                    <SortHeader column="status" label="Status" />
+                    <SortHeader column="created" label="Found" className="hidden lg:table-cell w-24" />
+                    <TableHead className="w-8" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((p) => (
+                    <TableRow
+                      key={p.id}
+                      className="cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openDetail(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openDetail(p);
+                        }
+                      }}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                            {initials(p.name)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{p.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {p.business_type ?? "Business"}{p.city ? ` · ${p.city}` : ""}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell tabular-nums text-sm">
+                        {p.icp_fit_score ?? "—"}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {p.clicked_at ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                            <MousePointerClick className="w-3.5 h-3.5" />Clicked
+                          </span>
+                        ) : p.opened_at ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-blue-500">
+                            <Eye className="w-3.5 h-3.5" />Opened
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/60">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs whitespace-nowrap ${STATUS_STYLES[p.status] ?? ""}`}>
+                          {STATUS_LABELS[p.status] ?? p.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-xs text-muted-foreground tabular-nums">
+                        {format(new Date(p.created_at), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((o) => !o)}
+          className="flex w-full items-center justify-between text-sm font-medium"
+        >
+          <span className="flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-muted-foreground" />
+            Campaign settings & sequence
+          </span>
+          {settingsOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </button>
+
+        {settingsOpen && (
+          <div className="mt-4 space-y-3">
+            <ProspectIcpCard clientAccountId={clientAccountId} />
+            <CompanyContextCard clientAccountId={clientAccountId} />
+            <OutreachSettingsCard clientAccountId={clientAccountId} />
+
+            {sequenceSteps && sequenceSteps.length > 0 && (
+              <Card className="p-4 space-y-3">
+                <div className="flex items-center gap-2 font-medium text-sm">
+                  <Mail className="w-4 h-4 text-primary" />
+                  Your outreach sequence
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  Every matched lead automatically goes through these {sequenceSteps.length} emails, personalized per business.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {sequenceSteps.map((s) => {
+                    const label = SEQUENCE_STEP_LABELS[s.step_number];
+                    return (
+                      <div key={s.step_number} className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Step {s.step_number}</span>
+                          <Badge variant="outline" className="text-xs">Day {s.cumulative_days}</Badge>
+                        </div>
+                        <div className="text-sm font-medium">{label?.title ?? `Step ${s.step_number}`}</div>
+                        <p className="text-xs text-muted-foreground">{label?.description ?? ""}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+          </div>
         )}
       </Card>
 
@@ -414,10 +556,10 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                   </div>
                 )}
 
-                <div className="space-y-2 border-t pt-3">
+                <div className="space-y-3 border-t pt-3">
                   <div className="flex items-center gap-2 font-medium text-xs uppercase tracking-wide text-muted-foreground">
                     <Mail className="w-3.5 h-3.5" />
-                    Email thread
+                    Sequence timeline
                   </div>
                   {emailsLoading ? (
                     <div className="flex items-center justify-center py-6">
@@ -426,32 +568,48 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                   ) : !emails || emails.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Nothing queued yet — this lead hasn't entered the sequence.</p>
                   ) : (
-                    <ul className="space-y-1.5">
+                    <ol>
                       {emails.map((e, i) => {
-                        const isSent = e.status === "sent" && e.sent_at;
+                        const isSent = e.status === "sent" && !!e.sent_at;
+                        const isFailed = ["failed", "skipped", "cancelled"].includes(e.status);
+                        const StepIcon = isSent ? Send : isFailed ? XCircle : Clock;
+                        const iconColor = isSent
+                          ? "text-emerald-700 bg-emerald-100"
+                          : isFailed
+                          ? "text-gray-400 bg-gray-100"
+                          : "text-blue-600 bg-blue-100";
                         return (
-                          <li key={i}>
+                          <li key={i} className="relative pl-8 pb-3 last:pb-0">
+                            {i < emails.length - 1 && (
+                              <span className="absolute left-[11px] top-6 bottom-0 w-px bg-border" />
+                            )}
+                            <span className={`absolute left-0 top-0.5 flex h-6 w-6 items-center justify-center rounded-full ${iconColor}`}>
+                              <StepIcon className="w-3.5 h-3.5" />
+                            </span>
                             <button
                               type="button"
-                              onClick={() => setViewingEmail(e)}
-                              className="flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2 text-left text-xs hover:bg-muted/40 transition-colors"
+                              onClick={() => isSent && setViewingEmail(e)}
+                              disabled={!isSent}
+                              className={`flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2 text-left text-xs ${
+                                isSent ? "hover:bg-muted/40 transition-colors" : "opacity-70 cursor-default"
+                              }`}
                             >
                               <div className="min-w-0 flex-1">
                                 <div className="font-medium truncate">{e.subject}</div>
                                 <div className="text-muted-foreground">
                                   {e.drip_step ? `Step ${e.drip_step} · ` : ""}
                                   {isSent
-                                    ? format(new Date(e.sent_at!), "MMM d, yyyy")
+                                    ? format(new Date(e.sent_at!), "MMM d, yyyy 'at' h:mm a")
                                     : `Scheduled ${format(new Date(e.scheduled_for), "MMM d, yyyy")}`}
                                 </div>
                               </div>
                               <Badge variant="outline" className="text-xs capitalize shrink-0">{e.status}</Badge>
-                              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                              {isSent && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />}
                             </button>
                           </li>
                         );
                       })}
-                    </ul>
+                    </ol>
                   )}
                 </div>
               </div>
