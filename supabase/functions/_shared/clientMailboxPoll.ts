@@ -48,6 +48,132 @@ function getHeader(headers: Record<string, string | string[]> | undefined, name:
 const BOUNCE_FROM_RE = /mailer-daemon|postmaster|mail delivery (sub)?system/i;
 const BOUNCE_SUBJECT_RE = /undeliver|delivery status notification|delivery (has )?failed|failure notice|returned mail|couldn't be delivered|address not found/i;
 
+interface MimePart {
+  contentType: string;
+  encoding: string;
+  body: string;
+}
+
+function splitHeaderBody(raw: string): { headers: Record<string, string>; body: string } {
+  const idx = raw.indexOf("\n\n");
+  const headerBlock = idx === -1 ? raw : raw.slice(0, idx);
+  const body = idx === -1 ? "" : raw.slice(idx + 2);
+  // RFC 2822 header folding: a line starting with space/tab continues the previous header.
+  const unfolded = headerBlock.replace(/\n[ \t]+/g, " ");
+  const headers: Record<string, string> = {};
+  for (const line of unfolded.split("\n")) {
+    const m = line.match(/^([^:]+):\s*(.*)$/);
+    if (m) headers[m[1].toLowerCase()] = m[2];
+  }
+  return { headers, body };
+}
+
+function parseContentType(value: string | undefined): { type: string; boundary?: string } {
+  if (!value) return { type: "text/plain" };
+  const type = value.split(";")[0].trim().toLowerCase();
+  const boundaryMatch = value.match(/boundary="?([^";]+)"?/i);
+  return { type, boundary: boundaryMatch?.[1] };
+}
+
+// Walks a (possibly multipart/nested) raw MIME message and collects every
+// text/plain and text/html leaf part -- good enough for real-world reply
+// emails (plain text, or multipart/alternative with an HTML copy, optionally
+// wrapped in multipart/mixed when there's a signature image attached).
+function collectTextParts(raw: string, parts: MimePart[], depth = 0): void {
+  if (depth > 4) return; // guard against pathological/malicious nesting
+  const { headers, body } = splitHeaderBody(raw);
+  const { type, boundary } = parseContentType(headers["content-type"]);
+  const encoding = (headers["content-transfer-encoding"] || "7bit").trim().toLowerCase();
+
+  if (type.startsWith("multipart/") && boundary) {
+    const segments = body.split(`--${boundary}`).slice(1, -1);
+    for (const seg of segments) collectTextParts(seg.replace(/^\n/, ""), parts, depth + 1);
+    return;
+  }
+
+  if (type === "text/plain" || type === "text/html") {
+    parts.push({ contentType: type, encoding, body });
+  }
+}
+
+function decodeQuotedPrintable(input: string): string {
+  const soft = input.replace(/=\r?\n/g, "");
+  const bytes: number[] = [];
+  for (let i = 0; i < soft.length; i++) {
+    if (soft[i] === "=" && /^[0-9A-Fa-f]{2}$/.test(soft.slice(i + 1, i + 3))) {
+      bytes.push(parseInt(soft.slice(i + 1, i + 3), 16));
+      i += 2;
+    } else {
+      bytes.push(soft.charCodeAt(i));
+    }
+  }
+  return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(bytes));
+}
+
+function decodeTransferEncoding(body: string, encoding: string): string {
+  if (encoding === "base64") {
+    try {
+      const binary = atob(body.replace(/\s+/g, ""));
+      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    } catch {
+      return body;
+    }
+  }
+  if (encoding === "quoted-printable") return decodeQuotedPrintable(body);
+  return body;
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
+// Cuts off the quoted history a reply client appends below a new message, so
+// what we store is what the prospect actually typed, not the full thread.
+// Best-effort heuristic -- a reply with no recognizable quote marker is kept
+// as-is rather than risk trimming real content.
+function trimQuotedReply(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const cutPatterns = [/^On .{0,120}wrote:\s*$/i, /^-{2,}\s*Original Message\s*-{2,}/i, /^>/];
+  for (let i = 0; i < lines.length; i++) {
+    if (cutPatterns.some((re) => re.test(lines[i]))) {
+      return lines.slice(0, i).join("\n").trim();
+    }
+  }
+  return text.trim();
+}
+
+export function extractReplySnippet(raw: Uint8Array): string | null {
+  try {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(raw);
+    const parts: MimePart[] = [];
+    collectTextParts(text, parts);
+    const preferred = parts.find((p) => p.contentType === "text/plain") ?? parts.find((p) => p.contentType === "text/html");
+    if (!preferred) return null;
+
+    let decoded = decodeTransferEncoding(preferred.body, preferred.encoding);
+    if (preferred.contentType === "text/html") decoded = stripHtml(decoded);
+
+    const trimmed = trimQuotedReply(decoded) || decoded.trim();
+    return trimmed ? trimmed.slice(0, 4000) : null;
+  } catch (e) {
+    console.warn("[clientMailboxPoll] reply body parse failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 const MAX_MESSAGES_PER_RUN = 25;
 const POLL_TIMEOUT_MS = 25_000;
 
@@ -139,7 +265,24 @@ export async function pollClientMailbox(
           // sent email -- unmatched inbound mail is just regular mail to this
           // client's inbox, not something attributable to a prospect.
           result.replied++;
-          await supabase.from("prospects").update({ status: "replied" }).eq("id", prospectId);
+
+          // Second, targeted fetch for the body -- only done for confirmed
+          // replies so the common case (bounces, unrelated inbox mail) stays
+          // on the cheap headers-only fetch above.
+          let replySnippet: string | null = null;
+          try {
+            const full = await client.fetch(String(uid), { byUid: true, full: true });
+            const rawMsg = full?.[0]?.raw;
+            if (rawMsg) replySnippet = extractReplySnippet(rawMsg);
+          } catch (e) {
+            console.warn(`[clientMailboxPoll] ${clientId} uid=${uid}: reply body fetch failed:`, e instanceof Error ? e.message : e);
+          }
+
+          await supabase.from("prospects").update({
+            status: "replied",
+            replied_at: new Date().toISOString(),
+            ...(replySnippet ? { reply_snippet: replySnippet } : {}),
+          }).eq("id", prospectId);
         }
 
         await client.setFlags(String(uid), ["\\Seen"], "add", true);

@@ -42,6 +42,7 @@ import {
   TrendingUp,
   Eye,
   MousePointerClick,
+  Reply,
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
@@ -69,6 +70,8 @@ interface Prospect {
   approved_at: string | null;
   opened_at: string | null;
   clicked_at: string | null;
+  reply_snippet: string | null;
+  replied_at: string | null;
 }
 
 interface IcpSuggestion {
@@ -1039,6 +1042,20 @@ export default function ProspectEnginePanel() {
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : (
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {threadProspect?.reply_snippet && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1">
+                  <div className="flex items-center gap-2 font-medium text-emerald-800 text-sm">
+                    <Reply className="w-4 h-4" />
+                    They replied
+                    {threadProspect.replied_at && (
+                      <span className="font-normal text-xs text-emerald-700/80">
+                        {format(new Date(threadProspect.replied_at), "MMM d, yyyy h:mm a")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-emerald-900 whitespace-pre-wrap">{threadProspect.reply_snippet}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Sent</p>
                 {threadData?.sent.length ? (

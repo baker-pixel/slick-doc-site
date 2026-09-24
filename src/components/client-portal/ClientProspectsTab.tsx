@@ -35,6 +35,8 @@ interface Prospect {
   drip_step: number;
   opened_at: string | null;
   clicked_at: string | null;
+  reply_snippet: string | null;
+  replied_at: string | null;
 }
 
 interface ProspectEmail {
@@ -128,7 +130,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     setLoading(true);
     const { data } = await supabase
       .from("prospects")
-      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at")
+      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at")
       .eq("client_id", clientAccountId)
       .order("created_at", { ascending: false })
       .limit(200);
@@ -522,6 +524,21 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                         Opened an email {format(new Date(selected.opened_at!), "MMM d, yyyy")}
                       </>
                     )}
+                  </div>
+                )}
+
+                {selected.reply_snippet && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-1">
+                    <div className="flex items-center gap-2 font-medium text-emerald-800">
+                      <Reply className="w-4 h-4" />
+                      They replied
+                      {selected.replied_at && (
+                        <span className="font-normal text-xs text-emerald-700/80">
+                          {format(new Date(selected.replied_at), "MMM d, yyyy 'at' h:mm a")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-emerald-900 whitespace-pre-wrap">{selected.reply_snippet}</p>
                   </div>
                 )}
 
