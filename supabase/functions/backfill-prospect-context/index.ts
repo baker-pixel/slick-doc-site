@@ -145,13 +145,18 @@ serve(async (req: Request) => {
       }
     }
 
-    // ── Email enrichment via Hunter.io ─────────────────────────
-    // Outbound prospects from Google Maps have no email. When a
-    // HUNTER_API_KEY is configured, look one up from their domain so
-    // the drip can run without manual email entry.
+    // ── Email enrichment via Apollo ─────────────────────────────
+    // Outbound prospects (Maps or Apollo/web discovery) have no email.
+    // Replaces the old Hunter domain-search pattern-guess (a confidence
+    // score on how plausible the *guess* looked, never a deliverability
+    // check) with Apollo: people-search finds a real decision-maker at the
+    // prospect's domain, then people-match returns their actual work email
+    // with an email_status Apollo itself verifies -- only "verified" gets
+    // written, so a prospect Apollo can't confirm just stays without an
+    // email rather than getting a guess that bounces.
     let emailsEnriched = 0;
-    const hunterKey = Deno.env.get("HUNTER_API_KEY");
-    if (!hunterKey) {
+    const apolloKey = Deno.env.get("APOLLO_API_KEY");
+    if (!apolloKey) {
       const { count: waitingForEmail } = await supabase
         .from("prospects")
         .select("id", { count: "exact", head: true })
@@ -164,24 +169,24 @@ serve(async (req: Request) => {
         const { data: existingAlert } = await supabase
           .from("automation_alerts")
           .select("id")
-          .eq("alert_type", "hunter_api_key_missing")
+          .eq("alert_type", "apollo_api_key_missing")
           .is("acknowledged_at", null)
           .limit(1)
           .maybeSingle();
 
         if (!existingAlert) {
           await supabase.from("automation_alerts").insert({
-            alert_type: "hunter_api_key_missing",
+            alert_type: "apollo_api_key_missing",
             severity: "warning",
-            title: "Prospects stuck without email — HUNTER_API_KEY not configured",
-            message: `${waitingForEmail} discovered prospect(s) have no email and can't be enriched or approved because HUNTER_API_KEY is not set in Supabase edge function secrets.`,
+            title: "Prospects stuck without email — APOLLO_API_KEY not configured",
+            message: `${waitingForEmail} discovered prospect(s) have no email and can't be enriched or approved because APOLLO_API_KEY is not set in Supabase edge function secrets.`,
             source: "backfill-prospect-context",
             metadata: { waitingForEmail },
           });
         }
       }
     }
-    if (hunterKey) {
+    if (apolloKey) {
       const { data: noEmail } = await supabase
         .from("prospects")
         .select("id, website_url, client_id")
@@ -197,26 +202,59 @@ serve(async (req: Request) => {
             p.website_url.startsWith("http") ? p.website_url : `https://${p.website_url}`,
           ).hostname.replace(/^www\./, "");
 
-          const res = await fetch(
-            `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&limit=5&api_key=${hunterKey}`,
-          );
-          if (!res.ok) {
-            if (res.status === 429) {
-              console.warn("Hunter rate limit hit — stopping enrichment for this run");
+          // 1. Find a decision-maker at this domain (0 credits -- search
+          // itself never returns contact info, see docs.apollo.io/reference/people-api-search).
+          const searchRes = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
+            method: "POST",
+            headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              q_organization_domains_list: [domain],
+              person_seniorities: ["owner", "founder", "c_suite", "partner", "vp", "head", "director"],
+              per_page: 1,
+              page: 1,
+            }),
+          });
+
+          if (!searchRes.ok) {
+            if (searchRes.status === 429) {
+              console.warn("Apollo rate limit hit — stopping enrichment for this run");
               break;
             }
-            console.warn(`Hunter lookup failed for ${domain}: ${res.status}`);
+            console.warn(`Apollo people search failed for ${domain}: ${searchRes.status}`);
             continue;
           }
 
-          const data = await res.json();
-          const emails: { value: string; confidence: number }[] = data?.data?.emails ?? [];
-          const best = emails.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0];
+          const searchData = await searchRes.json();
+          const person = (searchData?.people ?? [])[0];
+          if (!person?.id) {
+            // No decision-maker on file for this domain at all -- a guess
+            // would just be inventing an address, so leave it for manual entry.
+            await new Promise((r) => setTimeout(r, 300));
+            continue;
+          }
 
-          if (best?.value && (best.confidence ?? 0) >= 50) {
+          // 2. Reveal that person's real work email + Apollo's own
+          // verification status (their default match response, no
+          // reveal_personal_emails needed -- that flag is for *personal*
+          // inboxes, a work email is already included).
+          const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
+            method: "POST",
+            headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ id: person.id }),
+          });
+
+          if (!matchRes.ok) {
+            console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
+            continue;
+          }
+
+          const matchData = await matchRes.json();
+          const matched = matchData?.person;
+
+          if (matched?.email && matched.email_status === "verified") {
             await supabase
               .from("prospects")
-              .update({ email: best.value })
+              .update({ email: matched.email })
               .eq("id", p.id);
             emailsEnriched++;
 
@@ -226,17 +264,17 @@ serve(async (req: Request) => {
                 event_type: "prospect_research",
                 units: 1,
                 source_fn: "backfill-prospect-context",
-                metadata: { kind: "hunter_email_lookup", domain, confidence: best.confidence },
+                metadata: { kind: "apollo_email_lookup", domain, email_status: matched.email_status },
               });
             }
           }
 
           await new Promise((r) => setTimeout(r, 600));
         } catch (e) {
-          console.warn("Hunter enrichment error for prospect", p.id, e);
+          console.warn("Apollo enrichment error for prospect", p.id, e);
         }
       }
-      console.log(`Hunter enrichment: ${emailsEnriched} emails found`);
+      console.log(`Apollo enrichment: ${emailsEnriched} emails found`);
     }
 
     // ── ICP fit scoring ────────────────────────────────────────
