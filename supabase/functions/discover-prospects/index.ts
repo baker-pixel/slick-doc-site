@@ -92,7 +92,7 @@ serve(async (req) => {
     // Verify client exists
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("id, business_name, industry, icp, context_profile, tier")
+      .select("id, business_name, industry, icp, context_profile, tier, status")
       .eq("id", client_id)
       .single();
 
@@ -100,6 +100,13 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Client not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if ((client as { status?: string }).status !== "active") {
+      return new Response(
+        JSON.stringify({ error: "This client's automation is paused." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -216,7 +223,7 @@ serve(async (req) => {
       (p) => p.website && !existingUrls.has(p.website),
     );
     const skippedDuplicates = enriched.length - noWebsite - newProspects.length;
-    const emailEnrichment = !!Deno.env.get("HUNTER_API_KEY");
+    const emailEnrichment = !!Deno.env.get("APOLLO_API_KEY");
 
     if (newProspects.length === 0) {
       return new Response(

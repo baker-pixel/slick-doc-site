@@ -199,11 +199,15 @@ serve(async (req) => {
 
     const { data: client, error: clientErr } = await supabase
       .from("client_accounts")
-      .select("id, business_name, industry, icp, context_profile, tier")
+      .select("id, business_name, industry, icp, context_profile, tier, status")
       .eq("id", body.client_id)
       .single();
 
     if (clientErr || !client) return json({ error: "Client not found" }, 404);
+
+    if ((client as { status?: string }).status !== "active") {
+      return json({ error: "This client's automation is paused." }, 403);
+    }
 
     // Tier gate: prospecting is a plan feature; batch size from tier policy.
     const prospectPolicy = tierPolicy((client as { tier?: string }).tier).prospect;
@@ -248,7 +252,7 @@ Respond with ONLY a JSON array, no prose:
     }
 
     if (companies.length === 0) {
-      return json({ discovered: 0, skipped_duplicates: 0, skipped_no_website: 0, email_enrichment: !!Deno.env.get("HUNTER_API_KEY"), message: "No matching companies found" });
+      return json({ discovered: 0, skipped_duplicates: 0, skipped_no_website: 0, email_enrichment: !!Deno.env.get("APOLLO_API_KEY"), message: "No matching companies found" });
     }
 
     // Dedupe against existing prospects for this client (normalized URL)
@@ -318,7 +322,7 @@ Respond with ONLY a JSON array, no prose:
       discovered: inserted.length,
       skipped_duplicates: companies.length - fresh.length,
       skipped_no_website: 0,
-      email_enrichment: !!Deno.env.get("HUNTER_API_KEY"),
+      email_enrichment: !!Deno.env.get("APOLLO_API_KEY"),
       prospects: inserted,
     });
   } catch (err) {
