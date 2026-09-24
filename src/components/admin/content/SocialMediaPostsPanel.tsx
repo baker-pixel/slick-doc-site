@@ -14,6 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { isPlaceholderContent } from "@/lib/contentPlaceholder";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
   Send,
@@ -520,7 +521,7 @@ export default function SocialMediaPostsPanel() {
     setEditingPost(post);
     setNewPost({
       title: post.title || "",
-      content: post.content,
+      content: isPlaceholderContent(post.content) ? "" : post.content,
       platform: post.platform,
       scheduledFor: post.scheduled_for ? new Date(post.scheduled_for).toISOString().slice(0, 16) : "",
     });
@@ -700,7 +701,13 @@ export default function SocialMediaPostsPanel() {
                 </div>
               )}
               {post.title && <h4 className="font-medium">{post.title}</h4>}
-              <p className="text-sm text-muted-foreground line-clamp-3">{post.content}</p>
+              {isPlaceholderContent(post.content) ? (
+                <p className="text-sm text-amber-600 italic flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" /> Caption not generated yet
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground line-clamp-3">{post.content}</p>
+              )}
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
@@ -730,7 +737,7 @@ export default function SocialMediaPostsPanel() {
               )}
             </div>
             <div className="flex flex-col gap-1">
-              <Button size="icon" variant="ghost" onClick={() => copyToClipboard(post.content)}>
+              <Button size="icon" variant="ghost" disabled={isPlaceholderContent(post.content)} onClick={() => copyToClipboard(post.content)}>
                 <Copy className="h-4 w-4" />
               </Button>
               {post.status === "draft" && (
@@ -738,7 +745,8 @@ export default function SocialMediaPostsPanel() {
                   size="icon"
                   variant="ghost"
                   className="text-green-600 hover:text-green-700"
-                  title="Approve — queues for publishing via Post for Me"
+                  title={isPlaceholderContent(post.content) ? "Caption still generating — can't approve yet" : "Approve — queues for publishing via Post for Me"}
+                  disabled={isPlaceholderContent(post.content)}
                   onClick={() => updatePostStatus.mutate({ id: post.id, status: "approved" })}
                 >
                   <ShieldCheck className="h-4 w-4" />

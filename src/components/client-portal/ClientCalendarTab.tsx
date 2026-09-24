@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Loader2, ChevronLeft, ChevronRight, Calendar as CalendarIcon, AlertTriangle, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { isPlaceholderContent } from "@/lib/contentPlaceholder";
 import { toast } from "@/hooks/use-toast";
 
 interface ClientCalendarTabProps {
@@ -306,7 +307,11 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
 
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Content</p>
-                  <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded-lg p-3">{selectedItem.content}</p>
+                  {isPlaceholderContent(selectedItem.content) ? (
+                    <p className="text-sm italic text-muted-foreground bg-muted/50 rounded-lg p-3">Still being drafted — check back soon</p>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded-lg p-3">{selectedItem.content}</p>
+                  )}
                 </div>
 
                 {selectedItem.content_type === "social_post" && selectedItem.status === "draft" && (
