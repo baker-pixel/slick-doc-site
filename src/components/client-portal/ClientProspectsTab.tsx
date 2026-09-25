@@ -238,14 +238,27 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     }
   };
 
-  const SortHeader = ({ column, label, className }: { column: SortKey; label: string; className?: string }) => (
+  const SortHeader = ({ column, label, className, align = "left" }: { column: SortKey; label: string; className?: string; align?: "left" | "right" }) => (
     <TableHead className={className}>
-      <button type="button" onClick={() => toggleSort(column)} className="flex items-center gap-1 hover:text-foreground">
+      <button
+        type="button"
+        onClick={() => toggleSort(column)}
+        className={`flex w-full items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+          align === "right" ? "justify-end" : ""
+        }`}
+      >
         {label}
         {sortKey === column && (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
       </button>
     </TableHead>
   );
+
+  function fitScoreColor(score: number | null): string {
+    if (score == null) return "text-muted-foreground";
+    if (score >= 80) return "text-emerald-600";
+    if (score >= 50) return "text-amber-600";
+    return "text-muted-foreground";
+  }
 
   return (
     <div className="space-y-6">
@@ -297,7 +310,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                     key={s}
                     type="button"
                     onClick={() => setStatusFilter(s)}
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                       statusFilter === s ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
                     }`}
                   >
@@ -324,7 +337,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                 <TableHeader>
                   <TableRow>
                     <SortHeader column="name" label="Lead" />
-                    <SortHeader column="fit" label="Fit" className="hidden md:table-cell w-16" />
+                    <SortHeader column="fit" label="Fit" className="hidden md:table-cell w-16" align="right" />
                     <TableHead className="hidden sm:table-cell">Activity</TableHead>
                     <SortHeader column="status" label="Status" />
                     <SortHeader column="created" label="Found" className="hidden lg:table-cell w-24" />
@@ -335,7 +348,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                   {filtered.map((p) => (
                     <TableRow
                       key={p.id}
-                      className="cursor-pointer"
+                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       role="button"
                       tabIndex={0}
                       onClick={() => openDetail(p)}
@@ -359,7 +372,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell tabular-nums text-sm">
+                      <TableCell className={`hidden md:table-cell text-right tabular-nums text-sm font-medium ${fitScoreColor(p.icp_fit_score)}`}>
                         {p.icp_fit_score ?? "—"}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
