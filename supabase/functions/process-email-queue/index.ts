@@ -183,7 +183,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           <li>Get actionable recommendations tailored to ${data.businessName}</li>
         </ul>
         <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/report?token=${data.resumeToken}" 
+          <a href="https://orangedoormarketing.com/dashboard/${data.resumeToken}"
              style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
             View Your Report
           </a>
@@ -358,9 +358,29 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Found ${pendingEmails?.length || 0} emails to process`);
 
+    // A paused client (client_accounts.status = 'paused') should not have
+    // already-queued prospect outreach fire out from under them -- skip and
+    // leave the row "pending" so it resumes once unpaused. Only prospect_outreach
+    // rows carry metadata.client_id; every other email type (gap-analysis
+    // followups, contact-form replies, etc.) isn't tied to a pausable client.
+    const dueClientIds = [...new Set(
+      (pendingEmails || [])
+        .map((e: any) => (e.metadata as Record<string, unknown> | null)?.client_id)
+        .filter((id): id is string => typeof id === "string"),
+    )];
+    const { data: pausedClients } = dueClientIds.length
+      ? await supabase.from("client_accounts").select("id").in("id", dueClientIds).neq("status", "active")
+      : { data: [] };
+    const pausedClientIds = new Set((pausedClients || []).map((c: any) => c.id));
+
     const results = [];
 
     for (const email of pendingEmails || []) {
+      const emailClientId = (email.metadata as Record<string, unknown> | null)?.client_id as string | undefined;
+      if (emailClientId && pausedClientIds.has(emailClientId)) {
+        results.push({ id: email.id, status: "skipped", reason: "client_paused" });
+        continue;
+      }
       try {
         // Atomically claim this email — prevents duplicate sends when two cron instances overlap
         const { data: claimed } = await supabase

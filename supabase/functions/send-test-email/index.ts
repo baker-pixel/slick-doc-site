@@ -25,7 +25,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           <li>Get actionable recommendations tailored to ${data.businessName}</li>
         </ul>
         <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/report?token=${data.resumeToken}" 
+          <a href="https://orangedoormarketing.com/dashboard/${data.resumeToken}"
              style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
             View Your Report
           </a>
