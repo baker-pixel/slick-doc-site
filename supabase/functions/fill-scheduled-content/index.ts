@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { cleanGeneratedText } from "../_shared/textSanitize.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
@@ -499,6 +500,9 @@ async function generateContent(
     fallbackModels: [MODELS.fast],
   })).trim();
   if (!content) throw new Error("No content returned from AI");
+  // Strip invisible chars / non-breaking hyphens and repair a garbled brand name
+  // before anything is stored, QA'd, approved or published.
+  content = cleanGeneratedText(content, client.business_name);
   const originalLength = content.length;
 
   // Hard-enforce character limits — safety net after generation

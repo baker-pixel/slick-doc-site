@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { cleanGeneratedText } from "../_shared/textSanitize.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { buildSocialImagePrompt, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
@@ -233,7 +234,11 @@ serve(async (req) => {
       return json({ error: "Placeholder or empty content", success: false }, 422);
     }
 
-    const caption = enforceCharLimit(item.content, item.platform);
+    // Safety net for content drafted (and client-approved) before generation-time
+    // cleanup existed: invisible chars + garbled brand names went live on client pages.
+    const { data: brandRow } = await supabase
+      .from("client_accounts").select("business_name").eq("id", item.client_account_id).single();
+    const caption = enforceCharLimit(cleanGeneratedText(item.content, brandRow?.business_name), item.platform);
 
     if (item.platform === "twitter" && caption.length > 280) {
       await markFailed(contentCalendarId, existingMeta, `Tweet too long after truncation (${caption.length} chars).`, false, { platform: item.platform, title: item.title, client_account_id: item.client_account_id });
