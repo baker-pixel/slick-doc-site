@@ -5,11 +5,11 @@
 // before it reached a client's page, so we do it here.
 
 // zero-width space/non-joiner/joiner, word joiner, BOM, soft hyphen
-const INVISIBLE = /[​‌‍⁠﻿­]/g;
+const INVISIBLE = /\u200B|\u200C|\u200D|\u2060|\uFEFF|\u00AD/g;
 
 /** Strip invisible characters and turn U+2011 (non-breaking hyphen, which breaks copy/paste and search) into "-". */
 export function stripInvisible(text: string): string {
-  return text.replace(INVISIBLE, "").replace(/‑/g, "-");
+  return text.replace(INVISIBLE, "").replace(/\u2011/g, "-");
 }
 
 function levenshtein(a: string, b: string): number {
