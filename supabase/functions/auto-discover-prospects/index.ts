@@ -3,19 +3,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
+import { logAlert } from "../_shared/alerts.ts";
 
 // Daily cron: keeps every client's prospect pipeline topped up without any
 // admin or client action. For each active client on a prospecting-enabled
 // tier, if their review queue is thin and no discovery ran recently, it
 // calls discover-prospects (Maps) or discover-prospects-web (AI search)
 // with no query -- both derive their search from the client's ICP.
-// No auth check on the cron sweep: invoked only by pg_cron with the service
-// role, same pattern as run-prospect-drip. A request that names a single
-// `client_id` is instead an admin manually jump-starting one client (e.g.
-// right after onboarding, instead of waiting for the next 9am UTC sweep) --
-// that path requires admin auth and skips the queue-floor/cooldown skips
-// below since it's an explicit one-off, not the daily topping-up pass.
+// Auth: pg_cron (x-internal-secret "pipeline_cron"), service key, or admin.
+// A request that names a single `client_id` is an admin manually
+// jump-starting one client (e.g. right after onboarding, instead of waiting
+// for the next 9am UTC sweep) and skips the queue-floor/cooldown skips below
+// since it's an explicit one-off, not the daily topping-up pass.
 
 const REVIEW_QUEUE_FLOOR = 8; // skip clients who already have plenty to review
 const COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-run discovery for a client more often than this
@@ -40,14 +40,14 @@ serve(async (req) => {
   try {
     const { client_id: onlyClientId, password } = await req.json().catch(() => ({}));
 
-    if (onlyClientId) {
-      const auth = await checkAdminAuth(req, supabase, password);
-      if (!auth.authorized) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // Both the daily sweep (pg_cron, x-internal-secret) and the single-client
+    // jump-start (admin) spend paid Maps/Apollo/AI calls, so neither is open
+    // to a bare anon key.
+    if (!(await checkPipelineAuth(req, supabase, password))) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const clientQuery = supabase
@@ -124,6 +124,21 @@ serve(async (req) => {
     }
 
     console.log("auto-discover-prospects:", JSON.stringify(results));
+
+    // A partial failure (one client's Maps/ICP/Apollo call failing while the
+    // rest succeed) still returns 200 below, so it never showed up in cron
+    // monitoring -- a client could go weeks with no new leads and no signal.
+    if (erroredCount > 0 && !onlyClientId) {
+      const failed = Object.entries(results).filter(([, v]) => v.startsWith("error:"));
+      await logAlert(supabase, {
+        source: "auto-discover-prospects",
+        alertType: "prospect_discovery_failed",
+        severity: "warning",
+        title: `Prospect discovery failed for ${erroredCount} client(s)`,
+        message: failed.map(([id, v]) => `${id}: ${v}`).join("\n").slice(0, 900),
+        metadata: { attempted, errored: erroredCount, failed: Object.fromEntries(failed) },
+      });
+    }
 
     // Every attempted client failing (e.g. the ADMIN_PASSWORD secret this
     // relies on got rotated) is a systemic problem, not a per-client one --

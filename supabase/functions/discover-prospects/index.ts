@@ -14,6 +14,8 @@ import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { ensureClientICP, suggestDiscoveryQueries } from "../_shared/icp.ts";
 import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/prospectInsert.ts";
+import { logAlert } from "../_shared/alerts.ts";
+import { runInBackground } from "../_shared/background.ts";
 
 // Client-portal callers can self-serve discovery ("Find leads now"), but
 // with no per-click cost control that's an open tap on billed Maps/OpenAI
@@ -160,9 +162,9 @@ serve(async (req) => {
 
         if (searchData.status !== "OK" && searchData.status !== "ZERO_RESULTS") {
           console.error(`Google Maps error for "${q} in ${loc}": ${searchData.status} — ${searchData.error_message ?? ""}`);
-          return { ok: false, results: [] as PlacesResult[] };
+          return { ok: false, status: searchData.status as string, detail: searchData.error_message as string | undefined, results: [] as PlacesResult[] };
         }
-        return { ok: true, results: (searchData.results?.slice(0, perQueryCap) ?? []) as PlacesResult[] };
+        return { ok: true, status: "OK", detail: undefined, results: (searchData.results?.slice(0, perQueryCap) ?? []) as PlacesResult[] };
       }),
     );
 
@@ -170,6 +172,30 @@ serve(async (req) => {
     // identical to "the ICP genuinely matched nothing" unless called out
     // explicitly -- surface it as a failure instead of a quiet zero.
     if (searchResults.every((r) => !r.ok)) {
+      // Config-level Maps failures (billing off, key revoked/restricted,
+      // quota) fail every client's discovery until a human fixes them, and
+      // used to be visible only in function logs. Raise one alert per day.
+      const first = searchResults[0];
+      if (["REQUEST_DENIED", "OVER_QUERY_LIMIT", "OVER_DAILY_LIMIT"].includes(first.status)) {
+        const { data: openAlert } = await supabase
+          .from("automation_alerts")
+          .select("id")
+          .eq("alert_type", "google_maps_unavailable")
+          .is("acknowledged_at", null)
+          .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          .limit(1)
+          .maybeSingle();
+        if (!openAlert) {
+          await logAlert(supabase, {
+            source: "discover-prospects",
+            alertType: "google_maps_unavailable",
+            severity: "error",
+            title: `Google Maps discovery is failing (${first.status})`,
+            message: `${first.detail ?? "No detail returned"} -- local-business prospect discovery is down for every client until this is fixed.`,
+            metadata: { status: first.status, client_id },
+          });
+        }
+      }
       return new Response(
         JSON.stringify({ error: "Google Maps search failed for every query -- check function logs for the underlying status." }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -226,6 +252,17 @@ serve(async (req) => {
     const emailEnrichment = !!Deno.env.get("APOLLO_API_KEY");
 
     if (newProspects.length === 0) {
+      // Record the run even though nothing was inserted: the cooldown check
+      // (recentDiscoveryRun) reads client_usage, so an unrecorded zero-yield
+      // run made the daily cron re-run (and re-bill) this client's search
+      // every single day.
+      await supabase.from("client_usage").insert({
+        client_id,
+        event_type: "maps_api_call",
+        units: rawResults.length,
+        source_fn: "discover-prospects",
+        metadata: { queries: searchPairs.map((p) => `${p.query} in ${p.location}`), auto: !query, found: rawResults.length, inserted: 0 },
+      });
       return new Response(
         JSON.stringify({
           discovered: 0,
@@ -277,14 +314,14 @@ serve(async (req) => {
     // the admin reviews them — enables better personalized drip emails later.
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    fetch(`${supabaseUrl}/functions/v1/backfill-prospect-context`, {
+    runInBackground(fetch(`${supabaseUrl}/functions/v1/backfill-prospect-context`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${serviceKey}`,
       },
       body: "{}",
-    }).catch((e) => console.error("backfill-prospect-context trigger failed:", e));
+    }));
 
     console.log(`discover-prospects: client=${client_id} found=${rawResults.length} inserted=${inserted?.length ?? 0} duplicates=${skippedDuplicates} no_website=${noWebsite}`);
 

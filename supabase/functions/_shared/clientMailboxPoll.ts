@@ -283,6 +283,10 @@ export async function pollClientMailbox(
             replied_at: new Date().toISOString(),
             ...(replySnippet ? { reply_snippet: replySnippet } : {}),
           }).eq("id", prospectId);
+          // Stop the rest of the sequence -- a prospect who answered must not
+          // keep getting scheduled follow-ups.
+          await supabase.from("email_queue").update({ status: "cancelled", error_message: "Prospect replied" })
+            .filter("metadata->>prospect_id", "eq", prospectId).eq("status", "pending");
         }
 
         await client.setFlags(String(uid), ["\\Seen"], "add", true);

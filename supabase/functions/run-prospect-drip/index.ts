@@ -7,6 +7,7 @@ import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { logAlert } from "../_shared/alerts.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
 // logActivity for "email sent" moved to process-email-queue -- that's where
 // the actual send now happens (this function only enrolls/schedules).
 
@@ -15,6 +16,11 @@ import { logAlert } from "../_shared/alerts.ts";
 // LLM spend per run, not send volume (sending/rate-limiting is
 // process-email-queue's job now, not this function's).
 const MAX_ENROLLMENTS_PER_RUN = 25;
+// Stop starting new prospects once this much wall-clock has elapsed: each
+// prospect drafts up to 4 emails with the LLM, and an edge function killed
+// mid-run leaves the rest for the next hourly run (enrollment is resumable
+// per step, see below) instead of dying half-way with nothing logged.
+const RUN_TIME_BUDGET_MS = 100_000;
 
 interface Prospect {
   id: string;
@@ -73,6 +79,8 @@ function getFirstName(name: string): string {
 // Cold outreach reads as spam the moment it looks like a template -- no
 // branded header, no card, no colored button. Plain text on a white
 // background, like a person actually typed it.
+// The preferences page rejects a link without the token (base64 of the
+// email, same scheme as the unsubscribe function), so include it.
 const wrapHtml = (body: string, unsubEmail: string = "") => `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -80,7 +88,7 @@ const wrapHtml = (body: string, unsubEmail: string = "") => `
 <div style="max-width:600px;margin:20px auto;font-size:15px;color:#222;line-height:1.6;">
   ${body}
   <p style="font-size:12px;color:#999;margin-top:32px;">
-    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}" style="color:#999;">Unsubscribe</a>
+    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}&token=${unsubEmail ? btoa(unsubEmail) : ""}" style="color:#999;">Unsubscribe</a>
   </p>
 </div>
 </body></html>`;
@@ -291,8 +299,16 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Cron (x-internal-secret), service key, or an admin -- never a bare anon key.
+  if (!(await checkPipelineAuth(req, supabase, null))) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const now = new Date();
+    const runStartedAt = Date.now();
     let prospectsNurtured = 0;
     let prospectsEnrolled = 0;
 
@@ -335,13 +351,13 @@ serve(async (req) => {
 
     if (pendingProspects && pendingProspects.length > 0) {
       const ids = pendingProspects.map((p: { id: string }) => p.id);
-      const { count } = await supabase
+      const { data: moved } = await supabase
         .from("prospects")
         .update({ status: "nurture", drip_step: 0 })
         .in("id", ids)
         .eq("status", "pending")
-        .select("id", { count: "exact", head: true });
-      prospectsNurtured = count ?? ids.length;
+        .select("id");
+      prospectsNurtured = moved?.length ?? 0;
       console.log(`Moved ${ids.length} prospects to nurture`);
     }
 
@@ -488,17 +504,23 @@ serve(async (req) => {
       if (!client) continue;
 
       if (prospectsEnrolled >= MAX_ENROLLMENTS_PER_RUN) continue;
+      if (Date.now() - runStartedAt > RUN_TIME_BUDGET_MS) continue;
 
-      // Already enrolled? (email_queue rows persist with status flipped to
-      // sent/failed/cancelled, never deleted, so this is a reliable check
-      // regardless of how far through the sequence they've gotten.)
+      // Which steps are already queued? email_queue rows persist with status
+      // flipped to sent/failed/cancelled, never deleted, so any row for a step
+      // counts as "handled". Tracked per step (not per prospect) so a run that
+      // died or failed part-way through drafting the sequence is completed by
+      // the next run instead of leaving the prospect stranded with only some
+      // of their steps queued.
       const { data: existingQueueRows } = await supabase
         .from("email_queue")
-        .select("id")
+        .select("metadata")
         .filter("metadata->>prospect_id", "eq", prospect.id)
-        .filter("metadata->>sequence_id", "eq", sequence.id)
-        .limit(1);
-      if (existingQueueRows && existingQueueRows.length > 0) continue;
+        .filter("metadata->>sequence_id", "eq", sequence.id);
+      const alreadyQueuedSteps = new Set(
+        (existingQueueRows ?? []).map((r: { metadata: { drip_step?: number } | null }) => r.metadata?.drip_step),
+      );
+      if (alreadyQueuedSteps.size >= steps.length) continue;
 
       // Clock starts from when nurture began (approved_at + 48h), not
       // created_at -- prevents prospects discovered days ago from firing
@@ -507,27 +529,53 @@ serve(async (req) => {
         ? new Date(new Date(prospect.approved_at).getTime() + 48 * 60 * 60 * 1000)
         : new Date(prospect.created_at);
 
+      // Work out each missing step's send time first. A step whose nominal
+      // time is already past (late enrollment: email found days after
+      // approval, run cap, client un-paused) is pushed to "now", and each
+      // later step keeps at least its own delay_days after the one before --
+      // otherwise a late prospect would get several emails in the same batch.
+      const missing: { stepNumber: number; scheduledFor: Date }[] = [];
       let cumulativeDays = 0;
-      let enrolledAny = false;
+      let previousSendAt: Date | null = null;
       for (let i = 0; i < steps.length; i++) {
         const stepNumber = i + 1;
-        cumulativeDays += steps[i].delay_days ?? 0;
+        const delayDays = steps[i].delay_days ?? 0;
+        cumulativeDays += delayDays;
         if (stepNumber <= prospect.drip_step) continue; // already sent under this or a prior run
+        if (alreadyQueuedSteps.has(stepNumber)) {
+          previousSendAt = new Date(nurtureStart.getTime() + cumulativeDays * 24 * 60 * 60 * 1000);
+          continue;
+        }
+        let sendAt = new Date(nurtureStart.getTime() + cumulativeDays * 24 * 60 * 60 * 1000);
+        if (sendAt < now) sendAt = now;
+        if (previousSendAt) {
+          const earliest = new Date(previousSendAt.getTime() + delayDays * 24 * 60 * 60 * 1000);
+          if (sendAt < earliest) sendAt = earliest;
+        }
+        missing.push({ stepNumber, scheduledFor: sendAt });
+        previousSendAt = sendAt;
+      }
 
-        let emailContent = await buildPersonalizedOutreachEmail(prospect, client, stepNumber);
-        if (!emailContent) emailContent = buildStaticOutreachEmail(prospect, client, stepNumber);
-        if (!emailContent) continue;
+      // Draft the missing steps concurrently -- they're independent LLM calls.
+      const drafted = await Promise.all(missing.map(async ({ stepNumber }) => {
+        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber))
+          ?? buildStaticOutreachEmail(prospect, client, stepNumber);
+        return { stepNumber, content };
+      }));
 
-        const html = emailContent.html.includes("<!DOCTYPE")
-          ? emailContent.html
-          : wrapHtml(emailContent.html, prospect.email);
-        const scheduledFor = new Date(nurtureStart.getTime() + cumulativeDays * 24 * 60 * 60 * 1000);
+      let enrolledAny = false;
+      for (const { stepNumber, content } of drafted) {
+        if (!content) continue;
+        const html = content.html.includes("<!DOCTYPE")
+          ? content.html
+          : wrapHtml(content.html, prospect.email);
+        const scheduledFor = missing.find((m) => m.stepNumber === stepNumber)!.scheduledFor;
         const isFinalStep = stepNumber >= steps.length;
 
         const { error: queueErr } = await supabase.from("email_queue").insert({
           recipient_email: prospect.email,
           recipient_name: prospect.name,
-          subject: emailContent.subject,
+          subject: content.subject,
           html_content: html,
           scheduled_for: scheduledFor.toISOString(),
           status: "pending",
@@ -542,6 +590,14 @@ serve(async (req) => {
         });
         if (queueErr) {
           console.error(`Failed to queue step ${stepNumber} for ${prospect.email}:`, queueErr.message);
+          await logAlert(supabase, {
+            source: "run-prospect-drip",
+            alertType: "function_error",
+            severity: "error",
+            title: "Failed to queue an outreach step",
+            message: `Step ${stepNumber} for ${prospect.email}: ${queueErr.message}`,
+            metadata: { prospect_id: prospect.id, step: stepNumber },
+          });
           continue;
         }
         enrolledAny = true;

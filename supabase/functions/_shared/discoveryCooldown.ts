@@ -15,6 +15,10 @@ export async function recentDiscoveryRun(
     .select("id")
     .eq("client_id", clientId)
     .in("event_type", ["maps_api_call", "prospect_research"])
+    // Only discovery runs count. prospect_research is also logged by Apollo
+    // email lookups in backfill-prospect-context, which would otherwise start
+    // (and extend) the cooldown without any discovery having happened.
+    .in("source_fn", ["discover-prospects", "discover-prospects-web"])
     .gte("created_at", cutoff)
     .limit(1)
     .maybeSingle();

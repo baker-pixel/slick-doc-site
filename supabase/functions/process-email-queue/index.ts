@@ -3,6 +3,8 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logActivity } from "../_shared/activityLog.ts";
 import { sendViaClientEmail } from "../_shared/clientEmailSend.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
+import { decideProspectGate, repairPreferencesLinks } from "../_shared/outreachEmail.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -152,6 +154,30 @@ function addUnsubscribeFooter(html: string, email: string, supabaseUrl: string):
     const lastDivIndex = html.lastIndexOf("</div>");
     return html.slice(0, lastDivIndex + 6) + footer + html.slice(lastDivIndex + 6);
   }
+  return html + footer;
+}
+
+// Cold outreach is sent on behalf of a client, so the generic Orange Door
+// footer ("you interacted with Orange Door Marketing") is wrong for it: the
+// recipient never did, and it misidentifies the sender. Identify the actual
+// sender instead and keep a working, tokenized unsubscribe link.
+function addOutreachFooter(
+  html: string,
+  email: string,
+  supabaseUrl: string,
+  senderName: string,
+  senderSite?: string | null,
+): string {
+  const token = btoa(email);
+  const unsubscribeUrl = `${supabaseUrl}/functions/v1/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
+  const safeName = senderName.replace(/[<>&"]/g, "");
+  const site = senderSite ? ` (${senderSite.replace(/[<>&"]/g, "")})` : "";
+  const footer = `
+    <p style="margin-top:24px;font-size:12px;color:#9ca3af;">
+      Sent on behalf of ${safeName}${site}. Not interested?
+      <a href="${unsubscribeUrl}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>.
+    </p>`;
+  if (html.includes("</body>")) return html.replace("</body>", `${footer}</body>`);
   return html + footer;
 }
 
@@ -334,22 +360,41 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
   })
 };
 
+const MAX_SENDS_PER_RUN = 50;
+const STALE_CLAIM_MINUTES = 30;
+const MAX_REAPS = 2;
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Cron (x-internal-secret), service key, or an admin -- never a bare anon key.
+  if (!(await checkPipelineAuth(req, supabase as any, null))) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
 
     console.log("Processing email queue...");
 
-    // Get pending emails that are due
+    // Recover rows a crashed/killed run left in "processing" (claimed, never
+    // finished). Only rows with a claimed_at stamp are considered, so nothing
+    // can be resurrected blindly.
+    await reapStaleClaims();
+
+    // Get pending emails that are due, oldest first so a step never overtakes
+    // an earlier one. Fetch more than we will send: held rows (paused client /
+    // paused prospect) stay pending and must not starve everything behind them.
     const { data: pendingEmails, error: fetchError } = await supabase
       .from("email_queue")
       .select("*")
       .eq("status", "pending")
       .lte("scheduled_for", new Date().toISOString())
-      .limit(50);
+      .order("scheduled_for", { ascending: true })
+      .limit(200);
 
     if (fetchError) {
       console.error("Error fetching pending emails:", fetchError);
@@ -368,28 +413,82 @@ const handler = async (req: Request): Promise<Response> => {
         .map((e: any) => (e.metadata as Record<string, unknown> | null)?.client_id)
         .filter((id): id is string => typeof id === "string"),
     )];
-    const { data: pausedClients } = dueClientIds.length
-      ? await supabase.from("client_accounts").select("id").in("id", dueClientIds).neq("status", "active")
+    const { data: dueClients } = dueClientIds.length
+      ? await supabase.from("client_accounts").select("id, status, business_name, email, website_url").in("id", dueClientIds)
       : { data: [] };
-    const pausedClientIds = new Set((pausedClients || []).map((c: any) => c.id));
+    const clientById = new Map<string, { status: string; business_name: string; email: string | null; website_url: string | null }>(
+      (dueClients || []).map((c: any) => [c.id, c]),
+    );
+    const pausedClientIds = new Set((dueClients || []).filter((c: any) => c.status !== "active").map((c: any) => c.id));
+
+    // Live status of every prospect these steps belong to (one query).
+    const dueProspectIds = [...new Set(
+      (pendingEmails || [])
+        .map((e: any) => (e.metadata as Record<string, unknown> | null)?.prospect_id)
+        .filter((id): id is string => typeof id === "string"),
+    )];
+    const { data: dueProspects } = dueProspectIds.length
+      ? await supabase.from("prospects").select("id, status, drip_step").in("id", dueProspectIds)
+      : { data: [] };
+    const prospectById = new Map<string, { status: string; drip_step: number | null }>(
+      (dueProspects || []).map((p: any) => [p.id, p]),
+    );
 
     const results = [];
 
+    let attempted = 0;
     for (const email of pendingEmails || []) {
+      if (attempted >= MAX_SENDS_PER_RUN) break;
       const emailClientId = (email.metadata as Record<string, unknown> | null)?.client_id as string | undefined;
       if (emailClientId && pausedClientIds.has(emailClientId)) {
         results.push({ id: email.id, status: "skipped", reason: "client_paused" });
         continue;
       }
+
+      // Prospect gate (outreach steps only).
+      const gateMeta = email.metadata as Record<string, unknown> | null;
+      const gateProspectId = typeof gateMeta?.prospect_id === "string" ? gateMeta.prospect_id : null;
+      if (gateProspectId) {
+        const stepNo = typeof gateMeta?.drip_step === "number" ? gateMeta.drip_step : null;
+        const gate = decideProspectGate(prospectById.get(gateProspectId), stepNo);
+        if (gate.action === "hold") {
+          results.push({ id: email.id, status: "skipped", reason: gate.reason });
+          continue;
+        }
+        if (gate.action === "cancel") {
+          await supabase
+            .from("email_queue")
+            .update({ status: "cancelled", error_message: `Not sent: ${gate.reason}` })
+            .eq("id", email.id)
+            .eq("status", "pending");
+          results.push({ id: email.id, status: "cancelled", reason: gate.reason });
+          continue;
+        }
+      }
+
+      attempted++;
       try {
-        // Atomically claim this email — prevents duplicate sends when two cron instances overlap
-        const { data: claimed } = await supabase
+        // Atomically claim this email — prevents duplicate sends when two cron instances overlap.
+        // claimed_at lets reapStaleClaims() recover the row if this run dies mid-send.
+        let claimRes = await supabase
           .from("email_queue")
-          .update({ status: "processing" })
+          .update({ status: "processing", claimed_at: new Date().toISOString() })
           .eq("id", email.id)
           .eq("status", "pending")
           .select("id")
           .maybeSingle();
+        // Column not migrated yet (42703): claim without the stamp rather than
+        // failing every claim and sending nothing.
+        if (claimRes.error?.code === "42703") {
+          claimRes = await supabase
+            .from("email_queue")
+            .update({ status: "processing" })
+            .eq("id", email.id)
+            .eq("status", "pending")
+            .select("id")
+            .maybeSingle();
+        }
+        const claimed = claimRes.data;
 
         if (!claimed) {
           console.log(`Email ${email.id} already claimed by another process, skipping`);
@@ -415,9 +514,13 @@ const handler = async (req: Request): Promise<Response> => {
         const trackingId = crypto.randomUUID();
 
         // Add tracking pixel, wrap links, and add unsubscribe footer
-        let trackedHtml = addTrackingPixel(email.html_content, trackingId, supabaseUrl);
+        const outreachClient = emailClientId ? clientById.get(emailClientId) : undefined;
+        let trackedHtml = repairPreferencesLinks(email.html_content, email.recipient_email);
+        trackedHtml = addTrackingPixel(trackedHtml, trackingId, supabaseUrl);
         trackedHtml = wrapLinksWithTracking(trackedHtml, trackingId, supabaseUrl);
-        trackedHtml = addUnsubscribeFooter(trackedHtml, email.recipient_email, supabaseUrl);
+        trackedHtml = emailClientId
+          ? addOutreachFooter(trackedHtml, email.recipient_email, supabaseUrl, outreachClient?.business_name ?? "our team", outreachClient?.website_url)
+          : addUnsubscribeFooter(trackedHtml, email.recipient_email, supabaseUrl);
 
         // RFC 8058 one-click unsubscribe headers (Gmail/Yahoo bulk-sender
         // rules). The unsubscribe fn acts on query params, so an empty-body
@@ -453,11 +556,20 @@ const handler = async (req: Request): Promise<Response> => {
             to: [email.recipient_email],
             subject: email.subject,
             html: trackedHtml,
+            // Outreach goes out from the shared sender when the client has no
+            // mailbox connected -- make sure a reply still reaches the client.
+            ...(outreachClient?.email ? { reply_to: outreachClient.email } : {}),
             headers: {
               "List-Unsubscribe": `<${oneClickUrl}>`,
               "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
             },
           });
+          // resend@2 returns { data, error } instead of throwing. Ignoring
+          // `error` marked rejected sends (bad domain, rate limit, suppressed
+          // recipient...) as "sent" and advanced the drip for mail never sent.
+          if (emailResponse.error) {
+            throw new Error(`Resend rejected the send: ${emailResponse.error.message ?? JSON.stringify(emailResponse.error)}`);
+          }
           resendId = emailResponse.data?.id ?? null;
           console.log("Email sent via Resend:", emailResponse);
         }
@@ -581,5 +693,66 @@ const handler = async (req: Request): Promise<Response> => {
     });
   }
 };
+
+// Rows claimed ("processing") more than STALE_CLAIM_MINUTES ago belong to a run
+// that died before finishing. If the send actually happened (an email_logs row
+// for the same recipient+subject exists after the claim) close it out as sent;
+// otherwise put it back in the queue, at most MAX_REAPS times, then fail loudly.
+async function reapStaleClaims(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - STALE_CLAIM_MINUTES * 60 * 1000).toISOString();
+    const { data: stale, error } = await supabase
+      .from("email_queue")
+      .select("id, recipient_email, subject, claimed_at, metadata")
+      .eq("status", "processing")
+      .not("claimed_at", "is", null)
+      .lt("claimed_at", cutoff)
+      .limit(50);
+    if (error) {
+      // 42703 = claimed_at column not migrated yet; nothing to reap.
+      if (error.code !== "42703") console.error("reapStaleClaims fetch failed:", error.message);
+      return;
+    }
+    for (const row of stale ?? []) {
+      const { data: log } = await supabase
+        .from("email_logs")
+        .select("id, created_at")
+        .eq("recipient_email", row.recipient_email)
+        .eq("subject", row.subject)
+        .gte("created_at", row.claimed_at)
+        .limit(1)
+        .maybeSingle();
+      if (log) {
+        await supabase.from("email_queue").update({ status: "sent", sent_at: log.created_at })
+          .eq("id", row.id).eq("status", "processing");
+        continue;
+      }
+      const reaps = ((row.metadata as any)?.reap_count ?? 0) + 1;
+      if (reaps > MAX_REAPS) {
+        await supabase.from("email_queue").update({
+          status: "failed",
+          error_message: `Stuck in processing ${reaps} times (worker died mid-send) -- needs manual review`,
+        }).eq("id", row.id).eq("status", "processing");
+        await supabase.from("automation_alerts").insert({
+          alert_type: "email_failure",
+          severity: "error",
+          title: "Queued email repeatedly stuck in processing",
+          message: `Email to ${row.recipient_email} ("${row.subject}") was claimed ${reaps} times and never finished.`,
+          source: "process-email-queue",
+          source_id: row.id,
+        });
+      } else {
+        await supabase.from("email_queue").update({
+          status: "pending",
+          error_message: `Re-queued after stale claim (attempt ${reaps})`,
+          metadata: { ...(row.metadata as Record<string, unknown> | null), reap_count: reaps },
+        }).eq("id", row.id).eq("status", "processing");
+        console.warn(`Re-queued stale email ${row.id} (attempt ${reaps})`);
+      }
+    }
+  } catch (e) {
+    console.error("reapStaleClaims error:", e instanceof Error ? e.message : e);
+  }
+}
 
 serve(handler);

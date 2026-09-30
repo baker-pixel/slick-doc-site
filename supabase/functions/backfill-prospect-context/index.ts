@@ -35,10 +35,12 @@ serve(async (req: Request) => {
 
   try {
     // Fetch prospects with null context_profile
+    // Also picks up prospects whose website scan failed but is still
+    // retryable (see the failure stub below).
     const { data: prospects, error: fetchErr } = await supabase
       .from("prospects")
       .select("*")
-      .is("context_profile", null)
+      .or("context_profile.is.null,context_profile->>retry.eq.true")
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -141,6 +143,25 @@ serve(async (req: Request) => {
       } catch (err) {
         console.error("Backfill error for prospect", prospect.id, err);
         errors++;
+        // A site that can't be scanned (bot-blocked corporate site, dead
+        // domain, timeout) used to stay context_profile=null and get
+        // re-scanned -- and re-alerted -- every run forever, hogging the
+        // 50-row window and never reaching fit scoring. Retry a few times,
+        // then leave an explicit "unavailable" marker so the prospect moves
+        // on (scoring still works from name/type/city) instead of vanishing.
+        if (!prospect.submission_id) {
+          const prev = (prospect.context_profile ?? {}) as { attempts?: number };
+          const attempts = (prev.attempts ?? 0) + 1;
+          await supabase.from("prospects").update({
+            context_profile: {
+              source: "website_scan_failed",
+              partial: true,
+              attempts,
+              retry: attempts < 3,
+              last_error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+            },
+          }).eq("id", prospect.id);
+        }
       }
     }
 
@@ -186,16 +207,32 @@ serve(async (req: Request) => {
       }
     }
     if (apolloKey) {
-      const { data: noEmail } = await supabase
+      // Skip prospects Apollo already gave a definitive "nothing usable" answer
+      // for in the last 14 days. Without this, the same dead-end domains were
+      // re-queried every run and, once there were 25+ of them, crowded out
+      // every prospect that could actually be enriched.
+      const LOOKUP_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
+      const { data: noEmailAll } = await supabase
         .from("prospects")
-        .select("id, website_url, client_id")
+        .select("id, website_url, client_id, research_snapshot")
         .or("email.is.null,email.eq.")
         .not("website_url", "is", null)
         .neq("website_url", "")
         .in("status", ["discovered", "pending"])
-        .limit(25);
+        .order("created_at", { ascending: false })
+        .limit(150);
+      const noEmail = (noEmailAll ?? [])
+        .filter((p: { research_snapshot: { email_lookup?: { at?: string } } | null }) => {
+          const at = p.research_snapshot?.email_lookup?.at;
+          return !at || Date.now() - new Date(at).getTime() > LOOKUP_RETRY_MS;
+        })
+        .slice(0, 25);
+      const markLookup = (p: { id: string; research_snapshot: Record<string, unknown> | null }, result: string) =>
+        supabase.from("prospects").update({
+          research_snapshot: { ...(p.research_snapshot ?? {}), email_lookup: { at: new Date().toISOString(), result } },
+        }).eq("id", p.id);
 
-      for (const p of noEmail ?? []) {
+      for (const p of noEmail) {
         try {
           const domain = new URL(
             p.website_url.startsWith("http") ? p.website_url : `https://${p.website_url}`,
@@ -228,6 +265,7 @@ serve(async (req: Request) => {
           if (!person?.id) {
             // No decision-maker on file for this domain at all -- a guess
             // would just be inventing an address, so leave it for manual entry.
+            await markLookup(p, "no_decision_maker");
             await new Promise((r) => setTimeout(r, 300));
             continue;
           }
@@ -266,6 +304,8 @@ serve(async (req: Request) => {
                 metadata: { kind: "apollo_email_lookup", domain, email_status: matched.email_status },
               });
             }
+          } else {
+            await markLookup(p, matched?.email ? "unverified" : "no_email");
           }
 
           await new Promise((r) => setTimeout(r, 600));

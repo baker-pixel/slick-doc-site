@@ -7,6 +7,7 @@ import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/prospectInsert.ts";
+import { runInBackground } from "../_shared/background.ts";
 
 // See discover-prospects.ts for why this only applies to client callers.
 const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
@@ -115,7 +116,7 @@ async function webSearchCompanies(
   prompt: string,
 ): Promise<FoundCompany[]> {
   // Model fallback: newest small search-capable model first.
-  const models = ["gpt-5-mini", "gpt-4o-mini"];
+  const models = ["gpt-4.1-mini", "gpt-4o-mini"];
   let lastErr = "";
 
   for (const model of models) {
@@ -251,7 +252,19 @@ Respond with ONLY a JSON array, no prose:
       via = "web_search";
     }
 
+    // Zero-yield runs must still be recorded, or the cooldown (which reads
+    // client_usage) never sees them and the daily cron re-runs this client's
+    // paid Apollo / web-search discovery forever.
+    const recordEmptyRun = () => supabase.from("client_usage").insert({
+      client_id: body.client_id,
+      event_type: "prospect_research",
+      units: 0,
+      source_fn: "discover-prospects-web",
+      metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, inserted: 0 },
+    });
+
     if (companies.length === 0) {
+      await recordEmptyRun();
       return json({ discovered: 0, skipped_duplicates: 0, skipped_no_website: 0, email_enrichment: !!Deno.env.get("APOLLO_API_KEY"), message: "No matching companies found" });
     }
 
@@ -272,6 +285,7 @@ Respond with ONLY a JSON array, no prose:
     });
 
     let inserted: { id: string; name: string; website_url: string; city: string | null }[] = [];
+    if (fresh.length === 0) await recordEmptyRun();
     if (fresh.length > 0) {
       const rows = fresh.map((c) => ({
         client_id: body.client_id,
@@ -309,11 +323,11 @@ Respond with ONLY a JSON array, no prose:
       // Same as the Maps path: enrich context + score fit before review.
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      fetch(`${supabaseUrl}/functions/v1/backfill-prospect-context`, {
+      runInBackground(fetch(`${supabaseUrl}/functions/v1/backfill-prospect-context`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
         body: "{}",
-      }).catch((e) => console.error("backfill-prospect-context trigger failed:", e));
+      }));
     }
 
     console.log(`discover-prospects-web: client=${body.client_id} via=${via} found=${companies.length} inserted=${inserted.length}`);
