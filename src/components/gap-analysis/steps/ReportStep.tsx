@@ -293,7 +293,7 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
               We&apos;ll build a custom action plan for your business
             </li>
           </ul>
-          <Link to="/contact">
+          <Link to="/schedule">
             <Button className="w-full bg-primary hover:bg-orange-dark text-primary-foreground gap-2">
               Schedule Your Strategy Call
               <ArrowRight size={16} />

@@ -12,6 +12,26 @@ export interface AdminAuthResult {
   role?: "admin" | "client";
 }
 
+/**
+ * For calls made by our own database triggers (pg_net), which have no admin
+ * session. The trigger sends x-internal-secret; it's compared against
+ * internal_secrets (RLS on, no policies, service-role only).
+ */
+export async function checkInternalSecret(
+  req: Request,
+  supabase: SupabaseClient,
+  key: string,
+): Promise<boolean> {
+  const provided = req.headers.get("x-internal-secret");
+  if (!provided) return false;
+  const { data } = await supabase
+    .from("internal_secrets")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  return !!data?.value && data.value === provided;
+}
+
 export async function checkAdminAuth(
   req: Request,
   supabase: SupabaseClient,

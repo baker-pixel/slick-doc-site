@@ -1,7 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import logo from "@/assets/logo-white.png";
 
 export function Footer() {
+  // Section anchors only exist on the homepage; from any other page they must
+  // point at "/#section" or the click does nothing.
+  const anchorBase = useLocation().pathname === "/" ? "" : "/";
   return (
     <footer className="bg-navy text-navy-light border-t border-border/10">
       <div className="container-wide mx-auto section-padding py-12">
@@ -23,7 +26,7 @@ export function Footer() {
             <ul className="space-y-2">
               <li>
                 <a
-                  href="#about"
+                  href={`${anchorBase}#about`}
                   className="text-cream/60 hover:text-primary transition-colors"
                 >
                   About Us
@@ -31,7 +34,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="#system"
+                  href={`${anchorBase}#system`}
                   className="text-cream/60 hover:text-primary transition-colors"
                 >
                   The SYSTEM
@@ -39,7 +42,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="#pricing"
+                  href={`${anchorBase}#pricing`}
                   className="text-cream/60 hover:text-primary transition-colors"
                 >
                   Pricing
@@ -47,7 +50,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="#contact"
+                  href={`${anchorBase}#contact`}
                   className="text-cream/60 hover:text-primary transition-colors"
                 >
                   Contact
