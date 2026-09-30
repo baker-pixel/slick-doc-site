@@ -16,6 +16,7 @@ import {
 import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
 import { OutreachSettingsCard } from "./OutreachSettingsCard";
+import { SmtpSenderSection } from "./SmtpSenderSection";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
@@ -456,6 +457,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           </div>
         )}
       </Card>
+
+      <SmtpSenderSection clientAccountId={clientAccountId} />
 
       <Dialog
         open={!!selected}
