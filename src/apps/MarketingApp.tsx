@@ -27,6 +27,7 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 const ARBusinessCard = lazy(() => import("@/pages/ARBusinessCard"));
 const ARPresentation = lazy(() => import("@/pages/ARPresentation"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const LegacyReportRedirect = lazy(() => import("@/pages/LegacyReportRedirect"));
 const EmailPreferences = lazy(() => import("@/pages/EmailPreferences"));
 const Portfolio = lazy(() => import("@/pages/Portfolio"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
@@ -60,6 +61,7 @@ function AnimatedRoutes() {
           <Route path="/pricing/foundation" element={<PageTransition><TierFoundation /></PageTransition>} />
           <Route path="/pricing/growth" element={<PageTransition><TierGrowth /></PageTransition>} />
           <Route path="/pricing/transformation" element={<PageTransition><TierTransformation /></PageTransition>} />
+          <Route path="/report" element={<LegacyReportRedirect />} />
           <Route path="/report/:id" element={<PageTransition><Report /></PageTransition>} />
           <Route path="/ar-card" element={<PageTransition><ARBusinessCard /></PageTransition>} />
           <Route path="/ar-presentation" element={<ARPresentation />} />
