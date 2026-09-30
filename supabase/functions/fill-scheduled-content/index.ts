@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
@@ -56,6 +57,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    if (!(await checkPipelineAuth(req, supabase, body.password))) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const clientId: string | undefined = body.client_id;
     const limit: number = Math.min(body.limit || 10, 50);
 
@@ -449,9 +456,11 @@ async function generateContent(
   _apiKey: string,
   pillar?: string
 ): Promise<string> {
-  const now = new Date();
-  const month = MONTHS[now.getMonth()];
-  const season = SEASONS[now.getMonth()];
+  // Month/season of when the post will PUBLISH, not when it's drafted -- drafts
+  // are written weeks ahead, so "now" gave 1 Oct posts a "September tip".
+  const when = slot.scheduled_for ? new Date(slot.scheduled_for) : new Date();
+  const month = MONTHS[when.getUTCMonth()];
+  const season = SEASONS[when.getUTCMonth()];
 
   // Confirmed brand assets (logo colors, voice, pillars, "never say" list)
   // the client set up in "Verify Brand Assets" -- previously this generator

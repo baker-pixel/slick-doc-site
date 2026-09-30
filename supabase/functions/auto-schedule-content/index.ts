@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
@@ -95,6 +96,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    if (!(await checkPipelineAuth(req, supabase, body.password))) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const specificClientId: string | undefined = body.client_id;
 
     // Fetch active clients

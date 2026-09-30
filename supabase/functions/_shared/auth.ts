@@ -125,3 +125,18 @@ export async function checkClientOrAdminAuth(
 
   return { authorized: false, userId: null, via: null };
 }
+
+/**
+ * Gate for the social-pipeline endpoints (auto-schedule / fill / publish /
+ * sync-fill). Callers: our pg_cron jobs (x-internal-secret), other edge
+ * functions (service key) and the admin panel (session or admin password).
+ */
+export async function checkPipelineAuth(
+  req: Request,
+  supabase: SupabaseClient,
+  password?: string | null,
+): Promise<boolean> {
+  if (isServiceRequest(req)) return true;
+  if (await checkInternalSecret(req, supabase, "pipeline_cron")) return true;
+  return (await checkAdminAuth(req, supabase, password)).authorized;
+}

@@ -384,7 +384,7 @@ export default function SocialMediaPostsPanel() {
       if (!selectedClient) throw new Error("Select a client first");
 
       const scheduleRes = await supabase.functions.invoke("auto-schedule-content", {
-        body: { client_id: selectedClient },
+        body: { client_id: selectedClient, password: adminPassword },
       });
       if (scheduleRes.error || scheduleRes.data?.error) {
         const msg = await getEdgeErrorMessage(scheduleRes.error, scheduleRes.data);
@@ -392,7 +392,7 @@ export default function SocialMediaPostsPanel() {
       }
 
       const fillRes = await supabase.functions.invoke("fill-scheduled-content", {
-        body: { client_id: selectedClient, limit: 50 },
+        body: { client_id: selectedClient, limit: 50, password: adminPassword },
       });
       if (fillRes.error || fillRes.data?.error) {
         const msg = await getEdgeErrorMessage(fillRes.error, fillRes.data);
@@ -429,7 +429,7 @@ export default function SocialMediaPostsPanel() {
   const triggerPublishNow = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
-        body: {},
+        body: { password: adminPassword },
       });
       if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);
@@ -453,7 +453,7 @@ export default function SocialMediaPostsPanel() {
   const testPipeline = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
-        body: {},
+        body: { password: adminPassword },
       });
       if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);

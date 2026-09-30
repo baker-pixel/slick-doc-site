@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { logActivity } from "../_shared/activityLog.ts";
@@ -121,6 +122,13 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const authBody = await req.clone().json().catch(() => ({}));
+    if (!(await checkPipelineAuth(req, supabase, authBody.password))) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
     // ── Cleanup: reset rows stuck in processing for > 2 hours ──

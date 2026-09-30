@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
 import type { OverlayBrand } from "../_shared/imageOverlay.ts";
 
 const corsHeaders = {
@@ -74,18 +74,11 @@ serve(async (req) => {
     // protect here, just this one client's backlog.
     const force: boolean = !!body.force;
 
-    // Internal cron-only endpoint by default (same posture as
-    // fill-scheduled-content / publish-scheduled-content) -- no auth to gate
-    // when called with no client_id, same as generate-social-images-batch's
-    // original design intent. A client_id turns this into an admin-facing
-    // action, so it needs the same admin auth those get.
-    if (clientId) {
-      const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-      const isServer = isServiceRequest(req);
-      if (!isServer) {
-        const auth = await checkAdminAuth(req, supabase, body.password);
-        if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
-      }
+    // Cron (x-internal-secret), other functions (service key) or an admin.
+    // Previously ungated when called without client_id -> anyone with the
+    // public anon key could trigger paid image generation.
+    if (!(await checkPipelineAuth(req, supabase, body.password))) {
+      return json({ error: "Unauthorized" }, 401);
     }
 
     if (!openaiKey) {
