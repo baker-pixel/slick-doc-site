@@ -59,7 +59,8 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const clientName = clientAccount.first_name || clientAccount.business_name;
-    const portalUrl = `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", "")}/client-portal`;
+    // Was built from SUPABASE_URL (-> "https://<ref>/client-portal", not a real host).
+    const portalUrl = `${Deno.env.get("CLIENT_PORTAL_URL") || "https://client.orangedoormarketing.com"}/portal`;
 
     let subject = "";
     let htmlContent = "";
