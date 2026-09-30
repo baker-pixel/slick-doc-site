@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson } from "../_shared/ai.ts";
@@ -541,7 +542,7 @@ serve(async (req) => {
     // Auth: service-role bearer (seed-tier-workflow's background trigger),
     // admin password in body, or a validated client/admin JWT.
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServer = isServiceRequest(req);
     const adminPassword = Deno.env.get("ADMIN_PASSWORD");
     let isAdmin = false;
 

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { callAI } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
@@ -128,7 +128,7 @@ serve(async (req) => {
     // Read-only analysis endpoint. Accepts service-role (server-to-server) or
     // an admin session/password. It holds NO write-to-site capability.
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServer = isServiceRequest(req);
     if (!isServer) {
       const auth = await checkAdminAuth(req, supabase, body.password);
       if (!auth.authorized) return json({ error: "Unauthorized" }, 401);

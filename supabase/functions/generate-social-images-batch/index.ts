@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { buildGptImageRequestBody } from "../_shared/gptImage.ts";
 
@@ -33,7 +33,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServer = isServiceRequest(req);
     if (!isServer) {
       const auth = await checkAdminAuth(req, supabase, body.password);
       if (!auth.authorized) return json({ error: "Unauthorized" }, 401);

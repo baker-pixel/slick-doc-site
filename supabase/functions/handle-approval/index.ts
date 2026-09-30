@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, MODELS } from "../_shared/ai.ts";
 
@@ -62,7 +63,7 @@ serve(async (req) => {
     // portal user who owns this approval's client account. Without this check
     // anyone with the anon key could approve and publish arbitrary content.
     const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServer = isServiceRequest(req);
     const adminPassword = Deno.env.get("ADMIN_PASSWORD");
     const isAdminCall = !!adminPassword && password === adminPassword;
 

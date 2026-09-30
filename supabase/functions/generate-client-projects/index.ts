@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError } from "../_shared/ai.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 
 interface ActionItem {
   action: string;
@@ -32,7 +32,7 @@ serve(async (req) => {
     }
 
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === supabaseServiceKey;
+    const isServer = isServiceRequest(req);
     if (!isServer) {
       const auth = await checkAdminAuth(req, supabase, password);
       if (!auth.authorized) {

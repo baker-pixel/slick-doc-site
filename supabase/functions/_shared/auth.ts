@@ -13,6 +13,20 @@ export interface AdminAuthResult {
 }
 
 /**
+ * True when the caller presented the project's service-role/secret key. Edge
+ * functions now receive an sb_secret_ key that supabase-js sends in the
+ * `apikey` header ONLY (no Authorization header), so checking the bearer alone
+ * rejects every internal functions.invoke() call -- that silently failed all
+ * social publishing from 2026-09-24. Accept either header.
+ */
+export function isServiceRequest(req: Request): boolean {
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key) return false;
+  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  return bearer === key || (req.headers.get("apikey") ?? "") === key;
+}
+
+/**
  * For calls made by our own database triggers (pg_net), which have no admin
  * session. The trigger sends x-internal-secret; it's compared against
  * internal_secrets (RLS on, no policies, service-role only).

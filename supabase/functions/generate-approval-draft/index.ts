@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
@@ -20,8 +21,7 @@ serve(async (req) => {
   );
 
   try {
-    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    if (bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+    if (!isServiceRequest(req)) {
       return json({ error: "Unauthorized" }, 401);
     }
 

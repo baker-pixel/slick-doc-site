@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import type { OverlayBrand } from "../_shared/imageOverlay.ts";
 
 const corsHeaders = {
@@ -81,7 +81,7 @@ serve(async (req) => {
     // action, so it needs the same admin auth those get.
     if (clientId) {
       const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-      const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const isServer = isServiceRequest(req);
       if (!isServer) {
         const auth = await checkAdminAuth(req, supabase, body.password);
         if (!auth.authorized) return json({ error: "Unauthorized" }, 401);

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 import type { AutomationRequest } from "./types.ts";
 import { normalizeJobType } from "./jobTypeAliases.ts";
@@ -56,7 +56,7 @@ serve(async (req) => {
     // bearer) and the admin panel (session JWT + admin role, or the shared
     // ADMIN_PASSWORD in body/x-admin-password header).
     const bearer = (req.headers.get("authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServer = isServiceRequest(req);
     if (!isServer) {
       const password =
         req.headers.get("x-admin-password") ?? (body as unknown as Record<string, unknown>).password as string | undefined;

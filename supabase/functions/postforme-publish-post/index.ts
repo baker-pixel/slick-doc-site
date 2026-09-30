@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { buildSocialImagePrompt, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { logActivity } from "../_shared/activityLog.ts";
@@ -134,7 +134,7 @@ serve(async (req) => {
     if (!contentCalendarId) return json({ error: "contentCalendarId is required", success: false }, 400);
 
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === supabaseServiceKey;
+    const isServer = isServiceRequest(req);
     if (!isServer) {
       const auth = await checkAdminAuth(req, supabase, body.password);
       if (!auth.authorized) return json({ error: "Unauthorized" }, 401);

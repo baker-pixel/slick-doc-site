@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
+import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 import { functionErrorAlert } from "../_shared/alerts.ts";
 
@@ -34,7 +34,7 @@ serve(async (req) => {
     }
 
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const isServer = bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServer = isServiceRequest(req);
     if (!isServer) {
       const auth = await checkClientOrAdminAuth(req, supabase, client_id, password);
       if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
