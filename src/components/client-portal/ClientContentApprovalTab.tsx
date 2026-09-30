@@ -257,6 +257,15 @@ function ContentRenderer({ content, contentType }: { content: string | null; con
 }
 
 // Email content view
+// Mirrors supabase/functions/_shared/captionGate.ts: empty/placeholder posts can't be approved.
+function hasCaption(a: { full_content: string | null; content_preview: string | null }): boolean {
+  const ok = (t: string | null) => {
+    const v = (t ?? "").trim();
+    return v.length >= 15 && !/^\[auto-generated placeholder/i.test(v);
+  };
+  return ok(a.full_content) || ok(a.content_preview);
+}
+
 function EmailContentView({ data }: { data: any }) {
   return (
     <div className="space-y-4">
@@ -657,7 +666,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
   };
 
   const handleApprove = async () => {
-    if (!selectedApproval) return;
+    if (!selectedApproval || !hasCaption(selectedApproval)) return;
     setSubmitting(true);
 
     try {
@@ -718,7 +727,8 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
   // shot -- scoped to whatever platform tab is selected, same as the list
   // it's approving actually shows. Reuses the same handle-approval call as
   // the single-item flow, just fanned out.
-  const handleApproveAll = async (targets: ContentApproval[]) => {
+  const handleApproveAll = async (allTargets: ContentApproval[]) => {
+    const targets = allTargets.filter(hasCaption);
     if (targets.length === 0) return;
     setBulkApproving(true);
     try {
@@ -1180,7 +1190,12 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
                       <XCircle className="h-4 w-4 mr-2" />
                       {feedback.trim() ? "Request Changes" : "Reject"}
                     </Button>
-                    <Button onClick={handleApprove} disabled={submitting} className="bg-green-600 hover:bg-green-700">
+                    {!hasCaption(selectedApproval) && (
+                      <p className="text-sm text-orange-700 mr-auto self-center">
+                        Caption missing — we're regenerating this post.
+                      </p>
+                    )}
+                    <Button onClick={handleApprove} disabled={submitting || !hasCaption(selectedApproval)} className="bg-green-600 hover:bg-green-700">
                       {submitting ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (

@@ -9,6 +9,7 @@ import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
 import { getSocialPillars } from "../_shared/socialStrategy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
+import { isUsableCaption } from "../_shared/captionGate.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
 
@@ -232,6 +233,12 @@ serve(async (req) => {
         }
 
         const generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
+
+        // Caption gate: never draft or forward an empty post. Throwing leaves
+        // the slot as a placeholder so the next run retries it.
+        if (!isUsableCaption(generatedContent)) {
+          throw new Error("AI returned an empty or too-short caption");
+        }
 
         // Self-QA: cheap second-model critique, best-effort. A QA failure
         // (null) never blocks the draft -- it just means no auto-forward.

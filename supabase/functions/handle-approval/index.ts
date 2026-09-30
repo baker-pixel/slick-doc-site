@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, MODELS } from "../_shared/ai.ts";
+import { isUsableCaption } from "../_shared/captionGate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,6 +101,14 @@ serve(async (req) => {
     }
 
     if (action === "approved") {
+      // Caption gate: an empty/placeholder post must never be approved into the publish queue.
+      if (!isUsableCaption(approval.full_content) && !isUsableCaption(approval.content_preview)) {
+        return new Response(
+          JSON.stringify({ error: "This post has no caption yet, so it can't be approved. We're regenerating it." }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // 1. Update approval status
       await supabase
         .from("content_approvals")
