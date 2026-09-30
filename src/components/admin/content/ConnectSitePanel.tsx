@@ -38,6 +38,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
   const [wpAdminUrl, setWpAdminUrl] = useState("");
   const [preparing, setPreparing] = useState(false);
   const notifiedRef = useRef(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchSite = useCallback(async () => {
@@ -51,9 +52,14 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
     setSite(fetched);
     setLoading(false);
 
-    if (fetched && !notifiedRef.current) {
+    // Tell the parent when the connection goes live (plugin activated), not just
+    // on first load -- the parent owns which card renders and used to stay on
+    // "Waiting for plugin" until a manual reload.
+    if (fetched?.status === "connected" && !notifiedRef.current) {
       notifiedRef.current = true;
       onSiteConnected?.(fetched.id);
+    } else if (fetched?.status !== "connected") {
+      notifiedRef.current = false;
     }
     return fetched;
   }, [clientId, onSiteConnected]);
@@ -98,6 +104,41 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
     }
   }
 
+  async function prepare(siteUrl: string): Promise<boolean> {
+    const { data, error } = await supabase.functions.invoke("prepare-connection", {
+      body: { client_id: clientId, site_url: siteUrl, password: adminPassword },
+    });
+    if (error || data?.error) {
+      const msg = await getEdgeErrorMessage(error, data);
+      toast.error(msg ? friendlyEdgeMessage(msg) : "Could not save the site URL");
+      return false;
+    }
+    return true;
+  }
+
+  async function handleDisconnect() {
+    if (!site) return;
+    setDisconnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("disconnect-site", {
+        body: { site_id: site.id },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Could not disconnect");
+      }
+      const p = data?.plugin as { reached?: boolean; deactivated?: boolean; removed?: boolean } | undefined;
+      if (p?.removed) toast.success("Disconnected — the plugin was removed from your WordPress site");
+      else if (p?.deactivated) toast.warning("Disconnected and plugin deactivated. Delete “Orange Door SEO” under Plugins to finish removing it.");
+      else toast.warning("Disconnected. We couldn't reach your site to remove the plugin — deactivate and delete “Orange Door SEO” under Plugins.");
+      await fetchSite();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not disconnect");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
   async function handleConnect() {
     let base = wpAdminUrl.trim().replace(/\/+$/, "");
     if (!base) {
@@ -111,13 +152,10 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
 
     // Register client_id ↔ site_url so connect-site can link them when the plugin activates.
     // Also patches client_id onto any existing record if the plugin already registered.
-    try {
-      await supabase.functions.invoke("prepare-connection", {
-        body: { client_id: clientId, site_url: siteUrl },
-      });
-    } catch {
-      // Non-fatal — continue with download/redirect
-    }
+    // Stop here on failure: downloading a plugin that can't be matched back to
+    // this account just leaves the client waiting forever.
+    if (!(await prepare(siteUrl))) return;
+    await fetchSite();
 
     // Auto-download ZIP
     const a = document.createElement("a");
@@ -149,13 +187,10 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
     const siteUrl = base.replace(/\/wp-admin\/?$/i, "").replace(/\/+$/, "");
     setPreparing(true);
     try {
-      await supabase.functions.invoke("prepare-connection", {
-        body: { client_id: clientId, site_url: siteUrl },
-      });
-      toast.success("Site URL saved — now install the plugin on the WordPress site");
-      await fetchSite();
-    } catch {
-      toast.error("Could not save site URL");
+      if (await prepare(siteUrl)) {
+        toast.success("Site URL saved — now install the plugin on the WordPress site");
+        await fetchSite();
+      }
     } finally {
       setPreparing(false);
     }
@@ -182,6 +217,16 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
                   <XCircle className="h-3 w-3 mr-1" /> Unreachable
                 </Badge>
               )}
+              {site?.status === "pending" && (
+                <Badge variant="outline" className="text-amber-700 dark:text-amber-400">
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Waiting for plugin
+                </Badge>
+              )}
+              {site?.status === "disconnected" && (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Disconnected
+                </Badge>
+              )}
               {!site && (
                 <Badge variant="outline" className="text-muted-foreground">
                   Not connected
@@ -195,8 +240,15 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {!site || site.status === "pending" ? (
+          {!site || site.status === "pending" || site.status === "disconnected" ? (
             <div className="space-y-4">
+              {site?.status === "disconnected" && (
+                <p className="text-xs text-muted-foreground">
+                  Disconnected (the plugin is removed from the site on disconnect). To reconnect, reinstall the plugin from the
+                  ZIP below, or if it's still installed open Settings → Orange Door and click <strong>Reconnect</strong>.
+                  To move to a different site, save its URL first.
+                </p>
+              )}
               <div className="space-y-2">
                 <p className="text-sm font-medium">Client's WordPress site URL</p>
                 <div className="flex gap-2">
@@ -213,7 +265,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
                 </div>
                 {site?.status === "pending" && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    URL saved — waiting for the plugin to be activated on the WordPress site.
+                    URL saved ({site.site_url}) — waiting for the plugin to be activated on the WordPress site.
                   </p>
                 )}
               </div>
@@ -265,20 +317,28 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
               {site.status === "unreachable" && (
                 <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                  Site unreachable. Verify the plugin is active and the domain responds.
+                  Site unreachable. Verify the plugin is active and the domain responds. If the plugin was reinstalled or the site restored, open Settings → Orange Door on the site and click Re-sync Connection.
                 </div>
               )}
 
-              <Button
-                onClick={triggerScan}
-                disabled={scanning || site.status === "unreachable"}
-                size="sm"
-              >
-                {scanning
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Scanning…</>
-                  : <><RefreshCw className="h-4 w-4" /> Run Scan Now</>
-                }
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Not disabled when unreachable: a scan is the retry, and a successful one restores "connected". */}
+                <Button onClick={triggerScan} disabled={scanning || disconnecting} size="sm">
+                  {scanning
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Scanning…</>
+                    : <><RefreshCw className="h-4 w-4" /> {site.status === "unreachable" ? "Retry Scan" : "Run Scan Now"}</>
+                  }
+                </Button>
+                <Button
+                  onClick={handleDisconnect}
+                  disabled={scanning || disconnecting}
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Disconnect"}
+                </Button>
+              </div>
             </>
           )}
         </CardContent>
@@ -307,8 +367,8 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
               Disconnected
             </Badge>
           )}
-          {!site && (
-            <Badge variant="outline" className="text-muted-foreground text-xs">
+          {site?.status === "pending" && (
+            <Badge variant="outline" className="text-amber-700 dark:text-amber-400 text-xs">
               <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Waiting for plugin…
             </Badge>
           )}
@@ -316,12 +376,17 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {(!site || site.status === "disconnected") ? (
+        {(!site || site.status === "disconnected" || site.status === "pending") ? (
           <div className="space-y-4">
             {site?.status === "disconnected" && (
-              <p className="text-sm text-muted-foreground">
-                Your site was disconnected. Re-enter your WordPress admin URL to reconnect.
-              </p>
+              <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-medium">Your site was disconnected.</p>
+                <p>
+                  The plugin is removed when you disconnect. To reconnect, use the button below to download it again,
+                  upload it in WordPress, and activate it. (If it's still listed under Plugins, open Settings → Orange Door
+                  and click <strong>Reconnect</strong> instead.)
+                </p>
+              </div>
             )}
             {/* Step 1 — URL + Connect */}
             <div className="space-y-2">
@@ -329,7 +394,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
               <div className="flex gap-2">
                 <Input
                   placeholder="https://yoursite.com/wp-admin"
-                  value={wpAdminUrl || (site?.status === "disconnected" ? site.site_url : "")}
+                  value={wpAdminUrl || (site ? site.site_url : "")}
                   onChange={(e) => setWpAdminUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleConnect()}
                   className="font-mono text-sm"
@@ -351,6 +416,11 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
                 Upload the ZIP → <strong>Install Now</strong> → <strong>Activate Plugin</strong>
               </p>
               <p className="text-xs text-muted-foreground mt-1">This page updates automatically once connected — no API key needed.</p>
+              {site?.status === "pending" && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  Waiting for the plugin to check in from {site.site_url}…
+                </p>
+              )}
             </div>
           </div>
         ) : (

@@ -99,6 +99,15 @@ serve(async (req) => {
 
     const { site_url, token, client_id } = site as ConnectedSite;
 
+    // A disconnected/pending site has no token. Say so up front rather than
+    // marking the fix approved and then failed with a generic credentials error.
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "This WordPress site isn't connected. Reconnect it to apply fixes." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Tier gate: advisory-only plans don't get auto-applied fixes. Same rule
     // as the admin path in apply-fix-to-wordpress — the client's one-click
     // apply must not bypass it.

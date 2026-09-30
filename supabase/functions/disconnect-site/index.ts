@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { removePluginFromSite } from "../_shared/wpSite.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,14 +60,23 @@ serve(async (req) => {
     // stopped working.
     const { data: site } = await supabase
       .from("connected_sites")
-      .select("client_id")
+      .select("client_id, site_url, token")
       .eq("id", site_id)
       .maybeSingle();
 
-    await supabase
+    // Ask the plugin to deactivate and delete itself (needs the token we're
+    // about to erase). Best-effort: an unreachable or pre-1.2 plugin still
+    // gets disconnected on our side, and the result tells the UI whether the
+    // owner has to remove the plugin by hand.
+    const plugin = site?.token
+      ? await removePluginFromSite(site.site_url, site.token)
+      : { reached: false, deactivated: false, removed: false };
+
+    const { error: updErr } = await supabase
       .from("connected_sites")
       .update({ status: "disconnected", token: "", updated_at: new Date().toISOString() })
       .eq("id", site_id);
+    if (updErr) throw new Error("Could not disconnect: " + updErr.message);
 
     if (site?.client_id) {
       await supabase
@@ -75,7 +85,7 @@ serve(async (req) => {
         .eq("client_id", site.client_id);
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, plugin }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

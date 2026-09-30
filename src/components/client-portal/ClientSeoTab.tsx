@@ -431,6 +431,15 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wpSite?.id, wpSite?.status, wpSite?.last_scanned_at]);
 
+  // While a connection is pending the plugin checks in from the client's own
+  // WordPress admin, in another tab -- nothing here would otherwise notice, so
+  // the card sat on "Waiting for plugin…" until a manual reload.
+  useEffect(() => {
+    if (wpSite?.status !== "pending") return;
+    const t = setInterval(() => { loadWpData(); }, 4000);
+    return () => clearInterval(t);
+  }, [wpSite?.status, loadWpData]);
+
   async function applyWpFix(fix: WpFix) {
     setApplyingWp(fix.id);
     try {
@@ -502,7 +511,10 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Could not disconnect");
       }
-      toast.success("WordPress site disconnected");
+      const p = data?.plugin as { reached?: boolean; deactivated?: boolean; removed?: boolean } | undefined;
+      if (p?.removed) toast.success("Disconnected — the plugin was removed from your WordPress site");
+      else if (p?.deactivated) toast.warning("Disconnected and plugin deactivated. Delete “Orange Door SEO” under Plugins to finish removing it.");
+      else toast.warning("Disconnected. We couldn't reach your site to remove the plugin — deactivate and delete “Orange Door SEO” under Plugins.");
       setShowDisconnectConfirm(false);
       await loadWpData();
     } catch (e) {
@@ -722,9 +734,21 @@ export function ClientSeoTab({ clientAccountId }: Props) {
                       </p>
                     )}
                     {wpSite.status === "unreachable" && (
-                      <p className="text-xs text-destructive mt-1">
-                        Your site isn't responding. Check the plugin is active and your domain is reachable.
-                      </p>
+                      <div className="mt-1 space-y-1.5">
+                        <p className="text-xs text-destructive">
+                          Your site isn't responding. Check the plugin is active and your domain is reachable.
+                          If you reinstalled the plugin or restored your site, open Settings → Orange Door in
+                          WordPress and click Re-sync Connection.
+                        </p>
+                        <Button
+                          size="sm" variant="outline" className="h-7 text-xs"
+                          onClick={() => triggerScan()}
+                          disabled={scanning}
+                        >
+                          {scanning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                          Check again
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

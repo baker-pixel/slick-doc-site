@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Orange Door SEO
  * Description: Connects your WordPress site to Orange Door for automated SEO auditing and fixes.
- * Version: 1.1.1
+ * Version: 1.2.0
  * Author: Orange Door
  */
 
@@ -23,7 +23,11 @@ register_activation_hook( __FILE__, 'od_attempt_connect' );
 add_action( 'admin_init', 'od_maybe_connect' );
 
 function od_maybe_connect() {
-    if ( get_option( 'od_connect_status' ) === 'connected' ) return;
+    // 'disconnected' is a deliberate removal from the Orange Door dashboard --
+    // never silently undo it. Reconnecting takes an explicit action: the
+    // Reconnect button on Settings > Orange Door, or reactivating the plugin.
+    $status = get_option( 'od_connect_status' );
+    if ( $status === 'connected' || $status === 'disconnected' ) return;
 
     // Throttle retries so a broken connection doesn't hammer the backend
     // on every wp-admin page load.
@@ -49,7 +53,7 @@ function od_attempt_connect() {
             'site_url'       => get_site_url(),
             'token'          => $token,
             'wp_version'     => get_bloginfo( 'version' ),
-            'plugin_version' => '1.1.1',
+            'plugin_version' => '1.2.0',
             'plugins'        => od_get_active_seo_plugins(),
         ]),
         'headers' => [ 'Content-Type' => 'application/json' ],
@@ -103,6 +107,14 @@ function od_register_routes() {
         'permission_callback' => 'od_verify_token',
     ]);
 
+    // Called by Orange Door when the connection is removed from the dashboard,
+    // so this admin page reflects reality and offers Reconnect.
+    register_rest_route( 'orangedoor/v1', '/disconnect', [
+        'methods'             => 'POST',
+        'callback'            => 'od_disconnect',
+        'permission_callback' => 'od_verify_token',
+    ]);
+
     // Apply approved fixes
     register_rest_route( 'orangedoor/v1', '/apply', [
         'methods'             => 'POST',
@@ -142,6 +154,42 @@ function od_verify_token( WP_REST_Request $request ) {
 }
 
 
+function od_disconnect( WP_REST_Request $request ) {
+    update_option( 'od_connect_status', 'disconnected' );
+    update_option( 'od_connect_error', '' );
+
+    $result = [ 'status' => 'disconnected', 'deactivated' => false, 'removed' => false ];
+
+    // Disconnecting from the Orange Door dashboard also removes this plugin
+    // from the site. Deactivating always works; deleting the files needs
+    // direct filesystem access (hosts that demand FTP credentials can't be
+    // deleted from a background request), so report what actually happened
+    // and let the dashboard tell the owner to finish manually if needed.
+    $body = $request->get_json_params();
+    if ( empty( $body['remove_plugin'] ) ) return rest_ensure_response( $result );
+
+    require_once ABSPATH . 'wp-admin/includes/plugin.php';
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+
+    $basename = plugin_basename( __FILE__ );
+    deactivate_plugins( $basename, true );
+    $result['deactivated'] = ! is_plugin_active( $basename );
+
+    // Drop our connection state and the /llms.txt rewrite rule.
+    foreach ( [ 'od_secret_token', 'od_connect_status', 'od_connect_error', 'od_connect_last_attempt', 'od_llms_rewrite_version' ] as $opt ) {
+        delete_option( $opt );
+    }
+    delete_option( 'rewrite_rules' );
+
+    if ( $result['deactivated'] && get_filesystem_method() === 'direct' ) {
+        $deleted = delete_plugins( [ $basename ] );
+        $result['removed'] = ( $deleted === true );
+    }
+
+    return rest_ensure_response( $result );
+}
+
+
 // ─────────────────────────────────────────────
 // 4. PING ENDPOINT
 // ─────────────────────────────────────────────
@@ -150,7 +198,7 @@ function od_ping() {
     return rest_ensure_response([
         'status'         => 'ok',
         'site_url'       => get_site_url(),
-        'plugin_version' => '1.1.1',
+        'plugin_version' => '1.2.0',
         'wp_version'     => get_bloginfo( 'version' ),
         'yoast_active'   => defined( 'WPSEO_VERSION' ),
         'rankmath_active'=> defined( 'RANK_MATH_VERSION' ),
@@ -625,7 +673,7 @@ function od_admin_page() {
     $status = get_option( 'od_connect_status', 'pending' );
     $error  = get_option( 'od_connect_error', '' );
 
-    if ( isset( $_POST['od_retry_connect'] ) && check_admin_referer( 'od_retry_connect' ) ) {
+    if ( isset( $_POST['od_retry_connect'] ) && current_user_can( 'manage_options' ) && check_admin_referer( 'od_retry_connect' ) ) {
         od_attempt_connect();
         $status = get_option( 'od_connect_status', 'pending' );
         $error  = get_option( 'od_connect_error', '' );
@@ -654,15 +702,22 @@ function od_admin_page() {
 
         <?php if ( $status === 'connected' ) : ?>
             <p>&#10003; Connected to <strong>Orange Door</strong>. Fixes are applied automatically when approved in your Orange Door dashboard.</p>
+            <?php $button = 'Re-sync Connection'; ?>
+        <?php elseif ( $status === 'disconnected' ) : ?>
+            <p style="color:#996800;">
+                &#9888; This site was disconnected from Orange Door. Click Reconnect to link it again.
+            </p>
+            <?php $button = 'Reconnect'; ?>
         <?php else : ?>
             <p style="color:#b32d2e;">
                 &#10007; Not connected yet<?php echo $error ? ': ' . esc_html( $error ) : '.'; ?>
             </p>
-            <form method="post">
-                <?php wp_nonce_field( 'od_retry_connect' ); ?>
-                <button type="submit" name="od_retry_connect" value="1" class="button button-primary">Retry Connection</button>
-            </form>
+            <?php $button = 'Retry Connection'; ?>
         <?php endif; ?>
+        <form method="post">
+            <?php wp_nonce_field( 'od_retry_connect' ); ?>
+            <button type="submit" name="od_retry_connect" value="1" class="button <?php echo $status === 'connected' ? '' : 'button-primary'; ?>"><?php echo esc_html( $button ); ?></button>
+        </form>
     </div>
     <?php
 }

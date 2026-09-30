@@ -229,11 +229,9 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  let siteId: string | null = null;
-
   try {
     const body = await req.json();
-    siteId = body.site_id as string;
+    const siteId = body.site_id as string;
     if (!siteId) throw new Error("site_id required");
 
     // Fetch site record
@@ -260,6 +258,12 @@ serve(async (req) => {
       }
     }
 
+    // Not-connected states are reported, never rewritten: the catch below used
+    // to flip these to "unreachable", which hid the reconnect flow (it only
+    // shows for "disconnected") and disabled the admin scan button.
+    if (siteStatus === "disconnected") {
+      throw new Error("This WordPress site is disconnected. Reconnect it first.");
+    }
     if (!token || siteStatus === "pending") {
       throw new Error("WordPress plugin not yet activated. Install and activate the OrangeDoor plugin on your WordPress site first.");
     }
@@ -271,10 +275,13 @@ serve(async (req) => {
     ).catch(() => null);
 
     if (!pingRes || !pingRes.ok) {
+      // Token-guarded: a disconnect that lands mid-scan clears the token, so
+      // this can't overwrite "disconnected".
       await supabase
         .from("connected_sites")
         .update({ status: "unreachable", updated_at: new Date().toISOString() })
-        .eq("id", siteId);
+        .eq("id", siteId)
+        .eq("token", token);
       throw new Error("Site unreachable — ping failed");
     }
 
@@ -326,12 +333,10 @@ serve(async (req) => {
       .select("id")
       .single();
 
-    // 5. Clear existing pending/failed fixes before generating fresh ones
-    await supabase
-      .from("wp_fix_queue")
-      .delete()
-      .eq("site_id", siteId)
-      .in("status", ["pending", "failed"]);
+    // 5. (Old pending/failed fixes are replaced at the end of the scan, keyed
+    // on scan_id -- see step 6b. Wiping up front let two overlapping scans,
+    // e.g. connect-site's first scan racing the portal's auto-scan, each
+    // insert a full set and leave the client with duplicate fixes.)
 
     // 6. Generate AI fixes for pages with issues.
     const hasLlmKey = Deno.env.get("GROQ_API_KEY");
@@ -422,11 +427,25 @@ serve(async (req) => {
       }
     }
 
-    // 7. Update last_scanned_at
+    // 6b. Replace stale suggestions: anything pending/failed that isn't from
+    // this scan. Skipped when issues were found but nothing was generated
+    // (AI unavailable) so a transient failure doesn't empty a useful queue.
+    if (scanRecord && (fixesGenerated > 0 || totalIssues === 0)) {
+      await supabase
+        .from("wp_fix_queue")
+        .delete()
+        .eq("site_id", siteId)
+        .in("status", ["pending", "failed"])
+        .or(`scan_id.is.null,scan_id.neq.${scanRecord.id}`);
+    }
+
+    // 7. Update last_scanned_at. Token-guarded so a disconnect that happened
+    // while this scan was running isn't flipped back to "connected".
     await supabase
       .from("connected_sites")
       .update({ last_scanned_at: new Date().toISOString(), status: "connected", updated_at: new Date().toISOString() })
-      .eq("id", siteId);
+      .eq("id", siteId)
+      .eq("token", token);
 
     // 8. Close the loop with the client portal's "Analyze current website
     // performance" onboarding step -- a real WP scan already covers what
@@ -471,13 +490,9 @@ serve(async (req) => {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("scan-wordpress-site error:", msg);
 
-    if (siteId) {
-      await supabase
-        .from("connected_sites")
-        .update({ status: "unreachable", updated_at: new Date().toISOString() })
-        .eq("id", siteId)
-        .then(undefined, () => {});
-    }
+    // Status is deliberately NOT changed here: only a failed ping (handled
+    // above) proves the site is unreachable. AI/parse/DB errors used to mark
+    // a healthy site "unreachable" and lock its scan button.
 
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
