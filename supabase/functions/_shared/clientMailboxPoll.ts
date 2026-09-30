@@ -1,4 +1,4 @@
-import { ImapClient } from "jsr:@bobbyg603/deno-imap";
+import { ImapLite } from "./imapLite.ts";
 
 interface SmtpMeta {
   host?: string;
@@ -174,15 +174,23 @@ export function extractReplySnippet(raw: Uint8Array): string | null {
   }
 }
 
-const MAX_MESSAGES_PER_RUN = 25;
-const POLL_TIMEOUT_MS = 25_000;
+const MAX_MESSAGES_PER_RUN = 150;
+const POLL_TIMEOUT_MS = 40_000;
+// IMAP SINCE works on whole days; a reply is only acted on once (see the
+// status guards below), so re-scanning a window every run is safe and does
+// not depend on the client leaving mail unread.
+const LOOKBACK_DAYS = 10;
+// A reply/bounce may only change a prospect that is still in the outreach
+// funnel -- never resurrect an unsubscribed or converted one.
+const REPLYABLE_STATUSES = ["nurture", "exhausted", "pending"];
 
 /**
- * Polls one client's connected mailbox for unseen mail, classifies each
+ * Polls one client's connected mailbox for recent mail, classifies each
  * message as a bounce or a genuine reply (only when it can be tied back to a
  * specific sent email via In-Reply-To/References), and updates that
- * prospect's status accordingly. Never throws -- a broken mailbox for one
- * client must not block polling every other client's.
+ * prospect's status accordingly. Read-only: it never marks the client's mail
+ * as read. Never throws -- a broken mailbox for one client must not block
+ * polling every other client's.
  */
 export async function pollClientMailbox(
   // deno-lint-ignore no-explicit-any
@@ -206,109 +214,81 @@ export async function pollClientMailbox(
     return result;
   }
 
-  const imapHost = inferImapHost(meta.host);
-  const client = new ImapClient({
-    host: imapHost,
-    port: 993,
-    tls: true,
-    username: meta.username,
-    password: cred.access_token,
-    commandTimeout: 15_000,
-  });
+  const client = new ImapLite({ host: inferImapHost(meta.host), port: 993, timeoutMs: 15_000 });
 
   const run = async () => {
     await client.connect();
-    await client.authenticate();
-    await client.selectMailbox("INBOX");
+    await client.login(meta.username!, cred.access_token);
+    await client.examine("INBOX");
 
-    const uids = await client.search({ flags: { has: ["\\Unseen"] } });
-    const batch = (uids ?? []).slice(0, MAX_MESSAGES_PER_RUN);
+    const uids = await client.searchSince(new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
+    const batch = uids.slice(-MAX_MESSAGES_PER_RUN);
+    const headersByUid = await client.fetchHeaders(batch, ["SUBJECT", "FROM", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES"]);
 
-    for (const uid of batch) {
+    for (const [uid, headers] of headersByUid) {
       try {
-        const messages = await client.fetch(String(uid), {
-          byUid: true,
-          headers: ["Subject", "From", "Message-ID", "In-Reply-To", "References"],
-        });
-        const msg = messages?.[0];
-        if (!msg) continue;
         result.polled++;
 
-        const fromHeader = getHeader(msg.headers, "From");
-        const subject = getHeader(msg.headers, "Subject");
-        const inReplyTo = getHeader(msg.headers, "In-Reply-To");
-        const references = getHeader(msg.headers, "References");
-
-        const trackingId = extractTrackingId(inReplyTo) || extractTrackingId(references);
+        const fromHeader = getHeader(headers, "From");
+        const subject = getHeader(headers, "Subject");
+        const trackingId = extractTrackingId(getHeader(headers, "In-Reply-To")) ||
+          extractTrackingId(getHeader(headers, "References"));
         const isBounce = BOUNCE_FROM_RE.test(fromHeader) || BOUNCE_SUBJECT_RE.test(subject);
+        if (!trackingId) continue; // unrelated inbox mail, or a bounce we cannot attribute
 
-        let prospectId: string | null = null;
-        if (trackingId) {
-          const { data: log } = await supabase
-            .from("email_logs")
-            .select("metadata")
-            .eq("tracking_id", trackingId)
-            .maybeSingle();
-          const logMeta = (log?.metadata ?? {}) as Record<string, unknown>;
-          prospectId = typeof logMeta.prospect_id === "string" ? logMeta.prospect_id : null;
-        }
+        const { data: log } = await supabase
+          .from("email_logs")
+          .select("metadata")
+          .eq("tracking_id", trackingId)
+          .maybeSingle();
+        const logMeta = (log?.metadata ?? {}) as Record<string, unknown>;
+        const prospectId = typeof logMeta.prospect_id === "string" ? logMeta.prospect_id : null;
+        if (!prospectId) continue;
+
+        const { data: prospect } = await supabase.from("prospects").select("status").eq("id", prospectId).maybeSingle();
+        if (!prospect || !REPLYABLE_STATUSES.includes(prospect.status)) continue; // already handled
 
         if (isBounce) {
           result.bounced++;
-          if (prospectId) {
-            await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospectId);
-            await supabase.from("email_queue").update({ status: "cancelled" })
-              .filter("metadata->>prospect_id", "eq", prospectId).eq("status", "pending");
-          }
-        } else if (trackingId && prospectId) {
+          await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospectId);
+        } else {
           // Only counts as a genuine reply when it's tied back to a specific
-          // sent email -- unmatched inbound mail is just regular mail to this
-          // client's inbox, not something attributable to a prospect.
+          // sent email. Body fetched only for confirmed replies.
           result.replied++;
-
-          // Second, targeted fetch for the body -- only done for confirmed
-          // replies so the common case (bounces, unrelated inbox mail) stays
-          // on the cheap headers-only fetch above.
           let replySnippet: string | null = null;
           try {
-            const full = await client.fetch(String(uid), { byUid: true, full: true });
-            const rawMsg = full?.[0]?.raw;
-            if (rawMsg) replySnippet = extractReplySnippet(rawMsg);
+            const raw = await client.fetchRaw(uid);
+            if (raw) replySnippet = extractReplySnippet(raw);
           } catch (e) {
             console.warn(`[clientMailboxPoll] ${clientId} uid=${uid}: reply body fetch failed:`, e instanceof Error ? e.message : e);
           }
-
           await supabase.from("prospects").update({
             status: "replied",
             replied_at: new Date().toISOString(),
             ...(replySnippet ? { reply_snippet: replySnippet } : {}),
           }).eq("id", prospectId);
-          // Stop the rest of the sequence -- a prospect who answered must not
-          // keep getting scheduled follow-ups.
-          await supabase.from("email_queue").update({ status: "cancelled", error_message: "Prospect replied" })
-            .filter("metadata->>prospect_id", "eq", prospectId).eq("status", "pending");
         }
-
-        await client.setFlags(String(uid), ["\\Seen"], "add", true);
+        // Stop the rest of the sequence either way.
+        await supabase.from("email_queue").update({ status: "cancelled", error_message: isBounce ? "Prospect bounced" : "Prospect replied" })
+          .filter("metadata->>prospect_id", "eq", prospectId).eq("status", "pending");
       } catch (msgErr) {
         console.error(`[clientMailboxPoll] ${clientId} uid=${uid}:`, msgErr);
       }
     }
   };
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       run(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("IMAP poll timed out")), POLL_TIMEOUT_MS)),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("IMAP poll timed out")), POLL_TIMEOUT_MS); }),
     ]);
   } catch (err) {
     console.error(`[clientMailboxPoll] ${clientId}:`, err);
     result.error = err instanceof Error ? err.message : "IMAP poll failed";
   } finally {
-    try {
-      // deno-lint-ignore no-explicit-any
-      await (client as any).close?.();
-    } catch { /* best-effort */ }
+    clearTimeout(timer);
+    await client.close();
   }
 
   return result;
