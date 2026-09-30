@@ -3,8 +3,9 @@ import { createDeliverable, formatDate } from "../shared.ts";
 
 export async function sendIntakeForm(supabase: any, client: ClientData) {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-  const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
-  const intakeUrl = `${APP_URL}/intake?clientId=${client.id}`;
+  // No /intake route exists in any app; send clients to the portal (client. subdomain), not the marketing root.
+  const PORTAL_URL = Deno.env.get("CLIENT_PORTAL_URL") || "https://client.orangedoormarketing.com";
+  const intakeUrl = `${PORTAL_URL}/portal/auth`;
 
   if (RESEND_API_KEY) {
     await fetch("https://api.resend.com/emails", {

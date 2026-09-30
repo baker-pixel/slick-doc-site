@@ -12,7 +12,8 @@ serve(async (req) => {
   const CLIENT_ID = Deno.env.get("LINKEDIN_CLIENT_ID") || "";
   const CLIENT_SECRET = Deno.env.get("LINKEDIN_CLIENT_SECRET") || "";
   const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/linkedin-oauth-callback`;
-  const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
+  // /portal only exists on the client. subdomain; APP_URL (marketing root) 404s on it.
+  const APP_URL = Deno.env.get("CLIENT_PORTAL_URL") || "https://client.orangedoormarketing.com";
 
   const portalRedirect = (params: string) =>
     new Response(null, { status: 302, headers: { Location: `${APP_URL}/portal?tab=integrations&${params}` } });
