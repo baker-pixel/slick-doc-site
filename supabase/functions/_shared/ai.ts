@@ -5,8 +5,13 @@ import { serviceClient } from "./supabase.ts";
 import { functionErrorAlert } from "./alerts.ts";
 
 export const MODELS = {
-  /** Default reasoning/content model. */
-  default: "gpt-5-mini",
+  /** Default content/extraction model. gpt-4.1-mini: non-reasoning (no hidden
+   * reasoning tokens eating short max_tokens budgets), strong JSON/instruction
+   * following, and available without OpenAI org verification -- gpt-5-mini was
+   * the default but returned 404 "organization must be verified" on every call
+   * (0 successes in 30 days of agent_runs), so each call wasted a request
+   * before falling to Groq. Switch back once the org is verified if wanted. */
+  default: "gpt-4.1-mini",
   /** Cheap/fast model for classification and low-stakes calls. */
   fast: "gpt-4o-mini",
 } as const;
@@ -29,6 +34,7 @@ const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // a second provider means one vendor's outage/deprecation doesn't take
 // every AI-backed feature down at once.
 const OPENAI_TO_GROQ_FALLBACK: Record<string, string> = {
+  "gpt-4.1-mini": "openai/gpt-oss-120b",
   "gpt-5-mini": "openai/gpt-oss-120b",
   "gpt-4o-mini": "openai/gpt-oss-20b",
 };
