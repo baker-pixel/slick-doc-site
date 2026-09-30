@@ -4,6 +4,7 @@ import { checkAdminAuth } from "../_shared/auth.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { applyWpFix, verifyWpFix, currentWpFieldValue } from "../_shared/wpApply.ts";
+import { wpWriteBlockedReason } from "../_shared/wpSite.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,6 +67,9 @@ serve(async (req) => {
       if (tierPolicy(client?.tier).seo.applyMode === "off") {
         return jsonRes({ error: "This client's plan is advisory-only — SEO fixes aren't applied automatically." }, 403);
       }
+
+      const blocked = await wpWriteBlockedReason(supabase, client_id);
+      if (blocked) return jsonRes({ error: blocked }, 409);
 
       const { data: creds } = await supabase
         .from("client_credentials")
@@ -135,6 +139,9 @@ serve(async (req) => {
     if (!ready?.type || !String(ready.type).startsWith("wp_")) {
       throw new Error("This fix cannot be auto-published (not a WordPress action)");
     }
+
+    const blocked = await wpWriteBlockedReason(supabase, fix.client_account_id);
+    if (blocked) throw new Error(blocked);
 
     const { data: creds } = await supabase
       .from("client_credentials")

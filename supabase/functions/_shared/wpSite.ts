@@ -90,3 +90,35 @@ export async function removePluginFromSite(siteUrl: string, token: string): Prom
     return none;
   }
 }
+
+/**
+ * Refuse to write to a WordPress site the client disconnected. Disconnect
+ * clears the plugin token, but Basic Auth credentials (a separate field)
+ * would otherwise keep working. A client with no connected_sites row at all
+ * (Basic-Auth-only) is unaffected. Returns an error message, or null if OK.
+ */
+// deno-lint-ignore no-explicit-any
+export async function wpWriteBlockedReason(supabase: any, clientId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("connected_sites")
+    .select("status")
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (data?.status === "disconnected") {
+    return "This client's WordPress site is disconnected. Reconnect it before applying fixes.";
+  }
+  return null;
+}
+
+/** Human-readable words from an upload filename, or null when it carries no meaning (IMG_4021, hashes, screenshots). */
+export function filenameHint(filename: string): string | null {
+  const base = (filename ?? "")
+    .replace(/\.[^.]+$/, "")
+    .replace(/-\d{2,5}x\d{2,5}$/i, "")   // WordPress size suffix
+    .replace(/-scaled$/i, "");
+  if (/^(img|dsc|dscn|pxl|image|photo|screenshot|screen[ -]shot|whatsapp|untitled|download|unnamed)[\s_-]*\d*/i.test(base) && !/[a-z]{4,}\s+[a-z]{4,}/i.test(base.replace(/[-_]/g, " ").replace(/^\w+\s/, ""))) return null;
+  if (/^[0-9a-f]{8,}$/i.test(base)) return null;
+  const words = base.replace(/[-_.]+/g, " ").replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+  const real = words.split(" ").filter(w => w.length >= 3);
+  return real.length >= 2 || words.length >= 10 ? words : null;
+}

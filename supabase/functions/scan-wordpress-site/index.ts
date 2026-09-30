@@ -5,6 +5,7 @@ import { callAIJson } from "../_shared/ai.ts";
 import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
 import { fetchHtml, parseOnPage } from "../_shared/seoSignals.ts";
+import { filenameHint } from "../_shared/wpSite.ts";
 
 // wp_fix_queue's field names -> the canonical seo-audit finding types that
 // cover the same underlying WordPress field. Where the canonical engine
@@ -221,6 +222,30 @@ Omit any field that does not need a fix. The keyword used in meta_title and meta
   }
 }
 
+async function generateStandaloneAlt(
+  items: { id: number; hint: string }[],
+  brandBlock: string,
+  industry: string,
+): Promise<Record<string, string>> {
+  try {
+    const result = await callAIJson<Record<string, string>>({
+      source: "scan-wordpress-site",
+      system: `You write concise, factual image alt text for a WordPress site. You cannot see the images -- only their filenames. Describe only what the filename clearly indicates; never invent details, people, or claims. If a filename is too vague to describe honestly, omit that id. Return ONLY a JSON object mapping id -> alt text (max 125 chars, no "image of"/"picture of").\n\n${brandBlock}`,
+      prompt: `Industry: ${industry}\nFilenames:\n${items.map(i => `${i.id}: ${i.hint}`).join("\n")}`,
+      maxTokens: 800,
+    });
+    const out: Record<string, string> = {};
+    for (const i of items) {
+      const v = result?.[String(i.id)];
+      if (typeof v === "string" && v.trim().length >= 5) out[String(i.id)] = v.trim().slice(0, 125);
+    }
+    return out;
+  } catch (e) {
+    console.error("generateStandaloneAlt error:", e);
+    return {};
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -409,21 +434,35 @@ serve(async (req) => {
         }
       }
 
-      // Also handle media with missing alt text (standalone, not attached to a page)
+      // Media with missing alt text that isn't attached to a scanned page.
+      // We can't see the image, so the filename is the only signal: describe
+      // it with the AI when the name actually says something, and skip the
+      // rest. A placeholder like "Image: img 4021" is worse than no
+      // suggestion -- approving it would write junk alt text to a live site.
       const standaloneMissingAlt = (scanData.media ?? [])
         .filter(m => m.missing_alt)
+        .map(m => ({ m, hint: filenameHint(m.filename) }))
+        .filter((x): x is { m: ScanData["media"][number]; hint: string } => !!x.hint)
         .slice(0, 10);
 
       if (standaloneMissingAlt.length > 0) {
-        const altRows = standaloneMissingAlt.map(m => ({
-          site_id: siteId, scan_id: scanRecord.id,
-          media_id: m.id, page_title: m.filename, page_url: m.url,
-          field: "alt_text", current_value: m.alt_text || null,
-          suggested_value: `Image: ${m.filename.replace(/[-_]/g, " ").replace(/\.[^.]+$/, "")}`,
-          status: "pending",
-        }));
-        await supabase.from("wp_fix_queue").insert(altRows);
-        fixesGenerated += altRows.length;
+        const altMap = await generateStandaloneAlt(
+          standaloneMissingAlt.map(x => ({ id: x.m.id, hint: x.hint })),
+          brandBlock,
+          industry,
+        );
+        const altRows = standaloneMissingAlt
+          .filter(x => altMap[String(x.m.id)])
+          .map(x => ({
+            site_id: siteId, scan_id: scanRecord.id,
+            media_id: x.m.id, page_title: x.m.filename, page_url: x.m.url,
+            field: "alt_text", current_value: x.m.alt_text || null,
+            suggested_value: altMap[String(x.m.id)], status: "pending",
+          }));
+        if (altRows.length > 0) {
+          await supabase.from("wp_fix_queue").insert(altRows);
+          fixesGenerated += altRows.length;
+        }
       }
     }
 

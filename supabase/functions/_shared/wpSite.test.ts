@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { isPublicSiteUrl, normalizeSiteUrl, siteUrlVariants } from "./wpSite.ts";
+import { filenameHint, isPublicSiteUrl, normalizeSiteUrl, siteUrlVariants } from "./wpSite.ts";
 
 Deno.test("normalizeSiteUrl strips wp-admin, slash, case, and adds scheme", () => {
   assertEquals(normalizeSiteUrl("https://Site.com/wp-admin/"), "https://site.com");
@@ -20,5 +20,14 @@ Deno.test("isPublicSiteUrl rejects internal hosts", () => {
   assertEquals(isPublicSiteUrl("https://site.com"), true);
   for (const u of ["http://localhost", "http://127.0.0.1", "http://169.254.169.254", "http://192.168.1.5", "http://intranet", "http://x.internal"]) {
     assertEquals(isPublicSiteUrl(u), false, u);
+  }
+});
+
+Deno.test("filenameHint keeps descriptive names, drops meaningless ones", () => {
+  assertEquals(filenameHint("team-photo-office-2024.jpg"), "team photo office");
+  assertEquals(filenameHint("red-kitchen-remodel-1024x768.webp"), "red kitchen remodel");
+  assertEquals(filenameHint("hero-banner.png"), "hero banner");
+  for (const f of ["IMG_4021.jpg", "DSC00123.JPG", "Screenshot 2024-05-01 at 10.22.11.png", "a3f9c2d81b7e4455.jpg", "image1.png", "1234.jpg", "logo.png"]) {
+    assertEquals(filenameHint(f), null, f);
   }
 });

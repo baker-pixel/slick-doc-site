@@ -121,7 +121,7 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
     setDisconnecting(true);
     try {
       const { data, error } = await supabase.functions.invoke("disconnect-site", {
-        body: { site_id: site.id },
+        body: { site_id: site.id, password: adminPassword },
       });
       if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);

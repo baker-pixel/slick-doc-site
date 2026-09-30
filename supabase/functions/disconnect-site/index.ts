@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { removePluginFromSite } from "../_shared/wpSite.ts";
+import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,7 @@ serve(async (req) => {
       });
     }
 
-    const { site_id } = await req.json();
+    const { site_id, password } = await req.json();
     if (!site_id) {
       return new Response(JSON.stringify({ error: "site_id required" }), {
         status: 400,
@@ -28,30 +29,32 @@ serve(async (req) => {
       });
     }
 
-    // Verify caller owns this site via RLS
-    const userClient = createClient(
+    const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { authorization: authHeader } } },
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: owned } = await userClient
+
+    // Authorize: an admin (session OR the admin-panel password -- RLS on a
+    // user client can't see the password case), or a portal user who owns
+    // the site's client account.
+    const { data: target } = await supabase
       .from("connected_sites")
-      .select("id")
+      .select("client_id")
       .eq("id", site_id)
       .maybeSingle();
-
-    if (!owned) {
+    if (!target) {
+      return new Response(JSON.stringify({ error: "Site not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const auth = await checkClientOrAdminAuth(req, supabase, target.client_id, password);
+    if (!auth.authorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // Use service role to update status
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     // Clear the token, not just the status label -- otherwise a
     // "disconnected" site keeps working forever (confirmed live: a fix
