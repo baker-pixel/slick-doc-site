@@ -157,7 +157,9 @@ function trimQuotedReply(text: string): string {
 
 export function extractReplySnippet(raw: Uint8Array): string | null {
   try {
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(raw);
+    // IMAP delivers CRLF; the MIME splitter below keys on "\n\n", so without
+    // normalizing, header/body were never separated and every snippet was null.
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(raw).replace(/\r\n/g, "\n");
     const parts: MimePart[] = [];
     collectTextParts(text, parts);
     const preferred = parts.find((p) => p.contentType === "text/plain") ?? parts.find((p) => p.contentType === "text/html");

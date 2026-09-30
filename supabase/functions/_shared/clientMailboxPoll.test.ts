@@ -100,3 +100,13 @@ Deno.test("extractReplySnippet: truncates to 4000 chars", () => {
   assertEquals(out.length, 4000);
   assertStringIncludes(out, "aaaa");
 });
+
+
+Deno.test("extractReplySnippet: handles CRLF multipart/alternative (Gmail-style reply)", () => {
+  const raw = [
+    "From: a@b.com", "Content-Type: multipart/alternative; boundary=\"BB\"", "", "--BB",
+    "Content-Type: text/plain; charset=UTF-8", "", "Thanks, sounds good!", "", "On Tue, Sep 30, 2026 at 1:10 PM Ethan <e@x.com> wrote:", "> original text", "--BB",
+    "Content-Type: text/html; charset=UTF-8", "", "<div>Thanks, sounds good!</div>", "--BB--", "",
+  ].join("\r\n");
+  assertEquals(extractReplySnippet(new TextEncoder().encode(raw)), "Thanks, sounds good!");
+});
