@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { isServiceRequest } from "../_shared/auth.ts";
+import { checkInternalSecret, isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/icp.ts";
 import { getConversionWins } from "../_shared/outcomes.ts";
@@ -17,15 +17,16 @@ serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  // Auth check
-  if (!isServiceRequest(req)) {
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  // Callers: other edge functions (service key) and the sweep cron
+  // (x-internal-secret "pipeline_cron"). Never a bare anon key.
+  if (!isServiceRequest(req) && !(await checkInternalSecret(req, supabase as any, "pipeline_cron"))) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  const supabase = createClient(supabaseUrl, serviceKey);
 
   let processed = 0;
   let fromForm = 0;
