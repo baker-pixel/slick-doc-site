@@ -38,6 +38,7 @@ interface ProspectData {
   // falls back to a thinner report (just the headline score + weaknesses)
   // for those rather than crashing or showing fabricated zeros.
   analysis_snapshot: AnalysisSnapshot | null;
+  report_token: string;
 }
 
 // --- Same status/priority mapping ReportConfig.ts uses for the web report and the
@@ -181,9 +182,12 @@ function buildEmailHtml(prospect: ProspectData): string {
       </tr></table>
     </div>
 
-    <!-- Primary CTA -->
-    <div style="text-align:center;margin:8px 0 28px;">
-      <a href="${APP_URL}/schedule" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">Book My Free Strategy Call</a>
+    <!-- Primary CTA: the online report (always resolves -- unguessable token, friendly fallback page) -->
+    <div style="text-align:center;margin:8px 0 14px;">
+      <a href="${APP_URL}/quick-report/${prospect.report_token}" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">View My Report Online</a>
+    </div>
+    <div style="text-align:center;margin:0 0 28px;">
+      <a href="${APP_URL}/schedule" style="font-size:14px;color:#E8521A;text-decoration:underline;font-weight:600;">or book my free strategy call</a>
     </div>
 
     <p style="font-size:13px;color:#8A7A6D;line-height:1.7;text-align:center;margin:0;">
@@ -218,6 +222,19 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Internal only: analyze-website calls this with the service key after a scan
+  // is saved. It used to be public (prospectId only), so anyone holding an id
+  // could trigger branded emails to that prospect.
+  const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+  if (!bearer || bearer !== Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  let claimedProspectId: string | null = null;
+
   try {
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (!resendKey) throw new Error("RESEND_API_KEY is not configured");
@@ -226,13 +243,25 @@ serve(async (req) => {
     const { prospectId } = await req.json();
     if (!prospectId) throw new Error("prospectId is required");
 
-    const { data: prospect, error: fetchError } = await supabase
+    // Atomically claim the send so a retry or double-call can't email twice.
+    const { data: claimed, error: claimError } = await supabase
       .from("prospects")
-      .select("*")
+      .update({ report_sent_at: new Date().toISOString() })
       .eq("id", prospectId)
-      .single();
+      .is("report_sent_at", null)
+      .not("analysis_snapshot", "is", null)
+      .select("*")
+      .maybeSingle();
 
-    if (fetchError || !prospect) throw new Error("Prospect not found");
+    if (claimError) throw new Error(`Failed to claim report send: ${claimError.message}`);
+    if (!claimed) {
+      console.log(`send-prospect-report: skipping ${prospectId} (already sent, missing, or no analysis yet)`);
+      return new Response(JSON.stringify({ success: true, skipped: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    claimedProspectId = prospectId;
+    const prospect = claimed;
 
     console.log(`Rendering report PDF for ${prospect.email}...`);
 
@@ -262,6 +291,29 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("send-prospect-report error:", error);
+
+    // Release the claim so a later retry can send it.
+    if (claimedProspectId) {
+      await supabase.from("prospects").update({ report_sent_at: null }).eq("id", claimedProspectId);
+    }
+    try {
+      await supabase.from("automation_alerts").insert({
+        alert_type: "function_error",
+        severity: "error",
+        title: "Quick Analysis report email failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+        source: "send-prospect-report",
+        metadata: {
+          function_name: "send-prospect-report",
+          prospect_id: claimedProspectId,
+          error_message: error instanceof Error ? error.message : "Unknown error",
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (alertErr) {
+      console.error("Failed to log alert:", alertErr);
+    }
+
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },

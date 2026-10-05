@@ -113,7 +113,7 @@ const Dashboard = () => {
           .single();
 
         if (fetchError || !submission) {
-          setError("Dashboard not found. Please check your access link.");
+          setError("We couldn't find that report");
           setLoading(false);
           return;
         }
@@ -148,12 +148,17 @@ const Dashboard = () => {
           <div className="container mx-auto px-4 text-center">
             <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-foreground mb-2">{error}</h1>
-            <p className="text-muted-foreground mb-6">
-              If you completed a gap analysis, check your email for the correct link.
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              The link may be incomplete or out of date. You can get a fresh report in about a minute, no sign-in needed.
             </p>
-            <Button asChild>
-              <Link to="/gap-analysis">Start New Gap Analysis</Link>
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button asChild>
+                <Link to="/quick-analysis">Get a free website analysis</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/gap-analysis">Take the full Gap Analysis</Link>
+              </Button>
+            </div>
           </div>
         </main>
         <Footer />

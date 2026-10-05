@@ -7,5 +7,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 export default function LegacyReportRedirect() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  return <Navigate to={token ? `/dashboard/${token}` : "/"} replace />;
+  // Older emails were sent with a literal "undefined"/"null" when the token was missing.
+  const valid = !!token && token !== "undefined" && token !== "null";
+  return <Navigate to={valid ? `/dashboard/${token}` : "/gap-analysis"} replace />;
 }

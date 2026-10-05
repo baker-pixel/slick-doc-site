@@ -5,6 +5,11 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// A missing resumeToken (e.g. inactive_lead sequences carry none) must not render as the literal "undefined" in a link.
+const validToken = (t: unknown): t is string => typeof t === "string" && t.length > 0 && t !== "undefined" && t !== "null";
+const reportUrl = (t: unknown) => validToken(t) ? `https://orangedoormarketing.com/dashboard/${t}` : "https://orangedoormarketing.com/gap-analysis";
+const resumeUrl = (t: unknown) => validToken(t) ? `https://orangedoormarketing.com/gap-analysis?token=${t}` : "https://orangedoormarketing.com/gap-analysis";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -159,7 +164,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           <li>Get actionable recommendations tailored to ${data.businessName}</li>
         </ul>
         <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/dashboard/${data.resumeToken}" 
+          <a href="${reportUrl(data.resumeToken)}" 
              style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
             View Your Report
           </a>
@@ -276,7 +281,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
         <p>No worries - life gets busy! Your progress is saved, and you can pick up right where you left off.</p>
         <p><strong>You were ${data.progress}% complete.</strong></p>
         <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/gap-analysis?token=${data.resumeToken}" 
+          <a href="${resumeUrl(data.resumeToken)}" 
              style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
             Continue Your Analysis
           </a>
@@ -298,7 +303,7 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
           <strong>What you'll get:</strong> A personalized report showing exactly where your marketing is strong and where there's opportunity to improve.
         </p>
         <p style="margin: 30px 0;">
-          <a href="https://orangedoormarketing.com/gap-analysis?token=${data.resumeToken}" 
+          <a href="${resumeUrl(data.resumeToken)}" 
              style="background: #F97316; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
             Finish Your Analysis
           </a>
@@ -501,6 +506,13 @@ const handler = async (req: Request): Promise<Response> => {
     const queuedEmails = [];
 
     for (const emailConfig of emails) {
+      // Quick-scan leads already get the real report email (with the PDF) from
+      // send-prospect-report; the generic "report is ready" email would be a
+      // duplicate whose button has no report to open.
+      if (data.leadSource === "quick_analysis" && emailConfig.template === "immediate_report") {
+        continue;
+      }
+
       let subject: string;
       let html: string;
 

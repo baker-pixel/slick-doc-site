@@ -18,6 +18,7 @@ const AboutUs = lazy(() => import("@/pages/AboutUs"));
 const ScheduleCall = lazy(() => import("@/pages/ScheduleCall"));
 const System = lazy(() => import("@/pages/System"));
 const Report = lazy(() => import("@/pages/Report"));
+const QuickReport = lazy(() => import("@/pages/QuickReport"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
 const Signup = lazy(() => import("@/pages/Signup"));
 const TierFoundation = lazy(() => import("@/pages/TierFoundation"));
@@ -63,6 +64,7 @@ function AnimatedRoutes() {
           <Route path="/pricing/transformation" element={<PageTransition><TierTransformation /></PageTransition>} />
           <Route path="/report" element={<LegacyReportRedirect />} />
           <Route path="/report/:id" element={<PageTransition><Report /></PageTransition>} />
+          <Route path="/quick-report/:token" element={<PageTransition><QuickReport /></PageTransition>} />
           <Route path="/ar-card" element={<PageTransition><ARBusinessCard /></PageTransition>} />
           <Route path="/ar-presentation" element={<ARPresentation />} />
           <Route path="/dashboard/:token" element={<PageTransition><Dashboard /></PageTransition>} />

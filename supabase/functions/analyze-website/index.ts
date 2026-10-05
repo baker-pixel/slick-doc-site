@@ -139,6 +139,18 @@ serve(async (req) => {
 
     const audit = await auditWebsite(url);
     if (!audit) {
+      // The lead is already saved but got no report -- surface it so someone
+      // can follow up instead of the visitor silently hearing nothing.
+      if (prospectId) {
+        await supabase.from("automation_alerts").insert({
+          alert_type: "function_error",
+          severity: "warning",
+          title: "Quick Analysis could not fetch the site",
+          message: `Could not scan ${url} for ${prospectEmail}; no report was sent.`,
+          source: "analyze-website",
+          metadata: { function_name: "analyze-website", prospect_id: prospectId, url, timestamp: new Date().toISOString() },
+        });
+      }
       return new Response(
         JSON.stringify({ error: "Failed to fetch website. Please check the URL and try again." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -332,7 +344,31 @@ Provide your analysis as a valid JSON object.`;
         console.error("AI readiness score insert error:", readinessError);
       }
 
-      // Nurture: send-prospect-report (called separately by the frontend) is a
+      // Report email (PDF): sent from here, not from the visitor's browser, so
+      // closing the tab or losing signal right after the scan can't swallow it.
+      // send-prospect-report is idempotent (report_sent_at) and logs its own
+      // failures to automation_alerts. Runs in the background so the visitor
+      // isn't kept waiting on PDF rendering.
+      if (!updateError) {
+        const reportSend = fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-prospect-report`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+          },
+          body: JSON.stringify({ prospectId }),
+        })
+          .then(async (r) => {
+            if (!r.ok) console.error("send-prospect-report failed:", r.status, await r.text());
+          })
+          .catch((e) => console.error("send-prospect-report request error:", e));
+        // deno-lint-ignore no-explicit-any
+        const runtime = (globalThis as any).EdgeRuntime;
+        if (runtime?.waitUntil) runtime.waitUntil(reportSend);
+        else await reportSend;
+      }
+
+      // Nurture: the report email above is a
       // one-off email -- nothing else enrolls a quick-scan lead into any
       // follow-up sequence, so today they get one email and go stranded. Reuse
       // the same generic sequence full-form gap-analysis leads already get
