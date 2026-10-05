@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { acceptFailureMessage, acceptInvitation, fetchInvitationByToken } from "@/lib/invitations";
 
 export default function ClientPortalAuth() {
   const navigate = useNavigate();
@@ -89,15 +90,9 @@ export default function ClientPortalAuth() {
           // This handles the common case where the confirmation link opens in a new tab
           // (sessionStorage is not shared across tabs).
           setTimeout(async () => {
-            const { data: inv } = await supabase
-              .from("client_invitations")
-              .select("id, email, first_name, last_name, client_account_id")
-              .eq("token", inviteToken)
-              .is("accepted_at", null)
-              .gt("expires_at", new Date().toISOString())
-              .maybeSingle();
+            const inv = await fetchInvitationByToken(inviteToken).catch(() => null);
             if (inv) {
-              finalizePortalSetup(session.user.id, session.user.email, inv);
+              finalizePortalSetup(session.user.id, session.user.email, { ...inv, token: inviteToken });
             } else {
               checkClientPortalAccess(session.user.id, session.user.email);
             }
@@ -130,7 +125,7 @@ export default function ClientPortalAuth() {
   const finalizePortalSetup = async (
     userId: string,
     sessionEmail: string | null | undefined,
-    pending: { id: string; client_account_id: string; first_name: string | null; last_name: string | null; email?: string | null }
+    pending: { id: string; client_account_id: string; first_name: string | null; last_name: string | null; email?: string | null; token?: string | null }
   ) => {
     // Guard against finalizing someone else's invite under the wrong,
     // already-signed-in session -- e.g. this SIGNED_IN event fires for a
@@ -150,41 +145,16 @@ export default function ClientPortalAuth() {
       return;
     }
     try {
-      const { data: existing } = await supabase
-        .from("client_portal_users")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("client_account_id", pending.client_account_id)
-        .maybeSingle();
-
-      if (!existing) {
-        const { error: portalError } = await supabase
-          .from("client_portal_users")
-          .insert({
-            user_id: userId,
-            client_account_id: pending.client_account_id,
-            first_name: pending.first_name,
-            last_name: pending.last_name,
-            invited_by: "admin",
-            last_login_at: new Date().toISOString(),
-          });
-        if (portalError && portalError.code !== "23505") {
-          console.error("Portal user creation error (post-confirm):", portalError);
-        }
-      } else {
-        await supabase.from("client_portal_users")
-          .update({ last_login_at: new Date().toISOString() })
-          .eq("id", existing.id);
+      const result = await acceptInvitation(pending.token ?? inviteToken);
+      if (!result.ok) {
+        console.error("Finalize portal setup failed:", result);
+        toast({
+          title: "Portal setup failed",
+          description: acceptFailureMessage(result.reason),
+          variant: "destructive",
+        });
+        return;
       }
-
-      await supabase
-        .from("user_roles")
-        .upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
-
-      await supabase
-        .from("client_invitations")
-        .update({ accepted_at: new Date().toISOString() })
-        .eq("id", pending.id);
 
       sessionStorage.removeItem("pending_invitation");
 
@@ -213,36 +183,9 @@ export default function ClientPortalAuth() {
   // happened for support@innermetrix.com).
   const tryLinkPendingInvitation = async (userId: string, userEmail: string | null | undefined): Promise<boolean> => {
     if (!userEmail) return false;
-    const { data: inv } = await supabase
-      .from("client_invitations")
-      .select("id, client_account_id, first_name, last_name")
-      .ilike("email", userEmail)
-      .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!inv) return false;
-
-    const { error: portalError } = await supabase
-      .from("client_portal_users")
-      .insert({
-        user_id: userId,
-        client_account_id: inv.client_account_id,
-        first_name: inv.first_name,
-        last_name: inv.last_name,
-        invited_by: "admin",
-        last_login_at: new Date().toISOString(),
-      });
-    if (portalError && portalError.code !== "23505") {
-      console.error("Self-heal portal user creation error:", portalError);
-      return false;
-    }
-
-    await supabase.from("user_roles").upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
-    await supabase.from("client_invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
-    await seedWorkflowSafe(inv.client_account_id);
+    const result = await acceptInvitation();
+    if (!result.ok) return false;
+    await seedWorkflowSafe(result.clientAccountId);
     return true;
   };
 
@@ -302,13 +245,13 @@ export default function ClientPortalAuth() {
   const loadInvitation = async (token: string) => {
     setIsAcceptingInvite(true);
     
-    const { data, error } = await supabase
-      .from("client_invitations")
-      .select("id, email, first_name, last_name, client_account_id")
-      .eq("token", token)
-      .is("accepted_at", null)
-      .gt("expires_at", new Date().toISOString())
-      .maybeSingle();
+    let data: Awaited<ReturnType<typeof fetchInvitationByToken>> = null;
+    let error: unknown = null;
+    try {
+      data = await fetchInvitationByToken(token);
+    } catch (e) {
+      error = e;
+    }
 
     if (error || !data) {
       const reason = error
@@ -481,59 +424,17 @@ export default function ClientPortalAuth() {
           return;
         }
 
-        const { data: existingPortalUser } = await supabase
-          .from("client_portal_users")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("client_account_id", invitation.client_account_id)
-          .maybeSingle();
+        const accepted = await acceptInvitation(inviteToken);
 
-        if (!existingPortalUser) {
-          const { error: portalError } = await supabase
-            .from("client_portal_users")
-            .insert({
-              user_id: userId,
-              client_account_id: invitation.client_account_id,
-              first_name: invitation.first_name,
-              last_name: invitation.last_name,
-              invited_by: "admin",
-              last_login_at: new Date().toISOString(),
-            });
-
-          if (portalError) {
-            console.error("Portal user creation error:", portalError);
-            const desc = portalError.code === "42501" || portalError.message?.includes("row-level security")
-              ? "A permissions issue prevented your portal setup. This has been logged — please try again in a moment."
-              : portalError.code === "23505"
-              ? "Your portal access already exists. Try signing in instead."
-              : `Portal setup failed: ${portalError.message || "Unknown error"}. Please try again or contact your account manager.`;
-            toast({
-              title: "Portal Setup Failed",
-              description: desc,
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
-          }
-        } else {
-          await supabase.from("client_portal_users")
-            .update({ last_login_at: new Date().toISOString() })
-            .eq("id", existingPortalUser.id);
+        if (!accepted.ok) {
+          toast({
+            title: "Portal Setup Failed",
+            description: acceptFailureMessage(accepted.reason),
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
         }
-
-        // Ensure client role exists
-        try {
-          await supabase
-            .from("user_roles")
-            .upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
-        } catch (roleErr) {
-          console.error("Role upsert error (existing user):", roleErr);
-        }
-
-        await supabase
-          .from("client_invitations")
-          .update({ accepted_at: new Date().toISOString() })
-          .eq("id", invitation.id);
 
         await seedWorkflowSafe(invitation.client_account_id);
 
@@ -606,6 +507,7 @@ export default function ClientPortalAuth() {
             first_name: invitation.first_name,
             last_name: invitation.last_name,
             email: invitation.email,
+            token: inviteToken,
           })
         );
         setConfirmEmailSent(true);
@@ -617,48 +519,17 @@ export default function ClientPortalAuth() {
         return;
       }
 
-      const { error: portalError } = await supabase
-        .from("client_portal_users")
-        .insert({
-          user_id: userId,
-          client_account_id: invitation.client_account_id,
-          first_name: invitation.first_name,
-          last_name: invitation.last_name,
-          invited_by: "admin",
-          last_login_at: new Date().toISOString(),
+      const accepted = await acceptInvitation(inviteToken);
+
+      if (!accepted.ok) {
+        toast({
+          title: "Portal Setup Failed",
+          description: acceptFailureMessage(accepted.reason),
+          variant: "destructive",
         });
-
-      if (portalError) {
-        // If duplicate (23505), user already has access — proceed
-        if (portalError.code === "23505") {
-          console.warn("Portal user already exists, proceeding.");
-        } else {
-          console.error("Portal user creation error:", portalError);
-          const desc = portalError.code === "42501" || portalError.message?.includes("row-level security")
-            ? "A permissions issue prevented your portal setup. This has been logged — please try again in a moment."
-            : `Portal setup failed: ${portalError.message || "Unknown error"}. Your login was created — contact your admin with your email address to restore portal access.`;
-          toast({
-            title: "Portal Setup Failed",
-            description: desc,
-            variant: "destructive",
-          });
-          setLoading(false);
-          return;
-        }
+        setLoading(false);
+        return;
       }
-
-      try {
-        await supabase
-          .from("user_roles")
-          .upsert({ user_id: userId, role: "client" }, { onConflict: "user_id,role" });
-      } catch (roleErr) {
-        console.error("Role upsert error:", roleErr);
-      }
-
-      await supabase
-        .from("client_invitations")
-        .update({ accepted_at: new Date().toISOString() })
-        .eq("id", invitation.id);
 
       await seedWorkflowSafe(invitation.client_account_id);
 

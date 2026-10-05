@@ -67,10 +67,21 @@ serve(async (req) => {
     }
 
     // Prefer explicit portalOrigin; fall back to env var; fall back to request origin
-    const origin = portalOrigin
-      || Deno.env.get("CLIENT_PORTAL_URL")
-      || req.headers.get("origin")
-      || "https://client.orangedoormarketing.com";
+    // Only trust an origin on our own domain (or localhost for dev) -- a request from the old
+    // Lovable preview host would otherwise bake slick-doc-site.lovable.app into the invite email.
+    const DEFAULT_PORTAL = "https://client.orangedoormarketing.com";
+    const trusted = (o?: string | null) => {
+      if (!o) return null;
+      try {
+        const u = new URL(o);
+        const ok = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "client.orangedoormarketing.com";
+        return ok ? u.origin : null;
+      } catch { return null; }
+    };
+    const origin = trusted(portalOrigin)
+      || trusted(Deno.env.get("CLIENT_PORTAL_URL"))
+      || trusted(req.headers.get("origin"))
+      || DEFAULT_PORTAL;
     const inviteLink = `${origin}/portal/auth?invite=${token}`;
 
     const greeting = firstName ? `Hi ${firstName}` : "Hi there";

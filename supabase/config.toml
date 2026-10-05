@@ -195,5 +195,14 @@ verify_jwt = false
 [functions.send-approval-reminders]
 verify_jwt = true
 
+# Public token lookup for the accept-invite screen (no session yet).
+[functions.get-invitation]
+verify_jwt = false
+
+# Validates the caller's JWT itself (needs the user's email), so gateway JWT
+# verification is off to allow the same-device/other-device confirmation flows.
+[functions.accept-invitation]
+verify_jwt = false
+
 [functions.get-prospect-report]
 verify_jwt = false
