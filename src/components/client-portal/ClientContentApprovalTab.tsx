@@ -1,25 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Loader2, FileCheck, CheckCircle, XCircle, Clock, MessageSquare,
-  FileText, Image, Mail, Share2, PenTool, Video, Megaphone, Calendar,
-  ClipboardList, Sparkles, Target, Hash, Link, AtSign, Type, AlignLeft,
-  Facebook, Instagram, Linkedin, Twitter, LayoutGrid, CheckCheck,
-} from "lucide-react";
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Loader2, FileCheck, CheckCheck, PartyPopper, Facebook, Instagram, Linkedin, Twitter, LayoutGrid } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
-import { sanitizeHtml } from "@/lib/sanitize";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
-import { format } from "date-fns";
+import { hasCaption } from "./approvals/ContentRenderer";
+import { ApprovalCard } from "./approvals/ApprovalCard";
+import { ApprovalReviewDialog, type ReviewItem } from "./approvals/ApprovalReviewDialog";
+import { approvalDisplay, formatWhen, relativeUntil, type ApprovalBucket, type ApprovalLive } from "./approvals/approvalStatus";
+import type { PreviewPlatform } from "./approvals/SocialPostPreview";
 
 interface ContentApproval {
   id: string;
@@ -34,7 +31,18 @@ interface ContentApproval {
   publish_status: string | null;
   platform: string | null;
   content_id: string | null;
-  image_url?: string | null;
+  scheduled_for: string | null;
+}
+
+interface CalendarRow {
+  id: string;
+  content_id: string | null;
+  platform: string | null;
+  status: string;
+  scheduled_for: string | null;
+  published_at: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface ClientContentApprovalTabProps {
@@ -42,9 +50,9 @@ interface ClientContentApprovalTabProps {
   onTabChange?: (tab: string) => void;
 }
 
-type PlatformFilter = "all" | "facebook" | "instagram" | "twitter" | "linkedin" | "other";
+type PlatformFilter = "all" | PreviewPlatform;
 
-const PLATFORM_CONFIG: Record<Exclude<PlatformFilter, "all">, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+const PLATFORM_CONFIG: Record<PreviewPlatform, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   facebook: { label: "Facebook", icon: Facebook },
   instagram: { label: "Instagram", icon: Instagram },
   twitter: { label: "X", icon: Twitter },
@@ -52,488 +60,42 @@ const PLATFORM_CONFIG: Record<Exclude<PlatformFilter, "all">, { label: string; i
   other: { label: "Other", icon: LayoutGrid },
 };
 
-function normalizePlatform(platform: string | null): Exclude<PlatformFilter, "all"> {
+function normalizePlatform(platform: string | null): PreviewPlatform {
   const p = (platform || "").toLowerCase();
   if (p === "facebook" || p === "instagram" || p === "linkedin") return p;
   if (p === "twitter" || p === "x") return "twitter";
   return "other";
 }
 
-// Content type configurations with icons, colors, and descriptions
-const contentTypeConfig: Record<string, {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  color: string;
-  bgColor: string;
-  description: string;
-}> = {
-  "blog_post": {
-    icon: FileText,
-    label: "Blog Post",
-    color: "text-blue-600",
-    bgColor: "bg-blue-100",
-    description: "A blog article written for your website to improve SEO and engage visitors"
-  },
-  "social_media": {
-    icon: Share2,
-    label: "Social Media Post",
-    color: "text-purple-600",
-    bgColor: "bg-purple-100",
-    description: "Content designed for your social media channels"
-  },
-  // DB stores social_post — alias to social_media config
-  "social_post": {
-    icon: Share2,
-    label: "Social Media Post",
-    color: "text-purple-600",
-    bgColor: "bg-purple-100",
-    description: "Content designed for your social media channels"
-  },
-  "email": {
-    icon: Mail,
-    label: "Email Campaign",
-    color: "text-green-600",
-    bgColor: "bg-green-100",
-    description: "Email content for your marketing campaigns or newsletters"
-  },
-  // DB stores email_copy and email_sequence — alias both to email config
-  "email_copy": {
-    icon: Mail,
-    label: "Email Campaign",
-    color: "text-green-600",
-    bgColor: "bg-green-100",
-    description: "Email content for your marketing campaigns or newsletters"
-  },
-  "email_sequence": {
-    icon: Mail,
-    label: "Email Sequence",
-    color: "text-green-600",
-    bgColor: "bg-green-100",
-    description: "A series of emails for your marketing campaigns or nurture flows"
-  },
-  "ad_copy": {
-    icon: Megaphone,
-    label: "Ad Copy",
-    color: "text-orange-600",
-    bgColor: "bg-orange-100",
-    description: "Advertising copy for paid campaigns on Google, Facebook, etc."
-  },
-  "website_copy": { 
-    icon: PenTool, 
-    label: "Website Copy", 
-    color: "text-indigo-600",
-    bgColor: "bg-indigo-100",
-    description: "Content for your website pages to improve conversions"
-  },
-  "video_script": { 
-    icon: Video, 
-    label: "Video Script", 
-    color: "text-red-600",
-    bgColor: "bg-red-100",
-    description: "Script for video content production"
-  },
-  "graphic_design": { 
-    icon: Image, 
-    label: "Graphic Design", 
-    color: "text-pink-600",
-    bgColor: "bg-pink-100",
-    description: "Visual design assets for marketing materials"
-  },
-  "content_calendar": { 
-    icon: Calendar, 
-    label: "Content Calendar", 
-    color: "text-teal-600",
-    bgColor: "bg-teal-100",
-    description: "Planned content schedule for upcoming campaigns"
-  },
-  "strategy": { 
-    icon: Target, 
-    label: "Strategy Document", 
-    color: "text-amber-600",
-    bgColor: "bg-amber-100",
-    description: "Marketing strategy and planning documentation"
-  },
-  "report": { 
-    icon: ClipboardList, 
-    label: "Performance Report", 
-    color: "text-cyan-600",
-    bgColor: "bg-cyan-100",
-    description: "Analytics and performance reporting"
-  },
-  "default": { 
-    icon: FileCheck, 
-    label: "Content", 
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-    description: "Marketing content for your review"
-  }
-};
+const BUCKETS: { key: ApprovalBucket; label: string; empty: string }[] = [
+  { key: "review", label: "Needs review", empty: "You're all caught up — nothing is waiting for your review." },
+  { key: "upcoming", label: "Upcoming", empty: "Nothing approved and waiting to go out." },
+  { key: "live", label: "Published", empty: "Nothing published yet." },
+  { key: "attention", label: "Needs attention", empty: "Nothing needs attention." },
+];
 
-function getContentTypeConfig(type: string) {
-  const normalizedType = type.toLowerCase().replace(/\s+/g, '_');
-  return contentTypeConfig[normalizedType] || contentTypeConfig.default;
-}
-
-// Helpers to clean markdown-style asterisks/brackets from text
-function cleanMarkdownMarks(text: string): string {
-  return text
-    .replace(/\*\*/g, '')
-    .replace(/(?<!\*)\*(?!\*)/g, '')
-    .replace(/\[([^\]]+)\]/g, '$1');
-}
-
-function deepCleanStrings(value: any): any {
-  if (typeof value === 'string') return cleanMarkdownMarks(value);
-  if (Array.isArray(value)) return value.map(deepCleanStrings);
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = deepCleanStrings(v);
-    return out;
-  }
-  return value;
-}
-
-// Helper to parse JSON content safely
-function parseContentSafely(content: string | null): any {
-  if (!content) return null;
-  try {
-    return JSON.parse(content);
-  } catch {
-    return content;
-  }
-}
-
-// Smart content renderer component
-function ContentRenderer({ content, contentType }: { content: string | null; contentType: string }) {
-  if (!content) return null;
-
-  const parsedRaw = parseContentSafely(content);
-  const parsed = deepCleanStrings(parsedRaw);
-
-  // If it's a string (not JSON), render it nicely
-  if (typeof parsed === 'string') {
-    // Check if it looks like HTML
-    if (parsed.includes('<') && parsed.includes('>')) {
-      return (
-        <div 
-          className="prose prose-sm max-w-none text-foreground"
-          dangerouslySetInnerHTML={{ __html: sanitizeHtml(parsed) }}
-        />
-      );
-    }
-    // Plain text
-    return (
-      <div className="whitespace-pre-wrap text-sm text-foreground leading-relaxed">
-        {parsed}
-      </div>
-    );
-  }
-  
-  // Render based on content type and structure
-  const normalizedType = contentType.toLowerCase().replace(/\s+/g, '_');
-  
-  // Email content
-  if (['email', 'email_copy', 'email_sequence'].includes(normalizedType) || parsed.subject || parsed.body) {
-    return <EmailContentView data={parsed} />;
-  }
-
-  // Social media content
-  if (['social_media', 'social_post'].includes(normalizedType) || parsed.caption || parsed.post || parsed.platform) {
-    return <SocialMediaContentView data={parsed} />;
-  }
-
-  // Blog post content
-  if (normalizedType === 'blog_post' || parsed.headline || parsed.article || parsed.body) {
-    return <BlogPostContentView data={parsed} />;
-  }
-
-  // Ad copy content
-  if (normalizedType === 'ad_copy' || parsed.headline || parsed.description || parsed.cta) {
-    return <AdCopyContentView data={parsed} />;
-  }
-  
-  // Generic structured content
-  return <GenericContentView data={parsed} />;
-}
-
-// Email content view
-// Mirrors supabase/functions/_shared/captionGate.ts: empty/placeholder posts can't be approved.
-function hasCaption(a: { full_content: string | null; content_preview: string | null }): boolean {
-  const ok = (t: string | null) => {
-    const v = (t ?? "").trim();
-    return v.length >= 15 && !/^\[auto-generated placeholder/i.test(v);
-  };
-  return ok(a.full_content) || ok(a.content_preview);
-}
-
-function EmailContentView({ data }: { data: any }) {
-  return (
-    <div className="space-y-4">
-      {data.subject && (
-        <div className="bg-muted/50 rounded-lg p-4 border-l-4 border-l-green-500">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Mail className="h-3 w-3" />
-            <span>Subject Line</span>
-          </div>
-          <p className="font-semibold text-foreground">{data.subject}</p>
-        </div>
-      )}
-      
-      {data.preheader && (
-        <div className="bg-muted/30 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Type className="h-3 w-3" />
-            <span>Preview Text</span>
-          </div>
-          <p className="text-sm text-muted-foreground italic">{data.preheader}</p>
-        </div>
-      )}
-      
-      {(data.body || data.content || data.html) && (
-        <div className="bg-background rounded-lg border p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-            <AlignLeft className="h-3 w-3" />
-            <span>Email Body</span>
-          </div>
-          <div className="prose prose-sm max-w-none text-foreground">
-            {typeof (data.body || data.content || data.html) === 'string' && 
-             (data.body || data.content || data.html).includes('<') ? (
-              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.body || data.content || data.html) }} />
-            ) : (
-              <p className="whitespace-pre-wrap">{data.body || data.content || data.html}</p>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {data.cta && (
-        <div className="flex items-center gap-2">
-          <div className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium">
-            {data.cta}
-          </div>
-          <span className="text-xs text-muted-foreground">Call-to-action button</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Social media content view
-function SocialMediaContentView({ data }: { data: any }) {
-  return (
-    <div className="space-y-4">
-      {data.platform && (
-        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-          <Share2 className="h-3 w-3 mr-1" />
-          {data.platform}
-        </Badge>
-      )}
-      
-      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border">
-        <div className="space-y-3">
-          {(data.caption || data.post || data.content || data.text) && (
-            <p className="text-foreground whitespace-pre-wrap leading-relaxed">
-              {data.caption || data.post || data.content || data.text}
-            </p>
-          )}
-          
-          {data.hashtags && (
-            <div className="flex flex-wrap gap-1">
-              {(Array.isArray(data.hashtags) ? data.hashtags : data.hashtags.split(/\s+/)).map((tag: string, i: number) => (
-                <span key={i} className="text-purple-600 text-sm">
-                  {tag.startsWith('#') ? tag : `#${tag}`}
-                </span>
-              ))}
-            </div>
-          )}
-          
-          {data.image_description && (
-            <div className="flex items-start gap-2 bg-white/60 rounded-lg p-3">
-              <Image className="h-4 w-4 text-muted-foreground mt-0.5" />
-              <div>
-                <span className="text-xs text-muted-foreground block mb-1">Suggested Image</span>
-                <p className="text-sm text-foreground">{data.image_description}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {data.link && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link className="h-4 w-4" />
-          <span className="truncate">{data.link}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Blog post content view
-function BlogPostContentView({ data }: { data: any }) {
-  return (
-    <div className="space-y-4">
-      {(data.headline || data.title) && (
-        <div className="border-l-4 border-l-blue-500 pl-4">
-          <span className="text-xs text-muted-foreground block mb-1">Headline</span>
-          <h3 className="text-xl font-bold text-foreground">{data.headline || data.title}</h3>
-        </div>
-      )}
-      
-      {data.meta_description && (
-        <div className="bg-blue-50 rounded-lg p-3">
-          <span className="text-xs text-muted-foreground block mb-1">SEO Meta Description</span>
-          <p className="text-sm text-foreground">{data.meta_description}</p>
-        </div>
-      )}
-      
-      {(data.article || data.body || data.content) && (
-        <div className="bg-background rounded-lg border p-4">
-          <span className="text-xs text-muted-foreground block mb-3">Article Content</span>
-          <div className="prose prose-sm max-w-none text-foreground">
-            {typeof (data.article || data.body || data.content) === 'string' &&
-             (data.article || data.body || data.content).includes('<') ? (
-              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.article || data.body || data.content) }} />
-            ) : (
-              <p className="whitespace-pre-wrap">{data.article || data.body || data.content}</p>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {data.keywords && (
-        <div className="flex flex-wrap gap-1">
-          <span className="text-xs text-muted-foreground mr-2">Keywords:</span>
-          {(Array.isArray(data.keywords) ? data.keywords : data.keywords.split(',')).map((kw: string, i: number) => (
-            <Badge key={i} variant="secondary" className="text-xs">{kw.trim()}</Badge>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Ad copy content view
-function AdCopyContentView({ data }: { data: any }) {
-  return (
-    <div className="space-y-4">
-      <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-4 border border-orange-100">
-        {data.platform && (
-          <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-200 mb-3">
-            <Megaphone className="h-3 w-3 mr-1" />
-            {data.platform} Ad
-          </Badge>
-        )}
-        
-        <div className="space-y-3">
-          {(data.headline || data.title) && (
-            <div>
-              <span className="text-xs text-muted-foreground block mb-1">Headline</span>
-              <p className="font-bold text-lg text-foreground">{data.headline || data.title}</p>
-            </div>
-          )}
-          
-          {(data.description || data.body || data.text) && (
-            <div>
-              <span className="text-xs text-muted-foreground block mb-1">Description</span>
-              <p className="text-foreground">{data.description || data.body || data.text}</p>
-            </div>
-          )}
-          
-          {data.cta && (
-            <div className="pt-2">
-              <span className="text-xs text-muted-foreground block mb-1">Call-to-Action</span>
-              <span className="inline-block bg-orange-500 text-white px-4 py-2 rounded font-medium text-sm">
-                {data.cta}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {data.targeting && (
-        <div className="bg-muted/30 rounded-lg p-3">
-          <span className="text-xs text-muted-foreground block mb-1">Target Audience</span>
-          <p className="text-sm text-foreground">{data.targeting}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Generic content view for unknown structures
-function GenericContentView({ data }: { data: any }) {
-  const renderValue = (value: any, depth = 0): React.ReactNode => {
-    if (value === null || value === undefined) return null;
-    
-    if (typeof value === 'string') {
-      if (value.length > 100) {
-        return <p className="whitespace-pre-wrap text-foreground">{value}</p>;
-      }
-      return <span className="text-foreground">{value}</span>;
-    }
-    
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      return <span className="text-foreground font-medium">{String(value)}</span>;
-    }
-    
-    if (Array.isArray(value)) {
-      if (value.every(v => typeof v === 'string')) {
-        return (
-          <div className="flex flex-wrap gap-1">
-            {value.map((v, i) => (
-              <Badge key={i} variant="secondary" className="text-xs">{v}</Badge>
-            ))}
-          </div>
-        );
-      }
-      return (
-        <ul className="space-y-2 list-disc list-inside">
-          {value.map((v, i) => (
-            <li key={i}>{renderValue(v, depth + 1)}</li>
-          ))}
-        </ul>
-      );
-    }
-    
-    if (typeof value === 'object') {
-      return (
-        <div className={`space-y-3 ${depth > 0 ? 'pl-4 border-l-2 border-muted' : ''}`}>
-          {Object.entries(value).map(([key, val]) => {
-            const label = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
-            return (
-              <div key={key}>
-                <span className="text-xs text-muted-foreground capitalize block mb-1">{label}</span>
-                {renderValue(val, depth + 1)}
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-    
-    return null;
-  };
-  
-  return (
-    <div className="bg-muted/20 rounded-lg p-4 border">
-      {renderValue(data)}
-    </div>
-  );
-}
+const REFRESH_MS = 60_000;
 
 export default function ClientContentApprovalTab({ clientAccountId, onTabChange }: ClientContentApprovalTabProps) {
   const queryClient = useQueryClient();
   const [approvals, setApprovals] = useState<ContentApproval[]>([]);
+  const [calendar, setCalendar] = useState<CalendarRow[]>([]);
+  const [businessName, setBusinessName] = useState("Your business");
   const [loading, setLoading] = useState(true);
-  const [selectedApproval, setSelectedApproval] = useState<ContentApproval | null>(null);
-  const [feedback, setFeedback] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [bulkApproving, setBulkApproving] = useState(false);
+  const [confirmBulk, setConfirmBulk] = useState(false);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
+  const [bucket, setBucket] = useState<ApprovalBucket | null>(null);
   // Whether the client_approval onboarding step is unlocked but not yet complete
   // (draft is being generated in the background — show helpful empty state instead of blank)
   const [approvalStepPending, setApprovalStepPending] = useState(false);
+
+  useEffect(() => {
+    supabase.from("client_accounts").select("business_name").eq("id", clientAccountId).maybeSingle()
+      .then(({ data }) => { if (data?.business_name) setBusinessName(data.business_name); });
+  }, [clientAccountId]);
 
   useEffect(() => {
     // Check if the client_approval workflow step is pending (onboarding step 5)
@@ -557,297 +119,230 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
       });
   }, [clientAccountId]);
 
-  useEffect(() => {
-    fetchApprovals();
-
-    const channel = supabase
-      .channel('content-approvals-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'content_approvals',
-          filter: `client_account_id=eq.${clientAccountId}`,
-        },
-        () => {
-          fetchApprovals();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [clientAccountId]);
-
-  const fetchApprovals = async () => {
+  const fetchApprovals = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("content_approvals")
-        .select("*")
-        .eq("client_account_id", clientAccountId)
-        .order("submitted_at", { ascending: false });
-
+      const [{ data, error }, { data: calRows, error: calError }] = await Promise.all([
+        supabase.from("content_approvals").select("*").eq("client_account_id", clientAccountId).order("submitted_at", { ascending: false }),
+        // content_approvals has no image or real publish state of its own --
+        // both live on the calendar row (publish_status there is set to
+        // "queued" once at approval time and never updated).
+        supabase.from("content_calendar")
+          .select("id, content_id, platform, status, scheduled_for, published_at, error_message, metadata")
+          .eq("client_account_id", clientAccountId),
+      ]);
       if (error) throw error;
-      const rows = (data || []) as ContentApproval[];
-
-      // content_approvals has no image column of its own -- the image
-      // (when one exists) lives on content_calendar.metadata.image_url,
-      // matched via the shared content_id. A live join rather than a copy
-      // made at approval-creation time, since images are often still
-      // generating (via the nightly image batch) when the approval is
-      // first created.
-      //
-      // publish_status is the same story: handle-approval sets it to
-      // "queued" once and nothing ever updates it again -- the real outcome
-      // (published/failed) only ever lands on content_calendar.status. Same
-      // live join, so the badge doesn't get stuck on "Publishing..." forever.
-      //
-      // Two link paths exist because handle-approval has two: rows that came
-      // through fill-scheduled-content carry a content_id FK, but rows with
-      // no generated_content backing it (generate-approval-draft's intro
-      // post, run-ai-batch's automated output) never get one -- handle-approval
-      // links those to content_calendar via metadata.content_approval_id
-      // instead. Skipping that second path here is exactly what left old
-      // approvals stuck on "Publishing..." forever.
-      const contentIds = [...new Set(rows.map((r) => r.content_id).filter(Boolean))] as string[];
-      const approvalIdsWithoutContentId = rows.filter((r) => !r.content_id).map((r) => r.id);
-      let imageByContentId: Record<string, string> = {};
-      let liveStatusByContentId: Record<string, string> = {};
-      let imageByApprovalId: Record<string, string> = {};
-      let liveStatusByApprovalId: Record<string, string> = {};
-      if (contentIds.length > 0) {
-        const { data: calRows } = await supabase
-          .from("content_calendar")
-          .select("content_id, metadata, status")
-          .in("content_id", contentIds);
-        imageByContentId = Object.fromEntries(
-          (calRows || [])
-            .map((c: any) => [c.content_id, (c.metadata as { image_url?: string } | null)?.image_url])
-            .filter(([, url]) => !!url)
-        );
-        liveStatusByContentId = Object.fromEntries(
-          (calRows || [])
-            .filter((c: any) => c.status === "published" || c.status === "failed")
-            .map((c: any) => [c.content_id, c.status])
-        );
-      }
-      if (approvalIdsWithoutContentId.length > 0) {
-        const { data: calRowsByApproval } = await supabase
-          .from("content_calendar")
-          .select("metadata, status")
-          .in("metadata->>content_approval_id", approvalIdsWithoutContentId);
-        imageByApprovalId = Object.fromEntries(
-          (calRowsByApproval || [])
-            .map((c: any) => [(c.metadata as { content_approval_id?: string } | null)?.content_approval_id, (c.metadata as { image_url?: string } | null)?.image_url])
-            .filter(([id, url]) => !!id && !!url)
-        );
-        liveStatusByApprovalId = Object.fromEntries(
-          (calRowsByApproval || [])
-            .filter((c: any) => c.status === "published" || c.status === "failed")
-            .map((c: any) => [(c.metadata as { content_approval_id?: string } | null)?.content_approval_id, c.status])
-        );
-      }
-
-      setApprovals(rows.map((r) => ({
-        ...r,
-        image_url: (r.content_id ? imageByContentId[r.content_id] : imageByApprovalId[r.id]) ?? undefined,
-        publish_status:
-          (r.content_id && liveStatusByContentId[r.content_id]) ||
-          liveStatusByApprovalId[r.id] ||
-          r.publish_status,
-      })));
+      if (calError) throw calError;
+      setApprovals((data || []) as ContentApproval[]);
+      setCalendar((calRows || []) as CalendarRow[]);
     } catch (error) {
       console.error("Error fetching approvals:", error);
     } finally {
       setLoading(false);
     }
+  }, [clientAccountId]);
+
+  // Approvals arrive live; the calendar (publish results) is not in the
+  // realtime publication, so refresh on a timer and whenever the tab regains focus.
+  useEffect(() => {
+    fetchApprovals();
+
+    const channel = supabase
+      .channel("content-approvals-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "content_approvals", filter: `client_account_id=eq.${clientAccountId}` }, () => fetchApprovals())
+      .subscribe();
+
+    const tick = () => { if (document.visibilityState === "visible") fetchApprovals(); };
+    const timer = window.setInterval(tick, REFRESH_MS);
+    document.addEventListener("visibilitychange", tick);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [clientAccountId, fetchApprovals]);
+
+  // Join each approval to the calendar row that will actually publish it.
+  // Two link paths exist (see handle-approval): a content_id FK, or
+  // metadata.content_approval_id for rows with no generated_content behind them.
+  // One piece of content can fan out to several platforms, so a content_id match
+  // must also agree on platform -- guessing across platforms would show the
+  // wrong schedule.
+  const items: ReviewItem[] = useMemo(() => {
+    const byApproval = new Map<string, CalendarRow>();
+    const byContent = new Map<string, CalendarRow[]>();
+    for (const c of calendar) {
+      const aid = (c.metadata as { content_approval_id?: string } | null)?.content_approval_id;
+      if (aid) byApproval.set(aid, c);
+      if (c.content_id) byContent.set(c.content_id, [...(byContent.get(c.content_id) ?? []), c]);
+    }
+    const findCal = (a: ContentApproval): CalendarRow | undefined => {
+      const direct = byApproval.get(a.id);
+      if (direct) return direct;
+      const cands = a.content_id ? byContent.get(a.content_id) ?? [] : [];
+      if (cands.length === 1 && (!a.platform || !cands[0].platform || cands[0].platform === a.platform)) return cands[0];
+      return cands.find((c) => c.platform && c.platform === a.platform);
+    };
+
+    return approvals.map((a) => {
+      const cal = findCal(a);
+      const live: ApprovalLive | undefined = cal
+        ? { calStatus: cal.status, scheduledFor: cal.scheduled_for, publishedAt: cal.published_at, metadata: cal.metadata, errorMessage: cal.error_message }
+        : undefined;
+      const meta = (cal?.metadata ?? {}) as { image_url?: string; platform_post_url?: string };
+      return {
+        id: a.id,
+        title: a.title,
+        content_type: a.content_type,
+        content_preview: a.content_preview,
+        full_content: a.full_content,
+        status: a.status,
+        feedback: a.feedback,
+        submitted_at: a.submitted_at,
+        reviewed_at: a.reviewed_at,
+        platform: a.platform,
+        image_url: meta.image_url ?? null,
+        scheduledFor: cal?.scheduled_for ?? a.scheduled_for ?? null,
+        postUrl: meta.platform_post_url ?? null,
+        display: approvalDisplay(a, live, formatWhen),
+        previewPlatform: normalizePlatform(a.platform ?? cal?.platform ?? null),
+      };
+    });
+  }, [approvals, calendar]);
+
+  const platformCounts = useMemo(() => {
+    const acc: Record<PreviewPlatform, number> = { facebook: 0, instagram: 0, twitter: 0, linkedin: 0, other: 0 };
+    for (const i of items) acc[i.previewPlatform] += 1;
+    return acc;
+  }, [items]);
+
+  const visible = useMemo(
+    () => (platformFilter === "all" ? items : items.filter((i) => i.previewPlatform === platformFilter)),
+    [items, platformFilter],
+  );
+
+  // Soonest deadline first for the review queue; newest first for history.
+  const byBucket = useMemo(() => {
+    const out: Record<ApprovalBucket, ReviewItem[]> = { review: [], upcoming: [], live: [], attention: [] };
+    for (const i of visible) out[i.display.bucket].push(i);
+    const when = (i: ReviewItem) => (i.scheduledFor ? new Date(i.scheduledFor).getTime() : Number.MAX_SAFE_INTEGER);
+    out.review.sort((a, b) => when(a) - when(b));
+    out.upcoming.sort((a, b) => when(a) - when(b));
+    return out;
+  }, [visible]);
+
+  const activeBucket: ApprovalBucket =
+    bucket ?? (byBucket.review.length ? "review" : byBucket.upcoming.length ? "upcoming" : byBucket.attention.length ? "attention" : "live");
+
+  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const queue = byBucket.review;
+  const queueIndex = selected ? queue.findIndex((i) => i.id === selected.id) : -1;
+
+  const finishOnboardingStep = () => {
+    completeWorkflowStep(clientAccountId, "client_approval")
+      .then((completed) => {
+        if (completed) {
+          queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
+          queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+          // Last onboarding step -- take them Home to see the "all done" state.
+          onTabChange?.("activity");
+        }
+      })
+      .catch((e) => console.error("Failed to complete approval workflow step:", e));
   };
 
-  const handleApprove = async () => {
-    if (!selectedApproval || !hasCaption(selectedApproval)) return;
+  // After acting on a post, move straight to the next one waiting for review.
+  const advanceFrom = (id: string) => {
+    const idx = queue.findIndex((i) => i.id === id);
+    const next = queue.find((i, n) => i.id !== id && n > idx) ?? queue.find((i) => i.id !== id);
+    if (next) setSelectedId(next.id);
+    else {
+      setSelectedId(null);
+      toast({ title: "All caught up", description: "Nothing else is waiting for your review." });
+    }
+  };
+
+  const callHandleApproval = async (approvalId: string, action: "approved" | "changes_requested" | "rejected", feedback?: string) => {
+    const { data, error } = await supabase.functions.invoke("handle-approval", { body: { approval_id: approvalId, action, feedback } });
+    if (error || data?.error) {
+      const msg = await getEdgeErrorMessage(error, data);
+      throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong. Please try again.");
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    const target = approvals.find((a) => a.id === id);
+    if (!target || !hasCaption(target)) return;
     setSubmitting(true);
-
     try {
-      const { data, error } = await supabase.functions.invoke("handle-approval", {
-        body: {
-          approval_id: selectedApproval.id,
-          action: "approved",
-          feedback: feedback || undefined,
-        },
-      });
-
-      if (error || data?.error) {
-        const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to approve content");
-      }
-
-      // Optimistic update
-      setApprovals((prev) =>
-        prev.map((a) =>
-          a.id === selectedApproval.id
-            ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString(), feedback: feedback || null }
-            : a
-        )
-      );
-
-      toast({
-        title: "Content Approved",
-        description: "The content has been approved and queued for publishing.",
-      });
-
-      setSelectedApproval(null);
-      setFeedback("");
-
-      // Complete the client_approval workflow step — first real approval unlocks automation
-      completeWorkflowStep(clientAccountId, "client_approval")
-        .then((completed) => {
-          if (completed) {
-            queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
-            queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
-            // Last onboarding step -- take them Home to see the "all done" state.
-            onTabChange?.("activity");
-          }
-        })
-        .catch((e) => console.error("Failed to complete approval workflow step:", e));
+      await callHandleApproval(id, "approved");
+      setApprovals((prev) => prev.map((a) => (a.id === id ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString() } : a)));
+      const planned = items.find((i) => i.id === id)?.scheduledFor;
+      const pastDue = !planned || new Date(planned).getTime() <= Date.now();
+      toast({ title: "Approved", description: pastDue ? "It will be published shortly." : "It's scheduled and will go out at its planned time." });
+      advanceFrom(id);
+      finishOnboardingStep();
+      fetchApprovals();
     } catch (error) {
-      console.error("Error approving content:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to approve content. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Couldn't approve", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Approves every currently pending, currently-filtered approval in one
-  // shot -- scoped to whatever platform tab is selected, same as the list
-  // it's approving actually shows. Reuses the same handle-approval call as
-  // the single-item flow, just fanned out.
-  const handleApproveAll = async (allTargets: ContentApproval[]) => {
-    const targets = allTargets.filter(hasCaption);
-    if (targets.length === 0) return;
+  const handleRequestChanges = async (id: string, note: string) => {
+    setSubmitting(true);
+    try {
+      await callHandleApproval(id, "changes_requested", note);
+      setApprovals((prev) => prev.map((a) => (a.id === id ? { ...a, status: "changes_requested", feedback: note, reviewed_at: new Date().toISOString() } : a)));
+      toast({ title: "Feedback sent", description: "Our team will revise it and send it back for your review." });
+      advanceFrom(id);
+    } catch (error) {
+      toast({ title: "Couldn't send feedback", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDecline = async (id: string) => {
+    setSubmitting(true);
+    try {
+      await callHandleApproval(id, "rejected");
+      setApprovals((prev) => prev.map((a) => (a.id === id ? { ...a, status: "rejected", reviewed_at: new Date().toISOString() } : a)));
+      toast({ title: "Won't be posted", description: "This post has been declined." });
+      advanceFrom(id);
+    } catch (error) {
+      toast({ title: "Couldn't update", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Approves every post currently in the (platform-filtered) review queue that
+  // has a real caption. Same handle-approval call as the single flow, fanned out.
+  const approvable = queue.filter(hasCaption);
+  const handleApproveAll = async () => {
+    setConfirmBulk(false);
+    if (approvable.length === 0) return;
     setBulkApproving(true);
     try {
-      const results = await Promise.allSettled(
-        targets.map((a) =>
-          supabase.functions.invoke("handle-approval", {
-            body: { approval_id: a.id, action: "approved" },
-          }).then(({ error }) => {
-            if (error) throw error;
-          })
-        )
-      );
-
-      const succeededIds = new Set(
-        targets.filter((_, i) => results[i].status === "fulfilled").map((a) => a.id)
-      );
-      const failedCount = targets.length - succeededIds.size;
-
-      setApprovals((prev) =>
-        prev.map((a) =>
-          succeededIds.has(a.id)
-            ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString() }
-            : a
-        )
-      );
-
-      if (succeededIds.size > 0) {
+      const results = await Promise.allSettled(approvable.map((a) => callHandleApproval(a.id, "approved")));
+      const ok = new Set(approvable.filter((_, i) => results[i].status === "fulfilled").map((a) => a.id));
+      const failed = approvable.length - ok.size;
+      setApprovals((prev) => prev.map((a) => (ok.has(a.id) ? { ...a, status: "approved", publish_status: "queued", reviewed_at: new Date().toISOString() } : a)));
+      if (ok.size > 0) {
         toast({
-          title: failedCount > 0 ? `${succeededIds.size} approved, ${failedCount} failed` : `${succeededIds.size} post${succeededIds.size === 1 ? "" : "s"} approved`,
-          description: failedCount > 0 ? "Try again for the ones that failed." : "Approved content is queued for publishing.",
-          variant: failedCount > 0 ? "destructive" : "default",
+          title: failed > 0 ? `${ok.size} approved, ${failed} failed` : `${ok.size} post${ok.size === 1 ? "" : "s"} approved`,
+          description: failed > 0 ? "Try again for the ones that failed." : "They'll go out at their planned times.",
+          variant: failed > 0 ? "destructive" : "default",
         });
-
-        completeWorkflowStep(clientAccountId, "client_approval")
-          .then((completed) => {
-            if (completed) {
-              queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
-              queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
-              // Last onboarding step -- take them Home to see the "all done" state.
-              onTabChange?.("activity");
-            }
-          })
-          .catch((e) => console.error("Failed to complete approval workflow step:", e));
+        finishOnboardingStep();
+        fetchApprovals();
       } else {
         toast({ title: "Approval failed", description: "Nothing was approved. Please try again.", variant: "destructive" });
       }
     } finally {
       setBulkApproving(false);
-    }
-  };
-
-  const handleRequestChanges = async () => {
-    if (!selectedApproval) return;
-    setSubmitting(true);
-
-    try {
-      const trimmedFeedback = feedback.trim() || undefined;
-      const action = trimmedFeedback ? "changes_requested" : "rejected";
-      const { data, error } = await supabase.functions.invoke("handle-approval", {
-        body: {
-          approval_id: selectedApproval.id,
-          action,
-          feedback: trimmedFeedback,
-        },
-      });
-
-      if (error || data?.error) {
-        const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to submit feedback");
-      }
-
-      // Optimistic update
-      setApprovals((prev) =>
-        prev.map((a) =>
-          a.id === selectedApproval.id
-            ? { ...a, status: action, publish_status: action, feedback: trimmedFeedback ?? null, reviewed_at: new Date().toISOString() }
-            : a
-        )
-      );
-
-      toast(
-        trimmedFeedback
-          ? { title: "Changes Requested", description: "Your feedback has been sent to the team." }
-          : { title: "Content Declined", description: "This post won't be published." }
-      );
-
-      setSelectedApproval(null);
-      setFeedback("");
-    } catch (error) {
-      console.error("Error requesting changes:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to submit feedback. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const getStatusBadge = (status: string, publishStatus?: string | null) => {
-    if (publishStatus === "published") {
-      return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Published</Badge>;
-    }
-    if (publishStatus === "failed") {
-      return <Badge className="bg-red-100 text-red-800 border-red-200">Publish Failed</Badge>;
-    }
-    if (status === "approved" && publishStatus === "queued") {
-      return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Publishing...</Badge>;
-    }
-    switch (status) {
-      case "approved":
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge>;
-      case "changes_requested":
-        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Changes Requested</Badge>;
-      case "rejected":
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Rejected</Badge>;
-      default:
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending Review</Badge>;
     }
   };
 
@@ -859,48 +354,22 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
     );
   }
 
-  const platformCounts = approvals.reduce<Record<Exclude<PlatformFilter, "all">, number>>((acc, a) => {
-    const key = normalizePlatform(a.platform);
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, { facebook: 0, instagram: 0, twitter: 0, linkedin: 0, other: 0 });
-
-  const filteredApprovals = platformFilter === "all"
-    ? approvals
-    : approvals.filter((a) => normalizePlatform(a.platform) === platformFilter);
-
-  const pendingApprovals = filteredApprovals.filter((a) => a.status === "pending");
-  const reviewedApprovals = filteredApprovals.filter((a) => a.status !== "pending");
+  const nextDue = queue.find((i) => i.scheduledFor);
+  const nextDueRel = nextDue?.scheduledFor ? relativeUntil(nextDue.scheduledFor) : null;
+  const list = byBucket[activeBucket];
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Content Approvals</h2>
-        <p className="text-muted-foreground">Review and approve content before it goes live</p>
+        <p className="text-muted-foreground">
+          {queue.length > 0
+            ? `${queue.length} item${queue.length === 1 ? "" : "s"} waiting for your review${nextDueRel ? ` — the first is due ${nextDueRel.text}` : ""}.`
+            : "Review and approve content before it goes live."}
+        </p>
       </div>
 
-      {approvals.length > 0 && (
-        <Tabs value={platformFilter} onValueChange={(v) => setPlatformFilter(v as PlatformFilter)}>
-          <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="all" className="gap-1.5">
-              All <span className="text-xs text-muted-foreground">({approvals.length})</span>
-            </TabsTrigger>
-            {(Object.keys(PLATFORM_CONFIG) as Array<Exclude<PlatformFilter, "all">>).map((key) => {
-              const count = platformCounts[key];
-              if (count === 0) return null;
-              const { label, icon: PlatformIcon } = PLATFORM_CONFIG[key];
-              return (
-                <TabsTrigger key={key} value={key} className="gap-1.5">
-                  <PlatformIcon className="h-3.5 w-3.5" />
-                  {label} <span className="text-xs text-muted-foreground">({count})</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </Tabs>
-      )}
-
-      {approvals.length === 0 ? (
+      {items.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             {approvalStepPending ? (
@@ -920,298 +389,115 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
         </Card>
       ) : (
         <>
-          {/* Pending Approvals */}
-          {pendingApprovals.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <h3 className="font-semibold text-foreground flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-yellow-600" />
-                  Awaiting Your Review ({pendingApprovals.length})
-                </h3>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  disabled={bulkApproving}
-                  onClick={() => handleApproveAll(pendingApprovals)}
+          {/* Stage tabs */}
+          <div role="tablist" aria-label="Approval stage" className="flex flex-wrap gap-1 border-b">
+            {BUCKETS.map((b) => {
+              const count = byBucket[b.key].length;
+              const active = activeBucket === b.key;
+              return (
+                <button
+                  key={b.key}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setBucket(b.key)}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2",
+                    active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
                 >
-                  {bulkApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-                  Approve All{platformFilter !== "all" ? ` ${PLATFORM_CONFIG[platformFilter].label}` : ""} ({pendingApprovals.length})
-                </Button>
-              </div>
-              <div className="grid gap-4">
-                {pendingApprovals.map((approval) => {
-                  const typeConfig = getContentTypeConfig(approval.content_type);
-                  const IconComponent = typeConfig.icon;
-                  
-                  return (
-                    <Card 
-                      key={approval.id} 
-                      className="cursor-pointer hover:shadow-md transition-all border-l-4 border-l-yellow-500 hover:border-l-yellow-600"
-                      onClick={() => {
-                        setSelectedApproval(approval);
-                        setFeedback("");
-                      }}
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${typeConfig.bgColor}`}>
-                              <IconComponent className={`h-5 w-5 ${typeConfig.color}`} />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">{approval.title}</CardTitle>
-                              <CardDescription className="text-xs">
-                                {typeConfig.label} • Submitted {format(new Date(approval.submitted_at), "MMM d, yyyy 'at' h:mm a")}
-                              </CardDescription>
-                            </div>
-                          </div>
-                         {getStatusBadge(approval.status, approval.publish_status)}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-2">
-                        <p className="text-xs text-muted-foreground mb-2">{typeConfig.description}</p>
-                        <div className="flex gap-3 mt-2">
-                          {approval.image_url && (
-                            <img
-                              src={approval.image_url}
-                              alt=""
-                              className="w-20 h-20 rounded-md object-cover flex-shrink-0 border"
-                            />
-                          )}
-                          {approval.content_preview && (
-                            <div className="bg-muted/50 rounded-md p-3 flex-1 min-w-0">
-                              <p className="text-sm text-foreground line-clamp-3">
-                                {approval.content_preview}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-3">
-                          <Button size="sm" variant="default" className="text-xs">
-                            <Sparkles className="h-3 w-3 mr-1" />
-                            Review Now
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                  {b.label}
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 text-xs tabular-nums",
+                      b.key === "review" && count > 0 ? "bg-amber-100 text-amber-900" : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-          {/* Reviewed Content */}
-          {reviewedApprovals.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                Previously Reviewed ({reviewedApprovals.length})
-              </h3>
-              <div className="grid gap-4">
-                {reviewedApprovals.map((approval) => {
-                  const typeConfig = getContentTypeConfig(approval.content_type);
-                  const IconComponent = typeConfig.icon;
-                  
-                  return (
-                    <Card 
-                      key={approval.id} 
-                      className="cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => {
-                        setSelectedApproval(approval);
-                        setFeedback(approval.feedback || "");
-                      }}
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${typeConfig.bgColor} opacity-75`}>
-                              <IconComponent className={`h-5 w-5 ${typeConfig.color}`} />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">{approval.title}</CardTitle>
-                              <CardDescription className="text-xs">
-                                {typeConfig.label} • Reviewed {approval.reviewed_at ? format(new Date(approval.reviewed_at), "MMM d, yyyy 'at' h:mm a") : "N/A"}
-                              </CardDescription>
-                            </div>
-                          </div>
-                          {getStatusBadge(approval.status, approval.publish_status)}
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  );
-                })}
-              </div>
+          {/* Platform filter + bulk action */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {(["all", ...(Object.keys(PLATFORM_CONFIG) as PreviewPlatform[])] as PlatformFilter[]).map((key) => {
+                if (key !== "all" && platformCounts[key] === 0) return null;
+                if (key === "all" && Object.values(platformCounts).filter((n) => n > 0).length < 2) return null;
+                const Icon = key === "all" ? null : PLATFORM_CONFIG[key].icon;
+                const active = platformFilter === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setPlatformFilter(key)}
+                    aria-pressed={active}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted",
+                    )}
+                  >
+                    {Icon && <Icon className="h-3.5 w-3.5" />}
+                    {key === "all" ? "All platforms" : PLATFORM_CONFIG[key].label}
+                  </button>
+                );
+              })}
+            </div>
+            {activeBucket === "review" && approvable.length > 1 && (
+              <Button size="sm" variant="outline" className="gap-1.5" disabled={bulkApproving} onClick={() => setConfirmBulk(true)}>
+                {bulkApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+                Approve all ({approvable.length})
+              </Button>
+            )}
+          </div>
+
+          {list.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                {activeBucket === "review" ? <PartyPopper className="h-10 w-10 mx-auto text-emerald-600 mb-3" /> : <FileCheck className="h-10 w-10 mx-auto text-muted-foreground mb-3" />}
+                <p className="text-muted-foreground">{BUCKETS.find((b) => b.key === activeBucket)!.empty}</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {list.map((item) => (
+                <ApprovalCard key={item.id} item={item} onOpen={() => setSelectedId(item.id)} />
+              ))}
             </div>
           )}
         </>
       )}
 
-      {/* Enhanced Review Dialog */}
-      <Dialog open={!!selectedApproval} onOpenChange={() => setSelectedApproval(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          {selectedApproval && (() => {
-            const typeConfig = getContentTypeConfig(selectedApproval.content_type);
-            const IconComponent = typeConfig.icon;
-            
-            return (
-              <>
-                <DialogHeader className="pb-2">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className={`p-3 rounded-lg ${typeConfig.bgColor}`}>
-                      <IconComponent className={`h-6 w-6 ${typeConfig.color}`} />
-                    </div>
-                    <div>
-                      <DialogTitle className="text-xl">{selectedApproval.title}</DialogTitle>
-                      <p className="text-sm text-muted-foreground mt-1">{typeConfig.description}</p>
-                    </div>
-                  </div>
-                </DialogHeader>
-                
-                <div className="space-y-5">
-                  {/* Status and Meta Info */}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge variant="outline" className={`${typeConfig.bgColor} ${typeConfig.color} border-0`}>
-                      {typeConfig.label}
-                    </Badge>
-                    {getStatusBadge(selectedApproval.status, selectedApproval.publish_status)}
-                    <span className="text-xs text-muted-foreground">
-                      Submitted: {format(new Date(selectedApproval.submitted_at), "MMMM d, yyyy 'at' h:mm a")}
-                    </span>
-                  </div>
+      <ApprovalReviewDialog
+        item={selected}
+        businessName={businessName}
+        position={queueIndex >= 0 ? queueIndex + 1 : 0}
+        queueSize={queueIndex >= 0 ? queue.length : 0}
+        busy={submitting}
+        onClose={() => setSelectedId(null)}
+        onPrev={queueIndex > 0 ? () => setSelectedId(queue[queueIndex - 1].id) : undefined}
+        onNext={queueIndex >= 0 && queueIndex < queue.length - 1 ? () => setSelectedId(queue[queueIndex + 1].id) : undefined}
+        onApprove={handleApprove}
+        onRequestChanges={handleRequestChanges}
+        onDecline={handleDecline}
+      />
 
-                  <Separator />
-
-                  {/* What Was Completed Section */}
-                  <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg p-4">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2 mb-3">
-                      <ClipboardList className="h-4 w-4 text-primary" />
-                      What Was Completed
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>Created {typeConfig.label.toLowerCase()} based on your brand guidelines</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>Optimized for your target audience and marketing goals</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>Ready for your review and approval before publishing</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Image */}
-                  {selectedApproval.image_url && (
-                    <div>
-                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                        <Image className="h-4 w-4" />
-                        Image
-                      </h4>
-                      <img
-                        src={selectedApproval.image_url}
-                        alt=""
-                        className="w-full max-h-96 object-cover rounded-lg border"
-                      />
-                    </div>
-                  )}
-
-                  {/* Full Content Preview */}
-                  {(selectedApproval.full_content || selectedApproval.content_preview) && (
-                    <div>
-                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Content Preview
-                      </h4>
-                      <ScrollArea className="max-h-80">
-                        <div className="pr-4">
-                          <ContentRenderer 
-                            content={selectedApproval.full_content || selectedApproval.content_preview} 
-                            contentType={selectedApproval.content_type}
-                          />
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  {/* Feedback Section for Pending */}
-                  {selectedApproval.status === "pending" && (
-                    <div className="space-y-3">
-                      <h4 className="font-semibold text-foreground flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4" />
-                        Your Feedback
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Optional — leave a note if you'd like, or just decline below
-                      </p>
-                      <Textarea
-                        placeholder="Share any thoughts, suggestions, or specific changes you'd like to see..."
-                        value={feedback}
-                        onChange={(e) => setFeedback(e.target.value)}
-                        rows={4}
-                        className="resize-none"
-                      />
-                    </div>
-                  )}
-
-                  {/* Previous Feedback Display */}
-                  {selectedApproval.feedback && selectedApproval.status !== "pending" && (
-                    <div className="space-y-2">
-                      <h4 className="font-semibold text-foreground flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4" />
-                        Your Feedback
-                      </h4>
-                      <div className="bg-muted p-4 rounded-lg">
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{selectedApproval.feedback}</p>
-                        {selectedApproval.reviewed_at && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Submitted on {format(new Date(selectedApproval.reviewed_at), "MMMM d, yyyy 'at' h:mm a")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                {selectedApproval.status === "pending" && (
-                  <DialogFooter className="gap-2 mt-4 pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      onClick={handleRequestChanges}
-                      disabled={submitting}
-                      className="border-orange-200 text-orange-700 hover:bg-orange-50"
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      {feedback.trim() ? "Request Changes" : "Reject"}
-                    </Button>
-                    {!hasCaption(selectedApproval) && (
-                      <p className="text-sm text-orange-700 mr-auto self-center">
-                        Caption missing — we're regenerating this post.
-                      </p>
-                    )}
-                    <Button onClick={handleApprove} disabled={submitting || !hasCaption(selectedApproval)} className="bg-green-600 hover:bg-green-700">
-                      {submitting ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Approve Content
-                        </>
-                      )}
-                    </Button>
-                  </DialogFooter>
-                )}
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      <AlertDialog open={confirmBulk} onOpenChange={setConfirmBulk}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve {approvable.length} posts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Each one will be scheduled for its planned date.
+              {queue.length > approvable.length && ` ${queue.length - approvable.length} without a finished caption will be skipped.`}
+              {" "}You can open any of them first if you'd like to read it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleApproveAll}>Approve all</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
