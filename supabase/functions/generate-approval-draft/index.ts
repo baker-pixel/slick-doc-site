@@ -75,27 +75,23 @@ serve(async (req) => {
       .filter(Boolean)
       .join("\n");
 
-    let postContent = "";
-    let postPreview = "";
-
-    try {
-      postContent = (await callAI({
-        source: "generate-approval-draft",
-        system:
-          `You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
-        prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
-        maxTokens: 400,
-      })).trim();
-      postPreview = postContent.split("\n")[0].substring(0, 200);
-    } catch (e) {
-      console.error("generate-approval-draft AI call failed, using fallback copy:", e instanceof Error ? e.message : e);
+    // No canned fallback copy: this is the client's FIRST impression and
+    // approving it queues it for publishing, so a generic "Excited to share
+    // what we've been building at X!" post (which asserts things we never
+    // checked) is worse than a short delay. Throwing here returns non-2xx so
+    // process-agent-jobs retries and, if it keeps failing, dead-letters with
+    // an alert an admin can act on.
+    const postContent = (await callAI({
+      source: "generate-approval-draft",
+      system:
+        `You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
+      prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
+      maxTokens: 400,
+    })).trim();
+    if (postContent.length < 80) {
+      throw new Error(`AI returned an unusably short draft (${postContent.length} chars) for client ${client_id}`);
     }
-
-    // Fallback if Groq unavailable or key missing
-    if (!postContent) {
-      postContent = `Excited to share what we've been building at ${client.business_name}! We help ${client.industry || "businesses"} achieve their goals through innovative solutions and dedicated service.\n\nReady to see the difference? Let's connect.\n\n#Marketing #Business #Growth`;
-      postPreview = `Excited to share what we've been building at ${client.business_name}!`;
-    }
+    const postPreview = postContent.split("\n")[0].substring(0, 200);
 
     // Insert into content_approvals for client to review
     const { error: insertErr } = await supabase.from("content_approvals").insert({

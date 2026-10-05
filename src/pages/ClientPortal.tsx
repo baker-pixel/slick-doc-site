@@ -136,13 +136,18 @@ export default function ClientPortal() {
 
       const { data: steps } = await supabase
         .from("workflow_steps")
-        .select("step_number, status")
+        .select("step_number, status, task_type")
         .eq("workflow_id", wf.id)
         .lte("step_number", 5)
         .order("step_number", { ascending: true });
 
-      if (!steps || steps.length === 0) return false;
-      const allComplete = steps.every((s) => s.status === "completed");
+      // Client-driven gates only -- same definition as the Home checklist
+      // (ClientActivityTab) and workflowUnlock's onboarding_completed_at. The
+      // automation step in this range (brand extraction) is not something the
+      // client can finish, so it must not decide whether they're "onboarded".
+      const clientSteps = (steps || []).filter((s) => s.task_type.startsWith("client_"));
+      if (clientSteps.length === 0) return false;
+      const allComplete = clientSteps.every((s) => s.status === "completed");
 
       // Stamp onboarded_at once when all 5 steps are done
       if (allComplete) {

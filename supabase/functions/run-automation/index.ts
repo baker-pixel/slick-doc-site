@@ -210,28 +210,43 @@ serve(async (req) => {
         // call this replaces -- this step's whole purpose is to let
         // content_generation/social_strategy depends_on it and know brand
         // context actually landed before they run.
-        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/extract-brand-assets`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ client_account_id: clientId, website_url: client.website_url }),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          // 422 = the target site itself couldn't be scraped (unreachable, blocked,
-          // timed out, SSRF-guarded) -- expected/recoverable, not a bug in our code.
-          // Onboarding is explicitly designed to let the client upload brand assets
-          // from scratch at the next step, so don't hard-fail and wedge the workflow;
-          // only genuine server errors (5xx) should raise an alert + block progress.
-          if (res.status === 422) {
-            result = { skipped: "scrape_failed", detail: text };
+        // Extraction is a convenience, never a gate: the very next onboarding
+        // step ("Verify Brand Assets") lets the client upload from scratch. So
+        // ANY failure here (unreachable/blocked site = 422, a 5xx from the
+        // extractor, or a network error) skips the step instead of failing it.
+        // Failing it left steps 3-5 locked behind a step the client can't see
+        // or retry, i.e. a client silently stuck on day one.
+        try {
+          const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/extract-brand-assets`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ client_account_id: clientId, website_url: client.website_url }),
+          });
+          if (res.ok) {
+            result = await res.json();
             break;
           }
-          throw new Error(`extract-brand-assets failed (${res.status}): ${text}`);
+          const text = await res.text();
+          result = { skipped: res.status === 422 ? "scrape_failed" : "extractor_error", status: res.status, detail: text.slice(0, 500) };
+          // 422 is expected (site can't be scraped); anything else is ours to look at.
+          if (res.status !== 422) {
+            console.error(`extract-brand-assets failed (${res.status}) for ${clientId}; skipping step so onboarding can continue`, text);
+            await supabase.from("automation_alerts").insert({
+              alert_type: "function_error",
+              severity: "warning",
+              title: "Brand extraction failed during onboarding (step skipped)",
+              message: `extract-brand-assets returned ${res.status} for client ${clientId}. Onboarding continued; the client will upload brand assets manually.`,
+              source: "run-automation",
+              source_id: clientId,
+            }).then(undefined, () => {});
+          }
+        } catch (extractErr) {
+          console.error(`extract-brand-assets threw for ${clientId}; skipping step`, extractErr);
+          result = { skipped: "extractor_unreachable", detail: extractErr instanceof Error ? extractErr.message : String(extractErr) };
         }
-        result = await res.json();
         break;
       }
       default:
