@@ -88,7 +88,7 @@ async function renderProspectPdf(prospect: ProspectData): Promise<Uint8Array> {
           : [...snapshot.seo.recommendations.slice(0, 1), ...snapshot.conversion.recommendations.slice(0, 1), ...snapshot.technical.recommendations.slice(0, 1)];
 
         return {
-          businessName: prospect.name || domain,
+          businessName: domain, // not the visitor's name
           clientDomain: domain,
           reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
           overallScore,
@@ -106,7 +106,7 @@ async function renderProspectPdf(prospect: ProspectData): Promise<Uint8Array> {
     : {
         // Legacy fallback for a prospect scanned before analysis_snapshot existed --
         // best-effort single headline number, no per-category breakdown to show.
-        businessName: prospect.name || domain,
+        businessName: domain, // not the visitor's name
         clientDomain: domain,
         reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
         overallScore: prospect.gap_score ?? 0,

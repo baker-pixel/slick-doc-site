@@ -140,7 +140,8 @@ const QuickAnalysis = () => {
 
   const reportViewData: ReportData | null = result
     ? buildReportData(result, {
-        businessName: name || url,
+        // The visitor's own name is not the business name ("Yash has clear opportunities").
+        businessName: validatedUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
         domain: validatedUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
         reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
         aiReadinessScore,

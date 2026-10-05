@@ -240,8 +240,16 @@ serve(async (req) => {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    const industryContext = industry
-      ? `\nThe business is in the ${industry} industry. Tailor your recommendations to this industry's best practices and customer expectations.`
+    // The visitor-selected business type is only a hint: people pick the wrong
+    // one (or the nearest one), and treating it as fact produced advice for the
+    // wrong business (menus and reservations for a corporate AI company). The
+    // site's own content always wins. Also sanitized: it's visitor input that
+    // lands inside a prompt.
+    const industryHint = typeof industry === "string"
+      ? industry.replace(/[\r\n]+/g, " ").replace(/[^\p{L}\p{N} &/,'.-]/gu, "").trim().slice(0, 60)
+      : "";
+    const industryContext = industryHint
+      ? `\nThe visitor picked "${industryHint}" as their business type. Treat that as an UNVERIFIED HINT, never as fact. What the website itself says always wins: if the site clearly describes a different kind of business, base every finding, recommendation and quick win on what the site actually does, and NEVER recommend features that only make sense for the hinted industry (for example menus, table reservations, appointment booking, product catalogs) unless the site's own content supports them. Use the hint only to break ties when the site is ambiguous.`
       : "";
 
     const systemPrompt = `You are an expert digital marketing and web development analyst. Analyze the website HTML thoroughly and provide HONEST, VARIED scores based on what you ACTUALLY find.${industryContext}
@@ -319,7 +327,7 @@ Reference SPECIFIC elements from the HTML to justify each score. Any item flagge
     const userPrompt = `Analyze this website HTML for SEO, conversion optimization, and technical performance:
 
 URL: ${url}
-${industry ? `Industry: ${industry}` : ""}
+${industryHint ? `Business type (visitor-selected hint, unverified): ${industryHint}` : ""}
 
 ${factsSummary(signals)}
 

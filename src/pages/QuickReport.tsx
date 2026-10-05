@@ -73,7 +73,8 @@ export default function QuickReport() {
     if (!report) return null;
     const domain = (report.websiteUrl ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
     return buildReportData(report.analysis, {
-      businessName: report.name || domain,
+      // Domain, not the visitor's name ("Yash has clear opportunities").
+      businessName: domain,
       domain,
       reportDate: new Date(report.createdAt).toLocaleDateString("en-US", {
         year: "numeric",
