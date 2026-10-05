@@ -14,6 +14,8 @@ const PFM_API = "https://api.postforme.dev";
 const MIN_AGE_MINUTES = 5;   // give the platform time to process first
 const LOOKBACK_DAYS = 45;    // also sweeps historical unconfirmed posts
 const BATCH = 20;
+const ALERT_AFTER_MINUTES = 60;   // accepted by PfM but still no platform result -> tell an admin
+const GIVE_UP_AFTER_DAYS = 7;     // PfM has no result by now; stop re-checking and mark unverifiable
 const PACE_MS = 1000;        // PfM returned 429 after ~7 back-to-back lookups
 
 const corsHeaders = {
@@ -43,13 +45,32 @@ serve(async (req) => {
       .eq("status", "published")
       .not("postforme_post_id", "is", null)
       .is("metadata->>publish_confirmed_at", null)
+      .is("metadata->>publish_verification", null)
       .lt("published_at", new Date(now - MIN_AGE_MINUTES * 60_000).toISOString())
       .gt("published_at", new Date(now - LOOKBACK_DAYS * 86_400_000).toISOString())
       .order("published_at", { ascending: false })
       .limit(BATCH);
     if (error) throw error;
 
-    const summary = { checked: 0, confirmed: 0, failed: 0, pending: 0, errors: 0 };
+    // Published rows with no Post for Me id (older manual / legacy paths) have
+    // nothing to look up -- mark them so the UI doesn't claim confirmation.
+    if (!body.dryRun) {
+      const { data: noId } = await supabase
+        .from("content_calendar")
+        .select("id, metadata")
+        .eq("status", "published")
+        .is("postforme_post_id", null)
+        .is("metadata->>publish_verification", null)
+        .is("metadata->>publish_confirmed_at", null)
+        .in("platform", ["twitter", "facebook", "linkedin", "instagram"]);
+      for (const r of noId ?? []) {
+        await supabase.from("content_calendar").update({
+          metadata: { ...((r.metadata as Record<string, unknown>) || {}), publish_verification: "unavailable", publish_verification_reason: "no_pfm_post_id", publish_verification_at: new Date().toISOString() },
+        }).eq("id", r.id);
+      }
+    }
+
+    const summary = { checked: 0, confirmed: 0, failed: 0, pending: 0, unverifiable: 0, alerted: 0, errors: 0 };
     const details: Array<Record<string, unknown>> = [];
 
     for (const [i, row] of (rows ?? []).entries()) {
@@ -76,7 +97,32 @@ serve(async (req) => {
         const results: PfmPostResult[] = (Array.isArray(payload) ? payload : payload?.data ?? [])
           .filter((r: PfmPostResult) => r?.post_id === row.postforme_post_id || r?.post_id === undefined);
 
-        if (results.length === 0) { summary.pending++; continue; }
+        if (results.length === 0) {
+          summary.pending++;
+          const ageMin = (now - new Date(row.published_at).getTime()) / 60_000;
+          const meta = (row.metadata as Record<string, unknown>) || {};
+          if (!body.dryRun && ageMin > GIVE_UP_AFTER_DAYS * 1440) {
+            await supabase.from("content_calendar").update({
+              metadata: { ...meta, publish_verification: "unavailable", publish_verification_reason: "no_pfm_result", publish_verification_at: new Date().toISOString() },
+            }).eq("id", row.id);
+            summary.unverifiable++;
+          } else if (!body.dryRun && ageMin > ALERT_AFTER_MINUTES && !meta.unconfirmed_alerted_at) {
+            await supabase.from("automation_alerts").insert({
+              alert_type: "content_publish_unconfirmed",
+              severity: "warning",
+              title: `${row.platform} post accepted but not confirmed`,
+              message: `Post for Me accepted "${row.title ?? "post"}" over an hour ago but has no platform result yet. Check it on ${row.platform}.`,
+              source: "reconcile-postforme-posts",
+              source_id: row.id,
+              metadata: { client_account_id: row.client_account_id, pfm_post_id: row.postforme_post_id },
+            });
+            await supabase.from("content_calendar").update({
+              metadata: { ...meta, unconfirmed_alerted_at: new Date().toISOString() },
+            }).eq("id", row.id);
+            summary.alerted++;
+          }
+          continue;
+        }
 
         // One calendar row = one account, so one result. If PfM ever returns
         // several, any failure wins over success (never hide a rejection).

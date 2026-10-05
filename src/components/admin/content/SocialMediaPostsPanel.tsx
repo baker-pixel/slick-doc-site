@@ -1,3 +1,4 @@
+import { postDisplayStatus } from "@/lib/postStatus";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -657,8 +658,8 @@ export default function SocialMediaPostsPanel() {
 
   const draftPosts = posts.filter((p) => p.status === "draft");
   const approvedPosts = posts.filter((p) => p.status === "approved");
-  const scheduledPosts = posts.filter((p) => p.status === "scheduled");
-  const publishedPosts = posts.filter((p) => p.status === "published");
+  const scheduledPosts = posts.filter((p) => p.status === "scheduled" || postDisplayStatus(p).key === "sending");
+  const publishedPosts = posts.filter((p) => p.status === "published" && postDisplayStatus(p).key === "published");
 
   const PostCard = ({ post }: { post: SocialPost }) => {
     const imageUrl = (post.metadata as { image_url?: string } | null)?.image_url;
@@ -678,20 +679,13 @@ export default function SocialMediaPostsPanel() {
                 </div>
                 <span className="font-medium capitalize">{post.platform}</span>
                 <Badge
-                  variant={
-                    post.status === "published"
-                      ? "default"
-                      : post.status === "approved"
-                      ? "default"
-                      : post.status === "scheduled"
-                      ? "secondary"
-                      : "outline"
-                  }
+                  variant={postDisplayStatus(post).variant}
                   className={post.status === "approved" ? "bg-green-600" : ""}
+                  title={postDisplayStatus(post).note}
                 >
                   {post.status === "draft" && <EyeOff className="h-3 w-3 mr-1" />}
                   {post.status === "approved" && <Eye className="h-3 w-3 mr-1" />}
-                  {post.status}
+                  {postDisplayStatus(post).label}
                 </Badge>
               </div>
               {post.client_account_id && (

@@ -1,3 +1,4 @@
+import { postDisplayStatus } from "@/lib/postStatus";
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ interface CalendarItem {
   status: string;
   published_at: string | null;
   client_approved: boolean | null;
+  metadata: Record<string, unknown> | null;
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -97,7 +99,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
     queryFn: async () => {
       const { data, error } = await supabase
         .from("content_calendar")
-        .select("id, content_id, title, content, content_type, scheduled_for, platform, status, published_at, client_approved")
+        .select("id, content_id, title, content, content_type, scheduled_for, platform, status, published_at, client_approved, metadata")
         .eq("client_account_id", clientAccountId)
         .order("scheduled_for", { ascending: true });
       if (error) throw error;
@@ -127,7 +129,11 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
   const filteredItems = useMemo(() => {
     if (statusFilter === "all") return items;
     if (statusFilter === "pending") return items.filter(isTrulyPending);
-    return items.filter(i => i.status === statusFilter);
+    // "Sending" posts belong with Scheduled until the platform confirms them.
+    return items.filter(i => {
+      const k = postDisplayStatus(i).key;
+      return (k === "sending" ? "scheduled" : k) === statusFilter;
+    });
   }, [items, statusFilter, pendingApprovalContentIds]);
 
   const monthStart = startOfMonth(currentMonth);
@@ -276,12 +282,10 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
                       {selectedItem.platform}
                     </Badge>
                   )}
-                  <Badge variant={
-                    selectedItem.status === "published" ? "default" :
-                    selectedItem.status === "failed" ? "destructive" : "secondary"
-                  }>
-                    {selectedItem.status}
-                  </Badge>
+                  {(() => {
+                    const d = postDisplayStatus(selectedItem);
+                    return <Badge variant={d.variant} title={d.note}>{d.label}</Badge>;
+                  })()}
                   {isTrulyPending(selectedItem) ? (
                     <Badge variant="outline" className="border-amber-500 text-amber-600">
                       Awaiting your approval — check the Approvals tab

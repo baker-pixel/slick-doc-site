@@ -131,15 +131,18 @@ serve(async (req) => {
     }
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-    // ── Cleanup: reset rows stuck in processing for > 2 hours ──
+    // ── Cleanup: reset rows stuck in processing for > 15 minutes ──
+    // A real publish (image generation + PfM retries) finishes in ~1-2 min, so a
+    // claim older than this belongs to a crashed run; leaving it for 2h showed
+    // the post as "processing" all that time.
     // "awaiting_callback" used to also appear here (n8n publish in flight) --
     // n8n is gone and nothing sets that status anymore, so it's dropped.
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const staleClaimCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
     const { data: stuckPosts } = await supabase
       .from("content_calendar")
       .update({ status: "scheduled", updated_at: new Date().toISOString() })
       .eq("status", "processing")
-      .lt("updated_at", twoHoursAgo)
+      .lt("updated_at", staleClaimCutoff)
       .select("id, platform, title, client_account_id");
 
     if (stuckPosts?.length) {
@@ -149,7 +152,7 @@ serve(async (req) => {
           alert_type: "content_publish_timeout",
           severity: "warning",
           title: "Stuck Post Reset for Retry",
-          message: `Post "${post.title}" (${post.platform}) was stuck processing for 2h — reset to scheduled.`,
+          message: `Post "${post.title}" (${post.platform}) was stuck processing for 15+ min — reset to scheduled.`,
           source: "publish-scheduled-content",
           source_id: post.id,
           metadata: { platform: post.platform, title: post.title, client_account_id: post.client_account_id },
