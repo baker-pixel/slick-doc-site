@@ -89,7 +89,16 @@ const QuickAnalysis = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // supabase-js hides the function's JSON body behind a generic
+        // "non-2xx" message; our edge function sends a plain-language reason.
+        let message: string | undefined;
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (typeof body?.error === "string") message = body.error;
+        } catch { /* fall through to the generic message */ }
+        throw new Error(message ?? "We couldn't analyze that website. Please check the address and try again.");
+      }
       if (!data?.analysis) throw new Error("No analysis data returned");
 
       const analysis: AnalysisResult = data.analysis;

@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { parseOnPage } from "../_shared/seoSignals.ts";
-import { auditWebsite } from "../_shared/websiteAudit.ts";
+import { auditWebsiteDetailed, AUDIT_FAILURE_MESSAGES } from "../_shared/websiteAudit.ts";
 import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
 
 function getTier(score: number): "transformation" | "growth" | "optimization" {
@@ -116,29 +116,47 @@ serve(async (req) => {
         : null;
 
     if (prospectName && prospectEmail) {
-      const { data: savedProspect, error: prospectError } = await supabase
+      // A retry (site was down, typo fixed) shouldn't create a second lead row:
+      // reuse the same person + site from the last day.
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: existing } = await supabase
         .from("prospects")
-        .insert({
-          name: prospectName,
-          email: prospectEmail,
-          business_type: prospectBusinessType,
-          website_url: url,
-        })
         .select("id")
-        .single();
+        .eq("email", prospectEmail)
+        .eq("website_url", url)
+        .eq("source", "inbound")
+        .gte("created_at", dayAgo)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (prospectError) {
-        console.error("Prospect insert error:", prospectError);
-        throw new Error("Failed to save prospect");
+      if (existing) {
+        prospectId = existing.id;
+      } else {
+        const { data: savedProspect, error: prospectError } = await supabase
+          .from("prospects")
+          .insert({
+            name: prospectName,
+            email: prospectEmail,
+            business_type: prospectBusinessType,
+            website_url: url,
+          })
+          .select("id")
+          .single();
+
+        if (prospectError) {
+          console.error("Prospect insert error:", prospectError);
+          throw new Error("Failed to save prospect");
+        }
+
+        prospectId = savedProspect.id;
       }
-
-      prospectId = savedProspect.id;
     }
 
     console.log("Analyzing website:", url, "Industry:", industry || "not specified");
 
-    const audit = await auditWebsite(url);
-    if (!audit) {
+    const auditResult = await auditWebsiteDetailed(url);
+    if (!auditResult.ok) {
       // The lead is already saved but got no report -- surface it so someone
       // can follow up instead of the visitor silently hearing nothing.
       if (prospectId) {
@@ -146,16 +164,24 @@ serve(async (req) => {
           alert_type: "function_error",
           severity: "warning",
           title: "Quick Analysis could not fetch the site",
-          message: `Could not scan ${url} for ${prospectEmail}; no report was sent.`,
+          message: `Could not scan ${url} for ${prospectEmail} (${auditResult.reason}); no report was sent.`,
           source: "analyze-website",
-          metadata: { function_name: "analyze-website", prospect_id: prospectId, url, timestamp: new Date().toISOString() },
+          metadata: {
+            function_name: "analyze-website",
+            prospect_id: prospectId,
+            url,
+            reason: auditResult.reason,
+            http_status: auditResult.status ?? null,
+            timestamp: new Date().toISOString(),
+          },
         });
       }
       return new Response(
-        JSON.stringify({ error: "Failed to fetch website. Please check the URL and try again." }),
+        JSON.stringify({ error: AUDIT_FAILURE_MESSAGES[auditResult.reason], reason: auditResult.reason }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const audit = auditResult.audit;
     const { html: htmlContent, signals, readiness, additionalPages } = audit;
     console.log("Fetched HTML length:", htmlContent.length, "| additional pages found:", additionalPages.length);
 

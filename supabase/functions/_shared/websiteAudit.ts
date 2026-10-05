@@ -77,25 +77,101 @@ async function fetchAdditionalPages(homeUrl: string): Promise<{ url: string; tex
   }
 }
 
-export async function auditWebsite(url: string, timeoutMs = 12000): Promise<WebsiteAudit | null> {
-  let html = "";
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+export type AuditFailureReason = "timeout" | "blocked" | "not_found" | "server_error" | "unreachable" | "not_html" | "empty";
+
+export type AuditResult =
+  | { ok: true; audit: WebsiteAudit }
+  | { ok: false; reason: AuditFailureReason; status?: number };
+
+// Visitor-facing wording for each failure, so nobody is left staring at a
+// generic "failed to fetch".
+export const AUDIT_FAILURE_MESSAGES: Record<AuditFailureReason, string> = {
+  timeout: "That website took too long to respond. It may be down or very slow right now. Please try again in a few minutes.",
+  blocked: "That website blocks automated visitors, so we couldn't scan it automatically. Book a free call and we'll review it by hand.",
+  not_found: "We couldn't find a page at that address. Please check the spelling and try again.",
+  server_error: "That website returned an error when we tried to open it. Please try again shortly.",
+  unreachable: "We couldn't connect to that website. Please check the address and try again.",
+  not_html: "That address doesn't look like a regular web page. Please enter your website's home page.",
+  empty: "That page came back empty, so there was nothing to analyze. Please enter your website's home page.",
+};
+
+type FetchOutcome =
+  | { ok: true; html: string }
+  | { ok: false; reason: AuditFailureReason; status?: number };
+
+async function fetchHomepage(url: string, userAgent: string, timeoutMs: number): Promise<FetchOutcome> {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": UA,
+        "User-Agent": userAgent,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
       signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!res.ok) return null;
-    html = await res.text();
+    if (!res.ok) {
+      const status = res.status;
+      if (status === 401 || status === 403 || status === 429) return { ok: false, reason: "blocked", status };
+      if (status === 404 || status === 410) return { ok: false, reason: "not_found", status };
+      return { ok: false, reason: "server_error", status };
+    }
+    const type = res.headers.get("content-type") ?? "";
+    if (type && !/html|xml|text/i.test(type)) return { ok: false, reason: "not_html" };
+    const html = await res.text();
+    if (!html.trim()) return { ok: false, reason: "empty" };
+    return { ok: true, html };
+  } catch (e) {
+    const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
+    return { ok: false, reason: timedOut ? "timeout" : "unreachable" };
+  }
+}
+
+// www <-> non-www twin of a URL, for sites that only answer on one of them.
+function wwwTwin(url: string): string | null {
+  try {
+    const u = new URL(url);
+    u.hostname = u.hostname.startsWith("www.") ? u.hostname.slice(4) : `www.${u.hostname}`;
+    return u.toString();
   } catch {
     return null;
   }
-  if (!html) return null;
+}
 
-  const signals = parseOnPage(html, url);
-  const readiness = await computeAiReadiness(html, url, signals);
-  const additionalPages = await fetchAdditionalPages(url);
-  return { html, signals, readiness, additionalPages };
+/**
+ * Same audit as auditWebsite, but says *why* it failed. Retries only where a
+ * retry can actually help: a browser User-Agent when the site is blocking
+ * bots, and the www/non-www twin when the host is unreachable. A timeout is
+ * not retried -- a site that slow is down, and the visitor is waiting.
+ */
+export async function auditWebsiteDetailed(url: string, timeoutMs = 12000): Promise<AuditResult> {
+  let outcome = await fetchHomepage(url, UA, timeoutMs);
+  let finalUrl = url;
+
+  if (!outcome.ok && outcome.reason === "blocked") {
+    outcome = await fetchHomepage(url, BROWSER_UA, 8000);
+  }
+  if (!outcome.ok && outcome.reason === "unreachable") {
+    const twin = wwwTwin(url);
+    if (twin) {
+      const retry = await fetchHomepage(twin, UA, 8000);
+      if (retry.ok) {
+        outcome = retry;
+        finalUrl = twin;
+      }
+    }
+  }
+  if (!outcome.ok) return { ok: false, reason: outcome.reason, status: outcome.status };
+
+  const html = outcome.html;
+  const signals = parseOnPage(html, finalUrl);
+  const readiness = await computeAiReadiness(html, finalUrl, signals);
+  const additionalPages = await fetchAdditionalPages(finalUrl);
+  return { ok: true, audit: { html, signals, readiness, additionalPages } };
+}
+
+export async function auditWebsite(url: string, timeoutMs = 12000): Promise<WebsiteAudit | null> {
+  const result = await auditWebsiteDetailed(url, timeoutMs);
+  return result.ok ? result.audit : null;
 }
