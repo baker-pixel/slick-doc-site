@@ -5,11 +5,13 @@ import { applyPfmResult, type PfmPostResult } from "../_shared/pfmResult.ts";
 // Receives Post for Me webhook events. Register in the PfM dashboard:
 //   URL:    https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1/postforme-webhook
 //   Events: social.post.result.created
-// Set the webhook's secret as PFM_WEBHOOK_SECRET so events can be verified.
+// PfM generates the secret when the webhook is created (returned in the
+// response / shown in the dashboard) and sends it on every delivery in the
+// "Post-For-Me-Webhook-Secret" header. Store it as PFM_WEBHOOK_SECRET.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret, post-for-me-webhook-secret",
 };
 
 serve(async (req) => {
@@ -33,6 +35,7 @@ serve(async (req) => {
     if (expectedSecret) {
       const url = new URL(req.url);
       const provided =
+        req.headers.get("post-for-me-webhook-secret") ??
         req.headers.get("x-webhook-secret") ??
         req.headers.get("x-postforme-secret") ??
         url.searchParams.get("secret");
