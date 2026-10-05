@@ -6,7 +6,6 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Mail, Bell, Megaphone, CheckCircle, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 
 interface Preferences {
   marketing: boolean;
@@ -40,12 +39,6 @@ const EmailPreferences = () => {
 
   const fetchPreferences = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('unsubscribe', {
-        body: null,
-        method: 'GET',
-      });
-
-      // Use fetch directly since we need query params
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/unsubscribe?email=${encodeURIComponent(email!)}&token=${token}&action=preferences`
       );
@@ -104,12 +97,11 @@ const EmailPreferences = () => {
       [key]: !prefsData.preferences[key]
     };
     
-    // Check if all are being turned off
-    const allOff = !newPreferences.marketing && !newPreferences.sequences;
-    
+    // Transactional is always on, so it must not keep `subscribed` true:
+    // the senders skip a recipient only when subscribed = false.
     updatePreferences({
       preferences: newPreferences,
-      subscribed: !allOff || newPreferences.transactional
+      subscribed: newPreferences.marketing || newPreferences.sequences
     });
   };
 
