@@ -182,7 +182,8 @@ function buildEmailHtml(prospect: ProspectData): string {
       </tr></table>
     </div>
 
-    <!-- Primary CTA: the online report (always resolves -- unguessable token, friendly fallback page) -->
+    <!-- Primary CTA: the online report (always resolves -- unguessable token, friendly fallback page).
+         link-check-ok: prospects.report_token is NOT NULL with a default, so it is never missing. -->
     <div style="text-align:center;margin:8px 0 14px;">
       <a href="${APP_URL}/quick-report/${prospect.report_token}" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#E8521A,#F97316);color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;letter-spacing:0.5px;font-family:Georgia,'Times New Roman',serif;">View My Report Online</a>
     </div>

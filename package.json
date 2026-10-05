@@ -10,6 +10,8 @@
     "build:api": "node scripts/bundle-report-renderer.mjs",
     "vercel-build": "npm run build:api && vite build",
     "lint": "eslint .",
+    "check:email-links": "node scripts/check-email-links.mjs",
+    "smoke:quick-analysis": "node scripts/smoke-quick-analysis.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
