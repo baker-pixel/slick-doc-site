@@ -30,10 +30,11 @@ type WeeklySlot = {
 // what fill-scheduled-content's prompt switch expects.
 // google_post and email_newsletter candidates removed -- both only ever
 // published via n8n (now fully removed, see git history), and neither has a
-// replacement publisher. Social platforms are scheduled regardless of Post
-// for Me connection status -- content generation shouldn't be blocked on
-// that, publishing (publish-scheduled-content) fails safely per-post if the
-// platform isn't connected by the time a post is due.
+// replacement publisher. Social platforms are only scheduled once the client
+// has a connected Post for Me account for them (see buildWeeklyPlan) --
+// scheduling an unconnected platform just produced a guaranteed "No PfM
+// account" failure + alert when the post came due. The window rolls forward
+// on every run, so connecting a platform later picks it up automatically.
 const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: WeeklySlot }> = [
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" } },
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" } },
@@ -42,21 +43,20 @@ const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: Weekl
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post",   weekFilter: [1, 3] } },
 ];
 
-// Candidates for a platform the client has actually connected go first --
-// matters once postsPerMonth budgeting is back on (see git history for the
-// LinkedIn-only-forever bug this ordering fixes).
+// Platforms that publish through Post for Me. Blog is not one of them (it is
+// marked published directly), so it never needs a connected account.
+const PFM_PLATFORMS = new Set(["linkedin", "facebook", "instagram", "twitter"]);
+
 // ponytail: postsPerMonth budget cap disabled per request -- every candidate
 // matching the tier's allowed content types gets scheduled, uncapped. Re-add
 // the `c.perMonth > budget` check (removed here) to bring the cap back.
 function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Set<string>): WeeklySlot[] {
   const social = tierPolicy(tier).social;
   const allowed = new Set(social.contentTypes);
-  const candidates = [...SLOT_CANDIDATES].sort((a, b) =>
-    Number(connectedPlatforms.has(b.slot.platform)) - Number(connectedPlatforms.has(a.slot.platform))
-  );
   const plan: WeeklySlot[] = [];
-  for (const c of candidates) {
+  for (const c of SLOT_CANDIDATES) {
     if (!allowed.has(c.policyType)) continue;
+    if (PFM_PLATFORMS.has(c.slot.platform) && !connectedPlatforms.has(c.slot.platform)) continue;
     plan.push(c.slot);
   }
   return plan;
