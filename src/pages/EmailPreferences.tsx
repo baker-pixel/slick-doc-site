@@ -24,18 +24,55 @@ const EmailPreferences = () => {
   const [searchParams] = useSearchParams();
   const email = searchParams.get('email');
   const token = searchParams.get('token');
+  const autoUnsubscribe = searchParams.get('unsub') === '1';
   
+  const [justUnsubscribed, setJustUnsubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [prefsData, setPrefsData] = useState<EmailPreferencesData | null>(null);
 
   useEffect(() => {
     if (email && token) {
-      fetchPreferences();
+      if (autoUnsubscribe) {
+        unsubscribeOnOpen();
+      } else {
+        fetchPreferences();
+      }
     } else {
       setLoading(false);
     }
   }, [email, token]);
+
+  // One-click unsubscribe: the email footer link opens this page with unsub=1.
+  const unsubscribeOnOpen = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/unsubscribe?email=${encodeURIComponent(email!)}&token=${token}&action=update`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscribed: false,
+            preferences: { marketing: false, transactional: true, sequences: false },
+          }),
+        }
+      );
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      setPrefsData({
+        email: email!,
+        subscribed: false,
+        preferences: { marketing: false, transactional: true, sequences: false },
+      });
+      setJustUnsubscribed(true);
+    } catch (error) {
+      console.error('Error unsubscribing:', error);
+      toast.error('We could not process your unsubscribe. Please try again or reply to the email.');
+      await fetchPreferences();
+      return;
+    }
+    setLoading(false);
+  };
 
   const fetchPreferences = async () => {
     try {
@@ -161,7 +198,11 @@ const EmailPreferences = () => {
             <div className="flex items-center gap-2">
               <CheckCircle className={`h-5 w-5 ${prefsData?.subscribed ? 'text-green-500' : 'text-yellow-500'}`} />
               <span className="font-medium">
-                {prefsData?.subscribed ? 'You are subscribed' : 'You are unsubscribed from marketing emails'}
+                {prefsData?.subscribed
+                  ? 'You are subscribed'
+                  : justUnsubscribed
+                    ? "You've been unsubscribed. You won't receive further marketing emails."
+                    : 'You are unsubscribed from marketing emails'}
               </span>
             </div>
           </div>

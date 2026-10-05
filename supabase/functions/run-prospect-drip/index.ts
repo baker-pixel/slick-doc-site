@@ -88,7 +88,7 @@ const wrapHtml = (body: string, unsubEmail: string = "") => `
 <div style="max-width:600px;margin:20px auto;font-size:15px;color:#222;line-height:1.6;">
   ${body}
   <p style="font-size:12px;color:#999;margin-top:32px;">
-    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}&token=${unsubEmail ? btoa(unsubEmail) : ""}" style="color:#999;">Unsubscribe</a>
+    <a href="https://orangedoormarketing.com/email-preferences?email=${encodeURIComponent(unsubEmail)}&token=${unsubEmail ? btoa(unsubEmail) : ""}&unsub=1" style="color:#999;">Unsubscribe</a>
   </p>
 </div>
 </body></html>`;
