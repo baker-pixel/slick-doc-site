@@ -26,7 +26,8 @@ export async function applyPfmResult(
       .from("content_calendar")
       .update({
         status: "published",
-        published_at: new Date().toISOString(),
+        // published_at stays as recorded at submission time: this is a late
+        // confirmation (the reconciler can run weeks later), not the publish moment.
         error_message: null,
         metadata: {
           ...meta,
@@ -51,6 +52,7 @@ export async function applyPfmResult(
     .from("content_calendar")
     .update({
       status: "failed",
+      published_at: null, // it never went live; don't leave a publish time on a failed post
       error_message: errorMsg,
       metadata: { ...meta, pfm_result_id: result.id, error: errorMsg, publish_failed_at: new Date().toISOString() },
     })
