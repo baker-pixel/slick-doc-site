@@ -1,4 +1,6 @@
 import { ImapLite } from "./imapLite.ts";
+import { notifyClientBlocked } from "./clientAlerts.ts";
+import { logActivity } from "./activityLog.ts";
 
 interface SmtpMeta {
   host?: string;
@@ -43,6 +45,21 @@ function getHeader(headers: Record<string, string | string[]> | undefined, name:
     if (k.toLowerCase() === target) return Array.isArray(v) ? v.join(" ") : v;
   }
   return "";
+}
+
+// "Name <addr@x.com>" or bare "addr@x.com" -> lowercase address.
+export function extractSenderAddress(fromHeader: string): string | null {
+  const m = fromHeader.match(/<([^>]+)>/) ?? fromHeader.match(/([^\s<>"]+@[^\s<>"]+)/);
+  const addr = m?.[1]?.trim().toLowerCase();
+  return addr && addr.includes("@") ? addr : null;
+}
+
+// Out-of-office / vacation / auto-acknowledge mail is not a human reply and
+// must not stop a sequence or notify the client.
+const AUTO_REPLY_SUBJECT_RE = /^(auto(matic)?[ -]?reply|automatische antwort|out of office|ooo\b|vacation|away from|abwesenheit)|auto.?reply|out of the office/i;
+export function isAutoReply(subject: string, autoSubmitted: string): boolean {
+  if (autoSubmitted && !/^no$/i.test(autoSubmitted.trim())) return true;
+  return AUTO_REPLY_SUBJECT_RE.test(subject.trim());
 }
 
 const BOUNCE_FROM_RE = /mailer-daemon|postmaster|mail delivery (sub)?system/i;
@@ -176,12 +193,12 @@ export function extractReplySnippet(raw: Uint8Array): string | null {
   }
 }
 
-const MAX_MESSAGES_PER_RUN = 150;
+const MAX_MESSAGES_PER_RUN = 200;
 const POLL_TIMEOUT_MS = 40_000;
 // IMAP SINCE works on whole days; a reply is only acted on once (see the
 // status guards below), so re-scanning a window every run is safe and does
 // not depend on the client leaving mail unread.
-const LOOKBACK_DAYS = 10;
+const LOOKBACK_DAYS = 21;
 // A reply/bounce may only change a prospect that is still in the outreach
 // funnel -- never resurrect an unsubscribed or converted one.
 const REPLYABLE_STATUSES = ["nurture", "exhausted", "pending"];
@@ -225,7 +242,7 @@ export async function pollClientMailbox(
 
     const uids = await client.searchSince(new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
     const batch = uids.slice(-MAX_MESSAGES_PER_RUN);
-    const headersByUid = await client.fetchHeaders(batch, ["SUBJECT", "FROM", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES"]);
+    const headersByUid = await client.fetchHeaders(batch, ["SUBJECT", "FROM", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES", "AUTO-SUBMITTED"]);
 
     for (const [uid, headers] of headersByUid) {
       try {
@@ -236,26 +253,53 @@ export async function pollClientMailbox(
         const trackingId = extractTrackingId(getHeader(headers, "In-Reply-To")) ||
           extractTrackingId(getHeader(headers, "References"));
         const isBounce = BOUNCE_FROM_RE.test(fromHeader) || BOUNCE_SUBJECT_RE.test(subject);
-        if (!trackingId) continue; // unrelated inbox mail, or a bounce we cannot attribute
+        const autoReply = !isBounce && isAutoReply(subject, getHeader(headers, "Auto-Submitted"));
+        if (autoReply) continue;
 
-        const { data: log } = await supabase
-          .from("email_logs")
-          .select("metadata")
-          .eq("tracking_id", trackingId)
+        // Primary link: the Message-ID tag on what we sent. Fallback for a real
+        // reply that lost its threading headers (new compose, forwarding
+        // client): the sender is one of THIS client's prospects.
+        let prospectId: string | null = null;
+        if (trackingId) {
+          const { data: log } = await supabase
+            .from("email_logs")
+            .select("metadata")
+            .eq("tracking_id", trackingId)
+            .maybeSingle();
+          const logMeta = (log?.metadata ?? {}) as Record<string, unknown>;
+          prospectId = typeof logMeta.prospect_id === "string" ? logMeta.prospect_id : null;
+        } else if (!isBounce) {
+          const sender = extractSenderAddress(fromHeader);
+          if (sender && sender !== meta.username?.toLowerCase()) {
+            const { data: bySender } = await supabase
+              .from("prospects")
+              .select("id")
+              .eq("client_id", clientId)
+              .ilike("email", sender.replace(/[%_\\]/g, "\\$&"))
+              .limit(2);
+            // Ambiguous (same address on two prospects) -> don't guess.
+            if (bySender?.length === 1) prospectId = bySender[0].id;
+          }
+        }
+        if (!prospectId) continue; // unrelated inbox mail, or a bounce we cannot attribute
+
+        const { data: prospect } = await supabase
+          .from("prospects")
+          .select("name, status, reply_snippet")
+          .eq("id", prospectId)
           .maybeSingle();
-        const logMeta = (log?.metadata ?? {}) as Record<string, unknown>;
-        const prospectId = typeof logMeta.prospect_id === "string" ? logMeta.prospect_id : null;
-        if (!prospectId) continue;
-
-        const { data: prospect } = await supabase.from("prospects").select("status").eq("id", prospectId).maybeSingle();
-        if (!prospect || !REPLYABLE_STATUSES.includes(prospect.status)) continue; // already handled
+        if (!prospect) continue;
+        // A prospect someone already marked "replied" by hand still gets its
+        // reply text captured once; every other settled status is left alone.
+        const needsBackfill = prospect.status === "replied" && !prospect.reply_snippet;
+        if (!REPLYABLE_STATUSES.includes(prospect.status) && !needsBackfill) continue; // already handled
 
         if (isBounce) {
           result.bounced++;
           await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospectId);
         } else {
           // Only counts as a genuine reply when it's tied back to a specific
-          // sent email. Body fetched only for confirmed replies.
+          // sent email or a known prospect. Body fetched only for confirmed replies.
           result.replied++;
           let replySnippet: string | null = null;
           try {
@@ -269,6 +313,26 @@ export async function pollClientMailbox(
             replied_at: new Date().toISOString(),
             ...(replySnippet ? { reply_snippet: replySnippet } : {}),
           }).eq("id", prospectId);
+
+          // Tell the client -- a reply is the whole point of outreach and used
+          // to sit unseen until someone opened the prospect. Deduped per
+          // prospect (notifyClientBlocked keys on title) so re-scanning the
+          // lookback window never re-notifies.
+          const who = prospect.name ?? "A prospect";
+          const preview = replySnippet ? `"${replySnippet.replace(/\s+/g, " ").slice(0, 280)}${replySnippet.length > 280 ? "…" : ""}"` : "Open your portal to read it in your inbox.";
+          await notifyClientBlocked(supabase, clientId, {
+            notificationType: "prospect_reply",
+            title: `${who} replied to your outreach`,
+            description: preview,
+            dedupeHours: 24 * 60,
+          });
+          await logActivity(supabase, clientId, {
+            type: "prospect_replied",
+            title: `${who} replied to your outreach`,
+            description: replySnippet ? replySnippet.slice(0, 140) : undefined,
+            icon: "mail",
+            metadata: { prospect_id: prospectId },
+          });
         }
         // Stop the rest of the sequence either way.
         await supabase.from("email_queue").update({ status: "cancelled", error_message: isBounce ? "Prospect bounced" : "Prospect replied" })
