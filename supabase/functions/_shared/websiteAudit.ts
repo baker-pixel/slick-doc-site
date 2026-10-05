@@ -5,6 +5,7 @@
 // different ideas of what's "true" about a site.
 import { parseOnPage, discoverPages } from "./seoSignals.ts";
 import { computeAiReadiness, type AiReadinessScores } from "./aiReadiness.ts";
+import { isPublicHttpUrl } from "./urlSafety.ts";
 
 const UA = "Mozilla/5.0 (compatible; OrangeDoorAnalyzer/1.0)";
 
@@ -80,7 +81,7 @@ async function fetchAdditionalPages(homeUrl: string): Promise<{ url: string; tex
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-export type AuditFailureReason = "timeout" | "blocked" | "not_found" | "server_error" | "unreachable" | "not_html" | "empty";
+export type AuditFailureReason = "timeout" | "blocked" | "not_found" | "server_error" | "unreachable" | "not_html" | "empty" | "invalid_url";
 
 export type AuditResult =
   | { ok: true; audit: WebsiteAudit }
@@ -95,6 +96,7 @@ export const AUDIT_FAILURE_MESSAGES: Record<AuditFailureReason, string> = {
   server_error: "That website returned an error when we tried to open it. Please try again shortly.",
   unreachable: "We couldn't connect to that website. Please check the address and try again.",
   not_html: "That address doesn't look like a regular web page. Please enter your website's home page.",
+  invalid_url: "That doesn't look like a public website address. Please enter your website's home page, like https://yourbusiness.com.",
   empty: "That page came back empty, so there was nothing to analyze. Please enter your website's home page.",
 };
 
@@ -146,6 +148,9 @@ function wwwTwin(url: string): string | null {
  * not retried -- a site that slow is down, and the visitor is waiting.
  */
 export async function auditWebsiteDetailed(url: string, timeoutMs = 12000): Promise<AuditResult> {
+  // Never fetch localhost / private / metadata addresses on a visitor's behalf.
+  if (!isPublicHttpUrl(url)) return { ok: false, reason: "invalid_url" };
+
   let outcome = await fetchHomepage(url, UA, timeoutMs);
   let finalUrl = url;
 

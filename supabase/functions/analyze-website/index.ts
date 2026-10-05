@@ -4,6 +4,8 @@ import { corsHeaders } from "../_shared/http.ts";
 import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { parseOnPage } from "../_shared/seoSignals.ts";
 import { auditWebsiteDetailed, AUDIT_FAILURE_MESSAGES } from "../_shared/websiteAudit.ts";
+import { checkScanRateLimit } from "../_shared/scanRateLimit.ts";
+import { isPublicHttpUrl } from "../_shared/urlSafety.ts";
 import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
 
 function getTier(score: number): "transformation" | "growth" | "optimization" {
@@ -98,7 +100,7 @@ serve(async (req) => {
   );
 
   try {
-    const { url, industry, prospect } = await req.json();
+    const { url, industry, prospect, hp } = await req.json();
     let prospectId: string | null = null;
 
     if (!url) {
@@ -106,6 +108,47 @@ serve(async (req) => {
         JSON.stringify({ error: "URL is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Honeypot: the real form never fills this hidden field; bots usually do.
+    // Answer like a rate limit so a bot learns nothing, and spend nothing.
+    if (typeof hp === "string" && hp.trim() !== "") {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Reject non-public addresses before anything is saved or fetched (SSRF).
+    if (typeof url !== "string" || !isPublicHttpUrl(url)) {
+      return new Response(
+        JSON.stringify({ error: AUDIT_FAILURE_MESSAGES.invalid_url, reason: "invalid_url" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Anonymous visitors are rate limited; internal callers (backfill job etc.)
+    // authenticate with the service key and are exempt.
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const isInternal = !!bearer && bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isInternal) {
+      const limit = await checkScanRateLimit(
+        supabase,
+        req,
+        typeof prospect?.email === "string" ? prospect.email : null,
+      );
+      if (!limit.allowed) {
+        const message = limit.scope === "global"
+          ? "We're getting a lot of scans right now. Please try again in a little while, or book a free call and we'll review your site by hand."
+          : "You've run a lot of scans in a short time. Please try again later, or book a free call and we'll review your site by hand.";
+        return new Response(
+          JSON.stringify({ error: message, reason: "rate_limited", retryAfterMinutes: limit.retryAfterMinutes }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(limit.retryAfterMinutes * 60) },
+          }
+        );
+      }
     }
 
     const prospectName = typeof prospect?.name === "string" ? prospect.name.trim() : "";

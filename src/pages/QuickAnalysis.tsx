@@ -40,6 +40,8 @@ const QuickAnalysis = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [businessType, setBusinessType] = useState("");
+  // Honeypot: hidden from people, tempting to bots. Must stay empty.
+  const [honeypot, setHoneypot] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [prospectId, setProspectId] = useState<string | null>(null);
@@ -86,6 +88,7 @@ const QuickAnalysis = () => {
             email,
             businessType: businessType || null,
           },
+          hp: honeypot,
         },
       });
 
@@ -263,6 +266,16 @@ const QuickAnalysis = () => {
                           </p>
                         </div>
                         <form onSubmit={handleEmailGate} className="space-y-4">
+                          <input
+                            type="text"
+                            name="company_website"
+                            tabIndex={-1}
+                            autoComplete="off"
+                            aria-hidden="true"
+                            value={honeypot}
+                            onChange={(e) => setHoneypot(e.target.value)}
+                            style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+                          />
                           <div className="relative">
                             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                             <Input
