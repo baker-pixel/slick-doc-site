@@ -17,6 +17,7 @@ import { CompanyContextCard } from "./CompanyContextCard";
 import { ProspectIcpCard } from "./ProspectIcpCard";
 import { OutreachSettingsCard } from "./OutreachSettingsCard";
 import { SmtpSenderSection } from "./SmtpSenderSection";
+import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
@@ -126,6 +127,9 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [sortKey, setSortKey] = useState<SortKey>("created");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Who the outreach emails come from, so the email view can show a real "From".
+  const [sender, setSender] = useState<OutreachSender>({ name: "Your team", address: null });
+  const [signatureName, setSignatureName] = useState<string | null>(null);
 
   const loadProspects = async () => {
     setLoading(true);
@@ -141,10 +145,20 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
 
   useEffect(() => {
     loadProspects();
-    supabase.from("client_accounts").select("icp").eq("id", clientAccountId).single()
+    supabase.from("client_accounts").select("icp, business_name, outreach_settings").eq("id", clientAccountId).single()
       .then(({ data }) => {
         const icp = data?.icp as { local?: boolean } | null;
         if (icp && typeof icp.local === "boolean") setIcpLocal(icp.local);
+        const sig = (data?.outreach_settings as { signature?: { name?: string } } | null)?.signature?.name?.trim() || null;
+        setSignatureName(sig);
+        setSender((prev) => ({ ...prev, name: sig || data?.business_name || prev.name }));
+      });
+    // A connected inbox means emails go out from the client's own address.
+    supabase.from("client_oauth_tokens").select("page_id, token_metadata").eq("client_id", clientAccountId).eq("platform", "smtp").maybeSingle()
+      .then(({ data }) => {
+        if (!data?.page_id) return;
+        const fromName = (data.token_metadata as { from_name?: string } | null)?.from_name;
+        setSender((prev) => ({ name: fromName || prev.name, address: data.page_id }));
       });
     (supabase.rpc as any)("client_get_outreach_sequence").then(({ data }: { data: SequenceStep[] | null }) => {
       setSequenceSteps(data ?? []);
@@ -472,37 +486,32 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         <DialogContent
           className={
             viewingEmail
-              ? "sm:max-w-2xl h-[85vh] flex flex-col p-0 gap-0"
+              ? "sm:max-w-3xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
               : "max-w-lg max-h-[85vh] overflow-y-auto"
           }
         >
-          {selected && viewingEmail ? (
+          {selected && viewingEmail && emails ? (
             <>
-              <DialogHeader className="p-5 pb-4 border-b space-y-2 text-left shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setViewingEmail(null)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  Back to {selected.name}
-                </button>
-                <DialogTitle className="text-base leading-snug pr-6">{viewingEmail.subject}</DialogTitle>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {viewingEmail.drip_step && <span>Step {viewingEmail.drip_step} of 4</span>}
-                  <Badge variant="outline" className="text-xs capitalize">{viewingEmail.status}</Badge>
-                  <span>
-                    {viewingEmail.status === "sent" && viewingEmail.sent_at
-                      ? `Sent ${format(new Date(viewingEmail.sent_at), "MMM d, yyyy 'at' h:mm a")}`
-                      : `Scheduled for ${format(new Date(viewingEmail.scheduled_for), "MMM d, yyyy 'at' h:mm a")}`}
-                  </span>
-                </div>
-              </DialogHeader>
-              <iframe
-                title={viewingEmail.subject}
-                sandbox=""
-                srcDoc={viewingEmail.html_content}
-                className="flex-1 w-full bg-white"
+              <DialogTitle className="sr-only">{viewingEmail.subject}</DialogTitle>
+              <OutreachEmailViewer
+                prospectName={selected.name}
+                emails={emails}
+                activeIndex={Math.max(0, emails.indexOf(viewingEmail))}
+                onSelect={(i) => setViewingEmail(emails[i])}
+                onBack={() => setViewingEmail(null)}
+                sender={sender}
+                signatureName={signatureName}
+                onEditSignature={() => {
+                  setSelected(null);
+                  setViewingEmail(null);
+                  setSettingsOpen(true);
+                }}
+                activity={{
+                  opened_at: selected.opened_at,
+                  clicked_at: selected.clicked_at,
+                  replied_at: selected.replied_at,
+                  reply_snippet: selected.reply_snippet,
+                }}
               />
             </>
           ) : selected && (
