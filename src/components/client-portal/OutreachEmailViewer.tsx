@@ -167,7 +167,7 @@ export function OutreachEmailViewer({
                     current ? "border-primary bg-primary/5" : viewable ? "hover:bg-muted/50" : "opacity-60 cursor-default",
                   )}
                 >
-                  <div className="flex items-center gap-1 text-[11px] font-medium">
+                  <div className="flex items-center gap-1 whitespace-nowrap text-[11px] font-medium">
                     {viewable ? <Check className="h-3 w-3 text-emerald-600" aria-hidden /> : <Clock className="h-3 w-3 text-muted-foreground" aria-hidden />}
                     Step {step}
                   </div>
