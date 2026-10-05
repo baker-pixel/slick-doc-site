@@ -83,7 +83,8 @@ serve(async (req) => {
         const result = results.find((r) => !r.success) ?? results[0];
         details.push({ id: row.id, platform: row.platform, success: result.success, error: result.error ?? null });
         if (!body.dryRun) await applyPfmResult(supabase, row, { ...result, post_id: row.postforme_post_id }, "reconcile-postforme-posts");
-        result.success ? summary.confirmed++ : summary.failed++;
+        if (result.success) summary.confirmed++;
+        else summary.failed++;
       } catch (e) {
         console.error(`reconcile: ${row.id}`, e instanceof Error ? e.message : e);
         summary.errors++;
