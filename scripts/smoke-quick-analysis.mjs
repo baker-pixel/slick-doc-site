@@ -123,15 +123,26 @@ if (process.env.SITE_URL) {
   // A single-page app answers 200 for ANY path, so the checks below can't prove a
   // route exists. Look for the route inside the deployed JavaScript instead.
   await check("deployed frontend actually contains the /quick-report route", async () => {
-    const html = await (await fetch(site + "/", { signal: AbortSignal.timeout(20_000) })).text();
-    const scripts = [...html.matchAll(/<script[^>]+src="([^"]+\.js)"/g)].map((m) => new URL(m[1], site + "/").toString());
-    assert(scripts.length > 0, "no script bundles found on the home page");
+    // The apex domain redirects to www, and Vite code-splits the app: the routes
+    // live in a lazy MarketingApp chunk, not in the script tags of the HTML.
+    // So follow the HTML's scripts and then the chunk files they reference.
+    const home = await fetch(site + "/", { signal: AbortSignal.timeout(20_000) });
+    const base = new URL(home.url);
+    const queue = [...(await home.text()).matchAll(/(?:src|href)="(\/assets\/[^"]+\.js)"/g)].map((m) => m[1]);
+    assert(queue.length > 0, "no script bundles found on the home page");
+    const seen = new Set();
     let found = false;
-    for (const src of scripts) {
-      const js = await (await fetch(src, { signal: AbortSignal.timeout(30_000) })).text();
-      if (js.includes("/quick-report/")) { found = true; break; }
+    while (queue.length && !found && seen.size < 40) {
+      const path = queue.shift();
+      if (seen.has(path)) continue;
+      seen.add(path);
+      const res = await fetch(new URL(path, base), { signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) continue;
+      const js = await res.text();
+      if (js.includes("quick-report/:token")) { found = true; break; }
+      for (const m of js.matchAll(/["'`](?:\.\/|\/assets\/)([A-Za-z0-9_-]+-[A-Za-z0-9_-]{6,}\.js)["'`]/g)) queue.push("/assets/" + m[1]);
     }
-    assert(found, "the live site bundle has no /quick-report route yet -- frontend not deployed (push to Vercel)");
+    assert(found, `no /quick-report route in the live site bundles (checked ${seen.size} files) -- frontend not deployed yet?`);
   });
 
   for (const path of ["/quick-analysis", "/quick-report/00000000-0000-0000-0000-000000000000", "/dashboard/00000000-0000-0000-0000-000000000000", "/gap-analysis"]) {
