@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyPfmResult, type PfmPostResult } from "../_shared/pfmResult.ts";
 
 // Receives Post for Me webhook events. Register in the PfM dashboard:
 //   URL:    https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1/postforme-webhook
@@ -10,15 +11,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
 };
-
-interface PostResult {
-  id: string;
-  social_account_id: string;
-  post_id: string;
-  success: boolean;
-  error: Record<string, unknown> | null;
-  platform_data?: { id?: string; url?: string } | null;
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -52,7 +44,7 @@ serve(async (req) => {
 
     const event = await req.json();
     const eventType: string = event.type ?? event.event_type ?? "";
-    const result: PostResult | undefined = event.data;
+    const result: PfmPostResult | undefined = event.data;
 
     if (eventType !== "social.post.result.created" || !result?.post_id) {
       // Not an event we act on — acknowledge so PfM doesn't retry
@@ -70,47 +62,7 @@ serve(async (req) => {
       return json({ received: true, matched: false });
     }
 
-    const meta = (item.metadata as Record<string, unknown>) || {};
-
-    if (result.success) {
-      await supabase
-        .from("content_calendar")
-        .update({
-          status: "published",
-          published_at: new Date().toISOString(),
-          metadata: {
-            ...meta,
-            pfm_result_id: result.id,
-            platform_post_id: result.platform_data?.id ?? null,
-            platform_post_url: result.platform_data?.url ?? null,
-            publish_confirmed_at: new Date().toISOString(),
-          },
-        })
-        .eq("id", item.id);
-      console.log(`Confirmed publish: calendar=${item.id} url=${result.platform_data?.url ?? "n/a"}`);
-    } else {
-      const errorMsg = result.error
-        ? JSON.stringify(result.error).slice(0, 500)
-        : "Platform rejected the post";
-      await supabase
-        .from("content_calendar")
-        .update({
-          status: "failed",
-          metadata: { ...meta, pfm_result_id: result.id, error: errorMsg },
-        })
-        .eq("id", item.id);
-
-      await supabase.from("automation_alerts").insert({
-        alert_type: "content_publish_failure",
-        severity: "error",
-        title: `${item.platform} post failed on the platform`,
-        message: `PfM accepted the post but the platform rejected it: ${errorMsg}`,
-        source: "postforme-webhook",
-        source_id: item.id,
-        metadata: { client_account_id: item.client_account_id, title: item.title, pfm_post_id: result.post_id },
-      });
-      console.error(`Publish failed on platform: calendar=${item.id} error=${errorMsg}`);
-    }
+    await applyPfmResult(supabase, item, result, "postforme-webhook");
 
     return json({ received: true, matched: true, success: result.success });
   } catch (err) {

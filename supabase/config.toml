@@ -189,5 +189,8 @@ verify_jwt = false
 [functions.postforme-webhook]
 verify_jwt = false
 
+[functions.reconcile-postforme-posts]
+verify_jwt = false
+
 [functions.send-approval-reminders]
 verify_jwt = true
