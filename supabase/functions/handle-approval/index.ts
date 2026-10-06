@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callAI, MODELS } from "../_shared/ai.ts";
+import { callAI, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { isUsableCaption } from "../_shared/captionGate.ts";
 
 const corsHeaders = {
@@ -359,7 +359,7 @@ serve(async (req) => {
       try {
         const [{ data: genRecord }, { data: client }] = await Promise.all([
           supabase.from("generated_content").select("metadata").eq("id", generatedContentIdForChanges).maybeSingle(),
-          supabase.from("client_accounts").select("business_name, industry").eq("id", clientId).maybeSingle(),
+          supabase.from("client_accounts").select("business_name, industry, context_profile").eq("id", clientId).maybeSingle(),
         ]);
 
         const original = approval.full_content || approval.content_preview || "";
@@ -372,7 +372,12 @@ ${original}
 The client reviewed it and requested changes:
 "${feedback.trim()}"
 
-Rewrite the post to directly address this feedback. Keep the same topic, platform conventions, and roughly the same length. Return ONLY the revised post content -- no preamble, no explanation, no quotes.`;
+${(() => {
+          const cp = (client?.context_profile ?? {}) as Record<string, unknown>;
+          const vf = Array.isArray(cp.verified_facts) ? (cp.verified_facts as string[]) : [];
+          const ns = Array.isArray(cp.never_say) ? (cp.never_say as string[]) : [];
+          return `${vf.length ? `Verified facts about the business (the only source for product claims): ${vf.join("; ")}.\n` : ""}${ns.length ? `Never say or imply: ${ns.join("; ")}.\n` : ""}`;
+        })()}Rewrite the post to directly address this feedback. Keep the same topic, platform conventions, and roughly the same length. Return ONLY the revised post content -- no preamble, no explanation, no quotes.${NO_FABRICATION_GUARDRAIL}`;
 
         const revisedContent = await callAI({
           prompt,

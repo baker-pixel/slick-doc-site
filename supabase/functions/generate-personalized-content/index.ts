@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAI } from "../_shared/ai.ts";
+import { callAI, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 
 const SEGMENT_DESCRIPTIONS: Record<string, string> = {
@@ -67,7 +67,7 @@ Return ONLY the personalized content text — no explanation, no quotes, no extr
 
     const aiText = await callAI({
       source: "generate-personalized-content",
-      system: "You are a conversion copywriter specializing in personalized website content. Return only the rewritten content text with no extra commentary.",
+      system: "You are a conversion copywriter specializing in personalized website content. Return only the rewritten content text with no extra commentary." + NO_FABRICATION_GUARDRAIL,
       prompt,
       maxTokens: 512,
       temperature: 0.7,

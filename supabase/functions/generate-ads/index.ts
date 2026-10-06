@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson, AIError } from "../_shared/ai.ts";
+import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 
 serve(async (req) => {
@@ -203,7 +203,7 @@ Return ONLY valid JSON in this exact format:
     try {
       parsedAds = await callAIJson({
         source: "generate-ads",
-        system: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only.",
+        system: "You are an expert digital marketing strategist specializing in Google Ads and Meta Ads with deep knowledge of performance optimization, A/B testing, and conversion rate optimization. Always respond with valid JSON only." + NO_FABRICATION_GUARDRAIL,
         prompt,
         maxTokens: 4096,
       });

@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   CheckCircle, ChevronLeft, ChevronRight, Loader2, MessageSquare, AlertTriangle, Clock, ExternalLink, Ban,
 } from "lucide-react";
@@ -46,11 +47,11 @@ interface Props {
   onPrev?: () => void;
   onNext?: () => void;
   onApprove: (id: string) => void;
-  onRequestChanges: (id: string, note: string) => void;
+  onRequestChanges: (id: string, note: string, neverSay?: string) => void;
   onDecline: (id: string) => void;
 }
 
-const QUICK_REASONS = ["Tone doesn't sound like us", "Wrong or poor image", "Facts need fixing", "Too long", "Wrong timing", "Off-topic"];
+const QUICK_REASONS = ["Tone doesn't sound like us", "Wrong or poor image", "Facts need fixing", "Invents a feature or claim", "Too long", "Wrong timing", "Off-topic"];
 
 const isSocial = (t: string) => ["social_post", "social_media"].includes(t.toLowerCase().replace(/\s+/g, "_"));
 
@@ -59,12 +60,14 @@ export function ApprovalReviewDialog({
 }: Props) {
   const [mode, setMode] = useState<"review" | "changes">("review");
   const [note, setNote] = useState("");
+  const [neverSay, setNeverSay] = useState("");
   const [confirmDecline, setConfirmDecline] = useState(false);
 
   // Fresh state whenever a different post comes up (e.g. auto-advance).
   useEffect(() => {
     setMode("review");
     setNote(item?.feedback ?? "");
+    setNeverSay("");
     setConfirmDecline(false);
   }, [item?.id]);
 
@@ -208,6 +211,18 @@ export function ApprovalReviewDialog({
                       rows={5}
                       className="resize-none"
                     />
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Is it claiming something untrue? Tell us what never to say (optional)
+                      </label>
+                      <Input
+                        value={neverSay}
+                        onChange={(e) => setNeverSay(e.target.value)}
+                        placeholder="e.g. real-time AI analytics, HR system integrations"
+                        className="h-8 text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">We'll add it to your "Never say" list so future posts avoid it.</p>
+                    </div>
                   </section>
                 )}
               </aside>
@@ -235,7 +250,7 @@ export function ApprovalReviewDialog({
               ) : (
                 <>
                   <Button variant="ghost" onClick={() => setMode("review")} disabled={busy}>Back</Button>
-                  <Button onClick={() => onRequestChanges(item.id, note.trim())} disabled={busy || !noteOk}>
+                  <Button onClick={() => onRequestChanges(item.id, note.trim(), neverSay.trim() || undefined)} disabled={busy || !noteOk}>
                     {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                     Send feedback
                   </Button>

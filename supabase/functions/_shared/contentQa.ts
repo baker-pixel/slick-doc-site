@@ -92,3 +92,40 @@ export async function critiqueContentBatch(
     return items.map(() => null);
   }
 }
+
+/**
+ * Fact-check a draft against the facts we actually hold about the business.
+ * Returns the concrete claims (product features, technology, integrations,
+ * stats, awards, results) the facts do not support. Generic advice, questions
+ * and audience-problem framing are fine. Best-effort: null means "couldn't
+ * check", which callers must treat as "no verdict", not "clean".
+ */
+export async function findUnsupportedClaims(
+  content: string,
+  facts: string,
+  clientId?: string,
+): Promise<string[] | null> {
+  try {
+    const r = await callAIJson<{ unsupported_claims: string[] }>({
+      source: "content-claims-check",
+      promptId: "content-claims-check.v1",
+      model: MODELS.fast,
+      clientId,
+      system:
+        "You are a strict fact-checker for marketing copy. List every concrete claim in the draft about the company's own " +
+        "product, features, technology (AI, automation, real-time anything), dashboards, integrations, statistics, awards, " +
+        "customers, guarantees or results that is NOT supported by the FACTS. Generic advice, questions, and statements about " +
+        "the audience's problems are fine and must not be listed. Return JSON only: { \"unsupported_claims\": string[] } " +
+        "(empty array if every claim is supported). Do not invent problems.",
+      prompt: `FACTS:\n${facts}\n\nDRAFT:\n${content}`,
+      maxTokens: 300,
+      temperature: 0,
+      retries: 0,
+      silent: true,
+    });
+    return Array.isArray(r.unsupported_claims) ? r.unsupported_claims.filter((c) => typeof c === "string" && c.trim()) : [];
+  } catch (e) {
+    console.warn("[claims-check] failed (non-fatal):", e instanceof Error ? e.message : e);
+    return null;
+  }
+}

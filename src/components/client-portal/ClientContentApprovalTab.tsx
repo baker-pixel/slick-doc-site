@@ -290,12 +290,41 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
     }
   };
 
-  const handleRequestChanges = async (id: string, note: string) => {
+  // Appends a phrase to the client's "never say" list so every future draft avoids it.
+  const addToNeverSay = async (phrase: string) => {
+    const { data: acct, error } = await supabase
+      .from("client_accounts")
+      .select("industry, website_url, website_summary, tone, context_profile")
+      .eq("id", clientAccountId)
+      .single();
+    if (error || !acct) throw error ?? new Error("account not found");
+    const profile = ((acct.context_profile as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+    const existing = Array.isArray(profile.never_say) ? (profile.never_say as string[]) : [];
+    if (existing.some((e) => e.toLowerCase() === phrase.toLowerCase())) return;
+    const { error: rpcErr } = await (supabase.rpc as any)("client_update_company_context", {
+      p_client_account_id: clientAccountId,
+      p_industry: acct.industry ?? "",
+      p_website_url: acct.website_url ?? "",
+      p_website_summary: acct.website_summary ?? "",
+      p_tone: acct.tone ?? "professional",
+      p_context_profile: { ...profile, never_say: [...existing, phrase] },
+    });
+    if (rpcErr) throw rpcErr;
+  };
+
+  const handleRequestChanges = async (id: string, note: string, neverSay?: string) => {
     setSubmitting(true);
     try {
       await callHandleApproval(id, "changes_requested", note);
       setApprovals((prev) => prev.map((a) => (a.id === id ? { ...a, status: "changes_requested", feedback: note, reviewed_at: new Date().toISOString() } : a)));
-      toast({ title: "Feedback sent", description: "Our team will revise it and send it back for your review." });
+      let savedNeverSay = false;
+      if (neverSay) {
+        try { await addToNeverSay(neverSay); savedNeverSay = true; } catch (e) { console.error("never_say save failed", e); }
+      }
+      toast({
+        title: "Feedback sent",
+        description: `Our team will revise it and send it back for your review.${savedNeverSay ? " Future posts will avoid that claim." : neverSay ? " We couldn't save the never-say entry; add it in Settings." : ""}`,
+      });
       advanceFrom(id);
     } catch (error) {
       toast({ title: "Couldn't send feedback", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
@@ -366,6 +395,13 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
           {queue.length > 0
             ? `${queue.length} item${queue.length === 1 ? "" : "s"} waiting for your review${nextDueRel ? ` — the first is due ${nextDueRel.text}` : ""}.`
             : "Review and approve content before it goes live."}
+        </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Something inaccurate or off-brand?{" "}
+          <button type="button" onClick={() => onTabChange?.("settings")} className="text-primary underline underline-offset-2 hover:no-underline">
+            Update your Verified Facts and brand voice
+          </button>{" "}
+          so future posts get it right.
         </p>
       </div>
 

@@ -5,12 +5,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
 import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
-import { critiqueContent, qaNeedsAttention } from "../_shared/contentQa.ts";
+import { critiqueContent, qaNeedsAttention, findUnsupportedClaims } from "../_shared/contentQa.ts";
 import { getSocialPillars } from "../_shared/socialStrategy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { isUsableCaption } from "../_shared/captionGate.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
+import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
@@ -232,7 +233,31 @@ serve(async (req) => {
           pillarCursor[slot.client_account_id]++;
         }
 
-        const generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
+        let generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
+
+        // Claims check: a draft that states product capabilities the client's
+        // facts don't support gets one rewrite with those claims called out;
+        // if it still fails, it goes to admin review instead of the client's
+        // approval queue so an invented feature never reaches them unflagged.
+        const factsText = factsForClaimsCheck(client);
+        let unsupportedClaims = await findUnsupportedClaims(generatedContent, factsText, client.id);
+        if (unsupportedClaims && unsupportedClaims.length > 0) {
+          const retryFeedback: ContentFeedbackItem[] = [
+            {
+              content_type: slot.content_type,
+              title: "Previous draft",
+              reason: `Remove these unsupported claims and describe nothing the facts don't state: ${unsupportedClaims.join("; ")}`,
+            },
+            ...recentFeedback,
+          ];
+          const retry = await generateContent(supabase, slot, client, recentTopics, retryFeedback, recentApproved, GROQ_API_KEY, pillar);
+          const retryClaims = await findUnsupportedClaims(retry, factsText, client.id);
+          if (isUsableCaption(retry) && retryClaims !== null && retryClaims.length < unsupportedClaims.length) {
+            generatedContent = retry;
+            unsupportedClaims = retryClaims;
+          }
+        }
+        const claimsFlagged = !!unsupportedClaims && unsupportedClaims.length > 0;
 
         // Caption gate: never draft or forward an empty post. Throwing leaves
         // the slot as a placeholder so the next run retries it.
@@ -253,7 +278,7 @@ serve(async (req) => {
         // admin review is not in this loop. QA still runs and is attached as
         // metadata so a flagged post is visible to the client/admin, it just
         // doesn't reroute it into the admin-only pending_admin_review queue.
-        const autoForward = AUTO_FORWARD_PLATFORMS.has(slot.platform);
+        const autoForward = AUTO_FORWARD_PLATFORMS.has(slot.platform) && !claimsFlagged;
 
         // Save the draft to generated_content. Include full traceability
         // metadata so the admin panel can link back to the slot.
@@ -273,6 +298,7 @@ serve(async (req) => {
               context_used: !!(client.context_profile),
               generated_at: new Date().toISOString(),
               ...(qa ? { qa } : {}),
+              ...(claimsFlagged ? { unsupported_claims: unsupportedClaims } : {}),
               ...(autoForward ? { auto_forwarded: true } : {}),
             },
           })
@@ -362,7 +388,9 @@ serve(async (req) => {
               client_account_id: slot.client_account_id,
               activity_type: "content_draft_ready",
               title: `Draft ready for admin review: ${slot.title}`,
-              description: flagged
+              description: claimsFlagged
+                ? `${slot.content_type} for ${slot.platform} makes claims our facts don't support, held back from the client: ${unsupportedClaims!.join("; ")}.`
+                : flagged
                 ? `${slot.content_type} generated for ${slot.platform} — QA flagged it (score ${qa?.score}/10): ${qa?.issues.join("; ") || "brand tone mismatch"}.`
                 : `${slot.content_type} generated for ${slot.platform} — needs admin review before going to client.`,
               icon: "file-text",
@@ -530,6 +558,20 @@ async function generateContent(
   return content;
 }
 
+// Everything we can honestly say about the business -- deliberately excludes
+// the unverified differentiators / whats_working fields.
+function factsForClaimsCheck(client: ClientInfo): string {
+  const cp = (client.context_profile ?? {}) as Record<string, unknown>;
+  const list = (k: string) => (Array.isArray(cp[k]) ? (cp[k] as string[]).join("; ") : "");
+  return [
+    `Business: ${client.business_name} (${client.industry || "unknown industry"})`,
+    cp.business_summary ? `Summary: ${cp.business_summary}` : "",
+    list("services") ? `Services: ${list("services")}` : "",
+    list("verified_facts") ? `Verified facts: ${list("verified_facts")}` : "",
+    cp.location ? `Location: ${cp.location}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 function buildClientContext(client: ClientInfo): string {
   const ctx = client.context_profile;
   const industry = client.industry || "local business";
@@ -547,12 +589,22 @@ function buildClientContext(client: ClientInfo): string {
     parts.push(`${biz} is a ${industry} business.`);
   }
 
+  const verified = (ctx as { verified_facts?: string[] }).verified_facts;
+  if (Array.isArray(verified) && verified.length) {
+    parts.push(`VERIFIED FACTS (the only source for product claims): ${verified.join("; ")}.`);
+  }
+
+  const neverSay = (ctx as { never_say?: string[] }).never_say;
+  if (Array.isArray(neverSay) && neverSay.length) {
+    parts.push(`NEVER say or imply (client instruction): ${neverSay.join("; ")}.`);
+  }
+
   if (ctx.services?.length) {
     parts.push(`Services offered: ${ctx.services.slice(0, 6).join(", ")}.`);
   }
 
   if (ctx.differentiators?.length) {
-    parts.push(`What sets them apart: ${ctx.differentiators.slice(0, 4).join(", ")}.`);
+    parts.push(`Self-described positioning (UNVERIFIED -- tone only, do not state as concrete product features): ${ctx.differentiators.slice(0, 4).join(", ")}.`);
   }
 
   if (ctx.target_audience) {
@@ -612,9 +664,11 @@ function buildPrompt(
   // The feedback loop, consumed: whats_working is refined from real outcomes
   // (client-context-refresh) and pulled here so content leans into what has
   // actually been resonating for this client.
+  // whats_working is AI-refined, so it can echo an earlier hallucination back
+  // as a "proven angle". Treat it as a topic hint only, never as a fact.
   const working = (client.context_profile as { whats_working?: string[] } | null)?.whats_working;
   const workingLine = Array.isArray(working) && working.length
-    ? `\nWHAT'S BEEN WORKING for this client (lean into these angles): ${working.join("; ")}`
+    ? `\nTOPIC HINTS that have performed (themes only -- NOT verified facts about the product): ${working.join("; ")}`
     : "";
   const avoidRepeat = avoidRepetitionInstruction(recentTopics);
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
@@ -637,7 +691,8 @@ RULES:
 - Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
 - Be specific to ${biz}'s actual services and differentiators — never generic filler
 - Every piece must sound like it comes from this specific business, not a template
-- Reference ${month} or ${season} naturally only when it adds genuine value${approvedBlock ? `\n\n${approvedBlock}` : ""}${feedbackBlock ? `\n\n${feedbackBlock}` : ""}`;
+- Reference ${month} or ${season} naturally only when it adds genuine value
+- FACT RULE: product capabilities, technology, integrations, statistics and outcomes may only come from VERIFIED FACTS / services / business summary above. Positioning lines marked unverified are tone only. If facts are thin, write about the audience's problem or a practical tip instead of describing the product${approvedBlock ? `\n\n${approvedBlock}` : ""}${feedbackBlock ? `\n\n${feedbackBlock}` : ""}${NO_FABRICATION_GUARDRAIL}`;
 
   switch (contentType) {
     case "social_post": {

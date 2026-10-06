@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
-import { Building2, Save, Plus, X, Loader2 } from "lucide-react";
+import { Building2, Save, Plus, X, Loader2, ShieldCheck, AlertTriangle } from "lucide-react";
 
 interface ContextProfile {
   services: string[];
@@ -19,6 +19,8 @@ interface ContextProfile {
   location: string;
   tone: string;
   business_summary: string;
+  verified_facts?: string[];
+  never_say?: string[];
 }
 
 interface CompanyContext {
@@ -110,6 +112,8 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
   // context_profile fields lifted to state for easier editing
   const [services, setServices] = useState<string[]>([]);
   const [differentiators, setDifferentiators] = useState<string[]>([]);
+  const [verifiedFacts, setVerifiedFacts] = useState<string[]>([]);
+  const [neverSay, setNeverSay] = useState<string[]>([]);
   const [targetAudience, setTargetAudience] = useState("");
   const [location, setLocation] = useState("");
   const [businessSummary, setBusinessSummary] = useState("");
@@ -141,6 +145,8 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
       const cp = data.context_profile as unknown as ContextProfile | null;
       setServices(cp?.services || []);
       setDifferentiators(cp?.differentiators || []);
+      setVerifiedFacts(cp?.verified_facts || []);
+      setNeverSay(cp?.never_say || []);
       setTargetAudience(cp?.target_audience || "");
       setLocation(cp?.location || "");
       setBusinessSummary(cp?.business_summary || "");
@@ -166,6 +172,8 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
         ...(ctx.context_profile || {}),
         services,
         differentiators,
+        verified_facts: verifiedFacts,
+        never_say: neverSay,
         target_audience: targetAudience,
         location,
         tone: ctx.tone,
@@ -272,6 +280,46 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
         <div className="border-t pt-4 space-y-5">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Content Profile</p>
 
+          {/* Verified facts: the only source the AI may use for product claims */}
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <p className="text-sm font-semibold">Verified Facts</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The AI may only describe your products, features, integrations, technology or results if they are listed here.
+              One short, true statement per item.
+            </p>
+            {verifiedFacts.length < 3 && (
+              <div className="flex items-start gap-2 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 p-2 text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Add at least 3 facts so posts stay accurate. Until then the AI will keep product descriptions general.</span>
+              </div>
+            )}
+            <TagEditor
+              label="What your business really does"
+              values={verifiedFacts}
+              onChange={(v) => { setVerifiedFacts(v); handleProfileChange(); }}
+              placeholder="e.g. Offers DISC and Values Index assessments..."
+            />
+            {services.length > 0 && verifiedFacts.length === 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => { setVerifiedFacts(services.map((s) => `Offers ${s}`)); handleProfileChange(); }}
+              >
+                Start from my services
+              </Button>
+            )}
+            <TagEditor
+              label="Never say or claim"
+              values={neverSay}
+              onChange={(v) => { setNeverSay(v); handleProfileChange(); }}
+              placeholder="e.g. real-time AI, guaranteed results, HR system integrations..."
+            />
+          </div>
+
           {/* Business Summary */}
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">Business Summary</Label>
@@ -311,13 +359,16 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
             placeholder="Add a service and press Enter..."
           />
 
-          {/* Differentiators */}
+          {/* Positioning */}
           <TagEditor
-            label="Key Differentiators"
+            label="Positioning (tone only)"
             values={differentiators}
             onChange={(v) => { setDifferentiators(v); handleProfileChange(); }}
-            placeholder="e.g. 20+ years experience, family-owned..."
+            placeholder="e.g. family-owned, customer-first..."
           />
+          <p className="text-xs text-muted-foreground -mt-3">
+            Used for style only. The AI will not state these as product features. Put real capabilities in Verified Facts above.
+          </p>
         </div>
 
         {hasChanges && (

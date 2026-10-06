@@ -90,7 +90,7 @@ export async function getRecentApprovedContent(
 export function approvedContentToPromptBlock(items: ApprovedContentItem[]): string {
   if (items.length === 0) return "";
   const lines = [
-    "CONTENT THIS CLIENT HAS ALREADY APPROVED (match this voice, tone, and quality bar):",
+    "CONTENT THIS CLIENT HAS ALREADY APPROVED (match voice, tone and quality bar ONLY -- do not reuse any factual or product claims from these examples; claims must come from the verified facts):",
     ...items.map((item) => `- [${item.content_type}] "${item.title}":\n${item.content.slice(0, 400)}`),
   ];
   return lines.join("\n\n");

@@ -23,7 +23,7 @@ export const MODELS = {
 // ai-automation.ts's report prompt (added after a placeholder metric like
 // "[+15% MoM]" shipped in a real client email) and contextRefine.ts.
 export const NO_FABRICATION_GUARDRAIL =
-  " Use ONLY the business facts explicitly provided -- never invent a service, credential, guarantee, statistic, award, or claim that isn't in the given data. Write around a gap rather than fabricating a specific.";
+  " Use ONLY the business facts explicitly provided -- never invent a service, credential, guarantee, statistic, award, or claim that isn't in the given data. Never describe product features, technology (AI, automation, real-time anything), dashboards, integrations, or customer outcomes unless they are explicitly listed in the provided facts. Write around a gap rather than fabricating a specific: when facts are thin, stay on the audience's problem, a practical tip, or a question instead of describing what the product does.";
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
