@@ -40,7 +40,6 @@ import {
   Eye,
   EyeOff,
   Zap,
-  AlertTriangle,
   Link2,
   CircleDot,
   FlaskConical,
@@ -67,14 +66,6 @@ interface SocialPost {
   published_at: string | null;
   metadata: Record<string, unknown> | null;
   client_account_id: string | null;
-}
-
-interface OAuthToken {
-  id: string;
-  platform: string;
-  expires_at: string | null;
-  page_id: string | null;
-  token_metadata: Record<string, unknown> | null;
 }
 
 interface PostForMeAccount {
@@ -109,17 +100,11 @@ const platformColors: Record<string, string> = {
   threads: "bg-gray-800",
 };
 
-const SOCIAL_PLATFORMS = ["facebook", "instagram", "linkedin", "twitter"] as const;
-
 const CONNECT_PLATFORMS = [
   { id: "facebook", label: "Facebook" },
   { id: "instagram", label: "Instagram" },
   { id: "linkedin", label: "LinkedIn" },
   { id: "twitter", label: "X (Twitter)" },
-  { id: "tiktok", label: "TikTok" },
-  { id: "youtube", label: "YouTube" },
-  { id: "bluesky", label: "Bluesky" },
-  { id: "threads", label: "Threads" },
 ] as const;
 
 export default function SocialMediaPostsPanel() {
@@ -179,19 +164,6 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Fetch legacy OAuth tokens for selected client (kept for backward compat display)
-  const { data: oauthTokens = [] } = useQuery({
-    queryKey: ["client-oauth-tokens", selectedClient],
-    enabled: !!selectedClient,
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("admin", {
-        body: { action: "list", table: "client_oauth_tokens", filters: { client_id: selectedClient } },
-      });
-      if (error) throw error;
-      return (data?.data || []) as OAuthToken[];
-    },
-  });
-
   // Fetch Post for Me accounts for selected client
   const { data: pfmAccounts = [] } = useQuery({
     queryKey: ["pfm-accounts", selectedClient],
@@ -204,16 +176,6 @@ export default function SocialMediaPostsPanel() {
         .eq("status", "connected");
       if (error) throw error;
       return data as PostForMeAccount[];
-    },
-  });
-
-  // Fetch OAuth config
-  const { data: oauthConfig } = useQuery({
-    queryKey: ["oauth-config"],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("oauth-config");
-      if (error) throw error;
-      return data as Record<string, { clientId: string; configured: boolean }>;
     },
   });
 
@@ -618,42 +580,6 @@ export default function SocialMediaPostsPanel() {
   const getClientName = (clientId: string | null) => {
     if (!clientId) return "Unassigned";
     return clients.find((c) => c.id === clientId)?.business_name || "Unknown";
-  };
-
-  const startOAuthFlow = (platform: string) => {
-    if (!selectedClient) {
-      toast({ title: "Select a client first", variant: "destructive" });
-      return;
-    }
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const callbackMap: Record<string, string> = {
-      facebook: `${supabaseUrl}/functions/v1/facebook-oauth-callback`,
-      instagram: `${supabaseUrl}/functions/v1/instagram-oauth-callback`,
-      linkedin: `${supabaseUrl}/functions/v1/linkedin-oauth-callback`,
-      twitter: `${supabaseUrl}/functions/v1/twitter-oauth-callback`,
-    };
-    const cfg = oauthConfig?.[platform];
-    if (!cfg?.configured) {
-      toast({ title: `${platform} OAuth not configured`, description: "Set up app credentials first.", variant: "destructive" });
-      return;
-    }
-    const redirectUri = callbackMap[platform];
-    let authUrl = "";
-    switch (platform) {
-      case "facebook":
-        authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=pages_manage_posts,pages_read_engagement`;
-        break;
-      case "instagram":
-        authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=instagram_basic,instagram_content_publish,pages_show_list`;
-        break;
-      case "linkedin":
-        authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=${encodeURIComponent("w_member_social w_organization_social rw_organization_admin openid profile")}`;
-        break;
-      case "twitter":
-        authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${selectedClient}&scope=tweet.read+tweet.write+users.read&code_challenge=challenge&code_challenge_method=plain`;
-        break;
-    }
-    if (authUrl) window.open(authUrl, "_blank", "width=600,height=700");
   };
 
   const draftPosts = posts.filter((p) => p.status === "draft");
@@ -1240,70 +1166,6 @@ export default function SocialMediaPostsPanel() {
                 );
               })}
             </div>
-
-            {/* Legacy OAuth section (kept for backward compat) */}
-            {oauthTokens.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-xs text-muted-foreground px-2">Legacy OAuth Tokens</span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {SOCIAL_PLATFORMS.map((platform) => {
-                    const token = oauthTokens.find((t) => t.platform === platform);
-                    const isConnected = !!token;
-                    const isExpired = token?.expires_at ? new Date(token.expires_at) < new Date() : false;
-                    const oauthAvailable = oauthConfig?.[platform]?.configured;
-                    const pageName = (token?.token_metadata as { page_name?: string } | null)?.page_name;
-                    return (
-                      <div
-                        key={platform}
-                        className={cn(
-                          "rounded-lg border p-3 space-y-2",
-                          isConnected && !isExpired ? "border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800" : "border-border"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={`p-1.5 rounded ${platformColors[platform]} text-white`}>
-                            {platformIcons[platform]}
-                          </div>
-                          <span className="font-medium capitalize text-sm">{platform}</span>
-                          {isConnected && !isExpired && <CheckCircle className="h-3.5 w-3.5 text-green-600 ml-auto" />}
-                          {isConnected && isExpired && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 ml-auto" />}
-                        </div>
-                        {isConnected ? (
-                          <div className="text-xs text-muted-foreground space-y-0.5">
-                            {pageName && <p>{pageName}</p>}
-                            {token.expires_at && (
-                              <p className={isExpired ? "text-amber-600 font-medium" : ""}>
-                                {isExpired ? "Expired" : `Expires ${format(new Date(token.expires_at), "MMM d, yyyy")}`}
-                              </p>
-                            )}
-                            {isExpired && (
-                              <Button size="sm" variant="outline" className="w-full mt-1 h-7 text-xs" onClick={() => startOAuthFlow(platform)}>
-                                Reconnect
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full h-7 text-xs"
-                            onClick={() => startOAuthFlow(platform)}
-                            disabled={!oauthAvailable}
-                            title={!oauthAvailable ? "OAuth credentials not configured" : undefined}
-                          >
-                            {oauthAvailable ? "Connect" : "Not Configured"}
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </TabsContent>
 
           {/* Post tabs */}
