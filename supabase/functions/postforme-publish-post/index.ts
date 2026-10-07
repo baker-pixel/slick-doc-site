@@ -2,7 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { cleanGeneratedText } from "../_shared/textSanitize.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { buildSocialImagePrompt, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
@@ -267,7 +268,7 @@ serve(async (req) => {
         .single();
 
       const prompt = clientRow
-        ? buildSocialImagePrompt(clientRow, { content: item.content || "", title: item.title, platform: item.platform })
+        ? await buildCreativeImagePrompt({ ...clientRow, id: item.client_account_id }, { content: item.content || "", title: item.title, platform: item.platform })
         : `Professional marketing image for a business on ${item.platform}.`;
 
       const kit = await getClientBrandKit(supabase, item.client_account_id);

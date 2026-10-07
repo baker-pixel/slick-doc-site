@@ -21,6 +21,8 @@ interface ContextProfile {
   business_summary: string;
   verified_facts?: string[];
   never_say?: string[];
+  image_styles?: string[];
+  image_never?: string[];
 }
 
 interface CompanyContext {
@@ -31,6 +33,16 @@ interface CompanyContext {
   tone: string;
   context_profile: ContextProfile | null;
 }
+
+const IMAGE_STYLE_OPTIONS = [
+  { id: "human_moment", label: "Candid human moments" },
+  { id: "visual_metaphor", label: "Conceptual metaphor" },
+  { id: "editorial_illustration", label: "Editorial illustration" },
+  { id: "paper_collage", label: "Paper collage" },
+  { id: "isometric_3d", label: "Playful 3D scenes" },
+  { id: "macro_texture", label: "Macro close-ups" },
+  { id: "environment", label: "Atmospheric places" },
+];
 
 const TONE_OPTIONS = [
   { value: "professional", label: "Professional" },
@@ -114,6 +126,8 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
   const [differentiators, setDifferentiators] = useState<string[]>([]);
   const [verifiedFacts, setVerifiedFacts] = useState<string[]>([]);
   const [neverSay, setNeverSay] = useState<string[]>([]);
+  const [imageStyles, setImageStyles] = useState<string[]>([]);
+  const [imageNever, setImageNever] = useState<string[]>([]);
   const [targetAudience, setTargetAudience] = useState("");
   const [location, setLocation] = useState("");
   const [businessSummary, setBusinessSummary] = useState("");
@@ -147,6 +161,8 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
       setDifferentiators(cp?.differentiators || []);
       setVerifiedFacts(cp?.verified_facts || []);
       setNeverSay(cp?.never_say || []);
+      setImageStyles(cp?.image_styles || []);
+      setImageNever(cp?.image_never || []);
       setTargetAudience(cp?.target_audience || "");
       setLocation(cp?.location || "");
       setBusinessSummary(cp?.business_summary || "");
@@ -174,6 +190,8 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
         differentiators,
         verified_facts: verifiedFacts,
         never_say: neverSay,
+        image_styles: imageStyles,
+        image_never: imageNever,
         target_audience: targetAudience,
         location,
         tone: ctx.tone,
@@ -317,6 +335,35 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
               values={neverSay}
               onChange={(v) => { setNeverSay(v); handleProfileChange(); }}
               placeholder="e.g. real-time AI, guaranteed results, HR system integrations..."
+            />
+          </div>
+
+          {/* Image direction for AI-generated post images */}
+          <div className="rounded-lg border p-4 space-y-3">
+            <p className="text-sm font-semibold">Image Style</p>
+            <p className="text-xs text-muted-foreground">
+              Pick the looks you like for your post images. Leave all unselected to let us mix them up.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {IMAGE_STYLE_OPTIONS.map((o) => {
+                const on = imageStyles.includes(o.id);
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => { setImageStyles(on ? imageStyles.filter((x) => x !== o.id) : [...imageStyles, o.id]); handleProfileChange(); }}
+                    className={`text-xs rounded-full border px-3 py-1 transition-colors ${on ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+            <TagEditor
+              label="Never show in images"
+              values={imageNever}
+              onChange={(v) => { setImageNever(v); handleProfileChange(); }}
+              placeholder="e.g. stock-photo handshakes, laptops, people in suits..."
             />
           </div>
 
