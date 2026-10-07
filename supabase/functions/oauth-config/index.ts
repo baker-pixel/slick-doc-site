@@ -28,6 +28,10 @@ serve(async (req) => {
       clientId: Deno.env.get("TWITTER_CLIENT_ID") || "",
       configured: !!(Deno.env.get("TWITTER_CLIENT_ID") && Deno.env.get("TWITTER_CLIENT_SECRET")),
     },
+    google_analytics: {
+      clientId: Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "",
+      configured: !!(Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") && Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET")),
+    },
   };
 
   return new Response(JSON.stringify(config), {

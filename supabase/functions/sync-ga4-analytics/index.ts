@@ -12,6 +12,12 @@ import { getGoogleAccessToken } from "../_shared/googleServiceAccount.ts";
 // manually re-running the pull for one client from the analytics panel;
 // that path requires admin auth, same shape as auto-discover-prospects'
 // manual-trigger mode.
+//
+// Per-client auth: prefers a client_oauth_tokens row (from the client's own
+// "Connect Google Analytics" OAuth flow, google-analytics-oauth-callback)
+// and falls back to the shared service-account credential in
+// integration_configs (the older "share your property with our service
+// account" manual setup) only when no such row exists.
 
 interface ClientRow {
   id: string;
@@ -21,6 +27,56 @@ interface ClientRow {
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
+const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
+
+// A client who connected via the "Connect Google Analytics" OAuth flow has
+// their own token in client_oauth_tokens instead of relying on the shared
+// service account -- refresh it here if it's stale (access tokens are
+// 1hr-lived) so the weekly sync doesn't need a separate refresh cron.
+async function getClientOAuthToken(
+  supabase: ReturnType<typeof createClient>,
+  clientId: string,
+): Promise<string | null> {
+  const { data: token } = await supabase
+    .from("client_oauth_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("client_id", clientId)
+    .eq("platform", "google_analytics")
+    .maybeSingle();
+  if (!token) return null;
+
+  if (token.expires_at && new Date(token.expires_at) > new Date(Date.now() + 60_000)) {
+    return token.access_token as string;
+  }
+  if (!token.refresh_token || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return token.access_token as string; // best effort -- let the report call fail loudly if it's actually expired
+  }
+
+  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token as string,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+    }),
+  });
+  if (!refreshRes.ok) {
+    console.error("Google token refresh failed:", await refreshRes.text());
+    return token.access_token as string;
+  }
+  const refreshed = await refreshRes.json();
+  const expiresAt = new Date(Date.now() + (refreshed.expires_in || 3600) * 1000).toISOString();
+  await supabase
+    .from("client_oauth_tokens")
+    .update({ access_token: refreshed.access_token, expires_at: expiresAt })
+    .eq("client_id", clientId)
+    .eq("platform", "google_analytics");
+  return refreshed.access_token as string;
 }
 
 serve(async (req) => {
@@ -47,25 +103,30 @@ serve(async (req) => {
       }
     }
 
+    // Shared service-account fallback for clients who did the old manual
+    // "grant our service account Viewer access" setup instead of the OAuth
+    // connect flow. Not required up front -- a client with their own
+    // client_oauth_tokens row never touches this.
     const { data: config, error: configError } = await supabase
       .from("integration_configs")
       .select("settings")
       .eq("integration_type", "google_analytics")
       .eq("is_active", true)
       .maybeSingle();
-
     if (configError) throw configError;
     const settings = (config?.settings || {}) as { client_email?: string; private_key?: string };
-    if (!settings.client_email || !settings.private_key) {
-      const msg = "No active google_analytics integration configured (client_email/private_key missing) -- add one in Admin > Integrations";
-      if (onlyClientId) {
-        return new Response(JSON.stringify({ error: msg }), {
-          status: 412,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    let sharedAccessToken: string | null = null;
+    const getSharedAccessToken = async (): Promise<string> => {
+      if (sharedAccessToken) return sharedAccessToken;
+      if (!settings.client_email || !settings.private_key) {
+        throw new Error("No active google_analytics integration configured (client_email/private_key missing) -- add one in Admin > Integrations");
       }
-      throw new Error(msg);
-    }
+      sharedAccessToken = await getGoogleAccessToken(
+        settings as { client_email: string; private_key: string },
+        "https://www.googleapis.com/auth/analytics.readonly",
+      );
+      return sharedAccessToken;
+    };
 
     const clientQuery = supabase
       .from("client_accounts")
@@ -84,11 +145,6 @@ serve(async (req) => {
       });
     }
 
-    const accessToken = await getGoogleAccessToken(
-      settings as { client_email: string; private_key: string },
-      "https://www.googleapis.com/auth/analytics.readonly",
-    );
-
     const periodEnd = new Date();
     periodEnd.setUTCDate(periodEnd.getUTCDate() - 1); // yesterday -- GA4 same-day data is incomplete
     const periodStart = new Date(periodEnd);
@@ -98,6 +154,7 @@ serve(async (req) => {
 
     for (const client of (clients ?? []) as ClientRow[]) {
       try {
+        const accessToken = (await getClientOAuthToken(supabase, client.id)) ?? (await getSharedAccessToken());
         const reportRes = await fetch(
           `https://analyticsdata.googleapis.com/v1beta/properties/${client.ga4_property_id}:runReport`,
           {

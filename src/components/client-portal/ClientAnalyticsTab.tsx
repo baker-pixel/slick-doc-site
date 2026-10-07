@@ -1,13 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
-import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target, Download, Sparkles, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Eye, MousePointer, Users, BarChart3, Target, Download, Sparkles, AlertTriangle, RefreshCw, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import { PageHeader, StatCard, ModernCard, EmptyState, CollapsibleSection } from "./PortalUI";
+
+interface Ga4Property {
+  id: string;
+  name: string;
+}
 
 interface AnalyticsMetrics {
   website_visits?: number;
@@ -37,19 +43,93 @@ interface ClientAnalyticsTabProps {
   businessName?: string;
 }
 
+interface Ga4Token {
+  id: string;
+  page_id: string | null;
+  token_metadata: { properties?: Ga4Property[]; selection_required?: boolean } | null;
+}
+
 export default function ClientAnalyticsTab({ clientAccountId, businessName }: ClientAnalyticsTabProps) {
   const [analytics, setAnalytics] = useState<AnalyticsSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchFailed, setFetchFailed] = useState(false);
+  const [gaToken, setGaToken] = useState<Ga4Token | null>(null);
+  const [connectingGa, setConnectingGa] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState("");
+  const [savingProperty, setSavingProperty] = useState(false);
+  const gaPopupRef = useRef<Window | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
+    fetchGaToken();
     const channel = supabase
       .channel('client-analytics-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'client_analytics', filter: `client_account_id=eq.${clientAccountId}` }, () => fetchAnalytics())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [clientAccountId]);
+
+  // Refetch when the "Connect Google Analytics" popup closes -- catches both
+  // a completed connection and a cancelled one (nothing to do either way but
+  // stop showing "Redirecting...").
+  useEffect(() => {
+    const onFocus = () => {
+      if (gaPopupRef.current && gaPopupRef.current.closed) {
+        gaPopupRef.current = null;
+        setConnectingGa(false);
+        fetchGaToken();
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [clientAccountId]);
+
+  const fetchGaToken = async () => {
+    const { data } = await supabase
+      .from("client_oauth_tokens")
+      .select("id, page_id, token_metadata")
+      .eq("client_id", clientAccountId)
+      .eq("platform", "google_analytics")
+      .maybeSingle();
+    const token = (data as Ga4Token | null) ?? null;
+    setGaToken(token);
+    setSelectedProperty(token?.token_metadata?.properties?.[0]?.id ?? "");
+  };
+
+  const connectGoogleAnalytics = async () => {
+    setConnectingGa(true);
+    try {
+      const { data: cfg, error } = await supabase.functions.invoke("oauth-config");
+      if (error || !cfg?.google_analytics?.configured) {
+        toast({ title: "Google Analytics connect isn't set up yet", description: "Ask your account manager to configure it.", variant: "destructive" });
+        setConnectingGa(false);
+        return;
+      }
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const redirectUri = `${supabaseUrl}/functions/v1/google-analytics-oauth-callback`;
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&access_type=offline&prompt=consent&client_id=${cfg.google_analytics.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${clientAccountId}&scope=${encodeURIComponent("https://www.googleapis.com/auth/analytics.readonly")}`;
+      gaPopupRef.current = window.open(authUrl, "_blank", "width=600,height=700");
+    } finally {
+      // connectingGa stays true until the popup closes (see the focus effect above)
+    }
+  };
+
+  const saveSelectedProperty = async () => {
+    if (!selectedProperty) return;
+    setSavingProperty(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("select-ga4-property", {
+        body: { client_account_id: clientAccountId, property_id: selectedProperty },
+      });
+      if (error || data?.error) throw new Error(data?.error || "Failed to save");
+      toast({ title: "Google Analytics property connected" });
+      await fetchGaToken();
+    } catch (err) {
+      toast({ title: "Couldn't save that property", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSavingProperty(false);
+    }
+  };
 
   const fetchAnalytics = async () => {
     setFetchFailed(false);
@@ -235,8 +315,50 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
     );
   }
 
+  const properties = gaToken?.token_metadata?.properties ?? [];
+  const needsPropertyPick = !!gaToken && !gaToken.page_id && properties.length > 0;
+  const ga4Connected = !!gaToken?.page_id;
+
+  const ga4ConnectCard = !ga4Connected && (
+    <ModernCard className="p-6">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="p-2 rounded-xl bg-primary/10"><Link2 className="h-5 w-5 text-primary" /></div>
+        <div>
+          <h3 className="font-semibold text-foreground">Connect Google Analytics</h3>
+          <p className="text-sm text-muted-foreground">Pulls real website visit numbers automatically — no manual setup needed.</p>
+        </div>
+      </div>
+      {needsPropertyPick ? (
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+            <SelectTrigger className="sm:w-64"><SelectValue placeholder="Choose a property" /></SelectTrigger>
+            <SelectContent>
+              {properties.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={saveSelectedProperty} disabled={savingProperty || !selectedProperty}>
+            {savingProperty ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            Use this property
+          </Button>
+        </div>
+      ) : (
+        <Button onClick={connectGoogleAnalytics} disabled={connectingGa}>
+          {connectingGa ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Link2 className="h-4 w-4 mr-2" />}
+          {connectingGa ? "Complete in the popup..." : "Connect Google Analytics"}
+        </Button>
+      )}
+    </ModernCard>
+  );
+
   if (analytics.length === 0) {
-    return <EmptyState icon={BarChart3} title="No Analytics Yet" description="Performance data will appear here as campaigns run." />;
+    return (
+      <div className="space-y-6">
+        {ga4ConnectCard}
+        <EmptyState icon={BarChart3} title="No Analytics Yet" description="Performance data will appear here as campaigns run." />
+      </div>
+    );
   }
 
   const latestPeriod = analytics[0];
@@ -269,6 +391,8 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
           </Button>
         }
       />
+
+      {ga4ConnectCard}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
