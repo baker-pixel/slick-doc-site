@@ -555,7 +555,7 @@ export function ClientOnboardingChecklist({ adminPassword }: ClientOnboardingChe
       case "growth":
         return [
           "Comprehensive SEO audit and roadmap",
-          "Content calendar setup (4 blogs/month)",
+          "Content calendar setup",
           "Email nurture sequence configuration",
           "Social media content planning",
         ];

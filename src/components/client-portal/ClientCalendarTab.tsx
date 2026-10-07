@@ -43,8 +43,8 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 const TIER_CADENCE: Record<string, string> = {
-  foundation: "1 blog/mo · Monthly GBP posts · Quarterly SEO",
-  growth: "2 blogs/mo · Weekly LinkedIn · Email sequences · Monthly call",
+  foundation: "Monthly GBP posts · Quarterly SEO",
+  growth: "Weekly LinkedIn · Email sequences · Monthly call",
   transformation: "Full content suite · 2×/week social · Lead magnets · Full funnel",
 };
 
