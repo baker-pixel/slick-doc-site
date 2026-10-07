@@ -155,7 +155,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
   // Content generation state
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [generateClientId, setGenerateClientId] = useState<string>("");
-  const [generateContentType, setGenerateContentType] = useState<string>("blog_post");
+  const [generateContentType, setGenerateContentType] = useState<string>("social_post");
   const [generateTopic, setGenerateTopic] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -905,7 +905,6 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
                   <SelectValue placeholder="Select content type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="blog_post">Blog Post</SelectItem>
                   <SelectItem value="social_post">Social Media Post</SelectItem>
                   <SelectItem value="email_copy">Email Copy</SelectItem>
                   <SelectItem value="ad_copy">Ad Copy</SelectItem>

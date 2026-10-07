@@ -67,7 +67,7 @@ export function QuickActionsPanel() {
   // Quick Content Modal
   const [contentModalOpen, setContentModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState("");
-  const [contentType, setContentType] = useState<"blog_post" | "social_post" | "email_copy">("blog_post");
+  const [contentType, setContentType] = useState<"blog_post" | "social_post" | "email_copy">("social_post");
   const [contentTopic, setContentTopic] = useState("");
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [generatedContent, setGeneratedContent] = useState("");
@@ -791,7 +791,6 @@ export function QuickActionsPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="blog_post">Blog Post</SelectItem>
                   <SelectItem value="social_post">Social Media Post</SelectItem>
                   <SelectItem value="email_copy">Email Copy</SelectItem>
                 </SelectContent>

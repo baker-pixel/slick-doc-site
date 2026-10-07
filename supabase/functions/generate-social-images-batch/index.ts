@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
 import { buildGptImageRequestBody } from "../_shared/gptImage.ts";
 
 const corsHeaders = {
@@ -105,7 +106,7 @@ serve(async (req) => {
       const client = clientMap[slot.client_account_id];
       if (!client) continue;
 
-      const prompt = buildSocialImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+      const prompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
 
       jsonlLines.push(JSON.stringify({
         custom_id: slot.id,

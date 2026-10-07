@@ -1,4 +1,5 @@
 export interface ImagePromptClient {
+  id?: string;
   business_name: string;
   industry?: string | null;
   context_profile?: {

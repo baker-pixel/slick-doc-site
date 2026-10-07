@@ -82,6 +82,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   const [sendingInvite, setSendingInvite] = useState(false);
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [updatingTierIds, setUpdatingTierIds] = useState<Set<string>>(new Set());
   const [togglingPauseIds, setTogglingPauseIds] = useState<Set<string>>(new Set());
   
@@ -539,6 +540,25 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
     }
   };
 
+  const deleteClient = async (client: ClientAccount) => {
+    setDeletingIds((prev) => new Set(prev).add(client.id));
+    const { error } = await callAdminApi(adminPassword, {
+      action: "delete_client",
+      id: client.id,
+    });
+    setDeletingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(client.id);
+      return next;
+    });
+    if (error) {
+      toast.error("Failed to delete client: " + error);
+    } else {
+      toast.success(`${client.business_name} deleted.`);
+      fetchData();
+    }
+  };
+
   // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
@@ -894,6 +914,39 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                                 <Ban className="h-4 w-4" />
                               )}
                             </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={deletingIds.has(client.id)}
+                                  title="Delete Client"
+                                >
+                                  {deletingIds.has(client.id) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Client</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Permanently delete {client.business_name} and all of its data (content,
+                                    prospects, reports, workflows, invitations, portal access, etc.)? This
+                                    cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => deleteClient(client)}>
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>

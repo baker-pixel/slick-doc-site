@@ -483,6 +483,37 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Permanently deletes a client and everything attached to it. Most child
+      // tables cascade, but these don't (NO ACTION / SET NULL), so a plain
+      // client_accounts delete would either fail or orphan rows.
+      case "delete_client": {
+        if (!id) {
+          return new Response(
+            JSON.stringify({ error: "id is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const nonCascading: Array<[string, string]> = [
+          ["content_calendar", "client_account_id"],
+          ["prospects", "client_id"],
+          ["connected_sites", "client_id"],
+          ["agent_runs", "client_id"],
+          ["ad_campaigns", "client_account_id"],
+          ["workflow_steps", "client_id"],
+        ];
+        for (const [tbl, col] of nonCascading) {
+          const { error } = await supabase.from(tbl).delete().eq(col, id);
+          if (error) throw error;
+        }
+        const { error } = await supabase.from("client_accounts").delete().eq("id", id);
+        if (error) throw error;
+        console.log(`Deleted client_accounts record and all related data: ${id}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "create": {
         if (!table || !data) {
           return new Response(
@@ -510,7 +541,10 @@ Deno.serve(async (req) => {
                   "Content-Type": "application/json",
                   Authorization: `Bearer ${supabaseServiceKey}`,
                 },
-                body: JSON.stringify({ client_id: created.id }),
+                // seed-tier-workflow's auth ignores the service key (checkAdminAuth
+                // skips it), so authenticate as admin via the shared password --
+                // without this every new client got { error: "Unauthorized" }.
+                body: JSON.stringify({ client_id: created.id, password: adminPassword }),
               }
             );
             const seedResult = await seedRes.json();

@@ -64,7 +64,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
   transformation: {
     tier: "transformation",
     seo: { crawlPages: 15, reauditCadenceDays: 30, applyMode: "full" },
-    social: { contentTypes: ["google_post", "social_post", "email_newsletter", "blog_post"], postsPerMonth: 20 },
+    social: { contentTypes: ["google_post", "social_post", "email_newsletter"], postsPerMonth: 20 },
     prospect: { enabled: true, discoveryBatch: 20 },
     aiVisibility: { enabled: true, promptsPerMonth: 8 },
     reporting: { weekly: true, monthly: true },

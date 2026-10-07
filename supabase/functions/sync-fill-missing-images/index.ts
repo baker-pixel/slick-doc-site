@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildSocialImagePrompt, IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
+import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
@@ -165,7 +166,7 @@ serve(async (req) => {
       if (!client) continue;
 
       try {
-        const prompt = buildSocialImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+        const prompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
         const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, brandMap[slot.client_account_id]);
 
         await supabase

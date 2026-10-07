@@ -39,7 +39,8 @@ const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: Weekl
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" } },
   { policyType: "social_post",      perMonth: 4, slot: { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" } },
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 5, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post", weekFilter: [1, 3] } },
-  { policyType: "blog_post",        perMonth: 2, slot: { dayOfWeek: 1, platform: "blog",      content_type: "blog_post",   titlePrefix: "Blog Article",   weekFilter: [2, 4] } },
+  // Blog slots paused (no blog app/feature yet) -- re-add a blog_post candidate here and
+  // "blog_post" to tierPolicy.ts transformation.contentTypes to bring them back.
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post",   weekFilter: [1, 3] } },
 ];
 
@@ -133,6 +134,8 @@ serve(async (req) => {
 
     // 28-day rolling window starting from this week's Monday
     const windowStart = getMondayOfWeek(new Date());
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
     const windowEnd = new Date(windowStart);
     windowEnd.setDate(windowEnd.getDate() + 28);
 
@@ -179,6 +182,11 @@ serve(async (req) => {
           const slotDate = new Date(mondayOfThisWeek);
           slotDate.setDate(slotDate.getDate() + (item.dayOfWeek - 1)); // Mon+0, Tue+1 ...
           slotDate.setHours(9, 0, 0, 0);
+
+          // The window starts on this week's Monday, so early-week slots can
+          // land before today (e.g. a client onboarded on Tuesday would get a
+          // Monday post dated before they existed). Never schedule in the past.
+          if (slotDate.getTime() < todayStart.getTime()) continue;
 
           // Respect month-based filters (blog once/twice a month)
           if (item.weekFilter && !item.weekFilter.includes(weekOfMonth(slotDate))) {
