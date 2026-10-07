@@ -232,19 +232,7 @@ serve(async (req) => {
       );
     }
 
-    // Read Calendly URL from admin_settings (falls back to hardcoded default)
-    const { data: calendlySetting } = await supabase
-      .from("admin_settings")
-      .select("value")
-      .eq("key", "calendly_url")
-      .maybeSingle();
-    const calendlyUrl = calendlySetting?.value || "https://calendly.com/baker-orangedoor";
-
     const steps = getStepsForTier(client.tier);
-
-    // Inject the live Calendly URL into the kickoff step payload
-    const calendarStep = steps.find((s: any) => s.task_type === "client_calendar");
-    if (calendarStep) calendarStep.payload = { ...calendarStep.payload, calendar_url: calendlyUrl };
 
     // Create workflow
     const { data: workflow, error: wfError } = await supabase
