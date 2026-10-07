@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -39,10 +40,10 @@ import {
   Building2,
   Eye,
   EyeOff,
+  Hourglass,
   Zap,
   Link2,
   CircleDot,
-  FlaskConical,
   Unplug,
   ExternalLink,
 } from "lucide-react";
@@ -66,6 +67,7 @@ interface SocialPost {
   published_at: string | null;
   metadata: Record<string, unknown> | null;
   client_account_id: string | null;
+  content_id?: string | null;
 }
 
 interface PostForMeAccount {
@@ -121,6 +123,14 @@ export default function SocialMediaPostsPanel() {
   const [contentTopic, setContentTopic] = useState("");
   const [testResultOpen, setTestResultOpen] = useState(false);
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null);
+  // Destructive / outward-facing actions all go through one confirm dialog.
+  const [confirm, setConfirm] = useState<
+    | { kind: "delete"; post: SocialPost }
+    | { kind: "manual"; post: SocialPost }
+    | { kind: "approve"; post: SocialPost }
+    | { kind: "publish" }
+    | null
+  >(null);
   const [newPost, setNewPost] = useState({
     title: "",
     content: "",
@@ -163,6 +173,25 @@ export default function SocialMediaPostsPanel() {
       return data as SocialPost[];
     },
   });
+
+  // Posts the client is still deciding on. A draft in this set is NOT
+  // "hidden from the client" -- the automation already sent it to their
+  // Approvals tab -- so the admin must not be offered a bypass approve.
+  const { data: withClientIds = new Set<string>() } = useQuery({
+    queryKey: ["social-with-client", selectedClient],
+    enabled: !!selectedClient,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("content_approvals")
+        .select("content_id")
+        .eq("client_account_id", selectedClient)
+        .eq("status", "pending");
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.content_id).filter(Boolean) as string[]);
+    },
+  });
+  const isWithClient = (p: SocialPost) =>
+    p.status === "draft" && (!!p.content_id && withClientIds.has(p.content_id));
 
   // Fetch Post for Me accounts for selected client
   const { data: pfmAccounts = [] } = useQuery({
@@ -307,14 +336,19 @@ export default function SocialMediaPostsPanel() {
 
   // Update post status
   const updatePostStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, metadata }: { id: string; status: string; metadata?: Record<string, unknown> | null }) => {
       const extraFields: Record<string, unknown> = {};
       if (status === "approved") {
         extraFields.client_approved = true;
         extraFields.status = "scheduled";
       } else {
         extraFields.status = status;
-        if (status === "published") extraFields.published_at = new Date().toISOString();
+        if (status === "published") {
+          extraFields.published_at = new Date().toISOString();
+          // Nothing was sent by us -- record that, so the UI never claims a
+          // platform confirmation that doesn't exist.
+          extraFields.metadata = { ...(metadata ?? {}), publish_verification: "manual", manually_marked_at: new Date().toISOString() };
+        }
       }
 
       const { data, error } = await supabase.functions.invoke("admin", {
@@ -328,7 +362,9 @@ export default function SocialMediaPostsPanel() {
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["social-posts"] });
       if (status === "approved") {
-        toast({ title: "Post approved and queued", description: "Will publish at scheduled time via Post for Me" });
+        toast({ title: "Scheduled", description: "Approved on the client's behalf — it will publish at the scheduled time via Post for Me." });
+      } else if (status === "published") {
+        toast({ title: "Marked as posted manually", description: "Nothing was sent from here — this just records that it was posted." });
       } else {
         toast({ title: "Post status updated" });
       }
@@ -388,39 +424,17 @@ export default function SocialMediaPostsPanel() {
     },
   });
 
-  // Trigger publish now
-  const triggerPublishNow = useMutation({
+  // Publish everything that is due, for every client. (This used to exist
+  // twice -- "Publish Now" and "Test Pipeline" -- calling the same function
+  // with the same body; the "test" published real posts.)
+  const publishDue = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
         body: { password: adminPassword },
       });
       if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to trigger publish");
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["social-posts"] });
-      toast({
-        title: "Publish triggered",
-        description: `Processed: ${data?.processed ?? 0} · Published: ${data?.successful ?? 0} · Failed: ${data?.failed ?? 0}`,
-      });
-    },
-    onError: (error) => {
-      toast({ title: "Publish failed", description: error.message, variant: "destructive" });
-    },
-  });
-
-  // Test pipeline
-  const testPipeline = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("publish-scheduled-content", {
-        body: { password: adminPassword },
-      });
-      if (error || data?.error) {
-        const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to test pipeline");
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Failed to publish");
       }
       return data;
     },
@@ -582,7 +596,8 @@ export default function SocialMediaPostsPanel() {
     return clients.find((c) => c.id === clientId)?.business_name || "Unknown";
   };
 
-  const draftPosts = posts.filter((p) => p.status === "draft");
+  const withClientPosts = posts.filter(isWithClient);
+  const draftPosts = posts.filter((p) => p.status === "draft" && !isWithClient(p));
   const approvedPosts = posts.filter((p) => p.status === "approved");
   const scheduledPosts = posts.filter((p) => p.status === "scheduled" || postDisplayStatus(p).key === "sending");
   const publishedPosts = posts.filter((p) => p.status === "published" && postDisplayStatus(p).key === "published");
@@ -604,15 +619,22 @@ export default function SocialMediaPostsPanel() {
                   {platformIcons[post.platform] || <CircleDot className="h-4 w-4" />}
                 </div>
                 <span className="font-medium capitalize">{post.platform}</span>
-                <Badge
-                  variant={postDisplayStatus(post).variant}
-                  className={post.status === "approved" ? "bg-green-600" : ""}
-                  title={postDisplayStatus(post).note}
-                >
-                  {post.status === "draft" && <EyeOff className="h-3 w-3 mr-1" />}
-                  {post.status === "approved" && <Eye className="h-3 w-3 mr-1" />}
-                  {postDisplayStatus(post).label}
-                </Badge>
+                {isWithClient(post) ? (
+                  <Badge variant="secondary" className="bg-sky-500/15 text-sky-700 dark:text-sky-400" title="Sent to the client's Approvals tab automatically">
+                    <Hourglass className="h-3 w-3 mr-1" />
+                    With client
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant={postDisplayStatus(post).variant}
+                    className={post.status === "approved" ? "bg-green-600" : ""}
+                    title={postDisplayStatus(post).note}
+                  >
+                    {post.status === "draft" && <EyeOff className="h-3 w-3 mr-1" />}
+                    {post.status === "approved" && <Eye className="h-3 w-3 mr-1" />}
+                    {postDisplayStatus(post).label}
+                  </Badge>
+                )}
               </div>
               {post.client_account_id && (
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -640,9 +662,14 @@ export default function SocialMediaPostsPanel() {
                   </span>
                 )}
               </div>
-              {post.status === "draft" && (
+              {isWithClient(post) && (
+                <p className="text-xs text-sky-600 flex items-center gap-1">
+                  <Hourglass className="h-3 w-3" /> Waiting for the client to approve — nothing to do here
+                </p>
+              )}
+              {post.status === "draft" && !isWithClient(post) && (
                 <p className="text-xs text-amber-600 flex items-center gap-1">
-                  <EyeOff className="h-3 w-3" /> Not visible to client
+                  <EyeOff className="h-3 w-3" /> Not sent to the client
                 </p>
               )}
               {post.status === "approved" && (
@@ -656,47 +683,45 @@ export default function SocialMediaPostsPanel() {
                 </p>
               )}
             </div>
-            <div className="flex flex-col gap-1">
-              <Button size="icon" variant="ghost" disabled={isPlaceholderContent(post.content)} onClick={() => copyToClipboard(post.content)}>
-                <Copy className="h-4 w-4" />
+            <div className="flex flex-col gap-1 items-stretch min-w-[7.5rem]">
+              <Button size="sm" variant="ghost" className="justify-start" disabled={isPlaceholderContent(post.content)} onClick={() => copyToClipboard(post.content)}>
+                <Copy className="h-4 w-4 mr-2" /> Copy
               </Button>
-              {post.status === "draft" && (
+              {post.status === "draft" && !isWithClient(post) && (
                 <Button
-                  size="icon"
+                  size="sm"
                   variant="ghost"
-                  className="text-green-600 hover:text-green-700"
-                  title={isPlaceholderContent(post.content) ? "Caption still generating — can't approve yet" : "Approve — queues for publishing via Post for Me"}
+                  className="justify-start text-green-600 hover:text-green-700"
+                  title={isPlaceholderContent(post.content) ? "Caption still generating — can't approve yet" : "Schedules this post for publishing WITHOUT sending it to the client for approval"}
                   disabled={isPlaceholderContent(post.content)}
-                  onClick={() => updatePostStatus.mutate({ id: post.id, status: "approved" })}
+                  onClick={() => setConfirm({ kind: "approve", post })}
                 >
-                  <ShieldCheck className="h-4 w-4" />
+                  <ShieldCheck className="h-4 w-4 mr-2" /> Approve &amp; schedule
                 </Button>
               )}
-              {post.status !== "published" && (
-                <>
-                  <Button size="icon" variant="ghost" onClick={() => openEditDialog(post)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  {(post.status === "approved" || post.status === "scheduled") && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-blue-500 hover:text-blue-600"
-                      title="Mark as published"
-                      onClick={() => updatePostStatus.mutate({ id: post.id, status: "published" })}
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  )}
-                </>
+              {post.status !== "published" && !isWithClient(post) && (
+                <Button size="sm" variant="ghost" className="justify-start" onClick={() => openEditDialog(post)}>
+                  <Pencil className="h-4 w-4 mr-2" /> Edit
+                </Button>
+              )}
+              {(post.status === "approved" || post.status === "scheduled") && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="justify-start text-blue-500 hover:text-blue-600"
+                  title="Only for posts you published outside this system — it does not publish anything"
+                  onClick={() => setConfirm({ kind: "manual", post })}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" /> Mark posted
+                </Button>
               )}
               <Button
-                size="icon"
+                size="sm"
                 variant="ghost"
-                className="text-destructive hover:text-destructive"
-                onClick={() => deletePost.mutate(post.id)}
+                className="justify-start text-destructive hover:text-destructive"
+                onClick={() => setConfirm({ kind: "delete", post })}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-4 w-4 mr-2" /> Delete
               </Button>
             </div>
           </div>
@@ -739,30 +764,16 @@ export default function SocialMediaPostsPanel() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => testPipeline.mutate()}
-            disabled={testPipeline.isPending}
-            title="Test the publishing pipeline"
+            onClick={() => setConfirm({ kind: "publish" })}
+            disabled={publishDue.isPending}
+            title="Publish every post that is due right now, for ALL clients (the scheduler already does this automatically)"
           >
-            {testPipeline.isPending ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FlaskConical className="h-4 w-4 mr-2" />
-            )}
-            Test Pipeline
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => triggerPublishNow.mutate()}
-            disabled={triggerPublishNow.isPending}
-            title="Run publish now for all due posts"
-          >
-            {triggerPublishNow.isPending ? (
+            {publishDue.isPending ? (
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Zap className="h-4 w-4 mr-2" />
             )}
-            Publish Now
+            Publish due posts
           </Button>
           <Select value={selectedClient} onValueChange={setSelectedClient}>
             <SelectTrigger className="w-[220px]">
@@ -983,15 +994,54 @@ export default function SocialMediaPostsPanel() {
         </div>
       </div>
 
+      {/* One confirm for every destructive / outward-facing action */}
+      <AlertDialog open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm?.kind === "delete" && "Delete this post?"}
+              {confirm?.kind === "manual" && "Mark as posted manually?"}
+              {confirm?.kind === "approve" && "Approve and schedule without the client?"}
+              {confirm?.kind === "publish" && "Publish all due posts now?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm?.kind === "delete" && "This permanently removes the post. It can't be undone."}
+              {confirm?.kind === "manual" && "Use this only if the post was published outside this system. Nothing is sent from here — it just records the post as published."}
+              {confirm?.kind === "approve" && "This skips the client's Approvals tab and queues the post to publish at its scheduled time. Client-facing posts normally go through client approval."}
+              {confirm?.kind === "publish" && "Publishes every approved post that is due, for ALL clients, immediately. The scheduler already does this automatically."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={confirm?.kind === "delete" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+              onClick={() => {
+                if (!confirm) return;
+                if (confirm.kind === "delete") deletePost.mutate(confirm.post.id);
+                if (confirm.kind === "manual") updatePostStatus.mutate({ id: confirm.post.id, status: "published", metadata: confirm.post.metadata });
+                if (confirm.kind === "approve") updatePostStatus.mutate({ id: confirm.post.id, status: "approved" });
+                if (confirm.kind === "publish") publishDue.mutate();
+                setConfirm(null);
+              }}
+            >
+              {confirm?.kind === "delete" && "Delete"}
+              {confirm?.kind === "manual" && "Mark as posted"}
+              {confirm?.kind === "approve" && "Approve & schedule"}
+              {confirm?.kind === "publish" && "Publish now"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Test Pipeline Result Dialog */}
       <Dialog open={testResultOpen} onOpenChange={setTestResultOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FlaskConical className="h-5 w-5" />
-              Pipeline Test Results
+              <Zap className="h-5 w-5" />
+              Publish Results
             </DialogTitle>
-            <DialogDescription>Results from publish-scheduled-content execution</DialogDescription>
+            <DialogDescription>What happened when due posts were published just now</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             {testResult?.error ? (
@@ -1062,6 +1112,7 @@ export default function SocialMediaPostsPanel() {
               Accounts ({pfmAccounts.length})
             </TabsTrigger>
             <TabsTrigger value="all">All ({posts.length})</TabsTrigger>
+            <TabsTrigger value="with_client">With client ({withClientPosts.length})</TabsTrigger>
             <TabsTrigger value="draft">Drafts ({draftPosts.length})</TabsTrigger>
             <TabsTrigger value="approved">Approved ({approvedPosts.length})</TabsTrigger>
             <TabsTrigger value="scheduled">Scheduled ({scheduledPosts.length})</TabsTrigger>
@@ -1171,6 +1222,7 @@ export default function SocialMediaPostsPanel() {
           {/* Post tabs */}
           {[
             { value: "all", data: posts },
+            { value: "with_client", data: withClientPosts },
             { value: "draft", data: draftPosts },
             { value: "approved", data: approvedPosts },
             { value: "scheduled", data: scheduledPosts },

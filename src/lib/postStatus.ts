@@ -35,6 +35,9 @@ export function postDisplayStatus(post: PostLike, now: number = Date.now()): Pos
 
     case "published": {
       if (meta.publish_confirmed_at) return { key: "published", label: "Published", variant: "default" };
+      if (meta.publish_verification === "manual") {
+        return { key: "published", label: "Posted manually", variant: "default", note: "An admin marked this as posted outside the system" };
+      }
       if (meta.publish_verification === "unavailable") {
         return { key: "published", label: "Published", variant: "default", note: "Sent, but the platform's confirmation isn't available" };
       }

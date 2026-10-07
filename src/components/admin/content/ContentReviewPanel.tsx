@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { RefreshCw, Edit, Check, X, FileText, Mail, MessageSquare, Megaphone, Eye, Send, Loader2, Sparkles, Share2, ImageIcon, CalendarClock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Edit, X, FileText, Mail, Megaphone, Eye, Send, Loader2, Sparkles, Share2, ImageIcon, CalendarClock, AlertTriangle, CheckCircle2, Lock } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { callAdminApi } from "@/lib/admin-api";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { contentStage, isAutoSent, STAGE_TABS, type StageInfo, type StageTone } from "@/lib/contentLifecycle";
 
 interface GeneratedContent {
   id: string;
@@ -58,6 +59,7 @@ interface ApprovalLifecycleInfo {
   publish_status: string | null;
   reviewed_at: string | null;
   feedback: string | null;
+  submitted_at: string | null;
 }
 
 interface LifecycleStep {
@@ -73,19 +75,21 @@ function buildLifecycle(
   appr: ApprovalLifecycleInfo | undefined,
 ): LifecycleStep[] {
   const qa = content.metadata?.qa as { score?: number } | undefined;
-  const sentToClient = !!appr || ["approved", "client_approved", "changes_requested", "rejected", "published"].includes(content.status);
-  const clientDecided = appr?.status === "approved" || appr?.status === "rejected" || ["client_approved", "rejected", "changes_requested"].includes(content.status);
-  const clientRejected = appr?.status === "rejected" || content.status === "rejected" || content.status === "changes_requested";
-  const scheduled = !!cal?.scheduled_for && cal.status !== "published";
+  // "Sent" means a row exists in the client's approval queue -- not that
+  // generated_content.status says "approved", which can be set without one.
+  const sentToClient = !!appr;
+  const clientRejected = appr?.status === "rejected" || appr?.status === "changes_requested";
+  const clientApproved = appr?.status === "approved";
   const published = cal?.status === "published" || content.status === "published";
-  const failed = cal?.status === "failed";
+  const scheduled = clientApproved && !!cal?.scheduled_for && !published;
+  const failed = cal?.status === "failed" || appr?.publish_status === "failed";
 
   return [
     { label: "Drafted", done: true, detail: qa ? `QA ${qa.score}/10` : undefined },
-    { label: "Sent to client", done: sentToClient },
+    { label: isAutoSent(content) ? "Auto-sent to client" : "Sent to client", done: sentToClient },
     {
-      label: clientRejected ? "Changes requested" : "Client approved",
-      done: clientDecided,
+      label: clientRejected ? (appr?.status === "rejected" ? "Client declined" : "Changes requested") : "Client approved",
+      done: clientApproved || clientRejected,
       failed: clientRejected,
       detail: appr?.feedback || undefined,
     },
@@ -140,14 +144,13 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
   const [loading, setLoading] = useState(true);
   const [selectedClient, setSelectedClient] = useState<string>(clientId || "all");
   const [selectedType, setSelectedType] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedTab, setSelectedTab] = useState<string>("action");
   const [editingContent, setEditingContent] = useState<GeneratedContent | null>(null);
   const [editedContent, setEditedContent] = useState("");
   const [editedTitle, setEditedTitle] = useState("");
   const [previewContent, setPreviewContent] = useState<GeneratedContent | null>(null);
   const [publishingContent, setPublishingContent] = useState<GeneratedContent | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectingContent, setRejectingContent] = useState<GeneratedContent | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -158,6 +161,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
   const [generateContentType, setGenerateContentType] = useState<string>("social_post");
   const [generateTopic, setGenerateTopic] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -188,8 +192,9 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
           .in("content_id", contentIds),
         supabase
           .from("content_approvals")
-          .select("content_id, status, publish_status, reviewed_at, feedback")
-          .in("content_id", contentIds),
+          .select("content_id, status, publish_status, reviewed_at, feedback, submitted_at")
+          .in("content_id", contentIds)
+          .order("submitted_at", { ascending: true }),
       ]);
 
       const calendarMap: Record<string, CalendarLifecycleInfo> = {};
@@ -214,6 +219,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
           publish_status: row.publish_status,
           reviewed_at: row.reviewed_at,
           feedback: row.feedback,
+          submitted_at: row.submitted_at,
         };
       }
       setApprovalByContentId(approvalMap);
@@ -243,48 +249,26 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending_admin_review":
-        return <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">Needs Review</Badge>;
-      case "draft":
-        return <Badge variant="secondary">Draft</Badge>;
-      case "approved":
-        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Sent to Client</Badge>;
-      case "client_approved":
-        return <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30">Client Approved ✓</Badge>;
-      case "changes_requested":
-        return <Badge className="bg-orange-500/20 text-orange-600 border-orange-500/30">Changes Requested</Badge>;
-      case "published":
-        return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Published</Badge>;
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+  const stageOf = (c: GeneratedContent): StageInfo =>
+    contentStage(c, approvalByContentId[c.id], calendarByContentId[c.id]);
+
+  const toneClass: Record<StageTone, string> = {
+    action: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+    waiting: "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",
+    good: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+    done: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+    bad: "bg-destructive/15 text-destructive border-destructive/30",
+    muted: "bg-muted text-muted-foreground",
   };
+
+  const getStageBadge = (stage: StageInfo) => (
+    <Badge variant="outline" className={toneClass[stage.tone]} title={stage.hint}>
+      {stage.label}
+    </Badge>
+  );
 
   const formatContentType = (type: string) => {
     return type.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-  };
-
-  const handleApprove = async (content: GeneratedContent) => {
-    setApprovingId(content.id);
-    try {
-      const { error } = await callAdminApi(adminPassword, {
-        action: "update",
-        table: "generated_content",
-        id: content.id,
-        data: { status: "approved", updated_at: new Date().toISOString() },
-      });
-      if (error) throw new Error(error);
-      toast({ title: "Approved", description: "Content approved internally. Use 'Send to Client' to request their sign-off." });
-      fetchData();
-    } catch {
-      toast({ title: "Error", description: "Failed to approve content", variant: "destructive" });
-    } finally {
-      setApprovingId(null);
-    }
   };
 
   const openRejectDialog = (content: GeneratedContent) => {
@@ -329,36 +313,33 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
 
   const handleSaveEdit = async () => {
     if (!editingContent) return;
-
-    // If content was already sent to client or approved by client, reset to pending review
-    // so it must be re-reviewed before being sent again.
-    const resetStatus = ["approved", "client_approved", "changes_requested"].includes(editingContent.status)
-      ? "pending_admin_review"
-      : undefined;
-
-    const { error } = await callAdminApi(adminPassword, {
-      action: "update",
-      table: "generated_content",
-      id: editingContent.id,
-      data: {
-        content: editedContent,
-        title: editedTitle || null,
-        updated_at: new Date().toISOString(),
-        ...(resetStatus ? { status: resetStatus } : {}),
-      },
-    });
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to save changes", variant: "destructive" });
-    } else {
+    if (!editedContent.trim()) {
+      toast({ title: "Content can't be empty", variant: "destructive" });
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      // Server-side so the client's copy of the draft (and the calendar slot)
+      // is updated in the same call -- see updateContentText in the admin fn.
+      const { data, error } = await callAdminApi<{ syncedToClient?: boolean; resetToReview?: boolean }>(adminPassword, {
+        action: "updateContentText",
+        data: { contentId: editingContent.id, title: editedTitle, content: editedContent },
+      });
+      if (error) throw new Error(error);
       toast({
         title: "Saved",
-        description: resetStatus
-          ? "Content updated and reset to 'Needs Review' — re-approve before sending to client."
-          : "Content has been updated",
+        description: data?.syncedToClient
+          ? "Updated — the client now sees the new version in their Approvals tab."
+          : data?.resetToReview
+            ? "Updated and moved back to 'Needs your review' — send it to the client when ready."
+            : "Content updated.",
       });
       setEditingContent(null);
       fetchData();
+    } catch (e: any) {
+      toast({ title: "Couldn't save changes", description: e?.message || "Try again", variant: "destructive" });
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -452,33 +433,68 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
     }
   };
 
-  const filteredContents = contents.filter((c) => {
+  const inScope = contents.filter((c) => {
     if (selectedClient !== "all" && c.client_id !== selectedClient) return false;
     if (selectedType !== "all" && c.content_type !== selectedType) return false;
-    if (selectedStatus !== "all" && c.status !== selectedStatus) return false;
     return true;
   });
+  const staged = inScope.map((c) => ({ c, stage: stageOf(c) }));
+  const tabCounts: Record<string, number> = {};
+  for (const t of STAGE_TABS) tabCounts[t.key] = staged.filter((x) => t.stages.includes(x.stage.stage)).length;
+  const activeTab = STAGE_TABS.find((t) => t.key === selectedTab);
+  const visible = selectedTab === "all" ? staged : staged.filter((x) => activeTab?.stages.includes(x.stage.stage));
 
   const contentTypes = [...new Set(contents.map((c) => c.content_type))];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Content Review</h2>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold">Content Review</h2>
+          <p className="text-sm text-muted-foreground">
+            Social posts are drafted and sent to clients automatically. This list shows where each piece really is and what, if anything, needs you.
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button onClick={() => setGenerateModalOpen(true)} size="sm">
             <Sparkles className="w-4 h-4 mr-2" />
             Generate Content
           </Button>
-          <Button onClick={fetchData} variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
+          <Button onClick={fetchData} variant="outline" size="sm" disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4">
+      {/* Stage tabs -- the primary navigation. Counts are live. */}
+      <div className="flex flex-wrap gap-2" role="tablist">
+        {STAGE_TABS.map((t) => {
+          const n = tabCounts[t.key];
+          const active = selectedTab === t.key;
+          const attention = t.key === "action" && n > 0;
+          return (
+            <Button
+              key={t.key}
+              role="tab"
+              aria-selected={active}
+              size="sm"
+              variant={active ? "default" : "outline"}
+              onClick={() => setSelectedTab(t.key)}
+            >
+              {t.label}
+              <span className={`ml-2 rounded-full px-1.5 text-[11px] leading-5 ${active ? "bg-primary-foreground/20" : attention ? "bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}>
+                {n}
+              </span>
+            </Button>
+          );
+        })}
+        <Button size="sm" variant={selectedTab === "all" ? "default" : "ghost"} onClick={() => setSelectedTab("all")}>
+          All <span className="ml-2 text-[11px] text-muted-foreground">{staged.length}</span>
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
         <Select value={selectedClient} onValueChange={setSelectedClient}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Filter by client" />
@@ -506,40 +522,28 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
             ))}
           </SelectContent>
         </Select>
-
-        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="pending_admin_review">Needs Review</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="approved">Sent to Client</SelectItem>
-            <SelectItem value="client_approved">Client Approved</SelectItem>
-            <SelectItem value="changes_requested">Changes Requested</SelectItem>
-            <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="rejected">Rejected</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {/* Content Grid */}
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Loading content...</div>
-      ) : filteredContents.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">No content found</div>
+      ) : visible.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          {selectedTab === "action" ? "Nothing needs your action right now." : "Nothing here."}
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredContents.map((content) => (
+          {visible.map(({ c: content, stage }) => (
             <Card key={content.id} className="flex flex-col">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     {getContentTypeIcon(content.content_type)}
                     <span className="text-xs">{formatContentType(content.content_type)}</span>
+                    {calendarByContentId[content.id]?.platform && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{calendarByContentId[content.id].platform}</Badge>
+                    )}
                   </div>
-                  {getStatusBadge(content.status)}
+                  {getStageBadge(stage)}
                 </div>
                 <CardTitle className="text-base leading-tight mt-2">
                   {content.title || "Untitled"}
@@ -558,66 +562,45 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
                 )}
                 <div className="flex-1 mb-3">
                   <p className="text-sm text-muted-foreground line-clamp-4">
-                    {content.content.substring(0, 200)}...
+                    {content.content.length > 200 ? `${content.content.substring(0, 200)}…` : content.content}
                   </p>
                 </div>
+                <p className={`text-xs mb-2 ${stage.tone === "bad" ? "text-destructive" : stage.tone === "action" ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+                  {stage.hint}
+                </p>
                 <LifecycleStrip content={content} cal={calendarByContentId[content.id]} appr={approvalByContentId[content.id]} />
                 <div className="flex gap-2 flex-wrap mt-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPreviewContent(content)}
-                  >
+                  <Button size="sm" variant="outline" onClick={() => setPreviewContent(content)}>
                     <Eye className="w-3 h-3 mr-1" />
                     Preview
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleEdit(content)}
-                  >
-                    <Edit className="w-3 h-3 mr-1" />
-                    Edit
-                  </Button>
-                  {(content.status === "draft" || content.status === "pending_admin_review" || content.status === "changes_requested") && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="bg-green-600 hover:bg-green-700"
-                        disabled={approvingId === content.id}
-                        onClick={() => handleApprove(content)}
-                      >
-                        {approvingId === content.id ? (
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        ) : (
-                          <Check className="w-3 h-3 mr-1" />
-                        )}
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={rejectingId === content.id}
-                        onClick={() => openRejectDialog(content)}
-                      >
-                        {rejectingId === content.id ? (
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        ) : (
-                          <X className="w-3 h-3 mr-1" />
-                        )}
-                        Reject
-                      </Button>
-                    </>
+                  {stage.canEdit ? (
+                    <Button size="sm" variant="outline" onClick={() => handleEdit(content)}>
+                      <Edit className="w-3 h-3 mr-1" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled title="The client already approved this — the text is locked.">
+                      <Lock className="w-3 h-3 mr-1" />
+                      Locked
+                    </Button>
                   )}
-                  {(content.status === "approved" || content.status === "draft" || content.status === "pending_admin_review" || content.status === "changes_requested") && (
+                  {stage.canSend && (
+                    <Button size="sm" onClick={() => handlePublishClick(content)}>
+                      <Send className="w-3 h-3 mr-1" />
+                      Send to client
+                    </Button>
+                  )}
+                  {stage.canReject && (
                     <Button
                       size="sm"
-                      variant="default"
-                      onClick={() => handlePublishClick(content)}
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      disabled={rejectingId === content.id}
+                      onClick={() => openRejectDialog(content)}
                     >
-                      <Send className="w-3 h-3 mr-1" />
-                      Send to Client
+                      {rejectingId === content.id ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <X className="w-3 h-3 mr-1" />}
+                      Reject
                     </Button>
                   )}
                 </div>
@@ -634,7 +617,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               {previewContent && getContentTypeIcon(previewContent.content_type)}
               <span className="text-sm">{previewContent && formatContentType(previewContent.content_type)}</span>
-              {previewContent && getStatusBadge(previewContent.status)}
+              {previewContent && getStageBadge(stageOf(previewContent))}
             </div>
             <DialogTitle>{previewContent?.title || "Untitled"}</DialogTitle>
             <p className="text-sm text-muted-foreground">
@@ -684,58 +667,35 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
                 sourceReferenceId={previewContent.id}
                 issueTitle={`Strengthen ${formatContentType(previewContent.content_type)}: ${previewContent.title || 'Untitled'}`}
                 issueSummary="Get an AI critique with rewrite suggestions to boost engagement and clarity."
-                severity={previewContent.status === 'rejected' ? 'high' : 'medium'}
+                severity={stageOf(previewContent).stage === "rejected" ? 'high' : 'medium'}
                 context={{ content_type: previewContent.content_type, title: previewContent.title, content_preview: previewContent.content?.slice(0, 1500) }}
                 compact
               />
             </div>
           )}
           <DialogFooter className="mt-4 flex-wrap gap-2">
-            {previewContent && (previewContent.status === "draft" || previewContent.status === "pending_admin_review" || previewContent.status === "changes_requested") && (
-              <>
-                <Button
-                  variant="default"
-                  className="bg-green-600 hover:bg-green-700"
-                  disabled={approvingId === previewContent.id}
-                  onClick={() => {
-                    handleApprove(previewContent);
-                    setPreviewContent(null);
-                  }}
-                >
-                  {approvingId === previewContent.id ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4 mr-2" />
-                  )}
-                  Approve
-                </Button>
-                <Button
-                  variant="destructive"
-                  disabled={rejectingId === previewContent.id}
-                  onClick={() => {
-                    openRejectDialog(previewContent);
-                    setPreviewContent(null);
-                  }}
-                >
-                  {rejectingId === previewContent.id ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <X className="w-4 h-4 mr-2" />
-                  )}
-                  Reject
-                </Button>
-              </>
-            )}
-            {previewContent && (previewContent.status === "approved" || previewContent.status === "draft" || previewContent.status === "pending_admin_review" || previewContent.status === "changes_requested") && (
+            {previewContent && stageOf(previewContent).canReject && (
               <Button
-                variant="default"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  openRejectDialog(previewContent);
+                  setPreviewContent(null);
+                }}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Reject
+              </Button>
+            )}
+            {previewContent && stageOf(previewContent).canSend && (
+              <Button
                 onClick={() => {
                   handlePublishClick(previewContent);
                   setPreviewContent(null);
                 }}
               >
                 <Send className="w-4 h-4 mr-2" />
-                Send to Client
+                Send to client
               </Button>
             )}
             <Button variant="outline" onClick={() => setPreviewContent(null)}>
@@ -749,9 +709,9 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
       <Dialog open={!!publishingContent} onOpenChange={() => setPublishingContent(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Send for Client Approval</DialogTitle>
+            <DialogTitle>Send to client</DialogTitle>
             <DialogDescription>
-              Approve this content internally and add it to the client's approval queue.
+              Puts this in the client's Approvals tab. Nothing is published until they approve it.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -762,7 +722,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
               </p>
             </div>
             <p className="text-sm text-muted-foreground">
-              The content will be marked as internally approved and placed in the client's Approvals tab for their sign-off before publishing.
+              Once it's with the client you can still edit it — changes sync to their copy until they approve. After they approve, the text is locked.
             </p>
           </div>
           <DialogFooter>
@@ -778,7 +738,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />
-                  Approve &amp; Send to Client
+                  Send to client
                 </>
               )}
             </Button>
@@ -839,6 +799,13 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Content</DialogTitle>
+            {editingContent && (
+              <DialogDescription>
+                {stageOf(editingContent).stage === "with_client"
+                  ? "This is already in the client's Approvals tab — saving updates the version they see."
+                  : "Saving updates the draft. It isn't sent to the client until you press Send to client."}
+              </DialogDescription>
+            )}
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
@@ -862,7 +829,8 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
             <Button variant="outline" onClick={() => setEditingContent(null)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit}>
+            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
+              {isSavingEdit ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Save Changes
             </Button>
           </DialogFooter>
