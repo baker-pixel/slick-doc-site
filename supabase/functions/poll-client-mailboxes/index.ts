@@ -45,8 +45,8 @@ serve(async (req) => {
     }
 
     const totals = results.reduce(
-      (acc, r) => ({ polled: acc.polled + r.polled, bounced: acc.bounced + r.bounced, replied: acc.replied + r.replied }),
-      { polled: 0, bounced: 0, replied: 0 },
+      (acc, r) => ({ polled: acc.polled + r.polled, bounced: acc.bounced + r.bounced, replied: acc.replied + r.replied, stored: acc.stored + r.stored }),
+      { polled: 0, bounced: 0, replied: 0, stored: 0 },
     );
 
     console.log(`Polled ${candidates.length} client mailbox(es):`, totals);

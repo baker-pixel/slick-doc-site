@@ -14,6 +14,8 @@ export interface PollResult {
   polled: number;
   bounced: number;
   replied: number;
+  /** New prospect_replies rows written this run (re-seen messages don't count). */
+  stored: number;
   error?: string;
 }
 
@@ -193,6 +195,29 @@ export function extractReplySnippet(raw: Uint8Array): string | null {
   }
 }
 
+// A stable per-message key for prospect_replies' unique (client_id, message_id).
+// Falls back to a UID-based key for the rare message with no Message-ID header
+// so it is still deduped instead of re-stored on every rescan.
+export function normalizeMessageId(headerValue: string, clientId: string, uid: number): string {
+  const m = headerValue.match(/<([^>]+)>/);
+  const id = (m?.[1] ?? headerValue).trim();
+  return id ? id.slice(0, 500) : `no-message-id:${clientId}:${uid}`;
+}
+
+// IMAP Date headers are RFC 2822 and occasionally missing or garbage; a bad
+// date must never block storing the reply, so fall back to the poll time.
+export function parseReceivedAt(dateHeader: string, fallback: Date = new Date()): string {
+  const t = Date.parse(dateHeader);
+  return new Date(Number.isNaN(t) ? fallback.getTime() : t).toISOString();
+}
+
+export function buildSnippet(body: string | null, max = 280): string | null {
+  if (!body) return null;
+  const flat = body.replace(/\s+/g, " ").trim();
+  if (!flat) return null;
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
+
 const MAX_MESSAGES_PER_RUN = 200;
 const POLL_TIMEOUT_MS = 40_000;
 // IMAP SINCE works on whole days; a reply is only acted on once (see the
@@ -216,7 +241,8 @@ export async function pollClientMailbox(
   supabase: any,
   clientId: string,
 ): Promise<PollResult> {
-  const result: PollResult = { polled: 0, bounced: 0, replied: 0 };
+  const result: PollResult = { polled: 0, bounced: 0, replied: 0, stored: 0 };
+  const startedAt = new Date();
 
   const { data: cred } = await supabase
     .from("client_oauth_tokens")
@@ -242,7 +268,7 @@ export async function pollClientMailbox(
 
     const uids = await client.searchSince(new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
     const batch = uids.slice(-MAX_MESSAGES_PER_RUN);
-    const headersByUid = await client.fetchHeaders(batch, ["SUBJECT", "FROM", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES", "AUTO-SUBMITTED"]);
+    const headersByUid = await client.fetchHeaders(batch, ["SUBJECT", "FROM", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES", "AUTO-SUBMITTED"]);
 
     for (const [uid, headers] of headersByUid) {
       try {
@@ -250,7 +276,8 @@ export async function pollClientMailbox(
 
         const fromHeader = getHeader(headers, "From");
         const subject = getHeader(headers, "Subject");
-        const trackingId = extractTrackingId(getHeader(headers, "In-Reply-To")) ||
+        const inReplyTo = getHeader(headers, "In-Reply-To");
+        const trackingId = extractTrackingId(inReplyTo) ||
           extractTrackingId(getHeader(headers, "References"));
         const isBounce = BOUNCE_FROM_RE.test(fromHeader) || BOUNCE_SUBJECT_RE.test(subject);
         const autoReply = !isBounce && isAutoReply(subject, getHeader(headers, "Auto-Submitted"));
@@ -258,16 +285,23 @@ export async function pollClientMailbox(
 
         // Primary link: the Message-ID tag on what we sent. Fallback for a real
         // reply that lost its threading headers (new compose, forwarding
-        // client): the sender is one of THIS client's prospects.
+        // client): the sender is one of THIS client's prospects. Anything that
+        // matches neither is the client's own mail and is never stored.
         let prospectId: string | null = null;
+        let emailLogId: string | null = null;
+        let matchMethod: "tracking_id" | "sender" | null = null;
         if (trackingId) {
           const { data: log } = await supabase
             .from("email_logs")
-            .select("metadata")
+            .select("id, metadata")
             .eq("tracking_id", trackingId)
             .maybeSingle();
           const logMeta = (log?.metadata ?? {}) as Record<string, unknown>;
           prospectId = typeof logMeta.prospect_id === "string" ? logMeta.prospect_id : null;
+          emailLogId = log?.id ?? null;
+          // The tracking id is ours, so this IS a reply/bounce to our outreach
+          // even when the email_logs row is gone -- keep it (prospect_id null).
+          matchMethod = "tracking_id";
         } else if (!isBounce) {
           const sender = extractSenderAddress(fromHeader);
           if (sender && sender !== meta.username?.toLowerCase()) {
@@ -278,36 +312,87 @@ export async function pollClientMailbox(
               .ilike("email", sender.replace(/[%_\\]/g, "\\$&"))
               .limit(2);
             // Ambiguous (same address on two prospects) -> don't guess.
-            if (bySender?.length === 1) prospectId = bySender[0].id;
+            if (bySender?.length === 1) {
+              prospectId = bySender[0].id;
+              matchMethod = "sender";
+            }
           }
         }
-        if (!prospectId) continue; // unrelated inbox mail, or a bounce we cannot attribute
+        if (!matchMethod) continue; // unrelated inbox mail, or a bounce we cannot attribute
+
+        // Already fully handled on an earlier run (the 21-day window re-sees
+        // every message): nothing to do, and no body re-fetch.
+        const messageId = normalizeMessageId(getHeader(headers, "Message-ID"), clientId, uid);
+        const { data: existing } = await supabase
+          .from("prospect_replies")
+          .select("id, processed_at")
+          .eq("client_id", clientId)
+          .eq("message_id", messageId)
+          .maybeSingle();
+        if (existing?.processed_at) continue;
+
+        // Body only for genuine replies; a bounce's text is just a DSN.
+        let replyBody: string | null = null;
+        if (!isBounce) {
+          try {
+            const raw = await client.fetchRaw(uid);
+            if (raw) replyBody = extractReplySnippet(raw);
+          } catch (e) {
+            console.warn(`[clientMailboxPoll] ${clientId} uid=${uid}: reply body fetch failed:`, e instanceof Error ? e.message : e);
+          }
+        }
+
+        const { data: stored, error: storeErr } = await supabase
+          .from("prospect_replies")
+          .upsert({
+            client_id: clientId,
+            prospect_id: prospectId,
+            email_log_id: emailLogId,
+            message_id: messageId,
+            in_reply_to: inReplyTo ? inReplyTo.slice(0, 500) : null,
+            from_address: extractSenderAddress(fromHeader),
+            subject: subject.slice(0, 500),
+            received_at: parseReceivedAt(getHeader(headers, "Date"), startedAt),
+            classification: isBounce ? "bounce" : "reply",
+            match_method: matchMethod,
+            snippet: buildSnippet(replyBody),
+            body_text: replyBody,
+          }, { onConflict: "client_id,message_id" })
+          .select("id")
+          .maybeSingle();
+        // Storing is the new record-keeping layer; if it fails the existing
+        // prospect handling below must still run, so log and carry on.
+        if (storeErr) console.error(`[clientMailboxPoll] ${clientId} uid=${uid}: prospect_replies upsert failed:`, storeErr.message);
+        else if (!existing) result.stored++;
+        const replyRowId: string | null = stored?.id ?? existing?.id ?? null;
+
+        const markProcessed = async () => {
+          if (replyRowId) {
+            await supabase.from("prospect_replies").update({ processed_at: new Date().toISOString() }).eq("id", replyRowId);
+          }
+        };
+
+        if (!prospectId) { await markProcessed(); continue; } // stored for review, nothing to update
 
         const { data: prospect } = await supabase
           .from("prospects")
           .select("name, status, reply_snippet")
           .eq("id", prospectId)
           .maybeSingle();
-        if (!prospect) continue;
+        if (!prospect) { await markProcessed(); continue; }
         // A prospect someone already marked "replied" by hand still gets its
         // reply text captured once; every other settled status is left alone.
         const needsBackfill = prospect.status === "replied" && !prospect.reply_snippet;
-        if (!REPLYABLE_STATUSES.includes(prospect.status) && !needsBackfill) continue; // already handled
+        if (!REPLYABLE_STATUSES.includes(prospect.status) && !needsBackfill) { await markProcessed(); continue; } // already handled
 
         if (isBounce) {
           result.bounced++;
           await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospectId);
         } else {
           // Only counts as a genuine reply when it's tied back to a specific
-          // sent email or a known prospect. Body fetched only for confirmed replies.
+          // sent email or a known prospect.
           result.replied++;
-          let replySnippet: string | null = null;
-          try {
-            const raw = await client.fetchRaw(uid);
-            if (raw) replySnippet = extractReplySnippet(raw);
-          } catch (e) {
-            console.warn(`[clientMailboxPoll] ${clientId} uid=${uid}: reply body fetch failed:`, e instanceof Error ? e.message : e);
-          }
+          const replySnippet = replyBody;
           await supabase.from("prospects").update({
             status: "replied",
             replied_at: new Date().toISOString(),
@@ -337,6 +422,7 @@ export async function pollClientMailbox(
         // Stop the rest of the sequence either way.
         await supabase.from("email_queue").update({ status: "cancelled", error_message: isBounce ? "Prospect bounced" : "Prospect replied" })
           .filter("metadata->>prospect_id", "eq", prospectId).eq("status", "pending");
+        await markProcessed();
       } catch (msgErr) {
         console.error(`[clientMailboxPoll] ${clientId} uid=${uid}:`, msgErr);
       }
@@ -355,6 +441,25 @@ export async function pollClientMailbox(
   } finally {
     clearTimeout(timer);
     await client.close();
+  }
+
+  // One row per attempted poll so a dead mailbox is distinguishable from a
+  // quiet one. Best-effort: bookkeeping must never fail the poll itself.
+  try {
+    const { error: runErr } = await supabase.from("poll_runs").insert({
+      client_id: clientId,
+      started_at: startedAt.toISOString(),
+      duration_ms: Date.now() - startedAt.getTime(),
+      ok: !result.error,
+      messages_seen: result.polled,
+      replies: result.replied,
+      bounces: result.bounced,
+      stored: result.stored,
+      error: result.error ?? null,
+    });
+    if (runErr) console.error(`[clientMailboxPoll] ${clientId}: poll_runs insert failed:`, runErr.message);
+  } catch (e) {
+    console.error(`[clientMailboxPoll] ${clientId}: poll_runs insert threw:`, e instanceof Error ? e.message : e);
   }
 
   return result;
