@@ -23,7 +23,7 @@ export interface PollResult {
 // the SMTP host already on file -- a fully custom SMTP server could be
 // anything, so we fall back to a smtp->imap subdomain guess (works for a lot
 // of providers) and let the connection attempt itself fail closed if wrong.
-function inferImapHost(smtpHost: string): string {
+export function inferImapHost(smtpHost: string): string {
   if (smtpHost === "smtp.gmail.com") return "imap.gmail.com";
   if (smtpHost === "smtp.office365.com") return "outlook.office365.com";
   return smtpHost.replace(/^smtp\./i, "imap.");
