@@ -1,3 +1,4 @@
+import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
@@ -208,6 +209,9 @@ serve(async (req) => {
 
     if ((client as { status?: string }).status !== "active") {
       return json({ error: "This client's automation is paused." }, 403);
+    }
+    if (!(await clientIdsWithMailbox(supabase, [body.client_id])).has(body.client_id)) {
+      return json({ error: NO_MAILBOX_MESSAGE, code: "no_mailbox" }, 403);
     }
 
     // Tier gate: prospecting is a plan feature; batch size from tier policy.

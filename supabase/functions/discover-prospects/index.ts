@@ -1,3 +1,4 @@
+import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -121,6 +122,13 @@ serve(async (req) => {
     if ((client as { status?: string }).status !== "active") {
       return new Response(
         JSON.stringify({ error: "This client's automation is paused." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!(await clientIdsWithMailbox(supabase, [client_id])).has(client_id)) {
+      return new Response(
+        JSON.stringify({ error: NO_MAILBOX_MESSAGE, code: "no_mailbox" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

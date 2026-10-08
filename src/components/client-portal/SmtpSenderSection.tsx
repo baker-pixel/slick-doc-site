@@ -67,8 +67,9 @@ const EMPTY_SMTP_FORM: SmtpFormState = {
   secure: SMTP_PRESETS.gmail.secure,
 };
 
-export function SmtpSenderSection({ clientAccountId }: { clientAccountId: string }) {
+export function SmtpSenderSection({ clientAccountId, onConnectionChange }: { clientAccountId: string; onConnectionChange?: (connected: boolean) => void }) {
   const [smtpToken_, setSmtpToken_] = useState<SmtpToken | null>(null);
+  const [tokenLoaded, setTokenLoaded] = useState(false);
   const [smtpDialogOpen, setSmtpDialogOpen] = useState(false);
   const [smtpForm, setSmtpForm] = useState<SmtpFormState>(EMPTY_SMTP_FORM);
   const [savingSmtp, setSavingSmtp] = useState(false);
@@ -87,7 +88,13 @@ export function SmtpSenderSection({ clientAccountId }: { clientAccountId: string
       return;
     }
     setSmtpToken_((data as SmtpToken | null) ?? null);
+    setTokenLoaded(true);
   };
+
+  useEffect(() => {
+    if (tokenLoaded) onConnectionChange?.(!!smtpToken_);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [smtpToken_, tokenLoaded]);
 
   useEffect(() => {
     fetchSmtpToken();
@@ -204,7 +211,7 @@ export function SmtpSenderSection({ clientAccountId }: { clientAccountId: string
       const { error } = await supabase.from("client_oauth_tokens").delete().eq("id", token.id);
       if (error) throw error;
       setSmtpToken_(null);
-      toast({ title: "Disconnected", description: "Outreach emails will use the shared sender until you reconnect." });
+      toast({ title: "Disconnected", description: "Lead outreach is paused until you reconnect a mailbox." });
     } catch (err) {
       console.error("Error disconnecting email:", err);
       toast({ title: "Error", description: "Failed to disconnect. Please try again.", variant: "destructive" });
@@ -222,8 +229,8 @@ export function SmtpSenderSection({ clientAccountId }: { clientAccountId: string
           Email for Lead Outreach
         </h3>
         <p className="text-sm text-muted-foreground mt-1 mb-4">
-          Connect your own inbox via SMTP so outreach emails to prospects send from your address instead of our shared sender.
-          Optional — outreach still sends (from our shared address) if you skip this.
+          Connect your own inbox via SMTP so outreach emails to prospects send from your address.
+          Required — lead outreach will not send until a mailbox is connected.
         </p>
         {(() => {
           const smtpToken = smtpToken_;

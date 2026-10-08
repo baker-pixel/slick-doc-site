@@ -27,9 +27,8 @@ interface SendArgs {
  * Sends via the client's own connected SMTP mailbox so lead outreach lands
  * from an address the recipient can actually reply to, instead of the shared
  * no-reply sender. Returns false (never throws) whenever there's no
- * connected mailbox or the send fails, so callers can fall back to Resend --
- * a client's outreach must never silently stop just because their SMTP
- * credentials are wrong or a provider hiccuped.
+ * connected mailbox or the send fails, so callers can retry. Outreach
+ * must never fall back to the shared sender.
  */
 export async function sendViaClientEmail(
   // deno-lint-ignore no-explicit-any
@@ -113,7 +112,7 @@ export async function sendViaClientEmail(
 
     return { sent: true, provider: "smtp" };
   } catch (err) {
-    console.error("[clientEmailSend] SMTP send failed, caller should fall back to Resend:", err);
+    console.error("[clientEmailSend] SMTP send failed, caller must retry, not fall back:", err);
     return { sent: false, error: err instanceof Error ? err.message : "Unknown SMTP error" };
   }
 }

@@ -430,6 +430,13 @@ const handler = async (req: Request): Promise<Response> => {
     );
     const pausedClientIds = new Set((dueClients || []).filter((c: any) => c.status !== "active").map((c: any) => c.id));
 
+    // Lead outreach must NEVER go out from the shared sender. Only clients with
+    // a saved SMTP mailbox may send; everyone else's outreach rows are held.
+    const { data: smtpRows } = dueClientIds.length
+      ? await supabase.from("client_oauth_tokens").select("client_id").eq("platform", "smtp").in("client_id", dueClientIds)
+      : { data: [] };
+    const smtpClientIds = new Set((smtpRows || []).map((r: any) => r.client_id));
+
     // Live status of every prospect these steps belong to (one query).
     const dueProspectIds = [...new Set(
       (pendingEmails || [])
@@ -451,6 +458,11 @@ const handler = async (req: Request): Promise<Response> => {
       const emailClientId = (email.metadata as Record<string, unknown> | null)?.client_id as string | undefined;
       if (emailClientId && pausedClientIds.has(emailClientId)) {
         results.push({ id: email.id, status: "skipped", reason: "client_paused" });
+        continue;
+      }
+
+      if (emailClientId && !smtpClientIds.has(emailClientId)) {
+        results.push({ id: email.id, status: "skipped", reason: "no_smtp_mailbox" });
         continue;
       }
 
@@ -536,13 +548,10 @@ const handler = async (req: Request): Promise<Response> => {
         // provider POST works.
         const oneClickUrl = `${supabaseUrl}/functions/v1/unsubscribe?email=${encodeURIComponent(email.recipient_email)}&token=${btoa(email.recipient_email)}&action=unsubscribe`;
 
-        // Lead outreach (prospect_outreach drip steps, the only email_queue
-        // rows that carry a client_id) prefers the client's own connected
-        // SMTP mailbox when one exists -- replies land in their inbox and
-        // deliverability rides their domain reputation instead of the shared
-        // no-reply sender. Falls back to Resend below for every other email
-        // type, and for outreach clients who haven't connected a mailbox (or
-        // whose credentials are broken).
+        // Lead outreach (rows carrying a client_id) is sent ONLY through the
+        // client's own connected SMTP mailbox -- never the shared Resend
+        // sender. A failed SMTP send throws so the normal retry/backoff
+        // path handles it instead of falling back to the shared address.
         const emailMeta = email.metadata as Record<string, unknown> | null;
         let sentVia: string = "resend";
         let resendId: string | null = null;
@@ -556,6 +565,10 @@ const handler = async (req: Request): Promise<Response> => {
               trackingId,
             })
           : { sent: false };
+
+        if (emailMeta?.client_id && !clientSendResult.sent) {
+          throw new Error(`Outreach not sent: client SMTP send failed (${(clientSendResult as { error?: string }).error ?? "unknown"}); shared sender is disabled for outreach`);
+        }
 
         if (clientSendResult.sent) {
           sentVia = clientSendResult.provider!;
