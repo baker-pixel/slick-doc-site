@@ -11,7 +11,8 @@ export const MAX_IMPORT_ROWS = 10_000;
 
 /** Minimal RFC 4180 parser: quoted fields, "" escapes, CRLF/LF/CR, BOM, , ; or tab delimiter. */
 export function parseCsv(input: string): string[][] {
-  let text = input.replace(/^﻿/, "");
+  // Strip a leading byte-order mark (char code 0xFEFF), written without the literal character.
+  const text = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
   if (!text.trim()) return [];
 
   // Delimiter: whichever of , ; tab is most common in the header line.
