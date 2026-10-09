@@ -135,14 +135,14 @@ function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
         onClick={() => onTabChange(item.id)}
         tooltip={item.label}
         className={cn(
-          "relative h-10 rounded-xl transition-colors duration-200 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center",
+          "relative h-10 rounded-xl transition-colors duration-200 group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:overflow-hidden",
           isActive
-            ? "!bg-primary/15 !text-primary font-semibold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-primary group-data-[collapsible=icon]:before:hidden group-data-[collapsible=icon]:ring-1 group-data-[collapsible=icon]:ring-primary/40"
+            ? "!bg-primary/15 !text-primary font-semibold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-primary group-data-[collapsible=icon]:before:hidden group-data-[collapsible=icon]:ring-1 group-data-[collapsible=icon]:ring-inset group-data-[collapsible=icon]:ring-primary/40"
             : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
         )}
       >
-        <item.icon className="h-[18px] w-[18px] shrink-0" />
-        <span className="flex-1 font-medium">{item.label}</span>
+        <item.icon className="h-[18px] w-[18px] shrink-0 group-data-[collapsible=icon]:mx-auto" />
+        <span className="flex-1 truncate font-medium group-data-[collapsible=icon]:hidden">{item.label}</span>
         {showBadge && (
           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground group-data-[collapsible=icon]:hidden">
             {badgeCount > 9 ? "9+" : badgeCount}
@@ -151,7 +151,7 @@ function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
         {showBadge && (
           <span
             aria-label={`${badgeCount} new`}
-            className="absolute right-1.5 top-1.5 hidden h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background group-data-[collapsible=icon]:block"
+            className="absolute right-0.5 top-0.5 hidden h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background group-data-[collapsible=icon]:block"
           />
         )}
         {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60 group-data-[collapsible=icon]:hidden" />}
@@ -214,7 +214,7 @@ export function ClientPortalSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-1.5 group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:[scrollbar-width:none] group-data-[collapsible=icon]:[&::-webkit-scrollbar]:hidden">
+      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:[scrollbar-width:none] group-data-[collapsible=icon]:[&::-webkit-scrollbar]:hidden">
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>My Portal</SidebarGroupLabel>
           <SidebarGroupContent>
