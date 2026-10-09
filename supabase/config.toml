@@ -186,6 +186,9 @@ verify_jwt = false
 [functions.discover-prospects]
 verify_jwt = false
 
+[functions.prospect-campaign]
+verify_jwt = false
+
 [functions.postforme-webhook]
 verify_jwt = false
 

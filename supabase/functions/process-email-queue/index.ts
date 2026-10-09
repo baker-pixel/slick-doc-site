@@ -5,6 +5,7 @@ import { logActivity } from "../_shared/activityLog.ts";
 import { sendViaClientEmail } from "../_shared/clientEmailSend.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
 import { decideProspectGate, repairPreferencesLinks } from "../_shared/outreachEmail.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -370,6 +371,9 @@ const templates: Record<string, (data: any) => { subject: string; html: string }
 };
 
 const MAX_SENDS_PER_RUN = 50;
+// One client's backlog (e.g. an uploaded list) may use at most this many of the
+// run's slots, so it cannot starve every other client's outreach.
+const MAX_SENDS_PER_CLIENT_PER_RUN = 25;
 const STALE_CLAIM_MINUTES = 30;
 const MAX_REAPS = 2;
 
@@ -423,9 +427,9 @@ const handler = async (req: Request): Promise<Response> => {
         .filter((id): id is string => typeof id === "string"),
     )];
     const { data: dueClients } = dueClientIds.length
-      ? await supabase.from("client_accounts").select("id, status, business_name, email, website_url").in("id", dueClientIds)
+      ? await supabase.from("client_accounts").select("id, status, business_name, email, website_url, tier").in("id", dueClientIds)
       : { data: [] };
-    const clientById = new Map<string, { status: string; business_name: string; email: string | null; website_url: string | null }>(
+    const clientById = new Map<string, { status: string; business_name: string; email: string | null; website_url: string | null; tier: string | null }>(
       (dueClients || []).map((c: any) => [c.id, c]),
     );
     const pausedClientIds = new Set((dueClients || []).filter((c: any) => c.status !== "active").map((c: any) => c.id));
@@ -443,12 +447,53 @@ const handler = async (req: Request): Promise<Response> => {
         .map((e: any) => (e.metadata as Record<string, unknown> | null)?.prospect_id)
         .filter((id): id is string => typeof id === "string"),
     )];
-    const { data: dueProspects } = dueProspectIds.length
-      ? await supabase.from("prospects").select("id, status, drip_step").in("id", dueProspectIds)
-      : { data: [] };
-    const prospectById = new Map<string, { status: string; drip_step: number | null }>(
+    let dueProspects: any[] | null = [];
+    let prospectLookupFailed = false;
+    if (dueProspectIds.length) {
+      let res: { data: any[] | null; error: { code?: string; message: string } | null } = await supabase
+        .from("prospects").select("id, status, drip_step, campaign_id").in("id", dueProspectIds);
+      // 42703 = campaign_id not migrated yet: look up without it (no campaigns exist yet either).
+      if (res.error?.code === "42703") {
+        res = await supabase.from("prospects").select("id, status, drip_step").in("id", dueProspectIds);
+      }
+      if (res.error) {
+        // An empty map would make decideProspectGate cancel every outreach step
+        // as "prospect no longer exists". A failed lookup must hold, not cancel.
+        prospectLookupFailed = true;
+        console.error("Prospect lookup for due emails failed; holding prospect steps this run:", res.error.message);
+      }
+      dueProspects = res.data;
+    }
+    const prospectById = new Map<string, { status: string; drip_step: number | null; campaign_id: string | null }>(
       (dueProspects || []).map((p: any) => [p.id, p]),
     );
+
+    // Paused/archived campaigns hold their queued steps (they resume with the
+    // campaign). Rows stay pending, same as a paused prospect.
+    const dueCampaignIds = [...new Set((dueProspects || []).map((p: any) => p.campaign_id).filter(Boolean))] as string[];
+    const { data: dueCampaigns } = dueCampaignIds.length
+      ? await supabase.from("prospect_campaigns").select("id, status").in("id", dueCampaignIds)
+      : { data: [] };
+    const campaignStatusById = new Map<string, string>((dueCampaigns || []).map((c: any) => [c.id, c.status]));
+
+    // Rolling 24h send cap per client mailbox. A personal/workspace SMTP
+    // mailbox that cold-sends in bulk gets throttled or blocked, which would
+    // take down the client's real email too. cap <= 0 means "not capped" so an
+    // unexpected tier never silently blocks existing queued mail.
+    const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const capByClient = new Map<string, number>();
+    const sentRecentlyByClient = new Map<string, number>();
+    for (const cid of dueClientIds) {
+      capByClient.set(cid, tierPolicy(clientById.get(cid)?.tier).prospect.dailySendCap);
+      const { count } = await supabase
+        .from("email_queue")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "sent")
+        .gte("sent_at", sinceDay)
+        .filter("metadata->>client_id", "eq", cid);
+      sentRecentlyByClient.set(cid, count ?? 0);
+    }
+    const attemptedByClient = new Map<string, number>();
 
     const results = [];
 
@@ -470,6 +515,15 @@ const handler = async (req: Request): Promise<Response> => {
       const gateMeta = email.metadata as Record<string, unknown> | null;
       const gateProspectId = typeof gateMeta?.prospect_id === "string" ? gateMeta.prospect_id : null;
       if (gateProspectId) {
+        if (prospectLookupFailed) {
+          results.push({ id: email.id, status: "skipped", reason: "prospect_lookup_failed" });
+          continue;
+        }
+        const campaignId = prospectById.get(gateProspectId)?.campaign_id;
+        if (campaignId && campaignStatusById.get(campaignId) !== "active") {
+          results.push({ id: email.id, status: "skipped", reason: "campaign_not_active" });
+          continue;
+        }
         const stepNo = typeof gateMeta?.drip_step === "number" ? gateMeta.drip_step : null;
         const gate = decideProspectGate(prospectById.get(gateProspectId), stepNo);
         if (gate.action === "hold") {
@@ -485,6 +539,20 @@ const handler = async (req: Request): Promise<Response> => {
           results.push({ id: email.id, status: "cancelled", reason: gate.reason });
           continue;
         }
+      }
+
+      if (emailClientId) {
+        const cap = capByClient.get(emailClientId) ?? 0;
+        const usedThisRun = attemptedByClient.get(emailClientId) ?? 0;
+        if (cap > 0 && (sentRecentlyByClient.get(emailClientId) ?? 0) + usedThisRun >= cap) {
+          results.push({ id: email.id, status: "skipped", reason: "daily_send_cap" });
+          continue;
+        }
+        if (usedThisRun >= MAX_SENDS_PER_CLIENT_PER_RUN) {
+          results.push({ id: email.id, status: "skipped", reason: "client_run_limit" });
+          continue;
+        }
+        attemptedByClient.set(emailClientId, usedThisRun + 1);
       }
 
       attempted++;

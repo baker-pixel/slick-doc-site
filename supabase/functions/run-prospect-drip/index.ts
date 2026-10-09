@@ -9,6 +9,16 @@ import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
+import {
+  type Audience,
+  campaignBlock,
+  findOutreachViolations,
+  OUTREACH_STYLE_RULES,
+  outreachGreeting,
+  senderFactsBlock,
+  stepBrief,
+  toneInstruction,
+} from "../_shared/outreachPrompt.ts";
 // logActivity for "email sent" moved to process-email-queue -- that's where
 // the actual send now happens (this function only enrolls/schedules).
 
@@ -38,6 +48,20 @@ interface Prospect {
   approved_at: string | null;
   client_id: string | null;
   context_profile?: Record<string, unknown> | null;
+  // Set for campaign leads (CSV upload): a real person's details.
+  campaign_id?: string | null;
+  contact_first_name?: string | null;
+  contact_title?: string | null;
+  personalization_hook?: string | null;
+}
+
+interface Campaign {
+  id: string;
+  status: string;
+  max_steps: number;
+  audience: Audience;
+  topic: string | null;
+  topic_details: string | null;
 }
 
 interface ClientAccount {
@@ -46,6 +70,10 @@ interface ClientAccount {
   email: string;
   website_url?: string | null;
   industry?: string | null;
+  tier?: string | null;
+  // The portal's Company Context card saves tone here and verified_facts /
+  // never_say inside context_profile; brand_voice is a legacy column.
+  tone?: string | null;
   context_profile?: Record<string, unknown> | null;
   brand_voice?: Record<string, unknown> | null;
   outreach_settings?: {
@@ -73,10 +101,6 @@ interface SequenceStep {
   delay_days?: number;
 }
 
-function getFirstName(name: string): string {
-  return name?.split(" ")[0] || "there";
-}
-
 // Cold outreach reads as spam the moment it looks like a template -- no
 // branded header, no card, no colored button. Plain text on a white
 // background, like a person actually typed it.
@@ -99,67 +123,69 @@ function buildClientCtaButton(client: ClientAccount): string {
   return `<p><a href="${url}">${label}</a></p>`;
 }
 
-// Generic fallback — only fires if the AI call fails. No placeholders.
+// Fallback -- only used if the AI call fails or keeps breaking the style
+// rules. Deliberately makes NO claims about the sender's customers, results
+// or capabilities beyond the client's own business summary, and never uses
+// the prospect's company name as a first name.
 function buildStaticOutreachEmail(
   prospect: Prospect,
   client: ClientAccount,
   step: number,
 ): { subject: string; html: string } | null {
-  const firstName = getFirstName(prospect.name);
-  const bizType = prospect.business_type || "your industry";
+  const greeting = outreachGreeting(prospect.email, prospect.contact_first_name);
   const clientName = client.business_name;
   const signOff = getSignOff(client);
   const cta = buildClientCtaButton(client);
+  const summary = typeof client.context_profile?.business_summary === "string"
+    ? client.context_profile.business_summary.trim().replace(/\.$/, "")
+    : "";
+  const about = summary ? `${summary}.` : `We're ${clientName}.`;
 
   switch (step) {
     case 1:
       return {
-        subject: `Quick note from ${clientName}`,
+        subject: `quick question`,
         html: wrapHtml(`
-          <p>Hi ${firstName},</p>
-          <p>I came across your business and wanted to reach out — we work with a number of ${bizType} businesses and thought there could be a good fit.</p>
-          <p>We're <strong>${clientName}</strong> and we help businesses like yours grow and operate more efficiently. I'd love to hear a bit about what you're working on and see if we can add any value.</p>
-          <p>No pitch — just a quick conversation.</p>
+          <p>${greeting}</p>
+          <p>${about} I thought it might be relevant to what you're working on.</p>
+          <p>Would it be worth a short conversation?</p>
           ${cta}
-          <p>Talk soon,<br><strong>${signOff}</strong></p>
+          <p>— ${signOff}</p>
         `, prospect.email),
       };
 
     case 2:
       return {
-        subject: `Following up — ${clientName}`,
+        subject: `following up`,
         html: wrapHtml(`
-          <p>Hi ${firstName},</p>
-          <p>Just following up on my last note. One thing we hear from a lot of ${bizType} owners is that they know what they need to do to grow — they just don't have the bandwidth to do it all.</p>
-          <p>That's where we come in. <strong>${clientName}</strong> works alongside businesses like yours to take things off your plate and help you move faster. Happy to share some examples of what that looks like in practice.</p>
+          <p>${greeting}</p>
+          <p>Following up on my last note. ${about}</p>
+          <p>If it's not relevant, no problem. If it is, I'm happy to explain more.</p>
           ${cta}
-          <p>Best,<br><strong>${signOff}</strong></p>
+          <p>— ${signOff}</p>
         `, prospect.email),
       };
 
     case 3:
       return {
-        subject: `What working with ${clientName} actually looks like`,
+        subject: `what ${clientName} does`,
         html: wrapHtml(`
-          <p>Hi ${firstName},</p>
-          <p>People always ask us: "What exactly do you do?" — so here's the straightforward answer:</p>
-          <p>We partner with ${bizType} businesses to help them grow. Everything we do is hands-on, results-focused, and tailored to what your business actually needs — not a one-size-fits-all package.</p>
-          <p>If you're curious whether there's a fit, the fastest way to find out is a short call.</p>
+          <p>${greeting}</p>
+          <p>In case it helps, here's the short version of what we do. ${about}</p>
+          <p>Is that something you'd want to look at?</p>
           ${cta}
-          <p>Cheers,<br><strong>${signOff}</strong></p>
+          <p>— ${signOff}</p>
         `, prospect.email),
       };
 
     case 4:
       return {
-        subject: `Last note — ${clientName}`,
+        subject: `last note`,
         html: wrapHtml(`
-          <p>Hi ${firstName},</p>
-          <p>I'll keep this one short — just wanted to check in before I close the loop.</p>
-          <p>If growing your business is something you're actively thinking about, even a 15-minute call with us tends to be worth it. No obligation, no pressure.</p>
+          <p>${greeting}</p>
+          <p>I'll leave it here so I don't clutter your inbox. If the timing is ever right, you can find us below.</p>
           ${cta}
-          <p>Either way, best of luck — hope things are going well.</p>
-          <p>— <strong>${signOff}</strong></p>
+          <p>— ${signOff}</p>
         `, prospect.email),
       };
 
@@ -172,110 +198,96 @@ async function buildPersonalizedOutreachEmail(
   prospect: Prospect,
   client: ClientAccount,
   step: number,
+  campaign: Campaign | null,
 ): Promise<{ subject: string; html: string } | null> {
   const ctx = prospect.context_profile;
   const clientCtx = client.context_profile;
-  const brandVoice = client.brand_voice;
 
-  // ── Prospect signals ──────────────────────────────────────────
+  const brief = stepBrief(step, campaign?.audience ?? "cold");
+  if (!brief) return null;
+
+  // ── Prospect signals (only what we actually know) ─────────────
   const prospectServices = ctx && Array.isArray(ctx.services) && (ctx.services as string[]).length > 0
     ? (ctx.services as string[]).join(", ")
     : prospect.business_type || null;
-
   const prospectAudience = ctx && typeof ctx.target_audience === "string" ? ctx.target_audience : null;
   const prospectSummary = ctx && typeof ctx.business_summary === "string" ? ctx.business_summary : null;
-
   const prospectPainPoints = ctx && Array.isArray(ctx.pain_points) && (ctx.pain_points as string[]).length > 0
     ? (ctx.pain_points as string[]).slice(0, 2).join("; ")
     : prospect.top_weaknesses?.[0] || null;
 
-  const prospectDiffs = ctx && Array.isArray(ctx.differentiators) && (ctx.differentiators as string[]).length > 0
-    ? (ctx.differentiators as string[]).slice(0, 2).join("; ")
-    : null;
+  // Tone: the portal's Brand Tone setting (client_accounts.tone, mirrored in
+  // context_profile.tone); legacy brand_voice.tone still honoured.
+  const legacyTone = client.brand_voice && typeof client.brand_voice.tone === "string" ? client.brand_voice.tone : null;
+  const tone = toneInstruction(client.tone || (clientCtx?.tone as string | undefined) || legacyTone);
 
-  // ── Client signals ────────────────────────────────────────────
-  const clientServices = clientCtx && Array.isArray(clientCtx.services) && (clientCtx.services as string[]).length > 0
-    ? (clientCtx.services as string[]).join(", ")
-    : client.industry || null;
-
-  const clientDifferentiators = clientCtx && Array.isArray(clientCtx.differentiators) && (clientCtx.differentiators as string[]).length > 0
-    ? (clientCtx.differentiators as string[]).join("; ")
-    : null;
-
-  const clientSummary = clientCtx && typeof clientCtx.business_summary === "string"
-    ? clientCtx.business_summary
-    : null;
-
-  const clientTone = brandVoice && typeof brandVoice.tone === "string"
-    ? brandVoice.tone
-    : "professional but warm and direct";
+  const neverSay = Array.isArray(clientCtx?.never_say)
+    ? (clientCtx!.never_say as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
 
   const { url: ctaUrl, label: ctaLabel } = getCta(client);
   const signOff = getSignOff(client);
+  const greeting = outreachGreeting(prospect.email, prospect.contact_first_name);
 
-  const stepThemes: Record<number, string> = {
-    1: `Warm intro from the sender. Hook on one specific thing about the prospect's business — their industry, what they likely do for customers, or a common challenge in that space. Goal: start a conversation. One clear CTA. Under 150 words.`,
-    2: `Follow-up. Empathise with a real problem the prospect likely faces in their day-to-day. Show specifically how the sender solves it. Social proof line optional ("businesses like yours..."). One CTA. Under 160 words.`,
-    3: `Show exactly what working with the sender looks like — specific services, what the prospect gets, why it's different. Emphasise done-for-you. End with a single clear CTA. Under 180 words.`,
-    4: `Final low-pressure follow-up. Very short. Ask if it's worth a 15-minute call — no pitch, just a question. One CTA. Under 100 words.`,
-  };
-
-  const theme = stepThemes[step];
-  if (!theme) return null;
-
-  const prospectBlock = [
-    `- First name: ${getFirstName(prospect.name)}`,
-    prospectServices ? `- Their business / services: ${prospectServices}` : `- Business type: ${prospect.business_type || "unknown"}`,
+  const prospectLines = [
+    `- Company: ${prospect.name}`,
+    prospectServices ? `- What they do: ${prospectServices}` : null,
     prospect.website_url ? `- Website: ${prospect.website_url}` : null,
-    prospectSummary ? `- Business summary: ${prospectSummary}` : null,
+    prospectSummary ? `- Summary: ${prospectSummary}` : null,
     prospectAudience ? `- Who they serve: ${prospectAudience}` : null,
-    prospectPainPoints ? `- Known pain points / gaps: ${prospectPainPoints}` : null,
-    prospectDiffs ? `- Their differentiators: ${prospectDiffs}` : null,
+    prospectPainPoints ? `- Known gaps: ${prospectPainPoints}` : null,
+    prospect.contact_title ? `- Their role: ${prospect.contact_title}` : null,
+    // Written by the client about this person (CSV "note" column): safe to use.
+    prospect.personalization_hook ? `- Note from the sender about them: ${prospect.personalization_hook}` : null,
   ].filter(Boolean).join("\n");
+  const knownLittle = !prospectSummary && !prospectServices && !prospectAudience && !prospectPainPoints && !prospect.personalization_hook;
 
-  const clientBlock = [
-    `- Business name: ${client.business_name}`,
-    clientServices ? `- What they offer: ${clientServices}` : null,
-    clientSummary ? `- About them: ${clientSummary}` : null,
-    clientDifferentiators ? `- What sets them apart: ${clientDifferentiators}` : null,
-    `- Tone / voice: ${clientTone}`,
-  ].filter(Boolean).join("\n");
+  const basePrompt = `Write one cold outreach email for "${client.business_name}", as a real person at that business typing a quick note.
 
-  const prompt = `You are writing a B2B outreach email on behalf of a business called "${client.business_name}".
+SENDER:
+${senderFactsBlock(clientCtx, client.business_name)}
+- Voice: ${tone}
 
-SENDER (writing the email):
-${clientBlock}
+RECIPIENT (a person at this company):
+${prospectLines}${knownLittle ? "\n- Little is known about them. Do not pretend otherwise." : ""}
 
-RECIPIENT (prospect):
-${prospectBlock}
+${campaignBlock(campaign) ? campaignBlock(campaign) + "\n\n" : ""}STEP ${step}/${campaign?.max_steps ?? 4}: ${brief.theme} Max ${brief.maxWords} words.
 
-EMAIL GOAL FOR STEP ${step}:
-${theme}
+${OUTREACH_STYLE_RULES}
 
-Link to reference (only if it fits naturally, e.g. "you can see more at ${ctaUrl}"), call it "${ctaLabel}": ${ctaUrl}
+Body must start with <p>${greeting}</p>, then plain <p> paragraphs only, and end with <p>— ${signOff}</p>. Optional link: <a href="${ctaUrl}">${ctaLabel}</a>
+Return ONLY JSON: {"subject":"...","html":"..."}`;
 
-RULES:
-- Write ONLY the email body HTML — no <html>/<head>/<body> tags, no colors, no buttons, no divs — just plain <p> paragraphs like a real person typed in their email client
-- If a link belongs, write it as a plain inline <a href="${ctaUrl}">${ctaLabel}</a> in a sentence, never a styled button
-- Sound like a thoughtful human, not a template or a marketing email — reference at least one specific thing about the prospect
-- Never use placeholder brackets like [X] or [Y] — if you don't know a detail, write around it naturally
-- End with: <p>— ${signOff}</p>
+  let feedback = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const parsed = await callAIJson<{ subject?: string; html?: string }>({
+        source: "run-prospect-drip",
+        clientId: client.id,
+        promptId: "prospect-outreach-email.v2",
+        prompt: feedback ? `${basePrompt}\n\n${feedback}` : basePrompt,
+        maxTokens: 700,
+        temperature: 0.7,
+      });
+      if (!parsed.subject || !parsed.html) return null;
 
-Return ONLY valid JSON on one line: { "subject": "...", "html": "..." }`;
+      const violations = findOutreachViolations(
+        { subject: parsed.subject, html: parsed.html },
+        { greeting, maxWords: Math.round(brief.maxWords * 1.25), neverSay },
+      );
+      if (violations.length === 0) return { subject: parsed.subject, html: parsed.html };
 
-  try {
-    const parsed = await callAIJson<{ subject?: string; html?: string }>({
-      source: "run-prospect-drip",
-      prompt,
-      maxTokens: 800,
-    });
-    if (!parsed.subject || !parsed.html) return null;
-
-    return { subject: parsed.subject, html: parsed.html };
-  } catch (err) {
-    console.error("buildPersonalizedOutreachEmail error:", err);
-    return null;
+      console.warn(`outreach draft step ${step} for ${prospect.email} broke rules (attempt ${attempt}): ${violations.join("; ")}`);
+      feedback = `YOUR PREVIOUS DRAFT WAS REJECTED for: ${violations.join("; ")}. Rewrite it from scratch fixing every point, keeping all the rules above.`;
+    } catch (err) {
+      console.error("buildPersonalizedOutreachEmail error:", err);
+      return null;
+    }
   }
+
+  // Two failed drafts: hand back null so the caller uses the honest static
+  // fallback rather than queueing copy we already know breaks the rules.
+  return null;
 }
 
 // Cancels any not-yet-sent queued steps for a prospect who became
@@ -388,7 +400,7 @@ serve(async (req) => {
     if (clientIds.length > 0) {
       const { data: clientRows, error: clientRowsErr } = await supabase
         .from("client_accounts")
-        .select("id, business_name, email, website_url, industry, context_profile, brand_voice, tier, outreach_settings")
+        .select("id, business_name, email, website_url, industry, tone, context_profile, brand_voice, tier, outreach_settings")
         .in("id", clientIds)
         .eq("status", "active");
       if (clientRowsErr) {
@@ -469,6 +481,46 @@ serve(async (req) => {
 
     // 5. For every eligible prospect: disqualify (and cancel anything
     // already queued) or enroll their remaining steps.
+    // Campaigns the nurture prospects belong to (status, step cap, topic).
+    const campaignIds = [...new Set(
+      (nurtureProspects as Prospect[]).map((p) => p.campaign_id).filter((id): id is string => !!id),
+    )];
+    const campaignMap = new Map<string, Campaign>();
+    if (campaignIds.length > 0) {
+      const { data: campaignRows, error: campaignErr } = await supabase
+        .from("prospect_campaigns")
+        .select("id, status, max_steps, audience, topic, topic_details")
+        .in("id", campaignIds);
+      if (campaignErr) {
+        // Without campaign rows we cannot tell paused from active -- skip campaign
+        // leads this run rather than emailing people from a paused campaign.
+        await logAlert(supabase, {
+          source: "run-prospect-drip",
+          alertType: "function_error",
+          severity: "error",
+          title: "Failed to fetch prospect_campaigns for drip",
+          message: campaignErr.message,
+        });
+      }
+      for (const c of (campaignRows ?? []) as Campaign[]) campaignMap.set(c.id, c);
+    }
+
+    // Drafting is the expensive part (one LLM call per step). A big uploaded
+    // list must not be drafted weeks ahead of when it can actually be sent, so
+    // stop enrolling a client once about a week of sends is already queued.
+    const pendingByClient = new Map<string, number>();
+    const pendingFor = async (clientId: string): Promise<number> => {
+      if (!pendingByClient.has(clientId)) {
+        const { count } = await supabase
+          .from("email_queue")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending")
+          .filter("metadata->>client_id", "eq", clientId);
+        pendingByClient.set(clientId, count ?? 0);
+      }
+      return pendingByClient.get(clientId)!;
+    };
+
     const touchedClients = new Set<string>();
     for (const prospect of nurtureProspects as Prospect[]) {
       if (prospect.client_id && prospectingDisabled.has(prospect.client_id)) continue;
@@ -513,6 +565,15 @@ serve(async (req) => {
       if (prospectsEnrolled >= MAX_ENROLLMENTS_PER_RUN) continue;
       if (Date.now() - runStartedAt > RUN_TIME_BUDGET_MS) continue;
 
+      // Campaign gate: paused/archived (or unknown) campaigns enroll nothing.
+      const campaign = prospect.campaign_id ? campaignMap.get(prospect.campaign_id) ?? null : null;
+      if (prospect.campaign_id && campaign?.status !== "active") continue;
+      const stepLimit = Math.min(steps.length, campaign?.max_steps ?? steps.length);
+      if (prospect.drip_step >= stepLimit) continue;
+
+      const sendCap = tierPolicy(client.tier).prospect.dailySendCap;
+      if (sendCap > 0 && (await pendingFor(client.id)) >= sendCap * 7) continue;
+
       // Which steps are already queued? email_queue rows persist with status
       // flipped to sent/failed/cancelled, never deleted, so any row for a step
       // counts as "handled". Tracked per step (not per prospect) so a run that
@@ -527,7 +588,7 @@ serve(async (req) => {
       const alreadyQueuedSteps = new Set(
         (existingQueueRows ?? []).map((r: { metadata: { drip_step?: number } | null }) => r.metadata?.drip_step),
       );
-      if (alreadyQueuedSteps.size >= steps.length) continue;
+      if (alreadyQueuedSteps.size >= stepLimit) continue;
 
       // Clock starts from when nurture began (approved_at + 48h), not
       // created_at -- prevents prospects discovered days ago from firing
@@ -544,7 +605,7 @@ serve(async (req) => {
       const missing: { stepNumber: number; scheduledFor: Date }[] = [];
       let cumulativeDays = 0;
       let previousSendAt: Date | null = null;
-      for (let i = 0; i < steps.length; i++) {
+      for (let i = 0; i < stepLimit; i++) {
         const stepNumber = i + 1;
         const delayDays = steps[i].delay_days ?? 0;
         cumulativeDays += delayDays;
@@ -565,7 +626,7 @@ serve(async (req) => {
 
       // Draft the missing steps concurrently -- they're independent LLM calls.
       const drafted = await Promise.all(missing.map(async ({ stepNumber }) => {
-        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber))
+        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber, campaign))
           ?? buildStaticOutreachEmail(prospect, client, stepNumber);
         return { stepNumber, content };
       }));
@@ -577,7 +638,7 @@ serve(async (req) => {
           ? content.html
           : wrapHtml(content.html, prospect.email);
         const scheduledFor = missing.find((m) => m.stepNumber === stepNumber)!.scheduledFor;
-        const isFinalStep = stepNumber >= steps.length;
+        const isFinalStep = stepNumber >= stepLimit;
 
         const { error: queueErr } = await supabase.from("email_queue").insert({
           recipient_email: prospect.email,
@@ -608,6 +669,7 @@ serve(async (req) => {
           continue;
         }
         enrolledAny = true;
+        pendingByClient.set(client.id, (pendingByClient.get(client.id) ?? 0) + 1);
       }
 
       if (enrolledAny) {

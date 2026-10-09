@@ -2,7 +2,9 @@ import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMai
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { ensureClientICP } from "../_shared/icp.ts";
+import { ensureClientICP, ensureSearchKeywords } from "../_shared/icp.ts";
+import { filterProspectCandidates } from "../_shared/prospectFilter.ts";
+import { resolveDiscoveryCampaign } from "../_shared/campaignScope.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
@@ -34,6 +36,8 @@ interface RequestBody {
   /** Optional geography hint; ICP geography used when omitted. */
   geography?: string;
   max_results?: number;
+  /** Tag discovered leads with this (discovery) campaign. */
+  campaign_id?: string;
   password?: string;
 }
 
@@ -69,7 +73,8 @@ function parseEmployeeRange(companySize?: string): string | undefined {
 
 async function apolloSearchCompanies(
   apolloKey: string,
-  icp: { industries: string[]; company_size?: string; geography: string },
+  keywords: string[],
+  icp: { company_size?: string },
   geography: string,
   maxResults: number,
   focus?: string,
@@ -81,8 +86,9 @@ async function apolloSearchCompanies(
   // in scoreProspectFit once a prospect has real context to judge against
   // (this search response only returns name + domain, too thin to self-filter).
   const body: Record<string, unknown> = {
-    q_organization_keyword_tags: focus?.trim() ? [...icp.industries, focus.trim()] : icp.industries,
-    per_page: Math.min(maxResults, 100),
+    q_organization_keyword_tags: focus?.trim() ? [...keywords, focus.trim()] : keywords,
+    // Over-fetch: results on known non-prospect domains are dropped afterwards.
+    per_page: Math.min(maxResults * 2, 100),
     page: 1,
   };
   if (!/global/i.test(geography)) body.organization_locations = [normalizeGeographyForApollo(geography)];
@@ -188,6 +194,9 @@ serve(async (req) => {
 
     if (!body.client_id) return json({ error: "client_id is required" }, 400);
 
+    const campaign = await resolveDiscoveryCampaign(supabase, body.client_id, body.campaign_id);
+    if (!campaign.ok) return json({ error: campaign.error }, 400);
+
     const auth = await checkClientOrAdminAuth(req, supabase, body.client_id, body.password);
     if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
@@ -243,16 +252,28 @@ Respond with ONLY a JSON array, no prose:
 
     let companies: FoundCompany[] = [];
     let via: "apollo" | "web_search" = "web_search";
+    let droppedNonProspects = 0;
+    // Social networks, media, job boards, accelerators etc. are never useful
+    // outbound targets; drop them before they cost a scoring call (or an email).
+    const keepCandidates = (found: FoundCompany[]): FoundCompany[] => {
+      const { kept, dropped } = filterProspectCandidates(found);
+      droppedNonProspects += dropped.length;
+      return kept.slice(0, maxResults);
+    };
     if (apolloKey) {
       try {
-        companies = await apolloSearchCompanies(apolloKey, icp, geography, maxResults, body.focus);
+        // The ICP's industries are broad labels; derive specific buyer keywords
+        // so a niche client doesn't get every "technology" company on earth.
+        const keywords = await ensureSearchKeywords(supabase, client, icp);
+        const tags = keywords.length > 0 ? keywords : icp.industries;
+        companies = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geography, maxResults, body.focus));
         via = "apollo";
       } catch (e) {
         console.error("Apollo search failed, falling back to web search:", e instanceof Error ? e.message : e);
       }
     }
     if (companies.length === 0 && openaiKey) {
-      companies = await webSearchCompanies(openaiKey, prompt);
+      companies = keepCandidates(await webSearchCompanies(openaiKey, prompt));
       via = "web_search";
     }
 
@@ -264,7 +285,7 @@ Respond with ONLY a JSON array, no prose:
       event_type: "prospect_research",
       units: 0,
       source_fn: "discover-prospects-web",
-      metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, inserted: 0 },
+      metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, dropped_non_prospects: droppedNonProspects, inserted: 0 },
     });
 
     if (companies.length === 0) {
@@ -302,6 +323,7 @@ Respond with ONLY a JSON array, no prose:
         status: "discovered",
         business_type: c.business_type || null,
         research_snapshot: { via, why_fit: c.why_fit || null, focus: body.focus || null, geography },
+        ...(campaign.campaignId ? { campaign_id: campaign.campaignId } : {}),
       }));
 
       inserted = await insertNewProspects(supabase, body.client_id, rows);
@@ -311,7 +333,7 @@ Respond with ONLY a JSON array, no prose:
         event_type: "prospect_research",
         units: inserted.length,
         source_fn: "discover-prospects-web",
-        metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, inserted: inserted.length },
+        metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, dropped_non_prospects: droppedNonProspects, inserted: inserted.length },
       });
 
       await logActivity(supabase, body.client_id, {
@@ -334,7 +356,7 @@ Respond with ONLY a JSON array, no prose:
       }));
     }
 
-    console.log(`discover-prospects-web: client=${body.client_id} via=${via} found=${companies.length} inserted=${inserted.length}`);
+    console.log(`discover-prospects-web: client=${body.client_id} via=${via} found=${companies.length} dropped_non_prospects=${droppedNonProspects} inserted=${inserted.length}`);
 
     return json({
       discovered: inserted.length,

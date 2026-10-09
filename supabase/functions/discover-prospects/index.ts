@@ -15,6 +15,7 @@ import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { ensureClientICP, suggestDiscoveryQueries } from "../_shared/icp.ts";
 import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/prospectInsert.ts";
+import { resolveDiscoveryCampaign } from "../_shared/campaignScope.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { runInBackground } from "../_shared/background.ts";
 
@@ -80,6 +81,15 @@ serve(async (req) => {
     if (!client_id) {
       return new Response(
         JSON.stringify({ error: "client_id is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Optional: tag discovered leads with a topic campaign.
+    const campaign = await resolveDiscoveryCampaign(supabase, client_id, (body as { campaign_id?: unknown }).campaign_id);
+    if (!campaign.ok) {
+      return new Response(
+        JSON.stringify({ error: campaign.error }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -301,6 +311,7 @@ serve(async (req) => {
       source: "outbound",
       status: "discovered",
       business_type: extractBusinessType(p.types ?? []),
+      ...(campaign.campaignId ? { campaign_id: campaign.campaignId } : {}),
     }));
 
     const inserted = await insertNewProspects(supabase, client_id, rows);

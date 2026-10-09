@@ -28,6 +28,14 @@ export interface TierPolicy {
     enabled: boolean;
     /** prospects discovered per run */
     discoveryBatch: number;
+    /** may upload their own contact list (CSV) as a campaign */
+    listUpload: boolean;
+    /** max contacts accepted per uploaded list */
+    maxListSize: number;
+    /** outreach emails sent per rolling 24h from the client's own mailbox.
+     * A personal/workspace SMTP mailbox that cold-sends in bulk gets throttled
+     * or blocked, so this is the deliverability guard, not a billing limit. */
+    dailySendCap: number;
   };
   /** Paid-tier live LLM probe -- does ChatGPT/Claude actually cite this client
    * when asked a category+location question. Distinct from the free
@@ -49,7 +57,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
     tier: "foundation",
     seo: { crawlPages: 5, reauditCadenceDays: 90, applyMode: "off" },
     social: { contentTypes: ["social_post"], postsPerMonth: 4 },
-    prospect: { enabled: false, discoveryBatch: 0 },
+    prospect: { enabled: false, discoveryBatch: 0, listUpload: false, maxListSize: 0, dailySendCap: 0 },
     aiVisibility: { enabled: false, promptsPerMonth: 0 },
     reporting: { weekly: false, monthly: true },
   },
@@ -57,7 +65,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
     tier: "growth",
     seo: { crawlPages: 10, reauditCadenceDays: 30, applyMode: "key_pages" },
     social: { contentTypes: ["google_post", "social_post", "email_newsletter"], postsPerMonth: 12 },
-    prospect: { enabled: true, discoveryBatch: 10 },
+    prospect: { enabled: true, discoveryBatch: 10, listUpload: false, maxListSize: 0, dailySendCap: 40 },
     aiVisibility: { enabled: true, promptsPerMonth: 8 },
     reporting: { weekly: true, monthly: true },
   },
@@ -65,7 +73,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
     tier: "transformation",
     seo: { crawlPages: 15, reauditCadenceDays: 30, applyMode: "full" },
     social: { contentTypes: ["google_post", "social_post", "email_newsletter"], postsPerMonth: 20 },
-    prospect: { enabled: true, discoveryBatch: 20 },
+    prospect: { enabled: true, discoveryBatch: 20, listUpload: true, maxListSize: 5000, dailySendCap: 80 },
     aiVisibility: { enabled: true, promptsPerMonth: 8 },
     reporting: { weekly: true, monthly: true },
   },

@@ -18,6 +18,7 @@ import { ProspectIcpCard } from "./ProspectIcpCard";
 import { OutreachSettingsCard } from "./OutreachSettingsCard";
 import { SmtpSenderSection } from "./SmtpSenderSection";
 import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
+import { CampaignsSection } from "./CampaignsSection";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
@@ -56,14 +57,14 @@ interface SequenceStep {
   cumulative_days: number;
 }
 
-// Mirrors the step themes run-prospect-drip actually writes into each
-// prospect's personalized email (see stepThemes in that function) --
-// client-facing summaries of the same four goals, not the raw AI prompt.
+// Mirrors the step briefs run-prospect-drip actually writes into each
+// prospect's email (COLD_BRIEFS in _shared/outreachPrompt.ts) -- client-facing
+// summaries of the same four goals, not the raw AI prompt.
 const SEQUENCE_STEP_LABELS: Record<number, { title: string; description: string }> = {
-  1: { title: "Introduction", description: "A warm, personalized first note referencing something specific about the lead's business." },
-  2: { title: "Follow-up", description: "Speaks to a pain point common in the lead's space and how you solve it." },
-  3: { title: "What working with you looks like", description: "Concrete services and what sets you apart, aimed at booking a call." },
-  4: { title: "Final check-in", description: "Short, low-pressure close asking if a quick call is worth it." },
+  1: { title: "Introduction", description: "A short, plain note on who you are and what you do, based on your Verified Facts." },
+  2: { title: "Follow-up", description: "One new, specific point about what you offer." },
+  3: { title: "What working with you looks like", description: "What you offer and what they would get, in concrete terms, aimed at starting a conversation." },
+  4: { title: "Final check-in", description: "Short, low-pressure close asking if a quick chat is worth it." },
 };
 
 // Covers every value run-prospect-drip and the admin review-queue action
@@ -135,13 +136,16 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
 
   const loadProspects = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("prospects")
-      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at")
-      .eq("client_id", clientAccountId)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    setAllProspects(data ?? []);
+    const columns = "id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at";
+    // This list and its stats cover the always-on pipeline only. Campaign leads
+    // (an uploaded list can be thousands) are listed and counted per campaign
+    // in the Campaigns section, so they can't push the pipeline out of the
+    // 200-row window or skew these stats. If the campaigns migration isn't
+    // applied yet the column doesn't exist, so fall back to the old query.
+    const base = () => supabase.from("prospects").select(columns).eq("client_id", clientAccountId);
+    let res: any = await (base() as any).is("campaign_id", null).order("created_at", { ascending: false }).limit(200);
+    if (res.error?.code === "42703") res = await base().order("created_at", { ascending: false }).limit(200);
+    setAllProspects(res.data ?? []);
     setLoading(false);
   };
 
@@ -314,6 +318,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           {findingLeads ? "Searching..." : "Find leads now"}
         </Button>
       </div>
+
+      <CampaignsSection clientAccountId={clientAccountId} hasMailbox={hasMailbox} />
 
       <Card className="overflow-hidden">
         {loading ? (

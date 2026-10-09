@@ -65,9 +65,12 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
   const save = async () => {
     setSaving(true);
     try {
+      // Cached discovery keywords are derived from this ICP; drop them so the
+      // next discovery run re-derives them from what was just edited.
+      const { search_keywords: _cached, ...editable } = icp as ClientICP & { search_keywords?: string[] };
       const { error } = await (supabase.rpc as any)("client_update_icp", {
         p_client_account_id: clientAccountId,
-        p_icp: icp,
+        p_icp: editable,
       });
       if (error) throw error;
       toast({ title: "Ideal customer profile saved", description: "Future lead discovery and fit scoring will use this." });
