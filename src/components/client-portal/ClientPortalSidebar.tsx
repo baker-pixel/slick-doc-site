@@ -135,13 +135,13 @@ function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
         onClick={() => onTabChange(item.id)}
         tooltip={item.label}
         className={cn(
-          "relative h-10 rounded-xl transition-colors duration-200 group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:overflow-hidden",
+          "relative h-10 rounded-xl transition-colors duration-200 group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:overflow-hidden",
           isActive
             ? "!bg-primary/15 !text-primary font-semibold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-primary group-data-[collapsible=icon]:before:hidden group-data-[collapsible=icon]:ring-1 group-data-[collapsible=icon]:ring-inset group-data-[collapsible=icon]:ring-primary/40"
             : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
         )}
       >
-        <item.icon className="h-[18px] w-[18px] shrink-0 group-data-[collapsible=icon]:mx-auto" />
+        <item.icon className="h-[18px] w-[18px] shrink-0 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:w-5" />
         <span className="flex-1 truncate font-medium group-data-[collapsible=icon]:hidden">{item.label}</span>
         {showBadge && (
           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground group-data-[collapsible=icon]:hidden">
@@ -201,9 +201,9 @@ export function ClientPortalSidebar({
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader className="p-4 pb-6 group-data-[collapsible=icon]:p-2">
+      <SidebarHeader className="p-4 pb-6 group-data-[collapsible=icon]:px-3 group-data-[collapsible=icon]:pb-4 group-data-[collapsible=icon]:pt-4">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10">
             <Sparkles className="h-4 w-4" />
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
@@ -214,18 +214,18 @@ export function ClientPortalSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:[scrollbar-width:none] group-data-[collapsible=icon]:[&::-webkit-scrollbar]:hidden">
+      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-3 group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:[scrollbar-width:none] group-data-[collapsible=icon]:[&::-webkit-scrollbar]:hidden">
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>My Portal</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">{renderItems(myPortalItems)}</SidebarMenu>
+            <SidebarMenu className="space-y-0.5 group-data-[collapsible=icon]:space-y-1">{renderItems(myPortalItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup className={railGroupClass}>
           <SidebarGroupLabel className={labelClass}>Brand & Tools</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">{renderItems(brandToolsItems)}</SidebarMenu>
+            <SidebarMenu className="space-y-0.5 group-data-[collapsible=icon]:space-y-1">{renderItems(brandToolsItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -234,15 +234,15 @@ export function ClientPortalSidebar({
         <SidebarGroup className={railGroupClass}>
           <SidebarGroupLabel className={labelClass}>Support</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">{renderItems(supportItems)}</SidebarMenu>
+            <SidebarMenu className="space-y-0.5 group-data-[collapsible=icon]:space-y-1">{renderItems(supportItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="mt-auto p-3 group-data-[collapsible=icon]:p-2">
+      <SidebarFooter className="mt-auto p-3 group-data-[collapsible=icon]:px-3 group-data-[collapsible=icon]:pb-4">
         <div className="rounded-xl bg-muted/50 p-3 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
           <div className="flex items-center gap-3 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
-            <Avatar className="h-8 w-8 shrink-0" title={clientName || "Client"}>
+            <Avatar className="h-8 w-8 shrink-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10" title={clientName || "Client"}>
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                 {initials}
               </AvatarFallback>
@@ -254,7 +254,7 @@ export function ClientPortalSidebar({
               variant="ghost"
               size="icon"
               onClick={onSignOut}
-              className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:rounded-xl"
               aria-label="Sign out"
               title="Sign out"
             >
