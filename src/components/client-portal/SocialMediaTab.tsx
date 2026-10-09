@@ -3,23 +3,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link2, PenTool } from "lucide-react";
 import { ClientIntegrationsTab } from "./ClientIntegrationsTab";
 import { SocialPostComposer } from "./social/SocialPostComposer";
+import { BrandVoiceButton } from "./BrandVoiceButton";
 
 interface SocialMediaTabProps {
   clientAccountId: string;
   initialTab?: "composer" | "accounts";
   onTabChange?: (tab: string) => void;
+  onOpenBrandVoice?: () => void;
 }
 
-export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTabChange }: SocialMediaTabProps) {
+export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTabChange, onOpenBrandVoice }: SocialMediaTabProps) {
   const [subTab, setSubTab] = useState<string>(initialTab);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">Social & Accounts</h2>
-        <p className="text-muted-foreground">
-          Create posts and manage connected social accounts. See the Calendar tab for your full posting schedule.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold">Social & Accounts</h2>
+          <p className="text-muted-foreground">
+            Create posts and manage connected social accounts. See the Calendar tab for your full posting schedule.
+          </p>
+        </div>
+        {onOpenBrandVoice && <BrandVoiceButton onClick={onOpenBrandVoice} label="Posts don't sound right? Edit brand voice" />}
       </div>
 
       <Tabs value={subTab} onValueChange={setSubTab}>

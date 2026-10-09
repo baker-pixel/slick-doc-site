@@ -9,18 +9,20 @@ interface CollapsibleCardProps {
   title: string;
   description?: string;
   defaultOpen?: boolean;
+  /** DOM id, so other parts of the portal can deep-link / scroll to this card. */
+  id?: string;
   children: ReactNode;
 }
 
 // Shared shell for the settings cards on the Lead Outreach tab (ICP,
 // Company Context, Outreach signature/CTA) so they collapse/expand the
 // same way instead of each card inventing its own header interaction.
-export function CollapsibleCard({ icon, title, description, defaultOpen = false, children }: CollapsibleCardProps) {
+export function CollapsibleCard({ icon, title, description, defaultOpen = false, id, children }: CollapsibleCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} asChild>
-      <Card className="border-0 bg-muted/30 overflow-hidden">
+      <Card id={id} className="border-0 bg-muted/30 overflow-hidden scroll-mt-4">
         <CollapsibleTrigger asChild>
           <button type="button" className="w-full text-left">
             <CardHeader className="flex flex-row items-center justify-between gap-3 py-4 hover:bg-muted/50 transition-colors">

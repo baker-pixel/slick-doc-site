@@ -105,9 +105,13 @@ export function TagEditor({
 
 interface CompanyContextCardProps {
   clientAccountId: string;
+  /** Open the card and scroll it into view on mount (deep link from "Brand voice" buttons). */
+  autoOpen?: boolean;
 }
 
-export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps) {
+export const COMPANY_CONTEXT_CARD_ID = "company-context";
+
+export function CompanyContextCard({ clientAccountId, autoOpen = false }: CompanyContextCardProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -135,6 +139,12 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
   useEffect(() => {
     fetchContext();
   }, [clientAccountId]);
+
+  // The card only exists once loading finishes, so scroll then (not on mount).
+  useEffect(() => {
+    if (!autoOpen || loading) return;
+    document.getElementById(COMPANY_CONTEXT_CARD_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [autoOpen, loading]);
 
   const fetchContext = async () => {
     setLoading(true);
@@ -235,9 +245,11 @@ export function CompanyContextCard({ clientAccountId }: CompanyContextCardProps)
 
   return (
     <CollapsibleCard
+      id={COMPANY_CONTEXT_CARD_ID}
+      defaultOpen={autoOpen}
       icon={<Building2 className="h-5 w-5 text-primary" />}
       title="Company Context"
-      description="Used by AI when generating your content. Keep it accurate for the best results."
+      description="Verified facts, never-say list and brand tone. Used by AI for your social posts and outreach emails."
     >
       <div className="space-y-6">
 
