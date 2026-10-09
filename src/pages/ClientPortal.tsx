@@ -110,9 +110,19 @@ export default function ClientPortal() {
   // When navigating to social from the onboarding activity tab, open to Connected Accounts
   const [socialInitialTab, setSocialInitialTab] = useState<"composer" | "accounts">("accounts");
 
+  // "Edit brand voice & facts" buttons (Brand Assets, Social, Approvals) land on
+  // Settings with the Company Context card open. Any ordinary navigation clears it.
+  const [focusCompanyContext, setFocusCompanyContext] = useState(false);
+
   const handleTabChange = (tab: PortalTab) => {
     if (tab === "social") setSocialInitialTab(isOnboardingComplete ? "composer" : "accounts");
+    setFocusCompanyContext(false);
     setActiveTab(tab);
+  };
+
+  const openBrandVoice = () => {
+    setFocusCompanyContext(true);
+    setActiveTab("settings");
   };
 
   // Check if onboarding steps 1-5 are all completed
@@ -397,9 +407,9 @@ export default function ClientPortal() {
       case "documents":
         return <ClientDocumentsTab clientAccountId={portalUser.client_account_id} clientTier={tier} />;
       case "brand":
-        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
+        return <ClientBrandAssetsTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => handleTabChange(tab as PortalTab)} onOpenBrandVoice={openBrandVoice} />;
       case "social":
-        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
+        return <SocialMediaTab clientAccountId={portalUser.client_account_id} initialTab={socialInitialTab} onTabChange={(tab) => handleTabChange(tab as PortalTab)} onOpenBrandVoice={openBrandVoice} />;
       case "prospects":
         return <ClientProspectsTab clientAccountId={portalUser.client_account_id} />;
       case "calendar":
@@ -418,10 +428,11 @@ export default function ClientPortal() {
             userId={portalUser.user_id}
             clientAccountId={portalUser.client_account_id}
             onPreferencesChange={updatePreferences}
+            focusCompanyContext={focusCompanyContext}
           />
         );
       case "approvals":
-        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => handleTabChange(tab as PortalTab)} />;
+        return <ClientContentApprovalTab clientAccountId={portalUser.client_account_id} onTabChange={(tab) => handleTabChange(tab as PortalTab)} onOpenBrandVoice={openBrandVoice} />;
       case "learning":
         return gate("growth", "Learning Hub", "Guides and resources to get the most out of your marketing.", <ClientLearningHubTab clientAccountId={portalUser.client_account_id} />);
       default:

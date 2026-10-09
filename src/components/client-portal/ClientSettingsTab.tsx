@@ -28,6 +28,8 @@ interface ClientSettingsTabProps {
   userId: string;
   clientAccountId: string;
   onPreferencesChange?: (preferences: PortalPreferences) => void;
+  /** Open + scroll to the Company Context card (set by the "Brand voice" buttons elsewhere). */
+  focusCompanyContext?: boolean;
 }
 
 export interface PortalPreferences {
@@ -108,7 +110,7 @@ const widgetOptions = [
   { id: "meetings", label: "Upcoming Meetings" },
 ];
 
-export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange }: ClientSettingsTabProps) {
+export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange, focusCompanyContext = false }: ClientSettingsTabProps) {
   const [preferences, setPreferences] = useState<PortalPreferences>(defaultPreferences);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -227,7 +229,7 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
   return (
     <div className="space-y-6">
       {/* Company Context */}
-      <CompanyContextCard clientAccountId={clientAccountId} />
+      <CompanyContextCard clientAccountId={clientAccountId} autoOpen={focusCompanyContext} />
 
       {/* Save Button - Sticky */}
       {hasChanges && (

@@ -48,6 +48,8 @@ interface CalendarRow {
 interface ClientContentApprovalTabProps {
   clientAccountId: string;
   onTabChange?: (tab: string) => void;
+  /** Open Settings with the Company Context card expanded. Falls back to a plain Settings jump. */
+  onOpenBrandVoice?: () => void;
 }
 
 type PlatformFilter = "all" | PreviewPlatform;
@@ -76,7 +78,7 @@ const BUCKETS: { key: ApprovalBucket; label: string; empty: string }[] = [
 
 const REFRESH_MS = 60_000;
 
-export default function ClientContentApprovalTab({ clientAccountId, onTabChange }: ClientContentApprovalTabProps) {
+export default function ClientContentApprovalTab({ clientAccountId, onTabChange, onOpenBrandVoice }: ClientContentApprovalTabProps) {
   const queryClient = useQueryClient();
   const [approvals, setApprovals] = useState<ContentApproval[]>([]);
   const [calendar, setCalendar] = useState<CalendarRow[]>([]);
@@ -398,7 +400,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange 
         </p>
         <p className="text-sm text-muted-foreground mt-1">
           Something inaccurate or off-brand?{" "}
-          <button type="button" onClick={() => onTabChange?.("settings")} className="text-primary underline underline-offset-2 hover:no-underline">
+          <button type="button" onClick={() => (onOpenBrandVoice ? onOpenBrandVoice() : onTabChange?.("settings"))} className="text-primary underline underline-offset-2 hover:no-underline">
             Update your Verified Facts and brand voice
           </button>{" "}
           so future posts get it right.

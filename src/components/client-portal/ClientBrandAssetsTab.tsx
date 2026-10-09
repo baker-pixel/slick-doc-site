@@ -16,6 +16,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
+import { BrandVoiceButton } from "./BrandVoiceButton";
 
 interface BrandAsset {
   id: string;
@@ -35,6 +36,7 @@ interface BrandAsset {
 interface ClientBrandAssetsTabProps {
   clientAccountId: string;
   onTabChange?: (tab: string) => void;
+  onOpenBrandVoice?: () => void;
 }
 
 function brandKitCompleteness(assets: BrandAsset[]): { score: number; breakdown: Record<string, boolean> } {
@@ -58,7 +60,7 @@ function brandKitCompleteness(assets: BrandAsset[]): { score: number; breakdown:
   return { score, breakdown };
 }
 
-export default function ClientBrandAssetsTab({ clientAccountId, onTabChange }: ClientBrandAssetsTabProps) {
+export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onOpenBrandVoice }: ClientBrandAssetsTabProps) {
   const queryClient = useQueryClient();
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -352,10 +354,13 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange }: C
           <h2 className="text-2xl font-semibold">Brand Assets</h2>
           <p className="text-muted-foreground text-sm">Your brand identity in one place</p>
         </div>
-        <Button onClick={() => setUploadDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Upload Asset
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenBrandVoice && <BrandVoiceButton onClick={onOpenBrandVoice} />}
+          <Button onClick={() => setUploadDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Upload Asset
+          </Button>
+        </div>
       </div>
 
       {/* Brand Kit Completeness */}
@@ -657,17 +662,26 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange }: C
             </Card>
           )}
 
-          {/* Brand Voice (AI-extracted) */}
-          {voiceAssets.length > 0 && (
-            <Card className={voiceAssets.length > 2 ? "lg:col-span-2" : ""}>
-              <CardHeader className="pb-3">
+          {/* Brand Voice (AI-extracted). Always shown so there is a way to edit tone,
+              verified facts and the never-say list even before extraction has run.
+              Full-width only when there is no Typography card to sit beside. */}
+          <Card className={voiceAssets.length > 2 && fontAssets.length === 0 ? "lg:col-span-2" : ""}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Volume2 className="h-4 w-4 text-primary" />
                   Brand Voice
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className={voiceAssets.length > 2 ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
+                {onOpenBrandVoice && <BrandVoiceButton onClick={onOpenBrandVoice} label="Edit" />}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {voiceAssets.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No brand voice captured yet. Set your tone, the facts we may state about your business, and what we should never say. Your posts and outreach emails follow it.
+                </p>
+              ) : (
+                <div className={voiceAssets.length > 2 && fontAssets.length === 0 ? "grid grid-cols-1 md:grid-cols-2 gap-3" : "space-y-3"}>
                   {voiceAssets.map((asset) => (
                     <div key={asset.id} className="rounded-lg border bg-muted/30 p-3">
                       <Badge variant="outline" className="text-xs capitalize mb-2">
@@ -677,9 +691,9 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange }: C
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
 
           {/* Legacy voice assets (headline, description) */}
           {legacyVoiceAssets.length > 0 && (

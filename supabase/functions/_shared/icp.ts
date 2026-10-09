@@ -14,6 +14,8 @@ export interface ClientICP {
   buyer_persona?: string;
   disqualifiers?: string[];
   summary: string;
+  /** Specific buyer keywords for Apollo, derived once from the ICP and cached here. */
+  search_keywords?: string[];
 }
 
 export function hasValidICP(icp: unknown): icp is ClientICP {
@@ -119,6 +121,50 @@ Each query must name a concrete business type findable on Google Maps (e.g. "HR 
 Return ONLY valid JSON: { "suggestions": [ { "query": "...", "location": "..." }, ... ] } with 3-5 entries.`,
   });
   return (res.suggestions || []).slice(0, 5);
+}
+
+/**
+ * Specific buyer keywords for Apollo's organization search. The ICP's
+ * `industries` are broad labels ("Technology"), which as keyword tags match
+ * media and marketplaces for a niche product. Derived once and cached on the
+ * ICP (editing the ICP in the portal clears it, so it re-derives); falls back
+ * to the raw industries if the call fails.
+ */
+export async function ensureSearchKeywords(
+  supabase: any,
+  client: { id: string; business_name: string; context_profile?: Record<string, unknown> | null },
+  icp: ClientICP,
+): Promise<string[]> {
+  if (icp.search_keywords?.length) return icp.search_keywords;
+  try {
+    const res = await callAIJson<{ keywords?: unknown }>({
+      source: "icp-search-keywords",
+      clientId: client.id,
+      model: MODELS.fast,
+      jsonMode: true,
+      maxTokens: 120,
+      promptId: "icp-search-keywords.v1",
+      prompt: `Give 3-6 specific industry keywords (for a B2B company database search) describing the businesses that would BUY from "${client.business_name}".
+Sells: ${typeof client.context_profile?.business_summary === "string" ? client.context_profile.business_summary : "n/a"}
+Ideal customer: ${icp.summary}
+Bad fits: ${(icp.disqualifiers || []).join("; ") || "none"}
+Describe the buyer's business, not the product. No bare generic labels ("technology", "software", "AI").
+Return ONLY JSON: {"keywords":["..."]}`,
+    });
+    const keywords = [...new Set(
+      (Array.isArray(res.keywords) ? res.keywords : [])
+        .filter((k): k is string => typeof k === "string")
+        .map((k) => k.trim())
+        .filter((k) => k.length >= 3 && k.length <= 60),
+    )].slice(0, 6);
+    if (keywords.length > 0) {
+      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: keywords } }).eq("id", client.id);
+    }
+    return keywords;
+  } catch (e) {
+    console.error(`Search keyword suggestion failed for client ${client.id}:`, e instanceof Error ? e.message : e);
+    return [];
+  }
 }
 
 export interface FitResult {
