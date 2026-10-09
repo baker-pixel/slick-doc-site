@@ -17,7 +17,7 @@ Deno.test("parseCsv: quotes, escaped quotes, embedded commas and newlines", () =
 });
 
 Deno.test("parseCsv: CRLF, BOM, blank lines, no trailing newline", () => {
-  assertEquals(parseCsv("﻿a,b\r\n1,2\r\n\r\n3,4"), [["a", "b"], ["1", "2"], ["3", "4"]]);
+  assertEquals(parseCsv(String.fromCharCode(0xfeff) + "a,b\r\n1,2\r\n\r\n3,4"), [["a", "b"], ["1", "2"], ["3", "4"]]);
 });
 
 Deno.test("parseCsv: semicolon and tab delimiters are detected", () => {
