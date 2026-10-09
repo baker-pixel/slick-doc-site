@@ -479,7 +479,8 @@ export default function ClientPortal() {
         onTabChange={handleTabChange}
       />
 
-      <SidebarProvider>
+      {/* Roomier icon rail (default is 3rem) so 40px buttons and 20px icons fit comfortably. */}
+      <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as React.CSSProperties}>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-muted/20 via-background to-muted/30">
         <ClientPortalSidebar
           activeTab={activeTab}
