@@ -92,6 +92,17 @@ export function isValidEmail(email: string): boolean {
   return email.length <= 254 && EMAIL_RE.test(email) && !email.includes("..");
 }
 
+// RFC 2606 / 6761 reserved names: they can never receive mail, and the sample
+// CSV uses them on purpose so uploading it unchanged cannot email anyone.
+const RESERVED_TLDS = new Set(["test", "invalid", "localhost", "example"]);
+const RESERVED_DOMAINS = ["example.com", "example.org", "example.net"];
+
+export function isReservedDomain(email: string): boolean {
+  const domain = email.split("@")[1] ?? "";
+  const tld = domain.split(".").pop() ?? "";
+  return RESERVED_TLDS.has(tld) || RESERVED_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
 export function isRoleAddress(email: string): boolean {
   return ROLE_LOCAL_PARTS.has((email.split("@")[0] ?? "").split("+")[0]);
 }
@@ -142,7 +153,7 @@ export function buildLeads(rows: string[][], mapping: ColumnMapping): { leads: L
     const rawEmail = get(r, "email");
     if (!rawEmail.trim()) { rejected.push({ line, reason: "missing_email", value: "" }); return; }
     const email = normalizeEmail(rawEmail);
-    if (!isValidEmail(email)) { rejected.push({ line, reason: "invalid_email", value: clean(rawEmail, 80) }); return; }
+    if (!isValidEmail(email) || isReservedDomain(email)) { rejected.push({ line, reason: "invalid_email", value: clean(rawEmail, 80) }); return; }
 
     let first = clean(get(r, "first_name"), 60);
     let last = clean(get(r, "last_name"), 60);

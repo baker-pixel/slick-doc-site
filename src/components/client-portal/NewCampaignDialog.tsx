@@ -278,6 +278,23 @@ export function NewCampaignDialog({ open, onOpenChange, clientAccountId, onCreat
 
           {source === "csv" && (
             <div className="space-y-3">
+              <div className="rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground space-y-1">
+                <p>
+                  <span className="font-medium text-foreground">File format:</span> a CSV with one row per person and a header row.
+                  Only <code className="rounded bg-muted px-1">email</code> is required. These optional columns make the emails better:{" "}
+                  <code className="rounded bg-muted px-1">first_name</code> <code className="rounded bg-muted px-1">last_name</code>{" "}
+                  <code className="rounded bg-muted px-1">company</code> <code className="rounded bg-muted px-1">website</code>{" "}
+                  <code className="rounded bg-muted px-1">title</code> <code className="rounded bg-muted px-1">note</code>
+                  {" "}(a personal line about them, like "met at the May summit", that we use to open the email).
+                </p>
+                <p>
+                  Column names are matched automatically, and you can fix any we get wrong after uploading.{" "}
+                  <a href="/sample-contacts.csv" download="sample-contacts.csv" className="font-medium text-primary underline underline-offset-2 hover:no-underline">
+                    Download a sample CSV
+                  </a>
+                  {" "}(opens in Excel or Google Sheets; it uses fake addresses, so replace them with your own).
+                </p>
+              </div>
               <input ref={fileInput} type="file" accept=".csv,.txt,text/csv" className="hidden" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
               <button
                 type="button"
@@ -286,7 +303,7 @@ export function NewCampaignDialog({ open, onOpenChange, clientAccountId, onCreat
               >
                 {file ? <FileSpreadsheet className="h-5 w-5 text-primary" /> : <Upload className="h-5 w-5 text-muted-foreground" />}
                 <span className="text-sm">
-                  {file ? <><span className="font-medium">{file.name}</span><span className="text-muted-foreground"> · click to replace</span></> : <><span className="font-medium">Choose a CSV file</span><br /><span className="text-xs text-muted-foreground">One row per person. Needs an email column; first name, company, website and a personal note make the emails better. Up to 5 MB.</span></>}
+                  {file ? <><span className="font-medium">{file.name}</span><span className="text-muted-foreground"> · click to replace</span></> : <><span className="font-medium">Choose a CSV file</span><br /><span className="text-xs text-muted-foreground">CSV, up to 5 MB.</span></>}
                 </span>
               </button>
 

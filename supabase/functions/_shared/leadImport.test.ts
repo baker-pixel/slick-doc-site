@@ -4,6 +4,7 @@ import {
   classifyLeads,
   detectMapping,
   estimateSendDays,
+  isReservedDomain,
   isRoleAddress,
   isValidEmail,
   normalizeWebsite,
@@ -164,4 +165,32 @@ Deno.test("leadToProspectRow: pending + approved, real contact fields, no fit sc
   assertEquals(row.personalization_hook, "met");
   assertEquals(row.name, "Acme");
   assert(!("icp_fit_score" in row));
+});
+
+Deno.test("reserved domains (example.*, .test, .invalid) are rejected as invalid", () => {
+  for (const e of ["a@example.com", "a@mail.example.org", "a@foo.test", "a@x.invalid", "a@x.localhost"]) assert(isReservedDomain(e), e);
+  for (const e of ["a@acme.com", "a@notexample.com", "a@testing.io"]) assert(!isReservedDomain(e), e);
+  const { leads, rejected } = buildLeads([["a@example.com"], ["b@acme.com"]], { email: 0 });
+  assertEquals([leads.length, rejected.length, rejected[0].reason], [1, 1, "invalid_email"]);
+});
+
+// Run with: deno test --allow-read (reads public/sample-contacts.csv).
+// The file clients download is parsed by the real parser: if someone edits the
+// sample (or the parser's header aliases) this fails instead of shipping a
+// template that doesn't import.
+Deno.test("public/sample-contacts.csv maps every column and parses cleanly", async () => {
+  const text = await Deno.readTextFile(new URL("../../../public/sample-contacts.csv", import.meta.url));
+  const rows = parseCsv(text);
+  const mapping = detectMapping(rows[0]);
+  assertEquals(mapping, { email: 0, first_name: 1, last_name: 2, company: 3, website: 4, title: 5, note: 6 });
+  const { leads, rejected } = buildLeads(rows.slice(1), mapping);
+  // The sample uses reserved fake domains, so uploading it unchanged imports nobody.
+  assertEquals([leads.length, rejected.length], [0, 3]);
+  // ...but with real domains the same rows are fully valid, with every field populated.
+  const real = buildLeads(rows.slice(1).map((r) => [r[0].replace(".test", ".com"), ...r.slice(1)]), mapping);
+  assertEquals(real.rejected.length, 0);
+  assertEquals(real.leads.map((l) => l.first_name), ["Jane", "Sam", "Alex"]);
+  assertEquals(real.leads[0].note, "Met at the HR Summit in May");
+  assertEquals(real.leads[0].website, "https://acme.com");
+  assertEquals(real.leads[2].website, "");
 });
