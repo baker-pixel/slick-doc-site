@@ -135,20 +135,26 @@ function NavItem({ item, activeTab, onTabChange, badgeCounts }: NavItemProps) {
         onClick={() => onTabChange(item.id)}
         tooltip={item.label}
         className={cn(
-          "relative transition-all duration-200 rounded-xl h-10",
+          "relative h-10 rounded-xl transition-colors duration-200 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center",
           isActive
-            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-            : "hover:bg-muted/80"
+            ? "!bg-primary/15 !text-primary font-semibold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-primary group-data-[collapsible=icon]:before:hidden group-data-[collapsible=icon]:ring-1 group-data-[collapsible=icon]:ring-primary/40"
+            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
         )}
       >
-        <item.icon className={cn("h-4 w-4", isActive && "scale-110")} />
+        <item.icon className="h-[18px] w-[18px] shrink-0" />
         <span className="flex-1 font-medium">{item.label}</span>
         {showBadge && (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground">
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center bg-primary text-primary-foreground group-data-[collapsible=icon]:hidden">
             {badgeCount > 9 ? "9+" : badgeCount}
           </span>
         )}
-        {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60" />}
+        {showBadge && (
+          <span
+            aria-label={`${badgeCount} new`}
+            className="absolute right-1.5 top-1.5 hidden h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background group-data-[collapsible=icon]:block"
+          />
+        )}
+        {isActive && <ChevronRight className="h-3.5 w-3.5 opacity-60 group-data-[collapsible=icon]:hidden" />}
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
@@ -189,7 +195,9 @@ export function ClientPortalSidebar({
       />
     ));
 
-  const labelClass = "text-[10px] uppercase tracking-widest text-muted-foreground/60 px-2 mb-1";
+  const labelClass = "text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-3 mb-1";
+  // In the icon rail the text labels are hidden, so groups are split by a thin divider instead.
+  const railGroupClass = "group-data-[collapsible=icon]:mt-1 group-data-[collapsible=icon]:border-t group-data-[collapsible=icon]:border-border/40 group-data-[collapsible=icon]:pt-2";
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -206,7 +214,7 @@ export function ClientPortalSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-2">
+      <SidebarContent className="px-3 group-data-[collapsible=icon]:px-1.5 group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:[scrollbar-width:none] group-data-[collapsible=icon]:[&::-webkit-scrollbar]:hidden">
         <SidebarGroup>
           <SidebarGroupLabel className={labelClass}>My Portal</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -214,16 +222,16 @@ export function ClientPortalSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className={railGroupClass}>
           <SidebarGroupLabel className={labelClass}>Brand & Tools</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">{renderItems(brandToolsItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <div className="mx-3 my-4 border-t border-border/40" />
+        <div className="mx-3 my-2 border-t border-border/40 group-data-[collapsible=icon]:hidden" />
 
-        <SidebarGroup>
+        <SidebarGroup className={railGroupClass}>
           <SidebarGroupLabel className={labelClass}>Support</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-0.5">{renderItems(supportItems)}</SidebarMenu>
@@ -231,25 +239,26 @@ export function ClientPortalSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-3 mt-auto">
-        <div className="rounded-xl bg-muted/50 p-3 group-data-[collapsible=icon]:p-2">
-          <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-            <Avatar className="h-8 w-8">
+      <SidebarFooter className="mt-auto p-3 group-data-[collapsible=icon]:p-2">
+        <div className="rounded-xl bg-muted/50 p-3 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+          <div className="flex items-center gap-3 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
+            <Avatar className="h-8 w-8 shrink-0" title={clientName || "Client"}>
               <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                 {initials}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-              <p className="text-sm font-semibold truncate">{clientName || "Client"}</p>
+            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+              <p className="truncate text-sm font-semibold">{clientName || "Client"}</p>
             </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={onSignOut}
-              className="h-7 w-7 shrink-0 rounded-lg hover:bg-destructive/10 hover:text-destructive"
+              className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               aria-label="Sign out"
+              title="Sign out"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>

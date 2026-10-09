@@ -1,3 +1,4 @@
+import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -39,6 +40,19 @@ interface PlacesResult {
   formatted_address: string;
   website?: string;
   formatted_phone_number?: string;
+  rating?: number;
+  types?: string[];
+}
+
+const PLACES_FIELD_MASK =
+  "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.rating,places.types";
+
+interface NewPlace {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  websiteUri?: string;
+  nationalPhoneNumber?: string;
   rating?: number;
   types?: string[];
 }
@@ -112,6 +126,13 @@ serve(async (req) => {
       );
     }
 
+    if (!(await clientIdsWithMailbox(supabase, [client_id])).has(client_id)) {
+      return new Response(
+        JSON.stringify({ error: NO_MAILBOX_MESSAGE, code: "no_mailbox" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Tier gate: prospecting is a plan feature. Volume comes from tier
     // policy, capped by whatever the caller asked for.
     const policy = tierPolicy((client as { tier?: string }).tier).prospect;
@@ -148,23 +169,41 @@ serve(async (req) => {
       searchPairs = suggestions;
     }
 
-    // Step 1: Text Search via Places API, one call per query/location pair,
+    // Step 1: Text Search via Places API (New), one call per query/location pair,
     // splitting the batch cap evenly across them.
     const perQueryCap = Math.max(1, Math.ceil(batchCap / searchPairs.length));
     const searchResults = await Promise.all(
       searchPairs.map(async ({ query: q, location: loc }) => {
-        const searchUrl = new URL("https://maps.googleapis.com/maps/api/place/textsearch/json");
-        searchUrl.searchParams.set("query", `${q} in ${loc}`);
-        searchUrl.searchParams.set("key", mapsKey);
+        // Places API (New): one call returns the name, address, website and
+        // phone, so the old per-place details round-trip is gone. The legacy
+        // textsearch/details endpoints can't be enabled on new projects.
+        const searchResp = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": mapsKey,
+            "X-Goog-FieldMask": PLACES_FIELD_MASK,
+          },
+          body: JSON.stringify({ textQuery: `${q} in ${loc}`, pageSize: Math.min(20, perQueryCap) }),
+        });
+        const searchData = await searchResp.json().catch(() => ({}));
 
-        const searchResp = await fetch(searchUrl.toString());
-        const searchData = await searchResp.json();
-
-        if (searchData.status !== "OK" && searchData.status !== "ZERO_RESULTS") {
-          console.error(`Google Maps error for "${q} in ${loc}": ${searchData.status} — ${searchData.error_message ?? ""}`);
-          return { ok: false, status: searchData.status as string, detail: searchData.error_message as string | undefined, results: [] as PlacesResult[] };
+        if (!searchResp.ok) {
+          const status = (searchData?.error?.status as string | undefined) ?? `HTTP_${searchResp.status}`;
+          const detail = searchData?.error?.message as string | undefined;
+          console.error(`Google Maps error for "${q} in ${loc}": ${status} — ${detail ?? ""}`);
+          return { ok: false, status, detail, results: [] as PlacesResult[] };
         }
-        return { ok: true, status: "OK", detail: undefined, results: (searchData.results?.slice(0, perQueryCap) ?? []) as PlacesResult[] };
+        const results: PlacesResult[] = (searchData.places ?? []).slice(0, perQueryCap).map((pl: NewPlace) => ({
+          name: pl.displayName?.text ?? "",
+          place_id: pl.id ?? "",
+          formatted_address: pl.formattedAddress ?? "",
+          website: pl.websiteUri,
+          formatted_phone_number: pl.nationalPhoneNumber,
+          rating: pl.rating,
+          types: pl.types,
+        }));
+        return { ok: true, status: "OK", detail: undefined, results };
       }),
     );
 
@@ -176,7 +215,7 @@ serve(async (req) => {
       // quota) fail every client's discovery until a human fixes them, and
       // used to be visible only in function logs. Raise one alert per day.
       const first = searchResults[0];
-      if (["REQUEST_DENIED", "OVER_QUERY_LIMIT", "OVER_DAILY_LIMIT"].includes(first.status)) {
+      if (["PERMISSION_DENIED", "RESOURCE_EXHAUSTED", "UNAUTHENTICATED", "HTTP_403", "HTTP_429"].includes(first.status)) {
         const { data: openAlert } = await supabase
           .from("automation_alerts")
           .select("id")
@@ -204,32 +243,8 @@ serve(async (req) => {
 
     const rawResults: PlacesResult[] = searchResults.flatMap((r) => r.results).slice(0, batchCap);
 
-    // Step 2: Fetch place details (website + phone) for each result
-    const enriched: PlacesResult[] = await Promise.all(
-      rawResults.map(async (place) => {
-        try {
-          const detailUrl = new URL("https://maps.googleapis.com/maps/api/place/details/json");
-          detailUrl.searchParams.set("place_id", place.place_id);
-          detailUrl.searchParams.set("fields", "name,formatted_phone_number,website,formatted_address,rating,types");
-          detailUrl.searchParams.set("key", mapsKey);
-
-          const detailResp = await fetch(detailUrl.toString());
-          const detailData = await detailResp.json();
-          const r = detailData.result ?? {};
-
-          return {
-            ...place,
-            website: r.website,
-            formatted_phone_number: r.formatted_phone_number,
-            formatted_address: r.formatted_address ?? place.formatted_address,
-            rating: r.rating ?? place.rating,
-            types: r.types ?? place.types,
-          };
-        } catch {
-          return place;
-        }
-      }),
-    );
+    // Step 2: website/phone already came back with the search results.
+    const enriched: PlacesResult[] = rawResults;
 
     // Step 3: Deduplicate against existing prospects for this client
     const websites = enriched

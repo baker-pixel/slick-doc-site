@@ -15,6 +15,7 @@ export interface PostDisplay {
 interface PostLike {
   status: string;
   published_at?: string | null;
+  scheduled_for?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -35,6 +36,14 @@ export function postDisplayStatus(post: PostLike, now: number = Date.now()): Pos
 
     case "published": {
       if (meta.publish_confirmed_at) return { key: "published", label: "Published", variant: "default" };
+      if (meta.publish_verification === "manual") {
+        return { key: "published", label: "Posted manually", variant: "default", note: "An admin marked this as posted outside the system" };
+      }
+      // Never call a post Published while its slot is still in the future and
+      // nothing confirms it went out -- it hasn't been posted yet.
+      if (post.scheduled_for && new Date(post.scheduled_for).getTime() > now + CONFIRM_WINDOW_MS) {
+        return { key: "scheduled", label: "Scheduled", variant: "secondary", note: "Goes out at its scheduled time" };
+      }
       if (meta.publish_verification === "unavailable") {
         return { key: "published", label: "Published", variant: "default", note: "Sent, but the platform's confirmation isn't available" };
       }

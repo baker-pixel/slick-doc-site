@@ -1,3 +1,4 @@
+import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
@@ -408,7 +409,13 @@ serve(async (req) => {
           metadata: { clientIds },
         });
       }
+      const mailboxClients = await clientIdsWithMailbox(supabase, clientIds);
       for (const c of (clientRows ?? [])) {
+        // No connected mailbox -> no outreach (never the shared sender).
+        if (!mailboxClients.has(c.id)) {
+          prospectingDisabled.add(c.id);
+          continue;
+        }
         // Tier gate: plans without prospecting never send outreach, even if
         // prospects were somehow discovered/approved for them.
         if (!tierPolicy((c as { tier?: string }).tier).prospect.enabled) {

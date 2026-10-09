@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkPipelineAuth } from "../_shared/auth.ts";
 import { pollClientMailbox } from "../_shared/clientMailboxPoll.ts";
+import { checkMailboxHealth } from "../_shared/mailboxHealth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,7 +30,7 @@ serve(async (req) => {
     // spinning up an IMAP attempt we already know will be a no-op.
     const { data: rows, error } = await supabase
       .from("client_oauth_tokens")
-      .select("client_id, token_metadata")
+      .select("client_id, page_id, token_metadata")
       .eq("platform", "smtp");
 
     if (error) throw error;
@@ -41,12 +42,15 @@ serve(async (req) => {
     const results = [];
     for (const row of candidates) {
       const result = await pollClientMailbox(supabase, row.client_id);
-      results.push({ client_id: row.client_id, ...result });
+      // Judged from the recorded runs, so a mailbox that connects but never
+      // receives anything (e.g. a domain with no MX) is flagged, not silent.
+      const health = await checkMailboxHealth(supabase, row.client_id, row.page_id);
+      results.push({ client_id: row.client_id, ...result, health: health.status });
     }
 
     const totals = results.reduce(
-      (acc, r) => ({ polled: acc.polled + r.polled, bounced: acc.bounced + r.bounced, replied: acc.replied + r.replied }),
-      { polled: 0, bounced: 0, replied: 0 },
+      (acc, r) => ({ polled: acc.polled + r.polled, bounced: acc.bounced + r.bounced, replied: acc.replied + r.replied, stored: acc.stored + r.stored }),
+      { polled: 0, bounced: 0, replied: 0, stored: 0 },
     );
 
     console.log(`Polled ${candidates.length} client mailbox(es):`, totals);

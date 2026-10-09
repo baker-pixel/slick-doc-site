@@ -1756,6 +1756,103 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Edit a piece of generated content AND keep every copy of it in step.
+      // The client only ever sees content_approvals.full_content, and the
+      // scheduler publishes content_calendar.content -- editing just
+      // generated_content (what the panel used to do) left both stale, so a
+      // client could approve text the admin had already changed. Once the
+      // client has approved, the text is locked: changing it would publish
+      // something they never signed off on.
+      case "updateContentText": {
+        const { contentId, title, content: newText } = (data ?? {}) as { contentId?: string; title?: string | null; content?: string };
+        if (!contentId || typeof newText !== "string" || !newText.trim()) {
+          return new Response(
+            JSON.stringify({ error: "contentId and non-empty content are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: gc, error: gcErr } = await supabase
+          .from("generated_content")
+          .select("id, status")
+          .eq("id", contentId)
+          .maybeSingle();
+        if (gcErr) throw gcErr;
+        if (!gc) {
+          return new Response(
+            JSON.stringify({ error: "Content not found" }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: approvals, error: apprErr } = await supabase
+          .from("content_approvals")
+          .select("id, status")
+          .eq("content_id", contentId);
+        if (apprErr) throw apprErr;
+        const { data: calRows, error: calErr } = await supabase
+          .from("content_calendar")
+          .select("id, status")
+          .eq("content_id", contentId);
+        if (calErr) throw calErr;
+
+        const locked =
+          (approvals ?? []).some((a) => a.status === "approved") ||
+          (calRows ?? []).some((c) => ["scheduled", "processing", "published"].includes(c.status)) ||
+          gc.status === "published";
+        if (locked) {
+          return new Response(
+            JSON.stringify({ error: "The client has already approved this -- its text is locked. Reject or recreate it instead of editing." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const cleanTitle = title?.trim() || null;
+        const pendingIds = (approvals ?? []).filter((a) => a.status === "pending").map((a) => a.id);
+
+        // Client-visible copies first: if one of these fails we stop before
+        // touching the draft, so the draft is never ahead of what they see.
+        if (pendingIds.length > 0) {
+          const { error } = await supabase
+            .from("content_approvals")
+            .update({
+              full_content: newText,
+              content_preview: newText.substring(0, 300),
+              ...(cleanTitle ? { title: cleanTitle } : {}),
+            })
+            .in("id", pendingIds);
+          if (error) throw error;
+        }
+        const draftSlotIds = (calRows ?? []).filter((c) => c.status === "draft").map((c) => c.id);
+        if (draftSlotIds.length > 0) {
+          const { error } = await supabase
+            .from("content_calendar")
+            .update({ content: newText })
+            .in("id", draftSlotIds);
+          if (error) throw error;
+        }
+
+        // Pieces not currently with the client go back to review so the admin
+        // re-confirms before resending; a piece sitting in the client's queue
+        // keeps its place.
+        const backToReview = pendingIds.length === 0 && ["approved", "client_approved", "changes_requested"].includes(gc.status);
+        const { error: updErr } = await supabase
+          .from("generated_content")
+          .update({
+            content: newText,
+            title: cleanTitle,
+            updated_at: new Date().toISOString(),
+            ...(backToReview ? { status: "pending_admin_review" } : {}),
+          })
+          .eq("id", contentId);
+        if (updErr) throw updErr;
+
+        return new Response(
+          JSON.stringify({ success: true, syncedToClient: pendingIds.length > 0, resetToReview: backToReview }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "createContentApproval": {
         if (!approval?.client_account_id || !approval?.title || !approval?.content_type) {
           return new Response(

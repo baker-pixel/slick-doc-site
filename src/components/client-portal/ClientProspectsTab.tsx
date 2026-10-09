@@ -121,6 +121,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [viewingEmail, setViewingEmail] = useState<ProspectEmail | null>(null);
   const [icpLocal, setIcpLocal] = useState(true);
   const [findingLeads, setFindingLeads] = useState(false);
+  // null until the SMTP section reports; outreach is blocked without a mailbox.
+  const [hasMailbox, setHasMailbox] = useState<boolean | null>(null);
   const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[] | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -291,13 +293,23 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         ))}
       </div>
 
+      {hasMailbox === false && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm">
+          <Info className="w-4 h-4 mt-0.5 shrink-0 text-orange-500" />
+          <span className="flex-1">
+            Connect your email inbox below to start lead outreach. We don't find leads or send emails for you until
+            your own mailbox is connected, so every email goes out from your address.
+          </span>
+        </div>
+      )}
+
       <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary/60" />
         <span className="flex-1">
           Orange Door is running outreach on your behalf, based on your ideal customer profile. Click a lead
           below to see why it was matched and what's been sent.
         </span>
-        <Button size="sm" variant="outline" className="gap-2 shrink-0" onClick={findLeadsNow} disabled={findingLeads}>
+        <Button size="sm" variant="outline" className="gap-2 shrink-0" onClick={findLeadsNow} disabled={findingLeads || hasMailbox !== true}>
           {findingLeads ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           {findingLeads ? "Searching..." : "Find leads now"}
         </Button>
@@ -472,7 +484,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         )}
       </Card>
 
-      <SmtpSenderSection clientAccountId={clientAccountId} />
+      <SmtpSenderSection clientAccountId={clientAccountId} onConnectionChange={setHasMailbox} />
 
       <Dialog
         open={!!selected}

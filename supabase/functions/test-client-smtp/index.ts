@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendViaClientEmail } from "../_shared/clientEmailSend.ts";
+import { ImapLite } from "../_shared/imapLite.ts";
+import { inferImapHost } from "../_shared/clientMailboxPoll.ts";
+import { domainOf, lookupMx } from "../_shared/mailboxHealth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,7 +62,7 @@ serve(async (req) => {
 
     const { data: cred } = await supabase
       .from("client_oauth_tokens")
-      .select("page_id, token_metadata")
+      .select("page_id, access_token, token_metadata")
       .eq("client_id", clientId)
       .eq("platform", "smtp")
       .maybeSingle();
@@ -92,6 +95,38 @@ serve(async (req) => {
       meta.last_test_error = result.error ?? "Send failed";
       meta.last_tested_at = new Date().toISOString();
     }
+    // Sending is only half of the connection: replies must be able to come
+    // back AND be read. Both checks only record warnings -- they never flip
+    // `verified`, which still means "can send".
+    const warnings: string[] = [];
+    if (result.sent) {
+      const domain = domainOf(cred.page_id);
+      const mx = domain ? await lookupMx(domain) : ({ status: "error", error: "no from address" } as const);
+      if (mx.status === "none") {
+        warnings.push(`${domain} has no MX record, so replies to your outreach cannot be delivered. Add MX records at your domain's DNS provider.`);
+      }
+      const m = meta as { host?: string; username?: string };
+      let imapError: string | null = null;
+      if (m.host && m.username) {
+        const imap = new ImapLite({ host: inferImapHost(m.host), port: 993, timeoutMs: 10_000 });
+        try {
+          await imap.connect();
+          await imap.login(m.username, (cred as { access_token?: string }).access_token ?? "");
+          await imap.examine("INBOX");
+        } catch (e) {
+          imapError = e instanceof Error ? e.message : "IMAP login failed";
+        } finally {
+          try { await imap.close(); } catch { /* best-effort */ }
+        }
+      }
+      if (imapError) warnings.push(`We can send from this mailbox but could not read its inbox over IMAP (${imapError}), so replies will not be detected.`);
+      meta.mailbox_checks = {
+        checked_at: new Date().toISOString(),
+        mx: mx.status,
+        imap_ok: !imapError,
+        ...(imapError ? { imap_error: imapError } : {}),
+      };
+    }
     await supabase
       .from("client_oauth_tokens")
       .update({ token_metadata: meta })
@@ -104,7 +139,7 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, ...(warnings.length ? { warnings } : {}) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

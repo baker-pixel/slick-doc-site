@@ -1,3 +1,4 @@
+import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
@@ -66,10 +67,16 @@ serve(async (req) => {
       });
     }
 
+    const mailboxClients = await clientIdsWithMailbox(supabase, ((clients ?? []) as ClientRow[]).map((c) => c.id));
+
     let attempted = 0;
     let erroredCount = 0;
 
     for (const client of (clients ?? []) as ClientRow[]) {
+      if (!mailboxClients.has(client.id)) {
+        results[client.id] = "skipped: no email mailbox connected";
+        continue;
+      }
       const policy = tierPolicy(client.tier).prospect;
       if (!policy.enabled) {
         results[client.id] = "skipped: prospect agent not enabled for this tier";

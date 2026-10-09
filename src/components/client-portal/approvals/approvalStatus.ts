@@ -57,9 +57,13 @@ export function approvalDisplay(
   }
 
   if (live?.calStatus === "published" || live?.calStatus === "processing") {
-    const d = postDisplayStatus({ status: live.calStatus, published_at: live.publishedAt, metadata: live.metadata });
+    const d = postDisplayStatus({ status: live.calStatus, published_at: live.publishedAt, scheduled_for: live.scheduledFor, metadata: live.metadata });
     if (d.key === "sending") return { key: "sending", bucket: "upcoming", label: "Sending", tone: "blue", detail: d.note };
-    return { key: "published", bucket: "live", label: "Published", tone: "green", detail: live.publishedAt ? `Went live ${formatWhen(live.publishedAt)}` : undefined };
+    // A "published" row whose slot is still in the future was never actually
+    // sent: fall through to the Scheduled display below.
+    if (d.key !== "scheduled") {
+      return { key: "published", bucket: "live", label: "Published", tone: "green", detail: live.publishedAt ? `Went live ${formatWhen(live.publishedAt)}` : undefined };
+    }
   }
 
   const when = live?.scheduledFor ?? approval.scheduled_for ?? null;
