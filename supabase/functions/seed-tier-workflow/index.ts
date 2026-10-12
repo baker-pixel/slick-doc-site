@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
+import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -187,7 +187,11 @@ serve(async (req) => {
       });
     }
 
-    const auth = await checkClientOrAdminAuth(req, supabase, client_id, body.password);
+    // Our own backend (e.g. stripe-webhook after a paid signup) presents the
+    // service key; everyone else must be the client or an admin.
+    const auth = isServiceRequest(req)
+      ? { authorized: true }
+      : await checkClientOrAdminAuth(req, supabase, client_id, body.password);
     if (!auth.authorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,

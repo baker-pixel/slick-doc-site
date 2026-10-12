@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -29,7 +29,9 @@ serve(async (req) => {
   try {
     const { invitationId, email, firstName, businessName, token, portalOrigin, password }: InviteRequest = await req.json();
 
-    const auth = await checkAdminAuth(req, _sb, password);
+    const auth = isServiceRequest(req)
+      ? { authorized: true }
+      : await checkAdminAuth(req, _sb, password);
     if (!auth.authorized) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,

@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { checkRateLimit, getClientIp } from "../_shared/rateLimit.ts";
+import { createCheckoutSession } from "../_shared/stripeCheckout.ts";
+import type { PlanTier } from "../_shared/stripe.ts";
 
 // Public, unauthenticated self-serve signup. Creates a *pending* client
 // account -- it does not seed the onboarding workflow, generate projects,
@@ -114,7 +116,7 @@ serve(async (req) => {
 
     const { data: existing } = await supabase
       .from("client_accounts")
-      .select("id")
+      .select("id, email, business_name, first_name, last_name, status, stripe_customer_id, subscription_status")
       .ilike("email", normalizedEmail.replace(/[\\%_]/g, "\\$&"))
       .maybeSingle();
 
@@ -123,10 +125,20 @@ serve(async (req) => {
     // admin confirming a known lead. Answer exactly like a fresh signup so
     // this endpoint can't be used to check whether an email is registered.
     if (existing) {
-      return jsonResponse({ success: true, status: "created" });
+      // A pending account that abandoned checkout can resume: hand back a
+      // fresh payment link, same response shape as a brand-new signup.
+      let resumeUrl: string | null = null;
+      if (existing.status === "pending") {
+        try {
+          resumeUrl = await createCheckoutSession(supabase, existing, tier as PlanTier, "signup", req.headers.get("origin"));
+        } catch (e) {
+          console.error("signup resume checkout failed:", e);
+        }
+      }
+      return jsonResponse({ success: true, status: "created", checkout_url: resumeUrl });
     }
 
-    const { error: insertErr } = await supabase.from("client_accounts").insert({
+    const { data: created, error: insertErr } = await supabase.from("client_accounts").insert({
       email: normalizedEmail,
       business_name: business_name.trim(),
       first_name,
@@ -135,7 +147,7 @@ serve(async (req) => {
       tier,
       plan_tier: tier,
       status: "pending",
-    });
+    }).select("id, email, business_name, first_name, last_name, stripe_customer_id, subscription_status").single();
 
     if (insertErr) {
       // idx_client_accounts_business_name_unique -- a different business can't
@@ -155,7 +167,24 @@ serve(async (req) => {
       websiteUrl: website_url.trim(),
     }).catch((e) => console.error("signup notification failed:", e));
 
-    return jsonResponse({ success: true, status: "created" });
+    // Payment replaces manual approval: the Stripe webhook activates the
+    // account (seed workflow + portal invite) once checkout completes. If
+    // Stripe is unreachable the account still saves as pending and an admin
+    // can approve it by hand.
+    let checkoutUrl: string | null = null;
+    try {
+      checkoutUrl = await createCheckoutSession(
+        supabase,
+        created,
+        tier as PlanTier,
+        "signup",
+        req.headers.get("origin"),
+      );
+    } catch (e) {
+      console.error("signup checkout session failed:", e);
+    }
+
+    return jsonResponse({ success: true, status: "created", checkout_url: checkoutUrl });
   } catch (err) {
     console.error("signup failed:", err);
     return errorResponse(err);

@@ -130,7 +130,6 @@ export default function TierTransformation() {
                 </p>
                 <div className="flex items-baseline gap-2 mb-8">
                   <span className="text-5xl font-bold text-foreground">$799</span>
-                  <span className="text-2xl text-muted-foreground">–999</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <div className="flex gap-4">

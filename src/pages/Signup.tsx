@@ -51,7 +51,10 @@ export default function Signup() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [resultStatus, setResultStatus] = useState<"created" | "existing_account" | null>(null);
+  const checkoutReturn = searchParams.get("checkout"); // "success" | "cancelled" after Stripe
+  const [resultStatus, setResultStatus] = useState<"created" | "existing_account" | null>(
+    checkoutReturn === "success" ? "created" : null,
+  );
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -92,6 +95,11 @@ export default function Signup() {
         return;
       }
 
+      // Payment replaces manual approval: send them straight to Stripe.
+      if (data?.checkout_url) {
+        window.location.href = data.checkout_url;
+        return;
+      }
       setResultStatus((data?.status as "created" | "existing_account") ?? "created");
     } catch (err) {
       console.error("Signup failed:", err);
@@ -133,11 +141,17 @@ export default function Signup() {
                       <CheckCircle className="h-8 w-8 text-green-600" />
                     </div>
                     <h2 className="text-xl font-display font-semibold text-foreground">
-                      {resultStatus === "existing_account" ? "You're already signed up" : "You're all set!"}
+                      {resultStatus === "existing_account"
+                        ? "You're already signed up"
+                        : checkoutReturn === "success"
+                        ? "Payment received!"
+                        : "You're all set!"}
                     </h2>
                     <p className="text-muted-foreground">
                       {resultStatus === "existing_account"
                         ? "An account with this email already exists. Check your inbox for next steps, or contact us if you need help."
+                        : checkoutReturn === "success"
+                        ? "Thanks for subscribing. We're setting up your account now - check your inbox for your client portal invitation in the next few minutes."
                         : "We've received your signup and will review your account shortly. We'll be in touch by email once you're approved."}
                     </p>
                     <Button asChild variant="outline">
@@ -146,6 +160,11 @@ export default function Signup() {
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-4">
+                    {checkoutReturn === "cancelled" && (
+                      <p className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                        Checkout was cancelled - no charge was made. Submit again to pick up where you left off.
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="firstName">First Name</Label>
@@ -245,11 +264,11 @@ export default function Signup() {
                       {isSubmitting ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Submitting...
+                          Redirecting to checkout...
                         </>
                       ) : (
                         <>
-                          Create Account
+                          Continue to payment
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </>
                       )}

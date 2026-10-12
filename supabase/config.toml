@@ -209,3 +209,15 @@ verify_jwt = false
 
 [functions.get-prospect-report]
 verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.stripe-create-checkout]
+verify_jwt = false
+
+[functions.stripe-billing-portal]
+verify_jwt = false
+
+[functions.billing-enforce]
+verify_jwt = false
