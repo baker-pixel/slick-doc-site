@@ -23,11 +23,19 @@ export function escapeHtml(v: unknown): string {
  * injection via CR/LF) and caps the length.
  */
 export function cleanText(v: unknown, max = 100): string {
-  return String(v ?? "")
-    // deno-lint-ignore no-control-regex
-    .replace(/[\u0000-\u001F\u007F]+/g, " ")
-    .trim()
-    .slice(0, max);
+  let out = "";
+  let inControlRun = false;
+  for (const ch of String(v ?? "")) {
+    const code = ch.charCodeAt(0);
+    if (code < 0x20 || code === 0x7f) {
+      if (!inControlRun) out += " "; // a run of control chars becomes one space
+      inControlRun = true;
+    } else {
+      out += ch;
+      inControlRun = false;
+    }
+  }
+  return out.trim().slice(0, max);
 }
 
 /**
