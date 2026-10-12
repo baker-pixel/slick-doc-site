@@ -10,6 +10,7 @@ import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
 import { nurtureStartAt, readyForNurture, stepDelayDays } from "../_shared/dripSchedule.ts";
+import { existingClientDisposition } from "../_shared/campaignBoundary.ts";
 import {
   type Audience,
   campaignBlock,
@@ -533,18 +534,25 @@ serve(async (req) => {
       const emailLower = prospect.email.toLowerCase();
 
       if (clientEmailSet.has(emailLower)) {
-        await supabase.from("prospects").update({ status: "converted", converted_at: new Date().toISOString() }).eq("id", prospect.id);
+        // A pipeline lead that is now a client is a real win; a campaign contact
+        // is only skipped (never counted as a conversion) -- campaignBoundary.ts.
+        const disposition = existingClientDisposition(prospect);
+        if (disposition.status === "converted") {
+          await supabase.from("prospects").update({ status: "converted", converted_at: new Date().toISOString() }).eq("id", prospect.id);
+        } else {
+          await supabase.from("prospects").update({ status: "rejected", icp_fit_reason: disposition.reason }).eq("id", prospect.id);
+        }
         await cancelPendingQueuedEmails(supabase, prospect.id);
-        // Outcome signal + feedback input: a real conversion. getConversionWins
-        // reads these back to calibrate future fit scoring for this client.
-        if (prospect.client_id) {
+        if (disposition.recordConversion && prospect.client_id) {
+          // Outcome signal + feedback input: a real conversion. getConversionWins
+          // reads these back to calibrate future fit scoring for this client.
           await recordOutcome(supabase, prospect.client_id, {
             source: "prospect", metric: "prospect_converted", value: 1,
             metadata: { prospect_id: prospect.id, business_type: prospect.business_type },
           });
-          touchedClients.add(prospect.client_id);
         }
-        console.log(`Prospect ${prospect.email} is now a client — marked converted, queue cancelled`);
+        if (prospect.client_id) touchedClients.add(prospect.client_id);
+        console.log(`Prospect ${prospect.email} matches a client account — marked ${disposition.status}, queue cancelled`);
         continue;
       }
 

@@ -9,7 +9,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
-import { Archive, ChevronDown, ChevronUp, FileSpreadsheet, Loader2, Megaphone, Pause, Play, Plus, Sparkles } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, ChevronUp, FileSpreadsheet, Loader2, Megaphone, Pause, Play, Plus, Sparkles } from "lucide-react";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { NewCampaignDialog } from "./NewCampaignDialog";
 
@@ -58,7 +58,12 @@ const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0);
 // The campaign tables aren't in the generated Supabase types yet.
 const db = supabase as any;
 
-export function CampaignsSection({ clientAccountId, hasMailbox }: { clientAccountId: string; hasMailbox: boolean | null }) {
+export function CampaignsSection({ clientAccountId, hasMailbox, onOpenLead }: {
+  clientAccountId: string;
+  hasMailbox: boolean | null;
+  // Opens the lead's email timeline (the same detail view as the pipeline list).
+  onOpenLead?: (leadId: string) => void;
+}) {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [stats, setStats] = useState<Record<string, Stats>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -202,11 +207,12 @@ export function CampaignsSection({ clientAccountId, hasMailbox }: { clientAccoun
                       <span><b className="text-foreground tabular-nums">{st.total.toLocaleString()}</b> contacts</span>
                       <span><b className="text-foreground tabular-nums">{st.emailed.toLocaleString()}</b> emailed</span>
                       <span><b className="text-foreground tabular-nums">{pct(st.opened, st.emailed)}%</b> opened</span>
-                      <span><b className="text-foreground tabular-nums">{st.replied + st.converted}</b> replied</span>
+                      <span><b className="text-foreground tabular-nums">{st.replied}</b> replied</span>
+                      {st.converted > 0 && <span><b className="text-foreground tabular-nums">{st.converted}</b> converted</span>}
                       {st.bounced > 0 && <span>{st.bounced} bounced</span>}
                       {st.unsubscribed > 0 && <span>{st.unsubscribed} unsubscribed</span>}
                       <button type="button" onClick={() => toggleLeads(c)} className="ml-auto inline-flex items-center gap-1 underline-offset-2 hover:underline">
-                        {expanded === c.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}Contacts
+                        {expanded === c.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}{onOpenLead ? "Contacts & emails" : "Contacts"}
                       </button>
                     </div>
                   ) : (
@@ -221,17 +227,28 @@ export function CampaignsSection({ clientAccountId, hasMailbox }: { clientAccoun
                     ) : (
                       <Table>
                         <TableHeader>
-                          <TableRow><TableHead>Contact</TableHead><TableHead>Status</TableHead><TableHead className="w-20 text-right">Step</TableHead></TableRow>
+                          <TableRow><TableHead>Contact</TableHead><TableHead>Status</TableHead><TableHead className="w-24 text-right">Emails sent</TableHead></TableRow>
                         </TableHeader>
                         <TableBody>
                           {leads.map((l) => (
-                            <TableRow key={l.id}>
+                            <TableRow
+                              key={l.id}
+                              className={onOpenLead ? "cursor-pointer hover:bg-muted/40" : undefined}
+                              tabIndex={onOpenLead ? 0 : undefined}
+                              onClick={() => onOpenLead?.(l.id)}
+                              onKeyDown={(e) => { if (onOpenLead && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpenLead(l.id); } }}
+                            >
                               <TableCell>
                                 <div className="text-sm">{l.contact_first_name || l.name}</div>
                                 <div className="text-xs text-muted-foreground">{l.email}</div>
                               </TableCell>
                               <TableCell className="text-xs">{STATUS_LABELS[l.status] ?? l.status}</TableCell>
-                              <TableCell className="text-right text-xs tabular-nums">{l.drip_step}/{c.max_steps}</TableCell>
+                              <TableCell className="text-right text-xs tabular-nums">
+                                <span className="inline-flex items-center justify-end gap-1">
+                                  {l.drip_step}/{c.max_steps}
+                                  {onOpenLead && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />}
+                                </span>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
