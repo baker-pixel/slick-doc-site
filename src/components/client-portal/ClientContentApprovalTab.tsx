@@ -134,7 +134,9 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       ]);
       if (error) throw error;
       if (calError) throw calError;
-      setApprovals((data || []) as ContentApproval[]);
+      // "superseded" = a duplicate of another approved post for the same slot
+      // (see approvalReconcile.ts); showing it would list one post twice.
+      setApprovals(((data || []) as ContentApproval[]).filter((a) => a.publish_status !== "superseded"));
       setCalendar((calRows || []) as CalendarRow[]);
     } catch (error) {
       console.error("Error fetching approvals:", error);

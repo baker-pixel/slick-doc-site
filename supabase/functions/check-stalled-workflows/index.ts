@@ -29,6 +29,7 @@ serve(async (req) => {
       stale_prospect_alert: 0,
       stale_automation_step_alert: 0,
       stale_client_approval_reenqueued: 0,
+      unpublishable_social_alert: 0,
     };
 
     // ── Sweep 2: workflow_tasks stuck in "running" ──────────────────────
@@ -395,6 +396,57 @@ serve(async (req) => {
         metadata: { step_id: step.id, workflow_id: step.workflow_id, client_id: step.client_id },
       });
       if (!enqueueErr) summary.stale_client_approval_reenqueued++;
+    }
+
+    // ── Sweep 10: social post due soon that can't publish ────────────────
+    // A social slot due within 48h that is still an unapproved draft will be
+    // silently skipped by publish-scheduled-content (it only sends
+    // status=scheduled + client_approved=true). Typical causes: the draft was
+    // held in admin review for unsupported claims, or the client hasn't
+    // approved it. Found live: 3 Innermetrix LinkedIn posts sat in an
+    // admin-only queue with nobody told. Warn while there is still time to act.
+    const SOON_HOURS = 48;
+    const soon = new Date(now.getTime() + SOON_HOURS * 60 * 60_000).toISOString();
+    const { data: blockedSoon, error: blockedErr } = await supabase
+      .from("content_calendar")
+      .select("id, client_account_id, platform, scheduled_for, content_id")
+      .eq("content_type", "social_post")
+      .in("platform", ["facebook", "instagram", "twitter", "linkedin"])
+      .eq("status", "draft")
+      .eq("client_approved", false)
+      .gte("scheduled_for", now.toISOString())
+      .lte("scheduled_for", soon);
+    if (blockedErr) throw blockedErr;
+
+    if (blockedSoon && blockedSoon.length > 0) {
+      const { data: existingBlocked } = await supabase
+        .from("automation_alerts")
+        .select("id")
+        .eq("alert_type", "social_post_will_not_publish")
+        .is("acknowledged_at", null)
+        .maybeSingle();
+
+      if (!existingBlocked) {
+        const ids = blockedSoon.map((b) => b.content_id).filter(Boolean);
+        const { data: gens } = ids.length
+          ? await supabase.from("generated_content").select("id, status").in("id", ids)
+          : { data: [] };
+        const statusById = new Map((gens ?? []).map((g) => [g.id, g.status]));
+        const held = blockedSoon.filter((b) => statusById.get(b.content_id) === "pending_admin_review").length;
+        await logAlert(supabase, {
+          source: "check-stalled-workflows",
+          alertType: "social_post_will_not_publish",
+          severity: "high",
+          title: `${blockedSoon.length} social post(s) due within ${SOON_HOURS}h will not publish`,
+          message: `${blockedSoon.length} post(s) due in the next ${SOON_HOURS}h are still unapproved drafts, so they will be skipped. ${held} are held in admin review (flagged for unsupported claims) and never reached the client; the rest are waiting on client approval. Review them in the admin Content Review panel.`,
+          metadata: {
+            count: blockedSoon.length,
+            held_in_admin_review: held,
+            posts: blockedSoon.map((b) => ({ id: b.id, client_account_id: b.client_account_id, platform: b.platform, scheduled_for: b.scheduled_for })),
+          },
+        });
+        summary.unpublishable_social_alert = 1;
+      }
     }
 
     return jsonResponse({ checked: true, ...summary });

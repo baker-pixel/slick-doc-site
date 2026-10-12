@@ -7,6 +7,7 @@ import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { extractEdgeBody } from "../_shared/edgeError.ts";
+import { reconcileApprovedContent } from "../_shared/approvalReconcile.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -130,6 +131,13 @@ serve(async (req) => {
       });
     }
     const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
+    // ── Self-heal: client-approved posts whose calendar slot went missing ──
+    // Runs first so a re-attached post that is already due publishes this run.
+    const reconciled = await reconcileApprovedContent(supabase);
+    if (reconciled.adopted || reconciled.inserted || reconciled.superseded) {
+      console.log(`Approval reconcile: ${JSON.stringify(reconciled)}`);
+    }
 
     // ── Cleanup: reset rows stuck in processing for > 15 minutes ──
     // A real publish (image generation + PfM retries) finishes in ~1-2 min, so a

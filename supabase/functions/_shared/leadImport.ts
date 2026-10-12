@@ -276,8 +276,9 @@ export function assignWebsites(leads: Lead[], existingWebsiteUrls: string[]): Ma
 /**
  * The prospects row for an imported lead. Imported leads skip discovery,
  * enrichment and fit scoring (the client chose them) and go straight to
- * 'pending' with an approval stamp: the drip's existing 48h hold before first
- * contact is the window to pause or cancel the campaign.
+ * 'pending' with an approval stamp. The drip enrolls campaign leads at its next
+ * hourly run and sends step 1 immediately (see dripSchedule.ts); pausing the
+ * campaign holds every queued step.
  */
 export function leadToProspectRow(
   lead: Lead,

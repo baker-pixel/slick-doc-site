@@ -269,7 +269,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
 
       {/* Detail slide-over */}
       <Sheet open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
-        <SheetContent>
+        <SheetContent className="overflow-y-auto">
           {selectedItem && (
             <>
               <SheetHeader>

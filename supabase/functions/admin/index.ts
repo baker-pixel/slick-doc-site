@@ -470,11 +470,22 @@ Deno.serve(async (req) => {
       }
 
       case "delete": {
+        // Deleting a calendar slot is how an admin cancels a post. Its approval
+        // stays "approved" (and the client's portal keeps showing it as
+        // Scheduled) while nothing would ever publish it -- and the
+        // approved-content self-heal would resurrect it. Mark the approval
+        // cancelled first so both see the cancellation.
+        if (table === "content_calendar") {
+          const { data: slot } = await supabase.from("content_calendar").select("content_id").eq("id", id).maybeSingle();
+          if (slot?.content_id) {
+            await supabase.from("content_approvals").update({ publish_status: "cancelled" }).eq("content_id", slot.content_id).eq("status", "approved");
+          }
+        }
         const { error } = await supabase
           .from(table)
           .delete()
           .eq("id", id);
-        
+
         if (error) throw error;
         console.log(`Deleted ${table} record: ${id}`);
         return new Response(
