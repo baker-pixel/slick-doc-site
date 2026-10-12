@@ -32,7 +32,7 @@ export interface ApprovalDisplay {
 }
 
 export function approvalDisplay(
-  approval: { status: string; scheduled_for?: string | null },
+  approval: { status: string; scheduled_for?: string | null; publish_status?: string | null },
   live: ApprovalLive | undefined,
   formatWhen: (iso: string) => string,
 ): ApprovalDisplay {
@@ -43,6 +43,10 @@ export function approvalDisplay(
       return { key: "changes_requested", bucket: "attention", label: "Changes requested", tone: "orange", detail: "Our team is revising this based on your notes." };
     case "rejected":
       return { key: "declined", bucket: "attention", label: "Declined", tone: "gray", detail: "This post won't be published." };
+  }
+
+  if (approval.publish_status === "cancelled") {
+    return { key: "declined", bucket: "attention", label: "Cancelled", tone: "gray", detail: "Our team cancelled this post before it went out." };
   }
 
   // Approved from here on: what happens next depends on the real calendar row.
@@ -66,7 +70,12 @@ export function approvalDisplay(
     }
   }
 
-  const when = live?.scheduledFor ?? approval.scheduled_for ?? null;
+  // No calendar row means nothing is actually queued to publish -- an approval
+  // alone is not a schedule, so don't claim "Scheduled" (a background job
+  // re-attaches orphaned approvals; until then be honest).
+  if (!live) return { key: "approved", bucket: "upcoming", label: "Approved", tone: "green", detail: "Approved — we're putting it on the schedule." };
+
+  const when = live.scheduledFor ?? approval.scheduled_for ?? null;
   if (when) return { key: "scheduled", bucket: "upcoming", label: "Scheduled", tone: "blue", detail: `Goes live ${formatWhen(when)}` };
   return { key: "approved", bucket: "upcoming", label: "Approved", tone: "green", detail: "Approved — we'll schedule it shortly." };
 }
