@@ -505,7 +505,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           className={
             viewingEmail
               ? "sm:max-w-3xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
-              : "max-w-lg max-h-[85vh] overflow-y-auto"
+              : "max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden"
           }
         >
           {selected && viewingEmail && emails ? (
@@ -543,12 +543,12 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-4 text-sm">
-                <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="min-w-0 space-y-4 text-sm">
+                <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
                   <MapPin className="w-4 h-4 shrink-0" />
                   {selected.business_type ?? "Business"}{selected.city ? ` · ${selected.city}` : ""}
                   {selected.website_url && (
-                    <a href={selected.website_url} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">
+                    <a href={selected.website_url} target="_blank" rel="noreferrer" className="min-w-0 truncate text-primary hover:underline">
                       {selected.website_url}
                     </a>
                   )}
@@ -628,7 +628,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                   ) : !emails || emails.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Nothing queued yet — this lead hasn't entered the sequence.</p>
                   ) : (
-                    <ol>
+                    <ol className="min-w-0">
                       {emails.map((e, i) => {
                         const isSent = e.status === "sent" && !!e.sent_at;
                         const isFailed = ["failed", "skipped", "cancelled"].includes(e.status);
@@ -639,7 +639,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                           ? "text-gray-400 bg-gray-100"
                           : "text-blue-600 bg-blue-100";
                         return (
-                          <li key={i} className="relative pl-8 pb-3 last:pb-0">
+                          <li key={i} className="relative min-w-0 pl-8 pb-3 last:pb-0">
                             {i < emails.length - 1 && (
                               <span className="absolute left-[11px] top-6 bottom-0 w-px bg-border" />
                             )}
@@ -650,13 +650,13 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                               type="button"
                               onClick={() => isSent && setViewingEmail(e)}
                               disabled={!isSent}
-                              className={`flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2 text-left text-xs ${
+                              className={`flex w-full min-w-0 items-center gap-3 rounded-lg border bg-background px-3 py-2.5 text-left text-xs ${
                                 isSent ? "hover:bg-muted/40 transition-colors" : "opacity-70 cursor-default"
                               }`}
                             >
                               <div className="min-w-0 flex-1">
-                                <div className="font-medium truncate">{e.subject}</div>
-                                <div className="text-muted-foreground">
+                                <div className="line-clamp-2 break-words font-medium leading-snug" title={e.subject}>{e.subject}</div>
+                                <div className="mt-0.5 text-muted-foreground">
                                   {e.drip_step ? `Step ${e.drip_step} · ` : ""}
                                   {isSent
                                     ? format(new Date(e.sent_at!), "MMM d, yyyy 'at' h:mm a")
