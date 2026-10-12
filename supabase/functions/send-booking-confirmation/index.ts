@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { cleanText, escapeHtml, guardPublicSender } from "../_shared/publicEmailGuard.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY is not configured");
@@ -112,12 +113,32 @@ const handler = async (req: Request): Promise<Response> => {
 
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { firstName, lastName, email, businessName, date, time, rawDate }: BookingRequest = await req.json();
+    const raw: BookingRequest = await req.json();
+
+    // Public endpoint that emails an address the caller supplies: validate,
+    // rate limit (per IP and per recipient), strip control chars for the ICS
+    // file, and HTML-escape everything echoed into the email body.
+    const blocked = await guardPublicSender(req, _sb, "send-booking-confirmation", raw.email);
+    if (blocked) return blocked;
+    const email = raw.email.trim();
+    const plain = {
+      firstName: cleanText(raw.firstName, 60),
+      lastName: cleanText(raw.lastName, 60),
+      businessName: cleanText(raw.businessName, 100),
+      date: cleanText(raw.date, 60),
+      time: cleanText(raw.time, 30),
+      rawDate: cleanText(raw.rawDate, 30),
+    };
+    const firstName = escapeHtml(plain.firstName);
+    const lastName = escapeHtml(plain.lastName);
+    const businessName = escapeHtml(plain.businessName);
+    const date = escapeHtml(plain.date);
+    const time = escapeHtml(plain.time);
     
     console.log(`Sending booking confirmation to ${email} for ${date} at ${time}`);
 
     // Generate ICS calendar file
-    const icsContent = generateICS(firstName, lastName, email, businessName, rawDate, time);
+    const icsContent = generateICS(plain.firstName, plain.lastName, email, plain.businessName, plain.rawDate, plain.time);
     const icsBase64 = btoa(icsContent);
 
     console.log("Generated ICS file for calendar attachment");

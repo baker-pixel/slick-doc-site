@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument, rgb, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
+import { cleanText, escapeHtml, guardPublicSender } from "../_shared/publicEmailGuard.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -247,7 +248,13 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
   try {
-    const { email, firstName }: PdfRequest = await req.json();
+    const { email, firstName: rawFirstName }: PdfRequest = await req.json();
+
+    // Public endpoint that emails an address the caller supplies: validate and
+    // rate limit (per IP and per recipient); escape the name we echo back.
+    const blocked = await guardPublicSender(req, supabase, "send-system-pdf", email);
+    if (blocked) return blocked;
+    const firstName = escapeHtml(cleanText(rawFirstName, 60));
     
     console.log("Received PDF request for:", email);
 
@@ -262,7 +269,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { error: dbError } = await supabase
       .from("pdf_leads")
-      .insert({ email, first_name: firstName, source: "system_brochure" });
+      .insert({ email: email.trim(), first_name: cleanText(rawFirstName, 60) || null, source: "system_brochure" });
 
     if (dbError) {
       console.error("Database error:", dbError);
