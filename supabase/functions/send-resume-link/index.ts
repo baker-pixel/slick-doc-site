@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { cleanText, escapeHtml, guardPublicSender } from "../_shared/publicEmailGuard.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -24,7 +25,16 @@ const handler = async (req: Request): Promise<Response> => {
 
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { email, firstName, resumeToken, currentStep, totalSteps }: ResumeEmailRequest = await req.json();
+    const { email, firstName: rawFirstName, resumeToken: rawToken, currentStep: rawStep, totalSteps: rawTotal }: ResumeEmailRequest = await req.json();
+
+    // Public endpoint that emails an address the caller supplies: validate,
+    // rate limit (per IP and per recipient) and escape everything we echo back.
+    const blocked = await guardPublicSender(req, _sb, "send-resume-link", email);
+    if (blocked) return blocked;
+    const firstName = escapeHtml(cleanText(rawFirstName, 60));
+    const resumeToken = encodeURIComponent(cleanText(rawToken, 128));
+    const currentStep = Math.max(0, Math.floor(Number(rawStep) || 0));
+    const totalSteps = Math.max(1, Math.floor(Number(rawTotal) || 1));
 
     console.log("Sending resume link to:", email);
 

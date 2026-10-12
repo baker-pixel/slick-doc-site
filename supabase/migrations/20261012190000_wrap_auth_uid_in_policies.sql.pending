@@ -1,0 +1,56 @@
+-- NOT YET APPLIED (kept as .pending so `supabase db push` ignores it).
+--
+-- Supabase advisor `auth_rls_initplan`: policies that call auth.uid() directly
+-- re-evaluate it for every row. Wrapping it as ( SELECT auth.uid() AS uid ) lets
+-- Postgres evaluate it once per query. Semantics are identical; this is a pure
+-- performance rewrite of 170+ policies.
+--
+-- Safety: every policy definition is backed up first (private_backup schema, RLS
+-- on with no policies, so unreachable from the API), each ALTER is isolated so
+-- one failure can't affect others, and results are logged. To revert a policy:
+--   ALTER POLICY "<name>" ON public.<table> USING (<qual>) WITH CHECK (<with_check>)
+-- using the row in private_backup.policy_defs_20261012.
+--
+-- Verify afterwards: re-run the Supabase performance advisor (auth_rls_initplan
+-- should drop to ~0) and spot-check a client login, an admin panel page, and an
+-- anonymous gap-analysis submission.
+
+create schema if not exists private_backup;
+
+create table if not exists private_backup.policy_defs_20261012 as
+select schemaname, tablename, policyname, permissive, roles::text[] as roles, cmd, qual, with_check
+from pg_policies where schemaname = 'public';
+alter table private_backup.policy_defs_20261012 enable row level security;
+
+create table if not exists private_backup.policy_rewrite_log (policy text, tbl text, result text);
+alter table private_backup.policy_rewrite_log enable row level security;
+
+do $$
+declare r record; nq text; nw text; stmt text;
+begin
+  for r in select * from pg_policies where schemaname = 'public' loop
+    -- normalise any already-wrapped form first, then wrap every occurrence once
+    nq := case when r.qual is null then null else
+      replace(replace(replace(replace(r.qual,
+        '( SELECT auth.uid() AS uid)', 'auth.uid()'), 'auth.uid()', '( SELECT auth.uid() AS uid)'),
+        '( SELECT auth.role() AS role)', 'auth.role()'), 'auth.role()', '( SELECT auth.role() AS role)') end;
+    nw := case when r.with_check is null then null else
+      replace(replace(replace(replace(r.with_check,
+        '( SELECT auth.uid() AS uid)', 'auth.uid()'), 'auth.uid()', '( SELECT auth.uid() AS uid)'),
+        '( SELECT auth.role() AS role)', 'auth.role()'), 'auth.role()', '( SELECT auth.role() AS role)') end;
+
+    if nq is not distinct from r.qual and nw is not distinct from r.with_check then continue; end if;
+
+    stmt := format('alter policy %I on public.%I', r.policyname, r.tablename)
+         || case when nq is not null then format(' using (%s)', nq) else '' end
+         || case when nw is not null then format(' with check (%s)', nw) else '' end;
+    begin
+      execute stmt;
+      insert into private_backup.policy_rewrite_log values (r.policyname, r.tablename, 'ok');
+    exception when others then
+      insert into private_backup.policy_rewrite_log values (r.policyname, r.tablename, 'ERR: ' || left(sqlerrm, 80));
+    end;
+  end loop;
+end $$;
+
+-- Review: select result like 'ERR%' as failed, count(*) from private_backup.policy_rewrite_log group by 1;

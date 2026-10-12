@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { cleanText, escapeHtml, guardPublicSender } from "../_shared/publicEmailGuard.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
@@ -114,8 +115,11 @@ function uint8ToBase64(bytes: Uint8Array): string {
 // instead of re-rendering the report inline. ---
 
 function buildEmailHtml(params: ReportEmailRequest): string {
-  const { firstName, businessName, resumeToken } = params;
-  const dashboardUrl = resumeToken ? `${APP_URL}/dashboard/${resumeToken}` : null;
+  const firstName = escapeHtml(cleanText(params.firstName, 60));
+  const businessName = escapeHtml(cleanText(params.businessName, 100));
+  const dashboardUrl = params.resumeToken
+    ? `${APP_URL}/dashboard/${encodeURIComponent(cleanText(params.resumeToken, 128))}`
+    : null;
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your SYSTEM Gap Report</title></head>
@@ -196,7 +200,13 @@ const handler = async (req: Request): Promise<Response> => {
   const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const body: ReportEmailRequest = await req.json();
-    const { email, businessName } = body;
+    const { email } = body;
+
+    // Public endpoint that emails an address the caller supplies (and renders a
+    // PDF from a caller-supplied payload): validate + rate limit per IP and recipient.
+    const blocked = await guardPublicSender(req, _sb, "send-gap-report", email);
+    if (blocked) return blocked;
+    const businessName = cleanText(body.businessName, 100);
 
     console.log("Sending gap report to:", email);
 

@@ -69,6 +69,32 @@ export async function createCheckoutSession(
 
   const customerId = await ensureStripeCustomer(supabase, acct);
 
+  // Our DB can lag Stripe (webhook not landed yet), so ask Stripe directly:
+  // never open a second checkout for a customer who already has a live plan.
+  const subs = await stripeRequest<{ data: Array<{ status: string }> }>("GET", "/subscriptions", {
+    customer: customerId,
+    status: "all",
+    limit: 10,
+  });
+  if (subs.data.some((s) => ["active", "trialing", "past_due"].includes(s.status))) {
+    throw new Error("This account already has a subscription. Use Manage billing to update it.");
+  }
+
+  // Only one payable checkout may exist per customer: expire any still-open
+  // session so two tabs / a double click can't both be paid.
+  const open = await stripeRequest<{ data: Array<{ id: string }> }>("GET", "/checkout/sessions", {
+    customer: customerId,
+    status: "open",
+    limit: 10,
+  });
+  await Promise.all(
+    open.data.map((s) =>
+      stripeRequest("POST", `/checkout/sessions/${s.id}/expire`).catch((e) =>
+        console.warn("could not expire open checkout session", s.id, e)
+      )
+    ),
+  );
+
   const base = flow === "signup"
     ? trustedOrigin(originHint, Deno.env.get("MARKETING_SITE_URL") || MARKETING_ORIGIN)
     : portalOrigin(originHint);

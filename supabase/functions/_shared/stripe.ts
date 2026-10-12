@@ -113,3 +113,34 @@ export async function verifyStripeSignature(
   const expected = hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${rawBody}`)));
   return signatures.some((s) => timingSafeEqual(s, expected));
 }
+
+/**
+ * Refunds whatever paid a Stripe invoice. The payment reference lives in
+ * different places across Stripe API versions (invoice.payment_intent,
+ * invoice.charge, or the invoice_payments list), so try each. Returns the
+ * refund id, or null when there was nothing to refund / no payment found.
+ */
+export async function refundInvoice(invoiceId: string, reason = "duplicate"): Promise<string | null> {
+  const inv = await stripeRequest<any>("GET", `/invoices/${invoiceId}`);
+  if (!inv.amount_paid || inv.amount_paid <= 0) return null;
+
+  let paymentIntent: string | null = typeof inv.payment_intent === "string" ? inv.payment_intent : null;
+  const charge: string | null = typeof inv.charge === "string" ? inv.charge : null;
+
+  if (!paymentIntent && !charge) {
+    const payments = await stripeRequest<any>("GET", "/invoice_payments", { invoice: invoiceId, limit: 5 })
+      .catch(() => null);
+    const paid = payments?.data?.find((p: any) => p.status === "paid") ?? payments?.data?.[0];
+    const pi = paid?.payment?.payment_intent;
+    paymentIntent = typeof pi === "string" ? pi : null;
+  }
+  if (!paymentIntent && !charge) return null;
+
+  const refund = await stripeRequest<{ id: string }>(
+    "POST",
+    "/refunds",
+    { ...(paymentIntent ? { payment_intent: paymentIntent } : { charge }), reason },
+    { idempotencyKey: `refund-${invoiceId}` },
+  );
+  return refund.id;
+}
