@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { jsonResponse, errorResponse } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
-import { stripeRequest, tierForPriceId, verifyStripeSignature } from "../_shared/stripe.ts";
+import { refundInvoice, stripeRequest, tierForPriceId, verifyStripeSignature } from "../_shared/stripe.ts";
+import { decideClaim, isDuplicateSubscription } from "../_shared/stripeDedupe.ts";
+import { logAlert } from "../_shared/alerts.ts";
 import { applyBillingDecision } from "../_shared/billingGate.ts";
 import { sendPaymentFailedEmail, sendServicesPausedEmail } from "../_shared/billingEmail.ts";
 
@@ -57,6 +59,11 @@ async function syncSubscription(supabase: Supabase, sub: any) {
     return;
   }
 
+  if (isDuplicateSubscription(acct, { id: sub.id, status })) {
+    await resolveDuplicateSubscription(supabase, acct, sub);
+    return;
+  }
+
   const item = sub.items?.data?.[0];
   const priceId = item?.price?.id ?? null;
   const tier = tierForPriceId(priceId);
@@ -83,6 +90,45 @@ async function syncSubscription(supabase: Supabase, sub: any) {
   if (error) throw error;
 
   await enforce(supabase, acct);
+}
+
+/**
+ * The client paid twice (two checkout sessions both completed). Keep the
+ * original subscription; cancel the newer one so it never bills again, refund
+ * what it just charged, and alert an admin so nothing is silent.
+ */
+async function resolveDuplicateSubscription(supabase: Supabase, acct: any, sub: any) {
+  console.warn(`stripe-webhook: duplicate subscription ${sub.id} for client ${acct.id}; cancelling + refunding`);
+
+  await stripeRequest("DELETE", `/subscriptions/${sub.id}`).catch((e) => {
+    // Already cancelled by an earlier delivery is fine; anything else surfaces below.
+    if (!String(e?.message ?? e).includes("resource_missing")) console.error("cancel duplicate failed:", e);
+  });
+
+  let refundId: string | null = null;
+  let refundError: string | null = null;
+  try {
+    const invoices = await stripeRequest<{ data: Array<{ id: string }> }>("GET", "/invoices", {
+      subscription: sub.id,
+      limit: 1,
+    });
+    const invoiceId = invoices.data[0]?.id;
+    if (invoiceId) refundId = await refundInvoice(invoiceId, "duplicate");
+  } catch (e) {
+    refundError = String((e as Error)?.message ?? e);
+  }
+
+  await logAlert(supabase, {
+    source: "stripe-webhook",
+    alertType: "duplicate_payment",
+    severity: refundId ? "high" : "critical",
+    title: `Duplicate payment ${refundId ? "refunded" : "NEEDS MANUAL REFUND"}: ${acct.business_name}`,
+    message: refundId
+      ? `${acct.business_name} paid for a second subscription (${sub.id}). It was cancelled and refunded (${refundId}); the original subscription is unchanged.`
+      : `${acct.business_name} paid for a second subscription (${sub.id}). It was cancelled but the refund could not be completed${refundError ? `: ${refundError}` : ""}. Refund it manually in Stripe.`,
+    sourceId: acct.id,
+    metadata: { duplicate_subscription: sub.id, original_subscription: acct.stripe_subscription_id, refund_id: refundId },
+  });
 }
 
 /** Apply pause/resume and tell the client when we just paused them. */
@@ -283,15 +329,38 @@ serve(async (req) => {
   const event = JSON.parse(raw);
   const supabase = serviceClient();
 
-  // Claim the event id; a duplicate insert means we've already handled it.
+  // Claim the event id. A repeat id is a duplicate (already completed), an
+  // in-flight delivery (ask Stripe to retry later), or a claim whose earlier
+  // attempt died before finishing (take it over rather than lose the event).
   const { error: claimErr } = await supabase.from("stripe_events").insert({ id: event.id, type: event.type });
   if (claimErr) {
-    if (claimErr.code === "23505") return jsonResponse({ received: true, duplicate: true });
-    return errorResponse(claimErr, 500);
+    if (claimErr.code !== "23505") return errorResponse(claimErr, 500);
+
+    const { data: existing } = await supabase
+      .from("stripe_events")
+      .select("completed_at, processed_at")
+      .eq("id", event.id)
+      .maybeSingle();
+    const decision = decideClaim(existing);
+    if (decision === "duplicate") return jsonResponse({ received: true, duplicate: true });
+    if (decision === "in_progress") return jsonResponse({ error: "event in progress" }, 409);
+    if (decision === "take_over") {
+      // Optimistic takeover: only one retry wins the stale claim.
+      const { data: won } = await supabase
+        .from("stripe_events")
+        .update({ processed_at: new Date().toISOString() })
+        .eq("id", event.id)
+        .is("completed_at", null)
+        .eq("processed_at", existing!.processed_at)
+        .select("id")
+        .maybeSingle();
+      if (!won) return jsonResponse({ error: "event in progress" }, 409);
+    }
   }
 
   try {
     await handleEvent(supabase, event);
+    await supabase.from("stripe_events").update({ completed_at: new Date().toISOString() }).eq("id", event.id);
     return jsonResponse({ received: true });
   } catch (err) {
     console.error(`stripe-webhook: ${event.type} (${event.id}) failed:`, err);
