@@ -40,6 +40,11 @@ interface Prospect {
   clicked_at: string | null;
   reply_snippet: string | null;
   replied_at: string | null;
+  // Only present for campaign (CSV) contacts opened from the Campaigns section.
+  email?: string | null;
+  contact_first_name?: string | null;
+  contact_last_name?: string | null;
+  contact_title?: string | null;
 }
 
 interface ProspectEmail {
@@ -204,6 +209,22 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     setEmailsLoading(false);
   };
 
+  // Campaign contacts aren't in the pipeline list above; fetch the row on demand
+  // and show the same detail view (reason matched + the email sequence).
+  const openCampaignLead = async (leadId: string) => {
+    const { data, error } = await supabase
+      .from("prospects")
+      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at, email, contact_first_name, contact_last_name, contact_title")
+      .eq("id", leadId)
+      .eq("client_id", clientAccountId)
+      .maybeSingle();
+    if (error || !data) {
+      toast({ title: "Couldn't open this contact", variant: "destructive" });
+      return;
+    }
+    openDetail(data as unknown as Prospect);
+  };
+
   const visible = allProspects.filter((p) => p.status !== "discovered");
 
   // Campaign-level stats, computed from what's already fetched -- no new RPC
@@ -319,7 +340,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         </Button>
       </div>
 
-      <CampaignsSection clientAccountId={clientAccountId} hasMailbox={hasMailbox} />
+      <CampaignsSection clientAccountId={clientAccountId} hasMailbox={hasMailbox} onOpenLead={openCampaignLead} />
 
       <Card className="overflow-hidden">
         {loading ? (
@@ -544,6 +565,15 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
               </DialogHeader>
 
               <div className="min-w-0 space-y-4 text-sm">
+                {(selected.contact_first_name || selected.email) && (
+                  <div className="min-w-0 text-sm">
+                    <div className="font-medium">
+                      {[selected.contact_first_name, selected.contact_last_name].filter(Boolean).join(" ") || selected.name}
+                      {selected.contact_title ? <span className="font-normal text-muted-foreground"> · {selected.contact_title}</span> : null}
+                    </div>
+                    {selected.email && <div className="truncate text-xs text-muted-foreground">{selected.email}</div>}
+                  </div>
+                )}
                 <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
                   <MapPin className="w-4 h-4 shrink-0" />
                   {selected.business_type ?? "Business"}{selected.city ? ` · ${selected.city}` : ""}
