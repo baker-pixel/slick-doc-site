@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/s
 import { ClientPortalSidebar, type PortalTab, type BadgeCounts, type ClientTier } from "@/components/client-portal/ClientPortalSidebar";
 
 import { usePortalPreferences } from "@/hooks/use-portal-preferences";
+import { BillingBanner } from "@/components/client-portal/BillingBanner";
 
 // Tab Components
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
@@ -106,7 +107,11 @@ export default function ClientPortal() {
   
   // Portal preferences hook
   const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(user?.id);
-  const [activeTab, setActiveTab] = useState<PortalTab>(preferences.default_landing_page || "activity");
+  // Stripe sends people back to /portal?tab=invoices&checkout=success|cancelled.
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<PortalTab>(
+    searchParams.get("tab") === "invoices" ? "invoices" : preferences.default_landing_page || "activity",
+  );
   // When navigating to social from the onboarding activity tab, open to Connected Accounts
   const [socialInitialTab, setSocialInitialTab] = useState<"composer" | "accounts">("accounts");
 
@@ -172,7 +177,8 @@ export default function ClientPortal() {
 
   // Update active tab when preferences load
   useEffect(() => {
-    if (!preferencesLoading && preferences.default_landing_page) {
+    // A Stripe return (?tab=invoices) wins over the saved landing page.
+    if (!preferencesLoading && preferences.default_landing_page && searchParams.get("tab") !== "invoices") {
       setActiveTab(preferences.default_landing_page);
     }
   }, [preferences.default_landing_page, preferencesLoading]);
@@ -505,6 +511,12 @@ export default function ClientPortal() {
           {/* Main Content */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8">
             <div className="animate-fade-in max-w-7xl mx-auto">
+              {portalUser && activeTab !== "invoices" && (
+                <BillingBanner
+                  clientAccountId={portalUser.client_account_id}
+                  onOpenBilling={() => handleTabChange("invoices")}
+                />
+              )}
               <ErrorBoundary key={activeTab} variant="inline">
                 {renderContent()}
               </ErrorBoundary>

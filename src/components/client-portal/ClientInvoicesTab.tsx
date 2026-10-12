@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, Receipt, CreditCard, CheckCircle, Clock, AlertCircle, Download } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { BillingCard } from "@/components/client-portal/BillingCard";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
@@ -32,6 +34,8 @@ interface Invoice {
   description: string | null;
   line_items: LineItems | null;
   created_at: string;
+  hosted_invoice_url: string | null;
+  invoice_pdf_url: string | null;
 }
 
 interface ClientInvoicesTabProps {
@@ -42,6 +46,8 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [searchParams] = useSearchParams();
+  const justCheckedOut = searchParams.get("checkout") === "success";
 
   useEffect(() => {
     fetchInvoices();
@@ -101,6 +107,12 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
     if (status === "paid") {
       return <Badge className="bg-green-100 text-green-800">Paid</Badge>;
     }
+    if (status === "failed") {
+      return <Badge className="bg-red-100 text-red-800">Payment Failed</Badge>;
+    }
+    if (status === "void") {
+      return <Badge className="bg-gray-100 text-gray-800">Void</Badge>;
+    }
     if (isPastDue) {
       return <Badge className="bg-red-100 text-red-800">Past Due</Badge>;
     }
@@ -110,10 +122,13 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
     return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>;
   };
 
-  // No payment processor is wired up yet (would need Stripe or similar
-  // configured server-side). Rather than a fake "redirecting to payment"
-  // message that does nothing, this opens a real email to arrange payment.
+  // Stripe-generated invoices pay through Stripe's hosted page; invoices an
+  // admin created by hand (no Stripe link) fall back to emailing billing.
   const handlePayNow = (invoice: Invoice) => {
+    if (invoice.hosted_invoice_url) {
+      window.open(invoice.hosted_invoice_url, "_blank", "noopener,noreferrer");
+      return;
+    }
     const subject = encodeURIComponent(`Payment for Invoice ${invoice.invoice_number}`);
     const body = encodeURIComponent(
       `Hi,\n\nI'd like to pay invoice ${invoice.invoice_number} for ${formatCurrency(Number(invoice.amount), invoice.currency)}, due ${format(new Date(invoice.due_date), "MMM d, yyyy")}.\n\nPlease send payment instructions.\n\nThanks!`
@@ -126,6 +141,10 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
   };
 
   const handleDownloadPdf = (invoice: Invoice) => {
+    if (invoice.invoice_pdf_url) {
+      window.open(invoice.invoice_pdf_url, "_blank", "noopener,noreferrer");
+      return;
+    }
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text(`Invoice ${invoice.invoice_number}`, 14, 20);
@@ -173,14 +192,14 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
 
   // Calculate summary stats
   const totalOutstanding = invoices
-    .filter((i) => i.status === "pending")
+    .filter((i) => i.status === "pending" || i.status === "failed")
     .reduce((sum, i) => sum + Number(i.amount), 0);
   
   const totalPaid = invoices
     .filter((i) => i.status === "paid")
     .reduce((sum, i) => sum + Number(i.amount), 0);
 
-  const pendingInvoices = invoices.filter((i) => i.status === "pending");
+  const pendingInvoices = invoices.filter((i) => i.status === "pending" || i.status === "failed");
   const paidInvoices = invoices.filter((i) => i.status === "paid");
 
   return (
@@ -189,6 +208,8 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
         <h2 className="text-2xl font-bold text-foreground">Invoices & Payments</h2>
         <p className="text-muted-foreground">View and manage your billing</p>
       </div>
+
+      <BillingCard clientAccountId={clientAccountId} justCheckedOut={justCheckedOut} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -279,7 +300,7 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
                             }}
                           >
                             <CreditCard className="h-4 w-4 mr-2" />
-                            Request Payment Instructions
+                            {invoice.hosted_invoice_url ? "Pay now" : "Request Payment Instructions"}
                           </Button>
                         </div>
                       </div>
@@ -385,10 +406,10 @@ export default function ClientInvoicesTab({ clientAccountId }: ClientInvoicesTab
                 )}
 
                 <div className="flex gap-2 pt-4">
-                  {selectedInvoice.status === "pending" && (
+                  {(selectedInvoice.status === "pending" || selectedInvoice.status === "failed") && (
                     <Button className="flex-1" onClick={() => handlePayNow(selectedInvoice)}>
                       <CreditCard className="h-4 w-4 mr-2" />
-                      Request Payment Instructions
+                      {selectedInvoice.hosted_invoice_url ? "Pay now" : "Request Payment Instructions"}
                     </Button>
                   )}
                   <Button variant="outline" className="flex-1" onClick={() => handleDownloadPdf(selectedInvoice)}>

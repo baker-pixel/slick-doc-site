@@ -477,7 +477,7 @@ export type Database = {
           {
             foreignKeyName: "ai_readiness_scores_client_id_fkey"
             columns: ["client_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "client_accounts"
             referencedColumns: ["id"]
           },
@@ -890,8 +890,10 @@ export type Database = {
           brand_voice: Json | null
           business_name: string
           business_summary: Json | null
+          cancel_at_period_end: boolean
           context_profile: Json | null
           created_at: string
+          current_period_end: string | null
           email: string
           first_name: string | null
           ga4_property_id: string | null
@@ -907,12 +909,16 @@ export type Database = {
           level: number | null
           onboarded_at: string | null
           outreach_settings: Json
+          paused_for_billing: boolean
+          payment_failed_at: string | null
           plan_tier: string | null
           posting_preferences: Json | null
           review_qr_image_url: string | null
           status: string
           stripe_customer_id: string | null
+          stripe_price_id: string | null
           stripe_subscription_id: string | null
+          subscription_status: string
           tier: string
           tone: string | null
           updated_at: string
@@ -923,8 +929,10 @@ export type Database = {
           brand_voice?: Json | null
           business_name: string
           business_summary?: Json | null
+          cancel_at_period_end?: boolean
           context_profile?: Json | null
           created_at?: string
+          current_period_end?: string | null
           email: string
           first_name?: string | null
           ga4_property_id?: string | null
@@ -940,12 +948,16 @@ export type Database = {
           level?: number | null
           onboarded_at?: string | null
           outreach_settings?: Json
+          paused_for_billing?: boolean
+          payment_failed_at?: string | null
           plan_tier?: string | null
           posting_preferences?: Json | null
           review_qr_image_url?: string | null
           status?: string
           stripe_customer_id?: string | null
+          stripe_price_id?: string | null
           stripe_subscription_id?: string | null
+          subscription_status?: string
           tier: string
           tone?: string | null
           updated_at?: string
@@ -956,8 +968,10 @@ export type Database = {
           brand_voice?: Json | null
           business_name?: string
           business_summary?: Json | null
+          cancel_at_period_end?: boolean
           context_profile?: Json | null
           created_at?: string
+          current_period_end?: string | null
           email?: string
           first_name?: string | null
           ga4_property_id?: string | null
@@ -973,12 +987,16 @@ export type Database = {
           level?: number | null
           onboarded_at?: string | null
           outreach_settings?: Json
+          paused_for_billing?: boolean
+          payment_failed_at?: string | null
           plan_tier?: string | null
           posting_preferences?: Json | null
           review_qr_image_url?: string | null
           status?: string
           stripe_customer_id?: string | null
+          stripe_price_id?: string | null
           stripe_subscription_id?: string | null
+          subscription_status?: string
           tier?: string
           tone?: string | null
           updated_at?: string
@@ -1301,14 +1319,18 @@ export type Database = {
       client_invoices: {
         Row: {
           amount: number
+          attempt_count: number
           client_account_id: string
           created_at: string
           currency: string | null
           description: string | null
           due_date: string
+          hosted_invoice_url: string | null
           id: string
           invoice_number: string
+          invoice_pdf_url: string | null
           line_items: Json | null
+          next_payment_attempt: string | null
           paid_at: string | null
           status: string
           stripe_invoice_id: string | null
@@ -1317,14 +1339,18 @@ export type Database = {
         }
         Insert: {
           amount: number
+          attempt_count?: number
           client_account_id: string
           created_at?: string
           currency?: string | null
           description?: string | null
           due_date: string
+          hosted_invoice_url?: string | null
           id?: string
           invoice_number: string
+          invoice_pdf_url?: string | null
           line_items?: Json | null
+          next_payment_attempt?: string | null
           paid_at?: string | null
           status?: string
           stripe_invoice_id?: string | null
@@ -1333,14 +1359,18 @@ export type Database = {
         }
         Update: {
           amount?: number
+          attempt_count?: number
           client_account_id?: string
           created_at?: string
           currency?: string | null
           description?: string | null
           due_date?: string
+          hosted_invoice_url?: string | null
           id?: string
           invoice_number?: string
+          invoice_pdf_url?: string | null
           line_items?: Json | null
+          next_payment_attempt?: string | null
           paid_at?: string | null
           status?: string
           stripe_invoice_id?: string | null
@@ -1681,6 +1711,7 @@ export type Database = {
           theme: string
           updated_at: string
           user_id: string
+          weekly_recap_email: boolean
         }
         Insert: {
           accent_color?: string
@@ -1705,6 +1736,7 @@ export type Database = {
           theme?: string
           updated_at?: string
           user_id: string
+          weekly_recap_email?: boolean
         }
         Update: {
           accent_color?: string
@@ -1729,6 +1761,7 @@ export type Database = {
           theme?: string
           updated_at?: string
           user_id?: string
+          weekly_recap_email?: boolean
         }
         Relationships: [
           {
@@ -1842,6 +1875,7 @@ export type Database = {
           id: string
           kind: string
           name: string
+          pillars_generated_at: string | null
           progress_percentage: number | null
           source_audit_id: string | null
           start_date: string | null
@@ -1856,6 +1890,7 @@ export type Database = {
           id?: string
           kind?: string
           name: string
+          pillars_generated_at?: string | null
           progress_percentage?: number | null
           source_audit_id?: string | null
           start_date?: string | null
@@ -1870,6 +1905,7 @@ export type Database = {
           id?: string
           kind?: string
           name?: string
+          pillars_generated_at?: string | null
           progress_percentage?: number | null
           source_audit_id?: string | null
           start_date?: string | null
@@ -2673,6 +2709,7 @@ export type Database = {
       }
       email_queue: {
         Row: {
+          claimed_at: string | null
           created_at: string
           error_message: string | null
           html_content: string
@@ -2688,6 +2725,7 @@ export type Database = {
           subject: string
         }
         Insert: {
+          claimed_at?: string | null
           created_at?: string
           error_message?: string | null
           html_content: string
@@ -2703,6 +2741,7 @@ export type Database = {
           subject: string
         }
         Update: {
+          claimed_at?: string | null
           created_at?: string
           error_message?: string | null
           html_content?: string
@@ -3278,6 +3317,24 @@ export type Database = {
         }
         Relationships: []
       }
+      internal_secrets: {
+        Row: {
+          created_at: string
+          key: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       keyword_gap_results: {
         Row: {
           client_account_id: string
@@ -3699,6 +3756,56 @@ export type Database = {
         }
         Relationships: []
       }
+      poll_runs: {
+        Row: {
+          bounces: number
+          client_id: string
+          duration_ms: number
+          error: string | null
+          finished_at: string
+          id: string
+          messages_seen: number
+          ok: boolean
+          replies: number
+          started_at: string
+          stored: number
+        }
+        Insert: {
+          bounces?: number
+          client_id: string
+          duration_ms?: number
+          error?: string | null
+          finished_at?: string
+          id?: string
+          messages_seen?: number
+          ok: boolean
+          replies?: number
+          started_at: string
+          stored?: number
+        }
+        Update: {
+          bounces?: number
+          client_id?: string
+          duration_ms?: number
+          error?: string | null
+          finished_at?: string
+          id?: string
+          messages_seen?: number
+          ok?: boolean
+          replies?: number
+          started_at?: string
+          stored?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poll_runs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_comments: {
         Row: {
           client_account_id: string
@@ -3858,14 +3965,153 @@ export type Database = {
           },
         ]
       }
+      prospect_campaigns: {
+        Row: {
+          audience: string
+          client_id: string
+          consent_at: string | null
+          consent_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          import_summary: Json | null
+          kind: string
+          max_steps: number
+          name: string
+          source_filename: string | null
+          status: string
+          topic: string | null
+          topic_details: string | null
+          updated_at: string
+        }
+        Insert: {
+          audience?: string
+          client_id: string
+          consent_at?: string | null
+          consent_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          import_summary?: Json | null
+          kind: string
+          max_steps?: number
+          name: string
+          source_filename?: string | null
+          status?: string
+          topic?: string | null
+          topic_details?: string | null
+          updated_at?: string
+        }
+        Update: {
+          audience?: string
+          client_id?: string
+          consent_at?: string | null
+          consent_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          import_summary?: Json | null
+          kind?: string
+          max_steps?: number
+          name?: string
+          source_filename?: string | null
+          status?: string
+          topic?: string | null
+          topic_details?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospect_replies: {
+        Row: {
+          body_text: string | null
+          classification: string
+          client_id: string
+          created_at: string
+          email_log_id: string | null
+          from_address: string | null
+          id: string
+          in_reply_to: string | null
+          match_method: string
+          message_id: string
+          processed_at: string | null
+          prospect_id: string | null
+          received_at: string
+          snippet: string | null
+          subject: string | null
+        }
+        Insert: {
+          body_text?: string | null
+          classification: string
+          client_id: string
+          created_at?: string
+          email_log_id?: string | null
+          from_address?: string | null
+          id?: string
+          in_reply_to?: string | null
+          match_method: string
+          message_id: string
+          processed_at?: string | null
+          prospect_id?: string | null
+          received_at?: string
+          snippet?: string | null
+          subject?: string | null
+        }
+        Update: {
+          body_text?: string | null
+          classification?: string
+          client_id?: string
+          created_at?: string
+          email_log_id?: string | null
+          from_address?: string | null
+          id?: string
+          in_reply_to?: string | null
+          match_method?: string
+          message_id?: string
+          processed_at?: string | null
+          prospect_id?: string | null
+          received_at?: string
+          snippet?: string | null
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_replies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospect_replies_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prospects: {
         Row: {
+          analysis_snapshot: Json | null
           approved_at: string | null
           approved_by: string | null
           business_type: string | null
+          campaign_id: string | null
           city: string | null
           clicked_at: string | null
           client_id: string | null
+          contact_first_name: string | null
+          contact_last_name: string | null
+          contact_title: string | null
           context_profile: Json | null
           converted_at: string | null
           created_at: string
@@ -3881,20 +4127,30 @@ export type Database = {
           personalization_hook: string | null
           phone: string | null
           recommended_tier: string | null
+          replied_at: string | null
+          reply_snippet: string | null
+          report_sent_at: string | null
+          report_token: string
           research_snapshot: Json | null
           source: string
           status: string
           submission_id: string | null
           top_weaknesses: Json | null
+          updated_at: string
           website_url: string
         }
         Insert: {
+          analysis_snapshot?: Json | null
           approved_at?: string | null
           approved_by?: string | null
           business_type?: string | null
+          campaign_id?: string | null
           city?: string | null
           clicked_at?: string | null
           client_id?: string | null
+          contact_first_name?: string | null
+          contact_last_name?: string | null
+          contact_title?: string | null
           context_profile?: Json | null
           converted_at?: string | null
           created_at?: string
@@ -3910,20 +4166,30 @@ export type Database = {
           personalization_hook?: string | null
           phone?: string | null
           recommended_tier?: string | null
+          replied_at?: string | null
+          reply_snippet?: string | null
+          report_sent_at?: string | null
+          report_token?: string
           research_snapshot?: Json | null
           source?: string
           status?: string
           submission_id?: string | null
           top_weaknesses?: Json | null
+          updated_at?: string
           website_url: string
         }
         Update: {
+          analysis_snapshot?: Json | null
           approved_at?: string | null
           approved_by?: string | null
           business_type?: string | null
+          campaign_id?: string | null
           city?: string | null
           clicked_at?: string | null
           client_id?: string | null
+          contact_first_name?: string | null
+          contact_last_name?: string | null
+          contact_title?: string | null
           context_profile?: Json | null
           converted_at?: string | null
           created_at?: string
@@ -3939,14 +4205,26 @@ export type Database = {
           personalization_hook?: string | null
           phone?: string | null
           recommended_tier?: string | null
+          replied_at?: string | null
+          reply_snippet?: string | null
+          report_sent_at?: string | null
+          report_token?: string
           research_snapshot?: Json | null
           source?: string
           status?: string
           submission_id?: string | null
           top_weaknesses?: Json | null
+          updated_at?: string
           website_url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "prospects_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "prospect_campaigns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "prospects_client_id_fkey"
             columns: ["client_id"]
@@ -4189,6 +4467,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scan_rate_limits: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          ip_hash: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_hash?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_hash?: string | null
+        }
+        Relationships: []
       }
       scan_results: {
         Row: {
@@ -4641,6 +4940,24 @@ export type Database = {
           parsed_content?: Json | null
           tier?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      stripe_events: {
+        Row: {
+          id: string
+          processed_at: string
+          type: string
+        }
+        Insert: {
+          id: string
+          processed_at?: string
+          type: string
+        }
+        Update: {
+          id?: string
+          processed_at?: string
+          type?: string
         }
         Relationships: []
       }
@@ -5116,6 +5433,31 @@ export type Database = {
         Args: { p_client_account_id: string; p_include_prospect?: boolean }
         Returns: undefined
       }
+      client_campaign_stats: {
+        Args: { p_client_account_id: string }
+        Returns: {
+          bounced: number
+          campaign_id: string
+          clicked: number
+          converted: number
+          emailed: number
+          finished: number
+          in_outreach: number
+          opened: number
+          queued: number
+          replied: number
+          total: number
+          unsubscribed: number
+        }[]
+      }
+      client_get_outreach_sequence: {
+        Args: never
+        Returns: {
+          cumulative_days: number
+          delay_days: number
+          step_number: number
+        }[]
+      }
       client_get_prospect_emails: {
         Args: { p_client_account_id: string; p_prospect_id: string }
         Returns: {
@@ -5185,6 +5527,7 @@ export type Database = {
         }
         Returns: string
       }
+      report_failed_cron_http_calls: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "client"
@@ -5203,12 +5546,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5232,11 +5575,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5257,11 +5600,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5282,11 +5625,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5299,11 +5642,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

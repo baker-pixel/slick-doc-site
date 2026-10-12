@@ -121,8 +121,7 @@ export default function TierGrowth() {
                   For SMBs with moderate gaps who need activation across multiple channels to scale effectively.
                 </p>
                 <div className="flex items-baseline gap-2 mb-8">
-                  <span className="text-5xl font-bold text-foreground">$449</span>
-                  <span className="text-2xl text-muted-foreground">–549</span>
+                  <span className="text-5xl font-bold text-foreground">$599</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
                 <div className="flex gap-4">
