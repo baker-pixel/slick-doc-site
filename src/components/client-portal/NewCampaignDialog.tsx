@@ -184,7 +184,7 @@ export function NewCampaignDialog({ open, onOpenChange, clientAccountId, onCreat
         });
         toast({
           title: `${data.imported} contact${data.imported === 1 ? "" : "s"} added`,
-          description: "Emails start after a 48-hour review window. You can pause the campaign any time before then.",
+          description: "The first emails go out within the hour. You can pause the campaign any time to stop the rest.",
         });
       } else {
         const data = await callCampaign({ action: "create_discovery_campaign", client_id: clientAccountId, campaign });
@@ -366,7 +366,7 @@ export function NewCampaignDialog({ open, onOpenChange, clientAccountId, onCreat
                   {s.accepted > 0 && preview.estimated_days !== null && (
                     <p className="text-xs text-muted-foreground">
                       To protect your mailbox we send at most {preview.daily_cap} emails a day, so {preview.total_emails.toLocaleString()} emails
-                      take about {preview.estimated_days} {preview.estimated_days === 1 ? "day" : "days"}. The first go out after a 48-hour review window.
+                      take about {preview.estimated_days} {preview.estimated_days === 1 ? "day" : "days"}. The first go out within the hour of adding them.
                     </p>
                   )}
                   {preview.sample.length > 0 && (

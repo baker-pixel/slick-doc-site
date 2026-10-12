@@ -9,6 +9,7 @@ import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
+import { nurtureStartAt, readyForNurture, stepDelayDays } from "../_shared/dripSchedule.ts";
 import {
   type Audience,
   campaignBlock,
@@ -354,15 +355,18 @@ serve(async (req) => {
     }
     const steps = (sequence.emails as SequenceStep[] | null) ?? [];
 
-    // 1. Move pending prospects (48h+ after approval) to nurture
-    const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
-    const { data: pendingProspects } = await supabase
+    // 1. Move approved pending prospects to nurture: discovery leads after the
+    // 48h review hold, campaign (CSV) leads immediately -- see dripSchedule.ts.
+    const { data: approvedPending } = await supabase
       .from("prospects")
-      .select("id")
+      .select("id, approved_at, campaign_id")
       .eq("status", "pending")
-      .lte("approved_at", cutoff);
+      .not("approved_at", "is", null);
+    const pendingProspects = (approvedPending ?? []).filter(
+      (p: { approved_at: string | null; campaign_id: string | null }) => readyForNurture(p, now),
+    );
 
-    if (pendingProspects && pendingProspects.length > 0) {
+    if (pendingProspects.length > 0) {
       const ids = pendingProspects.map((p: { id: string }) => p.id);
       const { data: moved } = await supabase
         .from("prospects")
@@ -590,12 +594,10 @@ serve(async (req) => {
       );
       if (alreadyQueuedSteps.size >= stepLimit) continue;
 
-      // Clock starts from when nurture began (approved_at + 48h), not
-      // created_at -- prevents prospects discovered days ago from firing
-      // every step at once.
-      const nurtureStart = prospect.approved_at
-        ? new Date(new Date(prospect.approved_at).getTime() + 48 * 60 * 60 * 1000)
-        : new Date(prospect.created_at);
+      // Clock starts from when nurture began (approved_at + the discovery
+      // hold; none for campaign leads), not created_at -- prevents prospects
+      // discovered days ago from firing every step at once.
+      const nurtureStart = nurtureStartAt(prospect);
 
       // Work out each missing step's send time first. A step whose nominal
       // time is already past (late enrollment: email found days after
@@ -607,7 +609,7 @@ serve(async (req) => {
       let previousSendAt: Date | null = null;
       for (let i = 0; i < stepLimit; i++) {
         const stepNumber = i + 1;
-        const delayDays = steps[i].delay_days ?? 0;
+        const delayDays = stepDelayDays(prospect, i, steps[i].delay_days);
         cumulativeDays += delayDays;
         if (stepNumber <= prospect.drip_step) continue; // already sent under this or a prior run
         if (alreadyQueuedSteps.has(stepNumber)) {
