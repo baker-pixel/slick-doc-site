@@ -41,6 +41,7 @@ interface Prospect {
   reply_snippet: string | null;
   replied_at: string | null;
   // Only present for campaign (CSV) contacts opened from the Campaigns section.
+  campaign_id?: string | null;
   email?: string | null;
   contact_first_name?: string | null;
   contact_last_name?: string | null;
@@ -214,7 +215,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const openCampaignLead = async (leadId: string) => {
     const { data, error } = await supabase
       .from("prospects")
-      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at, email, contact_first_name, contact_last_name, contact_title")
+      .select("id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at, campaign_id, email, contact_first_name, contact_last_name, contact_title")
       .eq("id", leadId)
       .eq("client_id", clientAccountId)
       .maybeSingle();
@@ -565,6 +566,11 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
               </DialogHeader>
 
               <div className="min-w-0 space-y-4 text-sm">
+                {selected.campaign_id && (
+                  <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
+                    Campaign contact · from your uploaded list
+                  </Badge>
+                )}
                 {(selected.contact_first_name || selected.email) && (
                   <div className="min-w-0 text-sm">
                     <div className="font-medium">
@@ -612,6 +618,12 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                       )}
                     </div>
                     <p className="text-xs text-emerald-900 whitespace-pre-wrap">{selected.reply_snippet}</p>
+                  </div>
+                )}
+
+                {selected.status === "rejected" && selected.icp_fit_reason && selected.icp_fit_score == null && (
+                  <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {selected.icp_fit_reason}
                   </div>
                 )}
 

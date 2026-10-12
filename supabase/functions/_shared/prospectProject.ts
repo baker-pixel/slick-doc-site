@@ -4,6 +4,8 @@
 // has real activity. Progress = stages achieved ÷ 4. No LLM, cheap enough to
 // run after every discovery/drip run.
 
+import { pipelineOnly } from "./campaignBoundary.ts";
+
 const STAGES = [
   { key: "discovered", name: (n: number) => `Prospects discovered (${n})`, desc: "Businesses matching your ideal customer profile, found and researched." },
   { key: "contacted", name: (n: number) => `Prospects contacted (${n})`, desc: "Prospects who received at least one outreach email." },
@@ -12,8 +14,11 @@ const STAGES = [
 ] as const;
 
 export async function refreshProspectProject(supabase: any, clientId: string): Promise<void> {
-  const { data: prospects } = await supabase
-    .from("prospects").select("status, drip_step").eq("client_id", clientId);
+  // The Lead Generation Plan tracks the always-on agent's pipeline. Campaign
+  // uploads are counted per campaign, so they must not inflate these numbers.
+  const { data: prospects } = await pipelineOnly(
+    supabase.from("prospects").select("status, drip_step").eq("client_id", clientId),
+  );
   const rows: { status: string; drip_step: number | null }[] = prospects ?? [];
 
   const counts: Record<string, number> = {

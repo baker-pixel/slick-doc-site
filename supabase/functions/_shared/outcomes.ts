@@ -1,3 +1,5 @@
+import { pipelineOnly } from "./campaignBoundary.ts";
+
 // Phase F — record and read business-outcome signals. Best-effort writes
 // (never break the caller). This is the input the feedback loops learn from.
 
@@ -37,11 +39,15 @@ export async function getConversionWins(
   clientId: string,
   limit = 8,
 ): Promise<{ name: string; business_type: string | null; summary: string | null }[]> {
-  const { data } = await supabase
-    .from("prospects")
-    .select("name, business_type, context_profile, converted_at, status")
-    .eq("client_id", clientId)
-    .eq("status", "converted")
+  // Pipeline only: a converted campaign contact is not evidence about what the
+  // agent's own discovery should look for (see campaignBoundary.ts).
+  const { data } = await pipelineOnly(
+    supabase
+      .from("prospects")
+      .select("name, business_type, context_profile, converted_at, status")
+      .eq("client_id", clientId)
+      .eq("status", "converted"),
+  )
     .order("converted_at", { ascending: false })
     .limit(limit);
   return (data ?? []).map((p: any) => ({

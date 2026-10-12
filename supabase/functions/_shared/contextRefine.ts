@@ -6,6 +6,7 @@
 // This writes ONLY to client_accounts.context_profile. It triggers no work.
 
 import { callAIJson, MODELS } from "./ai.ts";
+import { pipelineOnly } from "./campaignBoundary.ts";
 
 interface RefineResult {
   refined: boolean;
@@ -27,8 +28,8 @@ export async function refineClientContext(supabase: any, clientId: string): Prom
     supabase.from("generated_content").select("title, rejection_reason")
       .eq("client_id", clientId).eq("status", "rejected").not("rejection_reason", "is", null)
       .gte("updated_at", since).limit(15),
-    supabase.from("prospects").select("business_type, context_profile")
-      .eq("client_id", clientId).eq("status", "converted").limit(10),
+    pipelineOnly(supabase.from("prospects").select("business_type, context_profile")
+      .eq("client_id", clientId).eq("status", "converted")).limit(10),
     supabase.from("outcome_metrics").select("value, captured_at")
       .eq("client_account_id", clientId).eq("metric", "seo_score")
       .order("captured_at", { ascending: true }).limit(20),
