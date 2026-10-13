@@ -73,6 +73,8 @@ import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelec
 import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientHeader";
 import { UnifiedClientView } from "@/components/admin/clients/UnifiedClientView";
 import { AdminHomeDashboard } from "@/components/admin/core/AdminHomeDashboard";
+import { CommandCenter } from "@/components/admin/core/CommandCenter";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1468,7 +1470,7 @@ const AdminInner = () => {
 
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
-      home: "Dashboard",
+      home: "Command Center",
       clients: "Client Management",
       "client-projects": "Client Projects",
       deliverables: "Deliverables",
@@ -1541,6 +1543,23 @@ const AdminInner = () => {
   const isGlobalSection = globalSections.includes(activeSection);
   const needsClientSelection = !isGlobalSection && !selectedClient;
 
+  const selectClientFromHome = (clientId: string, _businessName: string) => {
+    supabase.from("client_accounts").select("*").eq("id", clientId).single().then(({ data }) => {
+      if (data) {
+        setSelectedClient({
+          id: data.id,
+          business_name: data.business_name,
+          email: data.email,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          tier: data.tier,
+          status: data.status,
+          industry: data.industry,
+        });
+      }
+    });
+  };
+
   const handleSelectClient = (client: SelectedClient) => {
     setSelectedClient(client);
   };
@@ -1587,27 +1606,23 @@ const AdminInner = () => {
             {/* Home becomes the dashboard overview or client work */}
             {activeSection === "home" ? (
               !selectedClient ? (
-                <AdminHomeDashboard
-                  adminPassword={storedPassword}
-                  onSelectClient={(clientId, businessName) => {
-                    // Find the full client object
-                    supabase.from("client_accounts").select("*").eq("id", clientId).single().then(({ data }) => {
-                      if (data) {
-                        setSelectedClient({
-                          id: data.id,
-                          business_name: data.business_name,
-                          email: data.email,
-                          first_name: data.first_name,
-                          last_name: data.last_name,
-                          tier: data.tier,
-                          status: data.status,
-                          industry: data.industry,
-                        });
-                      }
-                    });
-                  }}
-                  onNavigateToSection={setActiveSection as (section: string) => void}
-                />
+                <div className="space-y-10">
+                  <CommandCenter
+                    adminPassword={storedPassword}
+                    onSelectClient={selectClientFromHome}
+                    onNavigateToSection={setActiveSection as (section: string) => void}
+                  />
+                  <Collapsible className="border-t pt-6">
+                    <CollapsibleTrigger className="text-lg font-semibold hover:underline">Business snapshot (onboarding, messages, meetings)</CollapsibleTrigger>
+                    <CollapsibleContent className="pt-4">
+                      <AdminHomeDashboard
+                        adminPassword={storedPassword}
+                        onSelectClient={selectClientFromHome}
+                        onNavigateToSection={setActiveSection as (section: string) => void}
+                      />
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
               ) : (
                 <UnifiedClientView client={selectedClient} adminPassword={storedPassword} onNavigateToSection={setActiveSection as (section: string) => void} />
               )
