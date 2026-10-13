@@ -34,6 +34,17 @@ serve(async (req: Request) => {
   let skipped = 0;
   let errors = 0;
 
+  // The gateway cuts a request off at ~150s, and this pass has three stages
+  // (website scans, Apollo email lookup, fit scoring). Scans used to run one at
+  // a time with no limit, so a batch of 30+ new prospects used up the whole
+  // run and the email lookup and scoring never started for them. Scan a few at
+  // once, and budget every stage so all three run on every pass.
+  const runStart = Date.now();
+  const SCAN_BUDGET_MS = 60_000;
+  const SCAN_CONCURRENCY = 4;
+  const EMAIL_DEADLINE_MS = 105_000;
+  const SCORE_DEADLINE_MS = 135_000;
+
   try {
     // Fetch prospects with null context_profile
     // Also picks up prospects whose website scan failed but is still
@@ -49,7 +60,7 @@ serve(async (req: Request) => {
 
     // Note: no early return when empty — the Hunter email enrichment pass
     // below must still run for prospects that have context but no email.
-    for (const prospect of prospects ?? []) {
+    const scanProspect = async (prospect: any) => {
       try {
         // Path A: has submission_id → extract from gap form
         if (prospect.submission_id) {
@@ -62,7 +73,7 @@ serve(async (req: Request) => {
           if (subErr || !sub) {
             console.error("Backfill error for prospect", prospect.id, subErr || "submission not found");
             errors++;
-            continue;
+            return;
           }
 
           const rawGoals = sub.top_business_goals;
@@ -103,7 +114,7 @@ serve(async (req: Request) => {
 
           processed++;
           fromForm++;
-          continue;
+          return;
         }
 
         // Path B: no submission but has website_url → call analyze-website
@@ -135,7 +146,7 @@ serve(async (req: Request) => {
 
           // Rate limit between website calls
           await new Promise((r) => setTimeout(r, 1000));
-          continue;
+          return;
         }
 
         // Path C: nothing to work with
@@ -164,6 +175,16 @@ serve(async (req: Request) => {
           }).eq("id", prospect.id);
         }
       }
+    };
+
+    {
+      const queue = [...(prospects ?? [])];
+      await Promise.all(Array.from({ length: SCAN_CONCURRENCY }, async () => {
+        while (queue.length > 0 && Date.now() - runStart < SCAN_BUDGET_MS) {
+          await scanProspect(queue.shift());
+        }
+      }));
+      if (queue.length > 0) console.log(`Website scans: ${queue.length} prospects left for the next pass`);
     }
 
     // ── Email enrichment via Apollo ─────────────────────────────
@@ -234,6 +255,7 @@ serve(async (req: Request) => {
         }).eq("id", p.id);
 
       for (const p of noEmail) {
+        if (Date.now() - runStart > EMAIL_DEADLINE_MS) break;
         try {
           const domain = new URL(
             p.website_url.startsWith("http") ? p.website_url : `https://${p.website_url}`,
@@ -336,6 +358,7 @@ serve(async (req: Request) => {
         const icpCache = new Map<string, ClientICP | null>();
         const winsCache = new Map<string, Awaited<ReturnType<typeof getConversionWins>>>();
         for (const p of unscored) {
+          if (Date.now() - runStart > SCORE_DEADLINE_MS) break;
           try {
             if (!icpCache.has(p.client_id)) {
               const { data: client } = await supabase
