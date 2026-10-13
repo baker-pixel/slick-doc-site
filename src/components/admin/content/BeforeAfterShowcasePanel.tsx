@@ -22,9 +22,7 @@ import {
   TrendingUp,
   Zap,
   BarChart3,
-  Wand2,
-  Download,
-  Share2
+  Wand2
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
@@ -556,16 +554,6 @@ export default function BeforeAfterShowcasePanel() {
                         </div>
                       )}
 
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-1" />
-                          Export
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Share2 className="h-4 w-4 mr-1" />
-                          Share
-                        </Button>
-                      </div>
                     </CardContent>
                   </Card>
                 ))}

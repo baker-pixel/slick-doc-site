@@ -23,8 +23,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Wand2,
-  Download
+  Wand2
 } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
@@ -390,11 +389,7 @@ export default function QualityAssurancePanel() {
                       )}
 
                       <div className="flex gap-2 mt-4">
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-2" />
-                          Export Report
-                        </Button>
-                        <Button 
+                        <Button
                           variant="outline" 
                           size="sm"
                           onClick={() => runScanMutation.mutate(report.url)}

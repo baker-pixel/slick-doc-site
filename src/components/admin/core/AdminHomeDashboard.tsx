@@ -83,6 +83,28 @@ export function AdminHomeDashboard({
     fetchAllClients();
   }, []);
 
+  // Live updates: refetch quietly (no spinner) whenever any table feeding
+  // these tiles changes. Bursts of events are coalesced into one refetch.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        fetchDashboardStats(true);
+        fetchAllClients();
+      }, 500);
+    };
+    let channel = supabase.channel("admin-home-live");
+    for (const table of ["client_accounts", "client_workflows", "deliverables", "client_messages", "client_meetings", "activity_feed"]) {
+      channel = channel.on("postgres_changes", { event: "*", schema: "public", table }, refresh);
+    }
+    channel.subscribe();
+    return () => {
+      clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const fetchAllClients = async () => {
     const { data } = await supabase
       .from("client_accounts")
@@ -91,8 +113,8 @@ export function AdminHomeDashboard({
     setAllClients(data || []);
   };
 
-  const fetchDashboardStats = async () => {
-    setIsLoading(true);
+  const fetchDashboardStats = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       // Fetch clients
       const { data: clients } = await supabase

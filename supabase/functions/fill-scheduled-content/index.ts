@@ -239,12 +239,19 @@ serve(async (req) => {
 
         let generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
 
+        // Social posts skip both checks below: the client reviews them in their
+        // Approvals tab, so an AI/admin gate in front of that is wasted time and
+        // tokens. Blogs and other platforms keep the gates.
+        const isSocial = AUTO_FORWARD_PLATFORMS.has(slot.platform);
+
         // Claims check: a draft that states product capabilities the client's
         // facts don't support gets one rewrite with those claims called out;
         // if it still fails, it goes to admin review instead of the client's
         // approval queue so an invented feature never reaches them unflagged.
         const factsText = factsForClaimsCheck(client);
-        let unsupportedClaims = await findUnsupportedClaims(generatedContent, factsText, client.id);
+        let unsupportedClaims: string[] | null = isSocial
+          ? null
+          : await findUnsupportedClaims(generatedContent, factsText, client.id);
         if (unsupportedClaims && unsupportedClaims.length > 0) {
           const retryFeedback: ContentFeedbackItem[] = [
             {
@@ -271,12 +278,14 @@ serve(async (req) => {
 
         // Self-QA: cheap second-model critique, best-effort. A QA failure
         // (null) never blocks the draft -- it just means no auto-forward.
-        const qa = await critiqueContent(
-          generatedContent,
-          slot.content_type,
-          client.context_profile?.tone || "professional",
-          client.id,
-        );
+        const qa = isSocial
+          ? null
+          : await critiqueContent(
+              generatedContent,
+              slot.content_type,
+              client.context_profile?.tone || "professional",
+              client.id,
+            );
         const flagged = qaNeedsAttention(qa);
         // Social platforms always go straight to the client's approval queue --
         // admin review is not in this loop. QA still runs and is attached as
@@ -384,7 +393,7 @@ serve(async (req) => {
               client_account_id: slot.client_account_id,
               activity_type: "content_sent_for_approval",
               title: `Sent to client for approval: ${slot.title}`,
-              description: `${slot.content_type} for ${slot.platform} passed QA (score ${qa?.score ?? "n/a"}/10) and was sent straight to the client — no admin action needed.`,
+              description: `${slot.content_type} for ${slot.platform} ${qa ? `passed QA (score ${qa.score}/10) and ` : ""}was sent straight to the client for approval — no admin action needed.`,
               icon: "send",
               metadata: {
                 content_calendar_slot_id: slot.id,
