@@ -5,6 +5,7 @@ import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { generateVisibilityPrompts, probeOpenAI, probeClaude } from "../_shared/aiVisibilityProbe.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { dueForRegen } from "../_shared/billingPeriod.ts";
+import { checkPipelineAuth } from "../_shared/auth.ts";
 
 // Cron now runs daily (see migration 20260921120000) instead of firing every
 // client on the calendar 1st. Each client is only actually probed once
@@ -33,6 +34,17 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  // Each call can spend LLM credits, and verify_jwt alone accepts the public
+  // anon key -- require the pipeline credential (cron secret, service key or
+  // an admin) like the other pipeline functions.
+  const body = await req.json().catch(() => ({}));
+  if (!(await checkPipelineAuth(req, supabase, body.password))) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
