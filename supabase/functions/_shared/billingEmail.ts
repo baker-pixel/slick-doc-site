@@ -7,7 +7,7 @@ const PORTAL_URL = Deno.env.get("CLIENT_PORTAL_URL") || "https://client.orangedo
 const esc = (v: string) =>
   v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-async function send(to: string, subject: string, html: string) {
+export async function send(to: string, subject: string, html: string) {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) {
     console.warn("RESEND_API_KEY not set; skipping billing email to", to);

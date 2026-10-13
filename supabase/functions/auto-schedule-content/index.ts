@@ -132,12 +132,15 @@ serve(async (req) => {
       );
     }
 
-    // 28-day rolling window starting from this week's Monday
+    // Rolling window starting from this week's Monday. Clients with an active
+    // work cycle are scheduled to the END of that cycle instead of a fixed 28
+    // days (see cycleByClient below), so one paid period = one fully scheduled
+    // period; the wide query window just has to cover the longest cycle.
     const windowStart = getMondayOfWeek(new Date());
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const windowEnd = new Date(windowStart);
-    windowEnd.setDate(windowEnd.getDate() + 28);
+    windowEnd.setDate(windowEnd.getDate() + 70);
 
     // Fetch all existing slots in the window in one query (all clients)
     const clientIds = clients.map((c: any) => c.id);
@@ -166,6 +169,21 @@ serve(async (req) => {
       connectedByClient.get(acct.client_id)!.add(acct.platform);
     }
 
+    // Active cycle per client: the cycle whose period contains now.
+    const nowIso = new Date().toISOString();
+    const { data: activeCycles } = await supabase
+      .from("client_cycles")
+      .select("id, client_account_id, period_start, period_end")
+      .in("client_account_id", clientIds)
+      .in("status", ["planning", "active"])
+      .lte("period_start", nowIso)
+      .gt("period_end", nowIso)
+      .order("period_end", { ascending: false });
+    const cycleByClient = new Map<string, { id: string; period_start: string; period_end: string }>();
+    for (const c of activeCycles || []) {
+      if (!cycleByClient.has(c.client_account_id)) cycleByClient.set(c.client_account_id, c);
+    }
+
     const allRows: any[] = [];
     const summary: { client: string; tier: string; created: number }[] = [];
 
@@ -174,7 +192,16 @@ serve(async (req) => {
       const plan: WeeklySlot[] = buildWeeklyPlan(tier, connectedByClient.get(client.id) ?? new Set());
       const clientRows: any[] = [];
 
-      for (let week = 0; week < 4; week++) {
+      // Cycle clients: schedule from the cycle start (never the past) to its
+      // end. Others keep the 4-week rolling window.
+      const cycle = cycleByClient.get(client.id);
+      const cycleStart = cycle ? new Date(cycle.period_start) : null;
+      const cycleEnd = cycle ? new Date(cycle.period_end) : null;
+      const weeks = cycleEnd
+        ? Math.min(10, Math.ceil((cycleEnd.getTime() - windowStart.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+        : 4;
+
+      for (let week = 0; week < weeks; week++) {
         const mondayOfThisWeek = new Date(windowStart);
         mondayOfThisWeek.setDate(mondayOfThisWeek.getDate() + week * 7);
 
@@ -187,6 +214,8 @@ serve(async (req) => {
           // land before today (e.g. a client onboarded on Tuesday would get a
           // Monday post dated before they existed). Never schedule in the past.
           if (slotDate.getTime() < todayStart.getTime()) continue;
+          if (cycleStart && slotDate.getTime() < cycleStart.getTime()) continue;
+          if (cycleEnd && slotDate.getTime() >= cycleEnd.getTime()) continue;
 
           // Respect month-based filters (blog once/twice a month)
           if (item.weekFilter && !item.weekFilter.includes(weekOfMonth(slotDate))) {
@@ -205,6 +234,7 @@ serve(async (req) => {
             scheduled_for: slotDate.toISOString(),
             status: "draft",
             client_approved: false,
+            ...(cycle ? { cycle_id: cycle.id } : {}),
           });
 
           occupied.add(key); // prevent same slot appearing twice if plan has duplicates

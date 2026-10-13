@@ -26,6 +26,8 @@ export async function upsertSocialStrategy(
   supabase: any,
   client: StrategyClient,
   policy: TierPolicy,
+  /** From the cycle rollover: what last cycle's digest says, and topics already used. */
+  cycle?: { learned?: string[]; recentTopics?: string[] },
 ): Promise<{ projectId: string | null; pillars: Pillar[] }> {
   // Don't derive pillars from "unknown"/"n/a" -- that's guessing, not
   // strategy. Every caller already treats a null projectId as "not ready".
@@ -53,6 +55,13 @@ export async function upsertSocialStrategy(
     ? `\n\nCurrent pillars: ${existingPillarNames.join(", ")}. This is a monthly refresh, not a first draft -- keep what's still genuinely on-strategy, but evolve or replace at least one with a fresher angle. Don't just re-list the same pillars unchanged.`
     : "";
 
+  const learnedBlock = cycle?.learned?.length
+    ? `\n\nWhat happened last cycle (factual -- use it to decide what to keep, drop or reframe):\n- ${cycle.learned.join("\n- ")}`
+    : "";
+  const topicsBlock = cycle?.recentTopics?.length
+    ? `\n\nTopics already posted recently (pillars should open fresh angles, not re-cover these): ${cycle.recentTopics.slice(0, 30).join(" | ")}`
+    : "";
+
   let pillars: Pillar[] = [];
   try {
     const res = await callAIJson<{ pillars?: Pillar[] }>({
@@ -63,7 +72,7 @@ export async function upsertSocialStrategy(
       maxTokens: 600,
       promptId: "social-strategy.v1",
       system: `You are a social media strategist. Define 3-5 content pillars -- recurring themes this business posts about -- grounded in what they actually do. Each pillar: a short name and one sentence on what it covers and why it matters to their audience. Return ONLY {"pillars":[{"name","description"}]}.`,
-      prompt: `Business: ${client.business_name}\nIndustry: ${client.industry ?? "unknown"}\nServices: ${services || "unknown"}\nAudience: ${audience || "unknown"}\nDifferentiators: ${differentiators || "n/a"}\nSummary: ${summary || "n/a"}\nPlatforms in plan: ${policy.social.contentTypes.join(", ")}.${evolveInstruction}`,
+      prompt: `Business: ${client.business_name}\nIndustry: ${client.industry ?? "unknown"}\nServices: ${services || "unknown"}\nAudience: ${audience || "unknown"}\nDifferentiators: ${differentiators || "n/a"}\nSummary: ${summary || "n/a"}\nPlatforms in plan: ${policy.social.contentTypes.join(", ")}.${evolveInstruction}${learnedBlock}${topicsBlock}`,
     });
     pillars = (res.pillars ?? []).filter((p) => p?.name).slice(0, 5);
   } catch (e) {

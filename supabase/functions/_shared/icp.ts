@@ -100,6 +100,8 @@ export interface DiscoveryQuery {
 export async function suggestDiscoveryQueries(
   clientId: string,
   icp: ClientICP,
+  /** "query in location" strings already searched; the model must pick different ones. */
+  avoid: string[] = [],
 ): Promise<DiscoveryQuery[]> {
   const res = await callAIJson<{ suggestions?: DiscoveryQuery[] }>({
     source: "prospect-icp",
@@ -116,7 +118,7 @@ IDEAL CUSTOMER PROFILE:
 - Geography: ${icp.geography}
 - Local businesses: ${icp.local ? "yes" : "no -- customers are national/global, Maps is a poor fit, still suggest the closest plausible local proxies"}
 
-Each query must name a concrete business type findable on Google Maps (e.g. "HR consulting firms", not "companies that value people"). Location must be a real city/region string Maps understands${icp.local ? `, within: ${icp.geography}` : ""}.
+${avoid.length ? `ALREADY SEARCHED (their results are already in our pipeline -- do NOT repeat these or close variants; target different business types or different neighbourhoods/cities within the geography):\n${avoid.slice(0, 30).map((q) => `- ${q}`).join("\n")}\n\n` : ""}Each query must name a concrete business type findable on Google Maps (e.g. "HR consulting firms", not "companies that value people"). Location must be a real city/region string Maps understands${icp.local ? `, within: ${icp.geography}` : ""}.
 
 Return ONLY valid JSON: { "suggestions": [ { "query": "...", "location": "..." }, ... ] } with 3-5 entries.`,
   });
@@ -234,6 +236,74 @@ Return ONLY valid JSON: { "score": <int 0-100>, "reason": "<one short sentence>"
     return { score: Math.max(0, Math.min(100, Math.round(res.score))), reason: res.reason || "" };
   } catch (e) {
     console.error(`Fit scoring failed for prospect ${prospect.id}:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** Every Maps query/location this client has already been searched with (newest 180 days). */
+export async function previousDiscoveryQueries(supabase: any, clientId: string): Promise<string[]> {
+  const since = new Date(Date.now() - 180 * 86_400_000).toISOString();
+  const { data } = await supabase
+    .from("client_usage")
+    .select("metadata")
+    .eq("client_id", clientId)
+    .eq("source_fn", "discover-prospects")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(40);
+  const out = new Set<string>();
+  for (const row of data ?? []) {
+    const qs = row.metadata?.queries;
+    if (Array.isArray(qs)) for (const q of qs) if (typeof q === "string") out.add(q);
+  }
+  return [...out];
+}
+
+/** Focus phrases earlier web discovery runs used, to rotate away from them. */
+export async function previousDiscoveryFocuses(supabase: any, clientId: string): Promise<string[]> {
+  const since = new Date(Date.now() - 180 * 86_400_000).toISOString();
+  const { data } = await supabase
+    .from("client_usage")
+    .select("metadata")
+    .eq("client_id", clientId)
+    .eq("source_fn", "discover-prospects-web")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(40);
+  const focuses = (data ?? []).map((r: any) => r.metadata?.focus).filter((f: unknown): f is string => typeof f === "string" && !!f);
+  return [...new Set<string>(focuses)];
+}
+
+/**
+ * A fresh sub-segment of the ICP to search this cycle (web/Apollo discovery
+ * accepts a `focus`). Without rotation every cycle re-runs the same search and
+ * the unique (client, website) index silently discards everything it returns.
+ */
+export async function nextDiscoveryFocus(
+  clientId: string,
+  icp: ClientICP,
+  previous: string[],
+  learned: string[] = [],
+): Promise<string | null> {
+  try {
+    const res = await callAIJson<{ focus?: unknown }>({
+      source: "discovery-focus",
+      clientId,
+      model: MODELS.fast,
+      jsonMode: true,
+      maxTokens: 100,
+      promptId: "discovery-focus.v1",
+      prompt: `Pick ONE specific sub-segment of this ideal customer profile to prospect this month, as a short search focus (under 12 words) -- a narrower niche, role or situation, still inside the ICP.
+ICP: ${icp.summary}
+Industries: ${icp.industries.join(", ")}
+Geography: ${icp.geography}
+Disqualifiers: ${(icp.disqualifiers || []).join("; ") || "none"}
+${previous.length ? `Already used (pick something clearly different):\n${previous.slice(0, 15).map((f) => `- ${f}`).join("\n")}\n` : ""}${learned.length ? `Last cycle's results:\n${learned.map((l) => `- ${l}`).join("\n")}\n` : ""}Return ONLY {"focus":"..."}.`,
+    });
+    const focus = typeof res.focus === "string" ? res.focus.trim() : "";
+    return focus.length >= 3 && focus.length <= 120 ? focus : null;
+  } catch (e) {
+    console.error(`nextDiscoveryFocus failed for ${clientId}:`, e instanceof Error ? e.message : e);
     return null;
   }
 }

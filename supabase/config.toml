@@ -221,3 +221,8 @@ verify_jwt = false
 
 [functions.billing-enforce]
 verify_jwt = false
+
+# Self-authenticating (pipeline secret / service key / admin): called by
+# stripe-webhook on a paid invoice and by the daily cycle sweep cron.
+[functions.start-client-cycle]
+verify_jwt = false

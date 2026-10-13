@@ -21,11 +21,11 @@ export async function refineClientContext(supabase: any, clientId: string): Prom
   if (!client?.context_profile) return { refined: false, whats_working: [] };
 
   // Gather the signals the reports are built from -- what actually happened.
-  const [approved, rejected, conversions, scores] = await Promise.all([
-    supabase.from("generated_content").select("title, content_type")
+  const [approved, rejected, conversions, scores, replies] = await Promise.all([
+    supabase.from("generated_content").select("title, content_type, metadata")
       .eq("client_id", clientId).in("status", ["approved", "client_approved", "published"])
       .gte("updated_at", since).limit(25),
-    supabase.from("generated_content").select("title, rejection_reason")
+    supabase.from("generated_content").select("title, rejection_reason, metadata")
       .eq("client_id", clientId).eq("status", "rejected").not("rejection_reason", "is", null)
       .gte("updated_at", since).limit(15),
     pipelineOnly(supabase.from("prospects").select("business_type, context_profile")
@@ -33,15 +33,19 @@ export async function refineClientContext(supabase: any, clientId: string): Prom
     supabase.from("outcome_metrics").select("value, captured_at")
       .eq("client_account_id", clientId).eq("metric", "seo_score")
       .order("captured_at", { ascending: true }).limit(20),
+    // Who actually answered our outreach: a stronger ICP signal than who we merely found.
+    pipelineOnly(supabase.from("prospects").select("business_type")
+      .eq("client_id", clientId).not("replied_at", "is", null)).gte("replied_at", since).limit(15),
   ]);
 
-  const approvedList = (approved.data ?? []).map((r: any) => r.title).filter(Boolean);
-  const rejectedList = (rejected.data ?? []).map((r: any) => `${r.title}: ${r.rejection_reason}`).filter(Boolean);
+  const approvedList = (approved.data ?? []).map((r: any) => r.metadata?.topic || r.title).filter(Boolean);
+  const rejectedList = (rejected.data ?? []).map((r: any) => `${r.metadata?.topic || r.title}: ${r.rejection_reason}`).filter(Boolean);
   const conversionTypes = (conversions.data ?? []).map((c: any) => c.business_type).filter(Boolean);
+  const replyTypes = [...new Set((replies.data ?? []).map((r: any) => r.business_type).filter(Boolean))];
   const scoreSeries = (scores.data ?? []).map((s: any) => Number(s.value));
 
   // Nothing new to learn from -> leave context untouched.
-  if (approvedList.length === 0 && rejectedList.length === 0 && conversionTypes.length === 0) {
+  if (approvedList.length === 0 && rejectedList.length === 0 && conversionTypes.length === 0 && replyTypes.length === 0) {
     return { refined: false, whats_working: [] };
   }
 
@@ -61,6 +65,7 @@ Current what's-working: ${Array.isArray(ctx.whats_working) ? (ctx.whats_working 
 Approved/published content titles: ${approvedList.join(" | ") || "none"}
 Rejected content (title: reason): ${rejectedList.join(" | ") || "none"}
 Business types that converted to customers: ${conversionTypes.join(", ") || "none"}
+Business types that replied to outreach: ${replyTypes.join(", ") || "none"}
 SEO score trend: ${scoreSeries.join(" → ") || "n/a"}`,
     });
   } catch (e) {

@@ -1316,6 +1316,68 @@ export type Database = {
           },
         ]
       }
+      client_cycles: {
+        Row: {
+          client_account_id: string
+          closed_at: string | null
+          created_at: string
+          cycle_no: number
+          digest: Json | null
+          error: string | null
+          id: string
+          period_end: string
+          period_start: string
+          plan: Json
+          planned_at: string | null
+          status: string
+          stripe_invoice_id: string | null
+          trigger_source: string
+          updated_at: string
+        }
+        Insert: {
+          client_account_id: string
+          closed_at?: string | null
+          created_at?: string
+          cycle_no: number
+          digest?: Json | null
+          error?: string | null
+          id?: string
+          period_end: string
+          period_start: string
+          plan?: Json
+          planned_at?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          trigger_source?: string
+          updated_at?: string
+        }
+        Update: {
+          client_account_id?: string
+          closed_at?: string | null
+          created_at?: string
+          cycle_no?: number
+          digest?: Json | null
+          error?: string | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          plan?: Json
+          planned_at?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          trigger_source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cycles_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_invoices: {
         Row: {
           amount: number
@@ -2439,6 +2501,7 @@ export type Database = {
       }
       content_calendar: {
         Row: {
+          cycle_id: string | null
           client_account_id: string | null
           client_approved: boolean
           content: string
@@ -2457,6 +2520,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cycle_id?: string | null
           client_account_id?: string | null
           client_approved?: boolean
           content: string
@@ -2475,6 +2539,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cycle_id?: string | null
           client_account_id?: string | null
           client_approved?: boolean
           content?: string
