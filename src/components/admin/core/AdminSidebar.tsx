@@ -18,6 +18,7 @@ import {
   Search,
   Send,
   Bell,
+  RefreshCw,
   UserCog,
   Radar,
 } from "lucide-react";
@@ -74,6 +75,7 @@ export type AdminSection =
   | "task-notifications"
   | "daily-digest"
   | "alerts"
+  | "cycles"
   | "activity-feed"
   | "feature-guide"
   | "quick-actions"
@@ -137,6 +139,7 @@ const growthItems: NavItem[] = [
 const operationsItems: NavItem[] = [
   { id: "clients", label: "Clients", icon: Users },
   { id: "client-projects", label: "Projects", icon: Layers },
+  { id: "cycles", label: "Cycles", icon: RefreshCw },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
   { id: "team-directory", label: "Team", icon: UserCog },

@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { buildLearned, isCycleInvoice, periodFromInvoice, summarizeProspects, summarizeSocial, sweepWindow } from "./cycle.ts";
+import { buildLearned, isCycleInvoice, periodFromInvoice, summarizeProspects, summarizeSocial, sweepWindow, planIssues
+} from "./cycle.ts";
 
 Deno.test("isCycleInvoice: only paid create/cycle invoices", () => {
   assertEquals(isCycleInvoice({ status: "paid", billing_reason: "subscription_cycle" }), true);
@@ -115,4 +116,14 @@ Deno.test("isRunInProgress: recent attempt blocks, stale or absent does not", ()
   assertEquals(isRunInProgress({ last_attempt_at: new Date(now - RUN_STALE_MS - 1).toISOString() }, now), false);
   assertEquals(isRunInProgress({}, now), false);
   assertEquals(isRunInProgress(null, now), false);
+});
+
+Deno.test("planIssues flags ok-but-empty steps and errors", () => {
+  const issues = planIssues(
+    { prospect_discovery: { status: "ok", detail: "0 new via x" }, social_schedule: { status: "ok", detail: "0 slots" }, learn: { status: "error", detail: "boom" } },
+    { discovered: 0 },
+  );
+  assertEquals(issues.length, 3);
+  assertEquals(planIssues({ prospect_discovery: { status: "ok" }, social_schedule: { status: "ok", detail: "3 slots" } }, { discovered: 5 }), []);
+  assertEquals(planIssues({ prospect_discovery: { status: "skipped" } }, { discovered: 0 }), []);
 });

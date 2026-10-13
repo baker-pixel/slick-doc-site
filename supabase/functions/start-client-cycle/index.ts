@@ -22,6 +22,7 @@ import {
   type CycleTrigger,
   computeDigest,
   openCycle,
+  planIssues,
   sweepWindow,
 } from "../_shared/cycle.ts";
 
@@ -181,7 +182,7 @@ async function rolloverClient(
 
   await supabase.from("client_cycles").update({
     status,
-    plan: { ...startedPlan, steps, discovery: { ...(cycle.plan?.discovery ?? {}), ...discovery }, learned },
+    plan: { ...startedPlan, steps, discovery: { ...(cycle.plan?.discovery ?? {}), ...discovery }, learned, issues: planIssues(steps, { ...(cycle.plan?.discovery ?? {}), ...discovery }) },
     error: failed.length ? failed.map((s) => s.detail).join("; ").slice(0, 500) : null,
     planned_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -331,7 +332,8 @@ async function replanCycle(supabase: Supabase, cycle: CycleRow): Promise<Record<
 
   const merged = { ...prior, ...fresh };
   const scheduledNow = prior.social_schedule?.status === "skipped" && fresh.social_schedule?.status === "ok";
-  const plan: Record<string, any> = { ...cycle.plan, steps: merged, discovery: { ...(cycle.plan?.discovery ?? {}), ...discovery } };
+  const mergedDiscovery = { ...(cycle.plan?.discovery ?? {}), ...discovery };
+  const plan: Record<string, any> = { ...cycle.plan, steps: merged, discovery: mergedDiscovery, issues: planIssues(merged, mergedDiscovery) };
 
   if (scheduledNow && cycle.cycle_no === 1 && !plan.ready_email_sent && client.email) {
     const slots = Number(String(fresh.social_schedule?.detail ?? "").match(/^(\d+)/)?.[1] ?? 0);

@@ -56,3 +56,18 @@ export function pickPillar(pillars: string[], recentPillars: Array<string | null
   for (const p of pillars) if (counts.get(p)! < counts.get(best)!) best = p;
   return best;
 }
+
+const topicKey = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]+/g, "").replace(/\s+/g, " ").trim();
+
+/** Topics that appear more than once in a set of rows (quality check: a cycle should not repeat itself). */
+export function findRepeatedTopics(rows: Array<{ title?: string | null; metadata?: any }>): string[] {
+  const counts = new Map<string, { topic: string; n: number }>();
+  for (const r of rows) {
+    const t = topicOf(r);
+    const k = t ? topicKey(t) : "";
+    if (!k) continue;
+    const e = counts.get(k);
+    if (e) e.n++; else counts.set(k, { topic: t!, n: 1 });
+  }
+  return [...counts.values()].filter((e) => e.n > 1).map((e) => e.topic);
+}

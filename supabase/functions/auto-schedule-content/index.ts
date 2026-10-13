@@ -169,14 +169,15 @@ serve(async (req) => {
       connectedByClient.get(acct.client_id)!.add(acct.platform);
     }
 
-    // Active cycle per client: the cycle whose period contains now.
+    // Active cycle per client: the one that has not ended yet. period_start is
+    // deliberately not compared to now -- a sweep-created cycle's start is
+    // end-minus-30-days and can sit a few hours ahead of the run.
     const nowIso = new Date().toISOString();
     const { data: activeCycles } = await supabase
       .from("client_cycles")
       .select("id, client_account_id, period_start, period_end")
       .in("client_account_id", clientIds)
       .in("status", ["planning", "active"])
-      .lte("period_start", nowIso)
       .gt("period_end", nowIso)
       .order("period_end", { ascending: false });
     const cycleByClient = new Map<string, { id: string; period_start: string; period_end: string }>();
@@ -248,6 +249,13 @@ serve(async (req) => {
     if (allRows.length > 0) {
       const { error: insertErr } = await supabase.from("content_calendar").insert(allRows);
       if (insertErr) throw new Error(`Batch insert failed: ${insertErr.message}`);
+    }
+
+    // Slots that already existed inside a cycle (from the rolling scheduler) belong to it too.
+    for (const [clientId, cy] of cycleByClient) {
+      await supabase.from("content_calendar").update({ cycle_id: cy.id })
+        .eq("client_account_id", clientId).is("cycle_id", null)
+        .gte("scheduled_for", cy.period_start).lt("scheduled_for", cy.period_end);
     }
 
     console.log(`auto-schedule-content: ${allRows.length} slots across ${clients.length} clients`);
