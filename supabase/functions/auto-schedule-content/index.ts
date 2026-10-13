@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
+import { isBudgetCapped, trimToBudget, windowBudget } from "../_shared/socialBudget.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,6 +45,19 @@ const SLOT_CANDIDATES: Array<{ policyType: string; perMonth: number; slot: Weekl
   { policyType: "social_post",      perMonth: 2, slot: { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post",   weekFilter: [1, 3] } },
 ];
 
+// Transformation is sold as 20 posts/month, which the default pattern above
+// (at most 12) can't reach. Its own weekly pattern: 2 LinkedIn + 2 Facebook +
+// 1 Instagram a week, then trimmed to the tier budget (see socialBudget.ts).
+// Twitter stays biweekly and, like the others, only when connected.
+const TRANSFORMATION_CANDIDATES: WeeklySlot[] = [
+  { dayOfWeek: 1, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
+  { dayOfWeek: 2, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
+  { dayOfWeek: 3, platform: "facebook",  content_type: "social_post", titlePrefix: "Facebook Post" },
+  { dayOfWeek: 4, platform: "linkedin",  content_type: "social_post", titlePrefix: "LinkedIn Post" },
+  { dayOfWeek: 5, platform: "instagram", content_type: "social_post", titlePrefix: "Instagram Post" },
+  { dayOfWeek: 4, platform: "twitter",   content_type: "social_post", titlePrefix: "Twitter Post", weekFilter: [1, 3] },
+];
+
 // Platforms that publish through Post for Me. Blog is not one of them (it is
 // marked published directly), so it never needs a connected account.
 const PFM_PLATFORMS = new Set(["linkedin", "facebook", "instagram", "twitter"]);
@@ -55,6 +69,13 @@ function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Se
   const social = tierPolicy(tier).social;
   const allowed = new Set(social.contentTypes);
   const plan: WeeklySlot[] = [];
+  if (isBudgetCapped(tier)) {
+    for (const slot of TRANSFORMATION_CANDIDATES) {
+      if (PFM_PLATFORMS.has(slot.platform) && !connectedPlatforms.has(slot.platform)) continue;
+      plan.push(slot);
+    }
+    return plan;
+  }
   for (const c of SLOT_CANDIDATES) {
     if (!allowed.has(c.policyType)) continue;
     if (PFM_PLATFORMS.has(c.slot.platform) && !connectedPlatforms.has(c.slot.platform)) continue;
@@ -242,8 +263,22 @@ serve(async (req) => {
         }
       }
 
-      summary.push({ client: client.business_name, tier, created: clientRows.length });
-      allRows.push(...clientRows);
+      // Capped tiers: keep only what still fits the budget once slots already
+      // in this window are counted, so re-runs never top the cycle up past it.
+      const budgetWindow = cycleStart && cycleEnd
+        ? { start: cycleStart, end: cycleEnd }
+        : null;
+      const budget = windowBudget(tier, budgetWindow);
+      const rangeStart = budgetWindow ? budgetWindow.start.getTime() : todayStart.getTime();
+      const rangeEnd = budgetWindow ? budgetWindow.end.getTime() : todayStart.getTime() + 28 * 24 * 60 * 60 * 1000;
+      const alreadyScheduled = (existingSlots || []).filter((s: any) => {
+        const t = new Date(s.scheduled_for).getTime();
+        return s.client_account_id === client.id && t >= rangeStart && t < rangeEnd;
+      }).length;
+      const keptRows = trimToBudget(clientRows, budget, alreadyScheduled);
+
+      summary.push({ client: client.business_name, tier, created: keptRows.length });
+      allRows.push(...keptRows);
     }
 
     if (allRows.length > 0) {
