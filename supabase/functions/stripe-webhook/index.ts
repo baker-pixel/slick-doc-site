@@ -6,6 +6,8 @@ import { decideClaim, isDuplicateSubscription } from "../_shared/stripeDedupe.ts
 import { logAlert } from "../_shared/alerts.ts";
 import { applyBillingDecision } from "../_shared/billingGate.ts";
 import { sendPaymentFailedEmail, sendServicesPausedEmail } from "../_shared/billingEmail.ts";
+import { isCycleInvoice, periodFromInvoice } from "../_shared/cycle.ts";
+import { runInBackground } from "../_shared/background.ts";
 
 // Stripe -> our DB. Verified by signature (verify_jwt = false in config.toml).
 // Every event id is recorded in stripe_events first, so Stripe's retries are
@@ -203,6 +205,37 @@ async function upsertInvoice(supabase: Supabase, inv: any) {
   return acct;
 }
 
+/**
+ * A paid first invoice or renewal starts the client's next work cycle (close
+ * the last one into a digest, re-plan social + prospecting for the new paid
+ * period). Fire-and-forget: planning makes LLM/discovery calls that must not
+ * delay or fail the webhook ack, and start-client-cycle is idempotent per
+ * (client, period_end) with a daily sweep as the safety net if this is lost.
+ * A client still paused for billing is skipped there and caught by the sweep
+ * once subscription.updated resumes them.
+ */
+function startCycleFor(supabase: Supabase, clientId: string, inv: any) {
+  if (!isCycleInvoice(inv)) return;
+  const period = periodFromInvoice(inv);
+  if (!period) {
+    console.warn("stripe-webhook: paid invoice without a usable period; sweep will plan it", inv.id);
+    return;
+  }
+  runInBackground(
+    supabase.functions.invoke("start-client-cycle", {
+      body: {
+        client_id: clientId,
+        period_start: period.start.toISOString(),
+        period_end: period.end.toISOString(),
+        stripe_invoice_id: inv.id,
+        trigger: "invoice_paid",
+      },
+    }).then(({ error }) => {
+      if (error) console.error("stripe-webhook: start-client-cycle failed:", error);
+    }),
+  );
+}
+
 async function onPaymentFailed(supabase: Supabase, inv: any) {
   const acct = await upsertInvoice(supabase, inv);
   if (!acct) return;
@@ -306,6 +339,7 @@ async function handleEvent(supabase: Supabase, event: any) {
       const acct = await upsertInvoice(supabase, obj);
       if (acct) {
         await supabase.from("client_accounts").update({ payment_failed_at: null }).eq("id", acct.id);
+        startCycleFor(supabase, acct.id, obj);
       }
       return;
     }

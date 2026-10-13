@@ -12,7 +12,7 @@ import { checkClientOrAdminAuth } from "../_shared/auth.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { logActivity } from "../_shared/activityLog.ts";
 import { refreshProspectProject } from "../_shared/prospectProject.ts";
-import { ensureClientICP, suggestDiscoveryQueries } from "../_shared/icp.ts";
+import { ensureClientICP, previousDiscoveryQueries, suggestDiscoveryQueries } from "../_shared/icp.ts";
 import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/prospectInsert.ts";
 import { resolveDiscoveryCampaign } from "../_shared/campaignScope.ts";
@@ -169,7 +169,7 @@ serve(async (req) => {
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const suggestions = await suggestDiscoveryQueries(client_id, icp);
+      const suggestions = await suggestDiscoveryQueries(client_id, icp, await previousDiscoveryQueries(supabase, client_id));
       if (suggestions.length === 0) {
         return new Response(
           JSON.stringify({ error: "Could not generate discovery queries from the ICP" }),

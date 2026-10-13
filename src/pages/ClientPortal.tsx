@@ -11,6 +11,7 @@ import { ClientPortalSidebar, type PortalTab, type BadgeCounts, type ClientTier 
 
 import { usePortalPreferences } from "@/hooks/use-portal-preferences";
 import { BillingBanner } from "@/components/client-portal/BillingBanner";
+import { CycleCard } from "@/components/client-portal/CycleCard";
 
 // Tab Components
 import ClientProjectsTab from "@/components/client-portal/ClientProjectsTab";
@@ -391,14 +392,17 @@ export default function ClientPortal() {
     switch (activeTab) {
       case "activity":
         return (
-          <ClientActivityTab
-            clientAccountId={portalUser.client_account_id}
-            clientEmail={clientAccount?.email}
-            firstName={portalUser.first_name}
-            businessName={clientAccount?.business_name}
-            userId={portalUser.user_id}
-            onTabChange={(tab) => handleTabChange(tab as PortalTab)}
-          />
+          <div className="space-y-6">
+            <CycleCard clientAccountId={portalUser.client_account_id} />
+            <ClientActivityTab
+              clientAccountId={portalUser.client_account_id}
+              clientEmail={clientAccount?.email}
+              firstName={portalUser.first_name}
+              businessName={clientAccount?.business_name}
+              userId={portalUser.user_id}
+              onTabChange={(tab) => handleTabChange(tab as PortalTab)}
+            />
+          </div>
         );
       case "notifications":
         return <ClientNotificationsTab clientAccountId={portalUser.client_account_id} />;

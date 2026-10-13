@@ -11,6 +11,8 @@ import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { isUsableCaption } from "../_shared/captionGate.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
+import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/topicLedger.ts";
+import { extractTopic } from "../_shared/topicExtract.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
 
@@ -135,23 +137,28 @@ serve(async (req) => {
         .map((c: any) => [c.id, c as ClientInfo])
     );
 
-    // Fetch recent content per client to avoid topic repetition
+    // Topic ledger: what each client's recent posts were actually ABOUT
+    // (metadata.topic, written when a slot is filled) and which pillar each
+    // served. Covers drafts awaiting approval too, and reaches back across
+    // cycle boundaries, so a new cycle doesn't re-pitch last cycle's topics.
     const { data: recentContent } = await supabase
       .from("content_calendar")
-      .select("client_account_id, platform, title, content")
+      .select("client_account_id, title, metadata")
       .in("client_account_id", clientIds)
       .not("content", "like", "[Auto-generated placeholder%")
-      .in("status", ["scheduled", "published"])
+      .in("status", ["draft", "scheduled", "published"])
       .order("scheduled_for", { ascending: false })
-      .limit(clientIds.length * 8);
+      .limit(clientIds.length * (RECENT_TOPIC_LIMIT * 2));
 
-    // Group recent content by client
-    const recentByClient: Record<string, string[]> = {};
+    const recentRowsByClient: Record<string, { title: string | null; metadata: any }[]> = {};
     for (const item of recentContent || []) {
-      if (!recentByClient[item.client_account_id]) recentByClient[item.client_account_id] = [];
-      if (recentByClient[item.client_account_id].length < 6) {
-        recentByClient[item.client_account_id].push(item.title);
-      }
+      (recentRowsByClient[item.client_account_id] ??= []).push(item);
+    }
+    const recentByClient: Record<string, string[]> = {};
+    const recentPillarsByClient: Record<string, (string | null)[]> = {};
+    for (const [cid, rows] of Object.entries(recentRowsByClient)) {
+      recentByClient[cid] = collectRecentTopics(rows);
+      recentPillarsByClient[cid] = rows.slice(0, 24).map((r) => r.metadata?.pillar ?? null);
     }
 
     // Feedback loop: batch-fetch recent hard-rejection reasons across all
@@ -163,7 +170,7 @@ serve(async (req) => {
     // handle-approval), not into unrelated future drafts.
     const { data: recentFeedbackRows } = await supabase
       .from("generated_content")
-      .select("client_id, content_type, title, rejection_reason")
+      .select("client_id, content_type, title, rejection_reason, metadata")
       .in("client_id", clientIds)
       .in("status", ["rejected"])
       .not("rejection_reason", "is", null)
@@ -176,7 +183,8 @@ serve(async (req) => {
       if (feedbackByClient[item.client_id].length < 5) {
         feedbackByClient[item.client_id].push({
           content_type: item.content_type,
-          title: item.title,
+          // The ledger topic says what was rejected; the calendar title is just a slot label.
+          title: item.metadata?.topic || item.title,
           reason: item.rejection_reason,
         });
       }
@@ -207,10 +215,9 @@ serve(async (req) => {
 
     const results: { id: string; success: boolean; error?: string }[] = [];
 
-    // Cache each client's social pillars + a rotating cursor, so posts spread
-    // across the strategy's themes instead of clustering on one.
+    // Cache each client's social pillars. Which pillar a post serves is picked
+    // per slot from recent usage (pickPillar), so rotation survives across runs.
     const pillarsByClient: Record<string, string[]> = {};
-    const pillarCursor: Record<string, number> = {};
 
     for (const slot of slots) {
       try {
@@ -224,14 +231,11 @@ serve(async (req) => {
         // On-strategy: pick the next pillar in rotation for this client.
         if (!(slot.client_account_id in pillarsByClient)) {
           pillarsByClient[slot.client_account_id] = await getSocialPillars(supabase, slot.client_account_id);
-          pillarCursor[slot.client_account_id] = 0;
         }
-        const pillars = pillarsByClient[slot.client_account_id];
-        let pillar: string | undefined;
-        if (pillars.length > 0) {
-          pillar = pillars[pillarCursor[slot.client_account_id] % pillars.length];
-          pillarCursor[slot.client_account_id]++;
-        }
+        const pillar = pickPillar(
+          pillarsByClient[slot.client_account_id],
+          recentPillarsByClient[slot.client_account_id] ?? [],
+        );
 
         let generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
 
@@ -280,6 +284,10 @@ serve(async (req) => {
         // doesn't reroute it into the admin-only pending_admin_review queue.
         const autoForward = AUTO_FORWARD_PLATFORMS.has(slot.platform) && !claimsFlagged;
 
+        // Ledger entry: what this post is about, so later drafts (this run,
+        // next week, next cycle) steer away from it. Best-effort.
+        const topic = await extractTopic(generatedContent, slot.platform, slot.client_account_id);
+
         // Save the draft to generated_content. Include full traceability
         // metadata so the admin panel can link back to the slot.
         const { data: draftRecord, error: draftErr } = await supabase
@@ -297,6 +305,8 @@ serve(async (req) => {
               scheduled_for: slot.scheduled_for,
               context_used: !!(client.context_profile),
               generated_at: new Date().toISOString(),
+              ...(topic ? { topic } : {}),
+              ...(pillar ? { pillar } : {}),
               ...(qa ? { qa } : {}),
               ...(claimsFlagged ? { unsupported_claims: unsupportedClaims } : {}),
               ...(autoForward ? { auto_forwarded: true } : {}),
@@ -336,11 +346,17 @@ serve(async (req) => {
               ai_draft_generated: true,
               generated_at: new Date().toISOString(),
               context_used: !!(client.context_profile),
+              ...(topic ? { topic } : {}),
+              ...(pillar ? { pillar } : {}),
             },
           })
           .eq("id", slot.id);
 
         if (updateErr) throw new Error(`Failed to update slot draft text: ${updateErr.message}`);
+
+        // Later slots in this same run see this one too.
+        if (topic) (recentByClient[slot.client_account_id] ??= []).unshift(topic);
+        (recentPillarsByClient[slot.client_account_id] ??= []).unshift(pillar ?? null);
 
         if (autoForward && draftRecord?.id) {
           // QA passed on a target social platform -- skip the manual admin
@@ -631,7 +647,7 @@ function getBrandVoice(client: ClientInfo): string {
 
 function avoidRepetitionInstruction(recentTopics: string[]): string {
   if (!recentTopics.length) return "";
-  return `\n\nRecently covered topics to avoid repeating: ${recentTopics.slice(0, 5).join(" | ")}. Choose a fresh angle.`;
+  return `\n\nTopics already covered recently (do NOT repeat any of these subjects or near-variants; pick a clearly different subject or angle): ${recentTopics.slice(0, RECENT_TOPIC_LIMIT).join(" | ")}.`;
 }
 
 function buildPrompt(
