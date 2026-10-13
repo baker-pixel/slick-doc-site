@@ -3,6 +3,7 @@ import { checkInternalSecret, isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/icp.ts";
 import { getConversionWins } from "../_shared/outcomes.ts";
+import { gateVerdict, isDroppable, minFitFor, normalizeUrl } from "../_shared/prospectGate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,8 +43,22 @@ serve(async (req: Request) => {
   const runStart = Date.now();
   const SCAN_BUDGET_MS = 60_000;
   const SCAN_CONCURRENCY = 4;
-  const EMAIL_DEADLINE_MS = 105_000;
-  const SCORE_DEADLINE_MS = 135_000;
+  const SCORE_DEADLINE_MS = 95_000;
+  const EMAIL_DEADLINE_MS = 135_000;
+
+  // Fit gate. Only prospects at/above the client's threshold are worth an email
+  // lookup or a place in the client's review queue; the rest are deleted and
+  // remembered only as a bare domain (prospect_seen_domains) so discovery
+  // doesn't re-find them. Never applies to anything a person has touched.
+  const minFitCache = new Map<string, number>();
+  const getMinFit = async (clientId: string): Promise<number> => {
+    if (!minFitCache.has(clientId)) {
+      const { data } = await supabase.from("client_accounts").select("outreach_settings").eq("id", clientId).maybeSingle();
+      minFitCache.set(clientId, minFitFor(data?.outreach_settings));
+    }
+    return minFitCache.get(clientId)!;
+  };
+  let dropped = 0;
 
   try {
     // Fetch prospects with null context_profile
@@ -187,6 +202,78 @@ serve(async (req: Request) => {
       if (queue.length > 0) console.log(`Website scans: ${queue.length} prospects left for the next pass`);
     }
 
+    // ── ICP fit scoring ────────────────────────────────────────
+    // Score enriched prospects against their client's ICP so the review
+    // queue can rank by fit instead of showing an undifferentiated list.
+    // Runs after context enrichment so the scorer has real signals.
+    let scored = 0;
+    {
+      const { data: unscored } = await supabase
+        .from("prospects")
+        .select("id, name, business_type, city, website_url, context_profile, client_id, status, approved_at, source, campaign_id, submission_id, research_snapshot")
+        .not("context_profile", "is", null)
+        .not("client_id", "is", null)
+        .is("icp_fit_score", null)
+        .in("status", ["discovered", "pending"])
+        .limit(20);
+
+      if (unscored && unscored.length > 0) {
+        const icpCache = new Map<string, ClientICP | null>();
+        const winsCache = new Map<string, Awaited<ReturnType<typeof getConversionWins>>>();
+        for (const p of unscored) {
+          if (Date.now() - runStart > SCORE_DEADLINE_MS) break;
+          try {
+            if (!icpCache.has(p.client_id)) {
+              const { data: client } = await supabase
+                .from("client_accounts")
+                .select("id, business_name, industry, icp, context_profile")
+                .eq("id", p.client_id)
+                .single();
+              icpCache.set(p.client_id, client ? await ensureClientICP(supabase, client) : null);
+              // Feedback loop: this client's real conversions calibrate scoring.
+              winsCache.set(p.client_id, await getConversionWins(supabase, p.client_id));
+            }
+            const icp = icpCache.get(p.client_id);
+            if (!icp) continue;
+
+            const fit = await scoreProspectFit(p, icp, p.client_id, winsCache.get(p.client_id) ?? []);
+            if (fit) {
+              await supabase
+                .from("prospects")
+                .update({ icp_fit_score: fit.score, icp_fit_reason: fit.reason })
+                .eq("id", p.id);
+              scored++;
+            }
+
+            const attempts = Number((p.research_snapshot as { fit_attempts?: number } | null)?.fit_attempts ?? 0);
+            const verdict = gateVerdict(fit ? fit.score : null, attempts, await getMinFit(p.client_id));
+            if (verdict === "retry") {
+              // Scoring couldn't tell (thin or unreadable site): not a bad fit, so look again next pass.
+              await supabase.from("prospects").update({
+                research_snapshot: { ...(p.research_snapshot ?? {}), fit_attempts: attempts + 1 },
+              }).eq("id", p.id);
+            } else if ((verdict === "drop" || verdict === "drop_unscorable") && isDroppable(p)) {
+              // Below the bar: keep a bare domain so it isn't re-found, delete everything else.
+              await supabase.from("prospect_seen_domains").upsert({
+                client_id: p.client_id,
+                domain: normalizeUrl(p.website_url || p.name),
+                name: p.name,
+                fit_score: fit ? fit.score : null,
+                reason: (fit?.reason ?? "not enough information").slice(0, 300),
+                outcome: verdict === "drop" ? "below_threshold" : "unscorable",
+                seen_at: new Date().toISOString(),
+              }, { onConflict: "client_id,domain" });
+              await supabase.from("prospects").delete().eq("id", p.id);
+              dropped++;
+            }
+          } catch (e) {
+            console.warn("Fit scoring error for prospect", p.id, e);
+          }
+        }
+        console.log(`ICP fit scoring: ${scored}/${unscored.length} prospects scored`);
+      }
+    }
+
     // ── Email enrichment via Apollo ─────────────────────────────
     // Outbound prospects (Maps or Apollo/web discovery) have no email.
     // Replaces the old Hunter domain-search pattern-guess (a confidence
@@ -236,14 +323,24 @@ serve(async (req: Request) => {
       const LOOKUP_RETRY_MS = 14 * 24 * 60 * 60 * 1000;
       const { data: noEmailAll } = await supabase
         .from("prospects")
-        .select("id, website_url, client_id, research_snapshot")
+        .select("id, website_url, client_id, research_snapshot, icp_fit_score, source, campaign_id")
         .or("email.is.null,email.eq.")
         .not("website_url", "is", null)
         .neq("website_url", "")
         .in("status", ["discovered", "pending"])
         .order("created_at", { ascending: false })
         .limit(150);
-      const noEmail = (noEmailAll ?? [])
+      // Gate: a machine-discovered prospect only earns an email lookup once it
+      // has a fit score at or above its client's threshold.
+      const passing: typeof noEmailAll = [];
+      for (const p of noEmailAll ?? []) {
+        if (p.source === "outbound" && !p.campaign_id) {
+          if (p.icp_fit_score === null || !p.client_id) continue;
+          if (p.icp_fit_score < (await getMinFit(p.client_id))) continue;
+        }
+        passing.push(p);
+      }
+      const noEmail = passing
         .filter((p: { research_snapshot: { email_lookup?: { at?: string } } | null }) => {
           const at = p.research_snapshot?.email_lookup?.at;
           return !at || Date.now() - new Date(at).getTime() > LOOKUP_RETRY_MS;
@@ -339,56 +436,6 @@ serve(async (req: Request) => {
       console.log(`Apollo enrichment: ${emailsEnriched} emails found`);
     }
 
-    // ── ICP fit scoring ────────────────────────────────────────
-    // Score enriched prospects against their client's ICP so the review
-    // queue can rank by fit instead of showing an undifferentiated list.
-    // Runs after context enrichment so the scorer has real signals.
-    let scored = 0;
-    {
-      const { data: unscored } = await supabase
-        .from("prospects")
-        .select("id, name, business_type, city, website_url, context_profile, client_id")
-        .not("context_profile", "is", null)
-        .not("client_id", "is", null)
-        .is("icp_fit_score", null)
-        .in("status", ["discovered", "pending"])
-        .limit(20);
-
-      if (unscored && unscored.length > 0) {
-        const icpCache = new Map<string, ClientICP | null>();
-        const winsCache = new Map<string, Awaited<ReturnType<typeof getConversionWins>>>();
-        for (const p of unscored) {
-          if (Date.now() - runStart > SCORE_DEADLINE_MS) break;
-          try {
-            if (!icpCache.has(p.client_id)) {
-              const { data: client } = await supabase
-                .from("client_accounts")
-                .select("id, business_name, industry, icp, context_profile")
-                .eq("id", p.client_id)
-                .single();
-              icpCache.set(p.client_id, client ? await ensureClientICP(supabase, client) : null);
-              // Feedback loop: this client's real conversions calibrate scoring.
-              winsCache.set(p.client_id, await getConversionWins(supabase, p.client_id));
-            }
-            const icp = icpCache.get(p.client_id);
-            if (!icp) continue;
-
-            const fit = await scoreProspectFit(p, icp, p.client_id, winsCache.get(p.client_id) ?? []);
-            if (fit) {
-              await supabase
-                .from("prospects")
-                .update({ icp_fit_score: fit.score, icp_fit_reason: fit.reason })
-                .eq("id", p.id);
-              scored++;
-            }
-          } catch (e) {
-            console.warn("Fit scoring error for prospect", p.id, e);
-          }
-        }
-        console.log(`ICP fit scoring: ${scored}/${unscored.length} prospects scored`);
-      }
-    }
-
     // Alert if errors
     if (errors > 0) {
       await supabase.from("automation_alerts").insert({
@@ -408,7 +455,7 @@ serve(async (req: Request) => {
       .is("context_profile", null);
 
     return new Response(
-      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, emailsEnriched, scored, hasMore: (count ?? 0) > 0 }),
+      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, emailsEnriched, scored, dropped, hasMore: (count ?? 0) > 0 }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

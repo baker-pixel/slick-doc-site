@@ -11,6 +11,7 @@ import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/prospectInsert.ts";
 import { runInBackground } from "../_shared/background.ts";
+import { SEEN_MEMORY_DAYS } from "../_shared/prospectGate.ts";
 
 // See discover-prospects.ts for why this only applies to client callers.
 const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
@@ -170,6 +171,13 @@ async function webSearchCompanies(
   throw new Error(`OpenAI web search failed on all models (${lastErr})`);
 }
 
+/** Companies already judged a poor fit for this client (kept as bare domains after their prospect row is deleted). */
+async function recentlyJudgedDomains(supabase: any, clientId: string): Promise<Set<string>> {
+  const since = new Date(Date.now() - SEEN_MEMORY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase.from("prospect_seen_domains").select("domain").eq("client_id", clientId).gte("seen_at", since);
+  return new Set((data ?? []).map((r: { domain: string }) => r.domain));
+}
+
 function normalizeUrl(url: string): string {
   try {
     const u = new URL(url.startsWith("http") ? url : `https://${url}`);
@@ -271,6 +279,7 @@ Respond with ONLY a JSON array, no prose:
         // already-known companies. Walk deeper pages until enough are new.
         const { data: known } = await supabase.from("prospects").select("website_url").eq("client_id", body.client_id);
         const knownNorm = new Set((known ?? []).map((p: { website_url: string }) => normalizeUrl(p.website_url || "")));
+        for (const d of await recentlyJudgedDomains(supabase, body.client_id)) knownNorm.add(d);
         const pool: FoundCompany[] = [];
         let freshCount = 0;
         for (let page = 1; page <= 5 && freshCount < maxResults; page++) {
@@ -313,6 +322,7 @@ Respond with ONLY a JSON array, no prose:
       .eq("client_id", body.client_id);
 
     const existingNorm = new Set((existing ?? []).map((p: { website_url: string }) => normalizeUrl(p.website_url || "")));
+    for (const d of await recentlyJudgedDomains(supabase, body.client_id)) existingNorm.add(d);
 
     const seen = new Set<string>();
     const fresh = companies.filter((c) => {

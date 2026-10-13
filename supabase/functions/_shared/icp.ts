@@ -146,11 +146,16 @@ export async function ensureSearchKeywords(
       jsonMode: true,
       maxTokens: 120,
       promptId: "icp-search-keywords.v1",
-      prompt: `Give 3-6 specific industry keywords (for a B2B company database search) describing the businesses that would BUY from "${client.business_name}".
+      prompt: `Give 4-6 specific business-type keywords (for a B2B company database search) for the companies that would BUY from "${client.business_name}".
 Sells: ${typeof client.context_profile?.business_summary === "string" ? client.context_profile.business_summary : "n/a"}
 Ideal customer: ${icp.summary}
+Buyer's industries: ${icp.industries.join(", ")}
 Bad fits: ${(icp.disqualifiers || []).join("; ") || "none"}
-Describe the buyer's business, not the product. No bare generic labels ("technology", "software", "AI").
+Rules:
+- Each keyword is a concrete TYPE OF COMPANY in 2-4 words, e.g. "executive coaching firms", "people analytics software", "learning and development platforms".
+- Describe the buyer's business, not the product or a benefit. Never use outcome words such as "solutions", "optimization", "enhancement", "programs" or "performance".
+- Do NOT return staffing, recruiting, headhunting or job-board keywords unless the ideal customer is explicitly that kind of business.
+- No bare generic labels ("technology", "software", "AI", "consulting", "HR").
 Return ONLY JSON: {"keywords":["..."]}`,
     });
     const keywords = [...new Set(
@@ -220,7 +225,8 @@ PROSPECT:
 - Audience: ${typeof ctx.target_audience === "string" ? ctx.target_audience : "unknown"}
 
 0-30 = wrong industry/geography or hits a disqualifier. 31-60 = partial match. 61-100 = solid to ideal fit${wins.length ? "; nudge up prospects that resemble the converted examples" : ""}.
-Return ONLY valid JSON: { "score": <int 0-100>, "reason": "<one short sentence>" }`;
+If the prospect details above are too thin to judge (no services, no summary and no known business type), do NOT guess and do NOT score 0 -- 0 means "clearly a bad fit". Return { "score": null, "reason": "not enough information" } instead.
+Return ONLY valid JSON: { "score": <int 0-100 or null>, "reason": "<one short sentence>" }`;
 
   try {
     const res = await callAIJson<FitResult>({
