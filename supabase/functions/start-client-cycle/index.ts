@@ -10,6 +10,7 @@ import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
 import { ensureClientICP, nextDiscoveryFocus, previousDiscoveryFocuses } from "../_shared/icp.ts";
 import { recordOutcome } from "../_shared/outcomes.ts";
+import { sendFirstCycleReadyEmail } from "../_shared/cycleEmail.ts";
 import { collectRecentTopics } from "../_shared/topicLedger.ts";
 import {
   closeCycle,
@@ -143,57 +144,7 @@ async function rolloverClient(
   const learned: string[] = previousDigest?.learned ?? [];
 
   // 2-5. Plan. Each step isolated.
-  const policy = tierPolicy(client.tier);
-  const steps: Record<string, StepResult> = {};
-  const discovery: Record<string, unknown> = {};
-
-  await step(steps, "learn", async () => {
-    const r = await refineClientContext(supabase, clientId);
-    return { status: r.refined ? "ok" : "skipped", detail: r.refined ? undefined : "nothing new to learn from" };
-  });
-
-  await step(steps, "social_strategy", async () => {
-    if (!hasBusinessContext(client)) return { status: "skipped", detail: "business context incomplete" };
-    const { data: rows } = await supabase.from("content_calendar").select("title, metadata")
-      .eq("client_account_id", clientId).not("content", "like", "[Auto-generated placeholder%")
-      .order("scheduled_for", { ascending: false }).limit(80);
-    const res = await upsertSocialStrategy(supabase, client, policy, {
-      learned,
-      recentTopics: collectRecentTopics(rows ?? [], 30),
-    });
-    return res.projectId
-      ? { status: "ok", detail: `${res.pillars.length} pillars` }
-      : { status: "error", detail: "strategy generation failed" };
-  });
-
-  await step(steps, "social_schedule", async () => {
-    if (!hasBusinessContext(client)) return { status: "skipped", detail: "business context incomplete" };
-    // auto-schedule-content finds this cycle itself and schedules to its end.
-    const r = await callFn("auto-schedule-content", { client_id: clientId });
-    return { status: "ok", detail: `${r.total_created ?? 0} slots` };
-  });
-
-  await step(steps, "prospect_discovery", async () => {
-    if (!policy.prospect.enabled) return { status: "skipped", detail: "tier has no prospect agent" };
-    const mailbox = await clientIdsWithMailbox(supabase, [clientId]);
-    if (!mailbox.has(clientId)) return { status: "skipped", detail: "no mailbox connected" };
-    const icp = await ensureClientICP(supabase, client);
-    if (!icp) return { status: "skipped", detail: "no ICP yet" };
-
-    const web = icp.local === false;
-    const fn = web ? "discover-prospects-web" : "discover-prospects";
-    const body: Record<string, unknown> = { client_id: clientId, max_results: policy.prospect.discoveryBatch };
-    if (web) {
-      // Rotate the search so this cycle's leads are new, not last cycle's again.
-      const focus = await nextDiscoveryFocus(clientId, icp, await previousDiscoveryFocuses(supabase, clientId), learned);
-      if (focus) body.focus = focus;
-      discovery.focus = focus;
-    } // Maps discovery excludes already-searched queries on its own.
-    discovery.fn = fn;
-    const r = await callFn(fn, body);
-    discovery.discovered = r.discovered ?? 0;
-    return { status: "ok", detail: `${r.discovered ?? 0} new via ${fn}` };
-  });
+  const { steps, discovery } = await planSteps(supabase, client, cycle, learned);
 
   const results = Object.values(steps);
   const worked = results.filter((s) => s.status !== "skipped");
@@ -224,6 +175,96 @@ async function rolloverClient(
   return { client_id: clientId, cycle_id: cycle.id, cycle_no: cycle.cycle_no, status, steps };
 }
 
+const RETRYABLE = "retry_when_ready";
+
+/** A skip caused by onboarding not being finished yet; the sweep re-runs it once it is. */
+const notReady = (detail: string): StepResult => ({ status: "skipped", detail, [RETRYABLE]: true } as StepResult);
+
+const isRetryableSkip = (r?: StepResult) => r?.status === "skipped" && !!(r as any)?.[RETRYABLE];
+
+interface PlanClient {
+  id: string;
+  business_name: string;
+  industry: string | null;
+  tier: string | null;
+  context_profile: any;
+  icp: unknown;
+  onboarded_at: string | null;
+  created_at: string | null;
+}
+
+/**
+ * The planning steps for one cycle. `only` restricts a re-plan to the steps
+ * that were skipped earlier (e.g. the client has since finished onboarding);
+ * steps outside it are left exactly as they were.
+ */
+async function planSteps(
+  supabase: Supabase,
+  client: PlanClient,
+  cycle: CycleRow,
+  learned: string[],
+  only?: Set<string>,
+): Promise<{ steps: Record<string, StepResult>; discovery: Record<string, unknown> }> {
+  const clientId = client.id;
+  const policy = tierPolicy(client.tier);
+  const steps: Record<string, StepResult> = {};
+  const discovery: Record<string, unknown> = {};
+  const run = (name: string, fn: () => Promise<StepResult>) => (only && !only.has(name)) ? Promise.resolve() : step(steps, name, fn);
+
+  await run("learn", async () => {
+    const r = await refineClientContext(supabase, clientId);
+    return { status: r.refined ? "ok" : "skipped", detail: r.refined ? undefined : "nothing new to learn from" };
+  });
+
+  await run("social_strategy", async () => {
+    if (!hasBusinessContext(client)) return notReady("business context incomplete");
+    const { data: rows } = await supabase.from("content_calendar").select("title, metadata")
+      .eq("client_account_id", clientId).not("content", "like", "[Auto-generated placeholder%")
+      .order("scheduled_for", { ascending: false }).limit(80);
+    const res = await upsertSocialStrategy(supabase, client, policy, {
+      learned,
+      recentTopics: collectRecentTopics(rows ?? [], 30),
+    });
+    return res.projectId
+      ? { status: "ok", detail: `${res.pillars.length} pillars` }
+      : { status: "error", detail: "strategy generation failed" };
+  });
+
+  await run("social_schedule", async () => {
+    if (!hasBusinessContext(client)) return notReady("business context incomplete");
+    // auto-schedule-content finds this cycle itself and schedules to its end.
+    const r = await callFn("auto-schedule-content", { client_id: clientId });
+    // No slots AND a message means the scheduler filtered this client out
+    // (portal invite not accepted yet): not done, retry later.
+    if (r.total_created === undefined && r.message) return notReady(String(r.message));
+    return { status: "ok", detail: `${r.total_created ?? 0} slots` };
+  });
+
+  await run("prospect_discovery", async () => {
+    if (!policy.prospect.enabled) return { status: "skipped", detail: "tier has no prospect agent" };
+    const mailbox = await clientIdsWithMailbox(supabase, [clientId]);
+    if (!mailbox.has(clientId)) return notReady("no mailbox connected");
+    const icp = await ensureClientICP(supabase, client);
+    if (!icp) return notReady("no ICP yet");
+
+    const web = icp.local === false;
+    const fn = web ? "discover-prospects-web" : "discover-prospects";
+    const body: Record<string, unknown> = { client_id: clientId, max_results: policy.prospect.discoveryBatch };
+    if (web) {
+      // Rotate the search so this cycle's leads are new, not last cycle's again.
+      const focus = await nextDiscoveryFocus(clientId, icp, await previousDiscoveryFocuses(supabase, clientId), learned);
+      if (focus) body.focus = focus;
+      discovery.focus = focus;
+    } // Maps discovery excludes already-searched queries on its own.
+    discovery.fn = fn;
+    const r = await callFn(fn, body);
+    discovery.discovered = r.discovered ?? 0;
+    return { status: "ok", detail: `${r.discovered ?? 0} new via ${fn}` };
+  });
+
+  return { steps, discovery };
+}
+
 /** Numeric outcomes per closed cycle so reporting can chart trends. */
 async function recordCycleOutcomes(supabase: Supabase, clientId: string, cycle: CycleRow, digest: Record<string, any>) {
   const base = { periodStart: cycle.period_start, periodEnd: cycle.period_end, metadata: { cycle_id: cycle.id, cycle_no: cycle.cycle_no } };
@@ -232,6 +273,47 @@ async function recordCycleOutcomes(supabase: Supabase, clientId: string, cycle: 
   }
   await recordOutcome(supabase, clientId, { source: "social", metric: "cycle_posts_published", value: digest.social?.published ?? 0, ...base });
   await recordOutcome(supabase, clientId, { source: "prospect", metric: "cycle_prospects_replied", value: digest.prospect?.replied ?? 0, ...base });
+}
+
+/**
+ * Re-runs only the steps a cycle skipped because onboarding was unfinished
+ * (business info, mailbox, ICP), once the client has since completed them. The
+ * first time scheduling goes from skipped to done on a client's first cycle,
+ * they get a "your first cycle is planned" email.
+ */
+async function replanCycle(supabase: Supabase, cycle: CycleRow): Promise<Record<string, unknown> | null> {
+  const prior: Record<string, StepResult> = cycle.plan?.steps ?? {};
+  const only = new Set(Object.entries(prior).filter(([, r]) => isRetryableSkip(r)).map(([n]) => n));
+  if (only.size === 0) return null;
+
+  const { data: client } = await supabase
+    .from("client_accounts")
+    .select("id, business_name, first_name, email, industry, tier, status, context_profile, icp, onboarded_at, created_at")
+    .eq("id", cycle.client_account_id).maybeSingle();
+  if (!client || client.status !== "active") return null;
+
+  const { steps: fresh, discovery } = await planSteps(supabase, client, cycle, cycle.plan?.learned ?? [], only);
+  // Nothing newly unblocked: leave the cycle untouched (no churn on every sweep).
+  if (!Object.values(fresh).some((r) => !isRetryableSkip(r))) return null;
+
+  const merged = { ...prior, ...fresh };
+  const scheduledNow = prior.social_schedule?.status === "skipped" && fresh.social_schedule?.status === "ok";
+  const plan: Record<string, any> = { ...cycle.plan, steps: merged, discovery: { ...(cycle.plan?.discovery ?? {}), ...discovery } };
+
+  if (scheduledNow && cycle.cycle_no === 1 && !plan.ready_email_sent && client.email) {
+    const slots = Number(String(fresh.social_schedule?.detail ?? "").match(/^(\d+)/)?.[1] ?? 0);
+    await sendFirstCycleReadyEmail(client.email, client.first_name, cycle.period_end, slots);
+    plan.ready_email_sent = true;
+  }
+
+  const failed = Object.values(fresh).filter((r) => r.status === "error");
+  await supabase.from("client_cycles").update({
+    plan,
+    error: failed.length ? failed.map((r) => r.detail).join("; ").slice(0, 500) : null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", cycle.id);
+
+  return { client_id: cycle.client_account_id, cycle_id: cycle.id, replanned: Object.keys(fresh), steps: fresh };
 }
 
 async function sweep(supabase: Supabase): Promise<Record<string, unknown>> {
@@ -268,7 +350,26 @@ async function sweep(supabase: Supabase): Promise<Record<string, unknown>> {
       results.push({ client_id: id, error: e instanceof Error ? e.message : String(e) });
     }
   }
-  return { due: due.length, processed: results.length, results };
+
+  // Cycles planned before the client finished onboarding: finish the skipped
+  // steps now that they may have. Shares the per-run work budget.
+  const replans: Record<string, unknown>[] = [];
+  if (results.length < SWEEP_MAX_PER_RUN) {
+    const nowIso = new Date().toISOString();
+    const { data: live } = await supabase.from("client_cycles").select("*")
+      .eq("status", "active").lte("period_start", nowIso).gt("period_end", nowIso);
+    for (const cyc of (live ?? []) as CycleRow[]) {
+      if (results.length + replans.length >= SWEEP_MAX_PER_RUN) break;
+      if (!Object.values(cyc.plan?.steps ?? {}).some((r) => isRetryableSkip(r as StepResult))) continue;
+      try {
+        const r = await replanCycle(supabase, cyc);
+        if (r) replans.push(r);
+      } catch (e) {
+        console.error(`start-client-cycle replan ${cyc.id} failed:`, e);
+      }
+    }
+  }
+  return { due: due.length, processed: results.length, results, replans };
 }
 
 serve(async (req) => {
