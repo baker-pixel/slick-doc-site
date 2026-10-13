@@ -29,7 +29,6 @@ import { AdminOnboarding } from "@/components/admin/core/AdminOnboarding";
 import { EmailAdminPanel } from "@/components/admin/email/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/sales/GapAnalysisDetailModal";
 import { ClientManagementPanel } from "@/components/admin/clients/ClientManagementPanel";
-import { ClientOnboardingChecklist } from "@/components/admin/clients/ClientOnboardingChecklist";
 import { SOPManagementPanel } from "@/components/admin/workflow/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/workflow/AutomationJobsPanel";
 import { AutomationControlCenter } from "@/components/admin/workflow/AutomationControlCenter";
@@ -58,31 +57,22 @@ import { TaskTemplatesPanel } from "@/components/admin/workflow/TaskTemplatesPan
 import { OnboardingAutomationPanel } from "@/components/admin/clients/OnboardingAutomationPanel";
 import { IntegrationConfigPanel } from "@/components/admin/misc/IntegrationConfigPanel";
 import { WorkPanel } from "@/components/admin/content/WorkPanel";
-import { MarketingOSDashboard } from "@/components/admin/misc/MarketingOSDashboard";
 import { GoogleReviewEngine } from "@/components/admin/content/GoogleReviewEngine";
 import LeadScoringPanel from "@/components/admin/sales/LeadScoringPanel";
 import ProspectEnginePanel from "@/components/admin/sales/ProspectEnginePanel";
-import AIAdGenerator from "@/components/admin/content/AIAdGenerator";
 import CaseStudyBuilderPanel from "@/components/admin/content/CaseStudyBuilderPanel";
 import ClientHealthDashboard from "@/components/admin/clients/ClientHealthDashboard";
-import WebsitePersonalizationPanel from "@/components/admin/misc/WebsitePersonalizationPanel";
 import QualityAssurancePanel from "@/components/admin/misc/QualityAssurancePanel";
 import BeforeAfterShowcasePanel from "@/components/admin/content/BeforeAfterShowcasePanel";
 import SalesProposalPanel from "@/components/admin/sales/SalesProposalPanel";
 import SocialMediaPostsPanel from "@/components/admin/content/SocialMediaPostsPanel";
 import FeatureGuidePanel from "@/components/admin/core/FeatureGuidePanel";
-import { ClientPhaseTracker } from "@/components/admin/clients/ClientPhaseTracker";
 import ClientProgressTracker from "@/components/admin/clients/ClientProgressTracker";
 import { AICopilotPanel } from "@/components/admin/core/AICopilotPanel";
 import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelector";
 import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientHeader";
 import { UnifiedClientView } from "@/components/admin/clients/UnifiedClientView";
 import { AdminHomeDashboard } from "@/components/admin/core/AdminHomeDashboard";
-import { SOPCommandCenter } from "@/components/admin/workflow/SOPCommandCenter";
-import { DailyDigestGenerator } from "@/components/admin/email/DailyDigestGenerator";
-import { TeamPerformanceMetrics } from "@/components/admin/misc/TeamPerformanceMetrics";
-import { WorkloadBalancer } from "@/components/admin/workflow/WorkloadBalancer";
-import { TaskNotificationsPanel } from "@/components/admin/workflow/TaskNotificationsPanel";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1378,16 +1368,6 @@ const AdminInner = () => {
     switch (activeSection) {
       case "automation-center":
         return <AutomationControlCenter adminPassword={storedPassword} />;
-      case "sop-command-center":
-        return <SOPCommandCenter adminPassword={storedPassword} />;
-      case "daily-digest":
-        return <DailyDigestGenerator adminPassword={storedPassword} />;
-      case "team-performance":
-        return <TeamPerformanceMetrics adminPassword={storedPassword} />;
-      case "workload-balancer":
-        return <WorkloadBalancer adminPassword={storedPassword} />;
-      case "task-notifications":
-        return <TaskNotificationsPanel />;
       case "pipeline":
         return renderLeadsHub();
       case "cycles":
@@ -1423,24 +1403,7 @@ const AdminInner = () => {
       case "campaigns":
         return <CampaignSenderPanel />;
       case "clients":
-        return (
-          <Tabs defaultValue="all-clients" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="all-clients">All Clients</TabsTrigger>
-              <TabsTrigger value="phases">Phases</TabsTrigger>
-              <TabsTrigger value="new-onboarding">New Client Onboarding</TabsTrigger>
-            </TabsList>
-            <TabsContent value="all-clients">
-              <ClientManagementPanel adminPassword={storedPassword} />
-            </TabsContent>
-            <TabsContent value="phases">
-              <ClientPhaseTracker adminPassword={storedPassword} />
-            </TabsContent>
-            <TabsContent value="new-onboarding">
-              <ClientOnboardingChecklist adminPassword={storedPassword} />
-            </TabsContent>
-          </Tabs>
-        );
+        return <ClientManagementPanel adminPassword={storedPassword} />;
       case "client-projects":
         return <ClientProjectsAdminPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
       case "client-analytics":
@@ -1480,24 +1443,18 @@ const AdminInner = () => {
         return <WorkPanel clientId={selectedClient?.id} adminPassword={storedPassword} />;
       case "reports-review":
         return <ReportsReviewPanel />;
-      case "marketing-os":
-        return <MarketingOSDashboard />;
       case "review-engine":
         return <GoogleReviewEngine />;
       case "prospect-engine":
         return <ProspectEnginePanel />;
       case "lead-scoring":
         return renderLeadsHub();
-      case "ad-generator":
-        return <AIAdGenerator />;
       case "case-studies":
       case "before-after":
       case "sales-proposals":
         return renderSalesHub();
       case "client-health":
         return <ClientHealthDashboard />;
-      case "website-personalization":
-        return <WebsitePersonalizationPanel />;
       case "quality-assurance":
         return <QualityAssurancePanel />;
       case "social-posts":
@@ -1540,13 +1497,9 @@ const AdminInner = () => {
       // Legacy titles for backward compatibility
       pipeline: "Pipeline Dashboard",
       "client-health": "Client Health",
-      "team-performance": "Team Performance",
       "automation-center": "Automation Control Center",
-      "sop-command-center": "SOP Command Center",
       "content-review": "Content Review",
       "reports-review": "Reports Review",
-      "task-notifications": "Task Notifications",
-      "daily-digest": "Daily Digest",
       cycles: "Work Cycles",
       alerts: "Automation Alerts",
       "activity-feed": "Activity Feed",
@@ -1554,14 +1507,10 @@ const AdminInner = () => {
       "quick-actions": "Quick Actions",
       "before-after": "Before & After Showcase",
       "case-studies": "Case Study Builder",
-      "website-personalization": "Website Personalization",
-      "marketing-os": "Marketing OS",
       "seo-dashboard": "SEO",
       "quality-assurance": "AI Quality Assurance",
       "prospect-engine": "Prospect Engine",
       "lead-scoring": "AI Lead Scoring",
-      "ad-generator": "AI Ad Generator",
-      "workload-balancer": "Workload Balancer",
       "client-analytics": "Client Analytics",
       "client-requests": "Client Requests",
       
@@ -1575,20 +1524,17 @@ const AdminInner = () => {
 
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
-    "home", "daily-digest", "task-notifications",
-    "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
+    "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
     "emails", "templates", "sequences", "campaigns", "alerts", "cycles",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
-    "clients", "team-directory", "team-performance", "workload-balancer",
-    "integrations",
+    "clients", "team-directory", "integrations",
     "quick-actions", "activity-feed",
     "prospect-engine",
-    "lead-scoring", "ad-generator", "sales-proposals", "automation",
-    "automation-center", "sop-command-center", "client-health",
-    "onboarding", "social-posts", "marketing-os", "seo-dashboard",
+    "lead-scoring", "sales-proposals", "automation",
+    "automation-center", "client-health",
+    "onboarding", "social-posts", "seo-dashboard",
     "review-engine", "case-studies", "before-after",
-    "quality-assurance", "website-personalization",
-    // Agent office sections — show all clients' work, no client selection required
+    "quality-assurance", // Agent office sections — show all clients' work, no client selection required
     "deliverables", "approvals", "content-review", "reports-review",
   ];
 

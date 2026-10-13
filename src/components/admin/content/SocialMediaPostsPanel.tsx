@@ -78,6 +78,7 @@ interface PostForMeAccount {
   username: string | null;
   profile_photo_url: string | null;
   status: string;
+  is_primary?: boolean | null;
 }
 
 const platformIcons: Record<string, React.ReactNode> = {
@@ -1145,7 +1146,10 @@ export default function SocialMediaPostsPanel() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {CONNECT_PLATFORMS.map(({ id: platformId, label }) => {
-                const connected = pfmAccounts.find((a) => a.platform === platformId);
+                const platformAccounts = pfmAccounts
+                  .filter((a) => a.platform === platformId)
+                  .sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary));
+                const connected = platformAccounts.length > 0;
                 const color = platformColors[platformId] || "bg-gray-500";
                 const icon = platformIcons[platformId] || <CircleDot className="h-4 w-4" />;
 
@@ -1170,32 +1174,41 @@ export default function SocialMediaPostsPanel() {
                     </div>
 
                     {connected ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          {connected.profile_photo_url && (
-                            <img
-                              src={connected.profile_photo_url}
-                              alt={connected.username || ""}
-                              className="h-6 w-6 rounded-full object-cover"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium truncate">{connected.username || "Connected"}</p>
-                            <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-100 dark:bg-green-900/30 dark:text-green-400">
-                              Connected
-                            </Badge>
+                      <div className="space-y-3">
+                        {platformAccounts.map((account) => (
+                          <div key={account.id} className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              {account.profile_photo_url && (
+                                <img
+                                  src={account.profile_photo_url}
+                                  alt={account.username || ""}
+                                  className="h-6 w-6 rounded-full object-cover"
+                                />
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{account.username || "Connected"}</p>
+                                <div className="flex items-center gap-1">
+                                  <Badge variant="outline" className="text-xs text-green-700 border-green-300 bg-green-100 dark:bg-green-900/30 dark:text-green-400">
+                                    Connected
+                                  </Badge>
+                                  {account.is_primary && platformAccounts.length > 1 && (
+                                    <Badge variant="outline" className="text-xs">Primary</Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="w-full h-7 text-xs text-muted-foreground hover:text-destructive"
+                              onClick={() => disconnectAccount.mutate(account)}
+                              disabled={disconnectAccount.isPending}
+                            >
+                              <Unplug className="h-3 w-3 mr-1" />
+                              Disconnect
+                            </Button>
                           </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="w-full h-7 text-xs text-muted-foreground hover:text-destructive"
-                          onClick={() => disconnectAccount.mutate(connected)}
-                          disabled={disconnectAccount.isPending}
-                        >
-                          <Unplug className="h-3 w-3 mr-1" />
-                          Disconnect
-                        </Button>
+                        ))}
                       </div>
                     ) : (
                       <Button

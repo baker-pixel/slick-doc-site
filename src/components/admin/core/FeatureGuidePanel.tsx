@@ -115,25 +115,6 @@ const features: FeatureInfo[] = [
     status: "active"
   },
   {
-    id: "calendar",
-    name: "Content Calendar",
-    icon: CalendarIcon,
-    category: "overview",
-    description: "Visual calendar for planning, scheduling, and managing content across all clients and platforms.",
-    capabilities: [
-      "Drag-and-drop scheduling",
-      "Multi-platform content planning",
-      "Publishing automation",
-      "Content status tracking"
-    ],
-    useCases: [
-      "Plan social media content weeks ahead",
-      "Coordinate blog post releases",
-      "Manage client content approvals"
-    ],
-    status: "active"
-  },
-  {
     id: "analytics",
     name: "Analytics Dashboard",
     icon: BarChart3,
@@ -426,25 +407,6 @@ const features: FeatureInfo[] = [
     status: "active"
   },
   {
-    id: "marketing-os",
-    name: "Marketing OS",
-    icon: Target,
-    category: "automation",
-    description: "Unified dashboard combining website analytics, SEO tracking, competitor insights, social performance, lead tracking, and AI recommendations.",
-    capabilities: [
-      "Multi-source data aggregation",
-      "AI-powered insights",
-      "Automated action items",
-      "Performance benchmarking"
-    ],
-    useCases: [
-      "Get a complete marketing overview",
-      "Identify growth opportunities",
-      "Make data-driven decisions"
-    ],
-    status: "active"
-  },
-  {
     id: "review-engine",
     name: "Review Engine",
     icon: Star,
@@ -460,44 +422,6 @@ const features: FeatureInfo[] = [
       "Grow client review counts",
       "Respond to reviews quickly",
       "Monitor reputation trends"
-    ],
-    status: "active"
-  },
-  {
-    id: "win-notifications",
-    name: "Win Notifications",
-    icon: Trophy,
-    category: "automation",
-    description: "Automated client notifications for wins like ranking improvements, traffic increases, and cost-per-lead decreases.",
-    capabilities: [
-      "Automated win detection",
-      "Customizable thresholds",
-      "Multi-channel notifications",
-      "Win history tracking"
-    ],
-    useCases: [
-      "Celebrate client successes",
-      "Build client relationships",
-      "Demonstrate value proactively"
-    ],
-    status: "active"
-  },
-  {
-    id: "ad-generator",
-    name: "AI Ad Generator",
-    icon: Megaphone,
-    category: "automation",
-    description: "Generate complete ad campaigns for Meta and Google including headlines, descriptions, images, video scripts, and landing page copy.",
-    capabilities: [
-      "Multi-platform ad generation",
-      "Audience targeting suggestions",
-      "Landing page copy",
-      "Visual asset recommendations"
-    ],
-    useCases: [
-      "Create ads in minutes",
-      "Test multiple variations",
-      "Scale ad production"
     ],
     status: "active"
   },
@@ -536,25 +460,6 @@ const features: FeatureInfo[] = [
       "Identify at-risk clients",
       "Prioritize client attention",
       "Reduce churn"
-    ],
-    status: "active"
-  },
-  {
-    id: "website-personalization",
-    name: "Website Personalization",
-    icon: Wand2,
-    category: "automation",
-    description: "Create dynamic content rules that change website elements based on visitor type (new/returning, local/out-of-town, past buyer, engaged scroller).",
-    capabilities: [
-      "Visitor segmentation",
-      "Dynamic content rules",
-      "A/B testing integration",
-      "Embed code generation"
-    ],
-    useCases: [
-      "Personalize client websites",
-      "Increase conversion rates",
-      "Deliver relevant experiences"
     ],
     status: "active"
   },

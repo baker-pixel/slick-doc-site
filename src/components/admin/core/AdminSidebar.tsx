@@ -16,7 +16,6 @@ import {
   LogOut,
   HelpCircle,
   Search,
-  Send,
   Bell,
   RefreshCw,
   UserCog,
@@ -67,13 +66,9 @@ export type AdminSection =
   // Legacy sections kept for routing compatibility
   | "pipeline"
   | "client-health"
-  | "team-performance"
   | "automation-center"
-  | "sop-command-center"
   | "content-review"
   | "reports-review"
-  | "task-notifications"
-  | "daily-digest"
   | "alerts"
   | "cycles"
   | "activity-feed"
@@ -81,12 +76,8 @@ export type AdminSection =
   | "quick-actions"
   | "before-after"
   | "case-studies"
-  | "website-personalization"
-  | "marketing-os"
   | "quality-assurance"
   | "lead-scoring"
-  | "ad-generator"
-  | "workload-balancer"
   | "client-analytics"
   | "client-requests"
   | "pdf-leads"
@@ -132,7 +123,9 @@ const growthItems: NavItem[] = [
   // own nav entry (not merged into "Leads") so the two audiences -- our own
   // leads vs. a client's prospects -- are never mixed in one view.
   { id: "prospect-engine", label: "Prospecting", icon: Radar },
-  { id: "sales-proposals", label: "Sales", icon: Send, matchIds: ["case-studies", "before-after"] },
+  // Sales hub (AI proposals / case studies / before-after) hidden for now --
+  // unused so far. Routes still work; re-add to restore:
+  // (needs the `Send` icon import from lucide-react) { id: "sales-proposals", label: "Sales", icon: Send, matchIds: ["case-studies", "before-after"] },
 ];
 
 // OPERATIONS group
