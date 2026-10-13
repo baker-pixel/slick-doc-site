@@ -48,6 +48,9 @@ verify_jwt = true
 [functions.admin]
 verify_jwt = false
 
+[functions.admin-command-center]
+verify_jwt = false
+
 [functions.generate-analysis]
 verify_jwt = false
 

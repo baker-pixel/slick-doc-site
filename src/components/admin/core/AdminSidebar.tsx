@@ -9,7 +9,6 @@ import {
   FolderOpen,
   Mail,
   Share2,
-  Home,
   Contact,
   Layers,
   Palette,
@@ -20,6 +19,8 @@ import {
   RefreshCw,
   UserCog,
   Radar,
+  Activity,
+  LayoutDashboard,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -104,37 +105,44 @@ interface NavItem {
   matchIds?: AdminSection[];
 }
 
-// AGENTS group
+// Grouped by what the owner is trying to do, not by how the code is organised.
+
+// CLIENTS: who we work for, and what we know about them.
+const clientItems: NavItem[] = [
+  { id: "clients", label: "Clients", icon: Users },
+  { id: "client-projects", label: "Projects", icon: Layers },
+  { id: "brand-assets", label: "Brand Assets", icon: Palette },
+];
+
+// AGENTS: the things the platform does for clients. Each one is a real panel
+// with its own data; the Command Center shows them all side by side.
 const agentItems: NavItem[] = [
-  { id: "seo-dashboard", label: "SEO", icon: Search },
-  { id: "content-review", label: "Content", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "social-posts", label: "Social", icon: Share2 },
-  { id: "emails", label: "Outreach", icon: Mail },
+  { id: "content-review", label: "Content approvals", icon: FileText, matchIds: ["approvals", "deliverables"] },
+  { id: "prospect-engine", label: "Prospecting", icon: Radar },
+  { id: "emails", label: "Outreach emails", icon: Mail },
+  { id: "seo-dashboard", label: "SEO", icon: Search },
   { id: "reports-review", label: "Reports", icon: BarChart3 },
 ];
 
-// GROWTH group
-const growthItems: NavItem[] = [
-  // OrangeDoor's own top-of-funnel: people who submitted the marketing site's
-  // form/quick-scan, or downloaded a PDF -- prospective OrangeDoor clients.
-  { id: "contacts", label: "Leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "pipeline", "lead-scoring"] },
-  // A world apart from the above: candidates OrangeDoor discovers/emails on
-  // behalf of one of ITS clients' own cold-outreach campaigns. Kept as its
-  // own nav entry (not merged into "Leads") so the two audiences -- our own
-  // leads vs. a client's prospects -- are never mixed in one view.
-  { id: "prospect-engine", label: "Prospecting", icon: Radar },
-  // Sales hub (AI proposals / case studies / before-after) hidden for now --
-  // unused so far. Routes still work; re-add to restore:
-  // (needs the `Send` icon import from lucide-react) { id: "sales-proposals", label: "Sales", icon: Send, matchIds: ["case-studies", "before-after"] },
+// MONITORING: is it all running, and what happened.
+const monitoringItems: NavItem[] = [
+  { id: "cycles", label: "Work cycles", icon: RefreshCw },
+  { id: "alerts", label: "Alerts", icon: Bell },
+  { id: "activity-feed", label: "Activity log", icon: Activity },
 ];
 
-// OPERATIONS group
-const operationsItems: NavItem[] = [
-  { id: "clients", label: "Clients", icon: Users },
-  { id: "client-projects", label: "Projects", icon: Layers },
-  { id: "cycles", label: "Cycles", icon: RefreshCw },
-  { id: "alerts", label: "Alerts", icon: Bell },
-  { id: "brand-assets", label: "Brand Assets", icon: Palette },
+// GROWTH: OrangeDoor's own top-of-funnel -- people who submitted the marketing
+// site's form/quick-scan or downloaded a PDF. Not to be confused with
+// "Prospecting" above, which is a client's own cold-outreach candidates.
+// (Sales hub -- proposals / case studies / before-after -- is hidden: unused.
+// Its routes still work; re-add { id: "sales-proposals", ... } to restore.)
+const growthItems: NavItem[] = [
+  { id: "contacts", label: "Our leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "pipeline", "lead-scoring"] },
+];
+
+// ADMIN
+const adminItems: NavItem[] = [
   { id: "team-directory", label: "Team", icon: UserCog },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -214,6 +222,8 @@ function NavGroup({ label, items, activeSection, onSectionChange, defaultOpen = 
   );
 }
 
+/** Alerts that still need a person: unacknowledged, warning or worse, from the last 7 days.
+ * (Counting every unacknowledged alert ever raised pinned this badge at "99+" forever.) */
 function useUnacknowledgedAlertCount(): number {
   const [count, setCount] = useState(0);
 
@@ -221,10 +231,13 @@ function useUnacknowledgedAlertCount(): number {
     let cancelled = false;
 
     const refresh = async () => {
+      const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
       const { count: c } = await supabase
         .from("automation_alerts")
         .select("id", { count: "exact", head: true })
-        .is("acknowledged_at", null);
+        .is("acknowledged_at", null)
+        .in("severity", ["warning", "error", "critical"])
+        .gte("created_at", since);
       if (!cancelled) setCount(c ?? 0);
     };
 
@@ -263,18 +276,20 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
                 <SidebarMenuButton
                   isActive={activeSection === "home"}
                   onClick={() => onSectionChange("home")}
-                  tooltip="Home"
+                  tooltip="Command Center"
                 >
-                  <Home className="h-4 w-4" />
-                  <span>Home</span>
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Command Center</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <NavGroup label="Clients" items={clientItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
+        <NavGroup label="Monitoring" items={monitoringItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ alerts: alertCount }} />
         <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
-        <NavGroup label="Operations" items={operationsItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ alerts: alertCount }} />
+        <NavGroup label="Admin" items={adminItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">

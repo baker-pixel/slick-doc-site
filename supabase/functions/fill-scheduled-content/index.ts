@@ -215,11 +215,23 @@ serve(async (req) => {
 
     const results: { id: string; success: boolean; error?: string }[] = [];
 
+    // The edge gateway cuts a request off at 150s of idle time. A slot takes
+    // 15-25s (draft, topic, claims/QA), so stop starting new ones early enough
+    // to leave room for the image kick-off below, and tell the caller to run
+    // again instead of letting the request die with its work half-reported.
+    const startedAt = Date.now();
+    const LOOP_BUDGET_MS = 85_000;
+    let stoppedEarly = false;
+
     // Cache each client's social pillars. Which pillar a post serves is picked
     // per slot from recent usage (pickPillar), so rotation survives across runs.
     const pillarsByClient: Record<string, string[]> = {};
 
     for (const slot of slots) {
+      if (Date.now() - startedAt > LOOP_BUDGET_MS) {
+        stoppedEarly = true;
+        break;
+      }
       try {
         const client = clientMap[slot.client_account_id];
         if (!client) throw new Error("Client not found");
@@ -482,6 +494,7 @@ serve(async (req) => {
         processed: results.length,
         successful: results.filter((r) => r.success).length,
         failed: results.filter((r) => !r.success).length,
+        ...(stoppedEarly ? { stopped_early: true, remaining_in_batch: slots.length - results.length } : {}),
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -629,7 +642,7 @@ function buildClientContext(client: ClientInfo): string {
   }
 
   if (ctx.differentiators?.length) {
-    parts.push(`Self-described positioning (UNVERIFIED -- tone only, do not state as concrete product features): ${ctx.differentiators.slice(0, 4).join(", ")}.`);
+    parts.push(`What the client says sets them apart (use these as proof points and positioning in the copy; do not add claims beyond these and the verified facts): ${ctx.differentiators.slice(0, 4).join(", ")}.`);
   }
 
   if (ctx.target_audience) {
