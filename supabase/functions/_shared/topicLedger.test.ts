@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { collectRecentTopics, isPlaceholderTitle, pickPillar, topicOf } from "./topicLedger.ts";
+import { collectRecentTopics, isPlaceholderTitle, pickPillar, topicOf, findRepeatedTopics
+} from "./topicLedger.ts";
 
 Deno.test("isPlaceholderTitle: slot labels vs real titles", () => {
   assertEquals(isPlaceholderTitle("LinkedIn Post — Oct 13, 2026"), true);
@@ -32,4 +33,9 @@ Deno.test("pickPillar: least used wins, ties to earlier, unknown ignored", () =>
   assertEquals(pickPillar(pillars, ["A", "B", "C", "A"]), "B");
   assertEquals(pickPillar(pillars, ["Z", null, undefined]), "A");
   assertEquals(pickPillar([], ["A"]), undefined);
+});
+
+Deno.test("findRepeatedTopics catches case/punctuation duplicates only", () => {
+  const rows = [{ metadata: { topic: "Team Trust!" } }, { metadata: { topic: "team trust" } }, { metadata: { topic: "Hiring" } }];
+  assertEquals(findRepeatedTopics(rows), ["Team Trust!"]);
 });

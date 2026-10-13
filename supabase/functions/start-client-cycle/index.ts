@@ -14,10 +14,15 @@ import { sendFirstCycleReadyEmail } from "../_shared/cycleEmail.ts";
 import { collectRecentTopics } from "../_shared/topicLedger.ts";
 import {
   closeCycle,
+  isRetryableSkip,
+  isRunInProgress,
+  remainingSteps,
+  type StepRecord,
   type CycleRow,
   type CycleTrigger,
   computeDigest,
   openCycle,
+  planIssues,
   sweepWindow,
 } from "../_shared/cycle.ts";
 
@@ -113,7 +118,16 @@ async function rolloverClient(
     if (attempts >= MAX_ATTEMPTS) {
       return { client_id: clientId, cycle_id: cycle.id, skipped: `gave up after ${attempts} attempts` };
     }
+    if (isRunInProgress(cycle.plan)) {
+      return { client_id: clientId, cycle_id: cycle.id, skipped: "another run is in progress" };
+    }
   }
+
+  // Consume the attempt BEFORE doing any work. If this run times out partway,
+  // the sweep still sees the attempt and eventually stops retrying, instead of
+  // re-running paid LLM/discovery calls every hour forever.
+  const startedPlan: Record<string, any> = { ...cycle.plan, attempts: attempts + 1, last_attempt_at: new Date().toISOString() };
+  await supabase.from("client_cycles").update({ plan: startedPlan, updated_at: new Date().toISOString() }).eq("id", cycle.id);
 
   // 1. Close earlier cycles and take the freshest digest as this cycle's input.
   const { data: open } = await supabase.from("client_cycles").select("*")
@@ -144,7 +158,21 @@ async function rolloverClient(
   const learned: string[] = previousDigest?.learned ?? [];
 
   // 2-5. Plan. Each step isolated.
-  const { steps, discovery } = await planSteps(supabase, client, cycle, learned);
+  // Resume a cycle that died mid-run (timeout): steps already done are kept
+  // and not repeated (a second paid discovery run would be wasted spend).
+  // `force` re-runs everything.
+  const priorSteps: Record<string, StepResult> = opts.force ? {} : (cycle.plan?.steps ?? {});
+  const only = remainingSteps(priorSteps as Record<string, StepRecord>, PLAN_STEP_NAMES);
+
+  const { steps: fresh, discovery } = only && only.size === 0
+    ? { steps: {} as Record<string, StepResult>, discovery: {} as Record<string, unknown> }
+    : await planSteps(supabase, client, cycle, learned, only, async (soFar, disc) => {
+      await supabase.from("client_cycles").update({
+        plan: { ...startedPlan, steps: { ...priorSteps, ...soFar }, discovery: { ...(cycle.plan?.discovery ?? {}), ...disc }, learned },
+        updated_at: new Date().toISOString(),
+      }).eq("id", cycle.id);
+    });
+  const steps = { ...priorSteps, ...fresh };
 
   const results = Object.values(steps);
   const worked = results.filter((s) => s.status !== "skipped");
@@ -154,7 +182,7 @@ async function rolloverClient(
 
   await supabase.from("client_cycles").update({
     status,
-    plan: { ...cycle.plan, attempts: attempts + 1, steps, discovery, learned },
+    plan: { ...startedPlan, steps, discovery: { ...(cycle.plan?.discovery ?? {}), ...discovery }, learned, issues: planIssues(steps, { ...(cycle.plan?.discovery ?? {}), ...discovery }) },
     error: failed.length ? failed.map((s) => s.detail).join("; ").slice(0, 500) : null,
     planned_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -175,12 +203,12 @@ async function rolloverClient(
   return { client_id: clientId, cycle_id: cycle.id, cycle_no: cycle.cycle_no, status, steps };
 }
 
+const PLAN_STEP_NAMES = ["learn", "social_strategy", "social_schedule", "prospect_discovery"];
 const RETRYABLE = "retry_when_ready";
 
 /** A skip caused by onboarding not being finished yet; the sweep re-runs it once it is. */
 const notReady = (detail: string): StepResult => ({ status: "skipped", detail, [RETRYABLE]: true } as StepResult);
 
-const isRetryableSkip = (r?: StepResult) => r?.status === "skipped" && !!(r as any)?.[RETRYABLE];
 
 interface PlanClient {
   id: string;
@@ -204,12 +232,18 @@ async function planSteps(
   cycle: CycleRow,
   learned: string[],
   only?: Set<string>,
+  /** Called after every step so progress survives a timeout mid-run. */
+  onStep?: (steps: Record<string, StepResult>, discovery: Record<string, unknown>) => Promise<void>,
 ): Promise<{ steps: Record<string, StepResult>; discovery: Record<string, unknown> }> {
   const clientId = client.id;
   const policy = tierPolicy(client.tier);
   const steps: Record<string, StepResult> = {};
   const discovery: Record<string, unknown> = {};
-  const run = (name: string, fn: () => Promise<StepResult>) => (only && !only.has(name)) ? Promise.resolve() : step(steps, name, fn);
+  const run = async (name: string, fn: () => Promise<StepResult>) => {
+    if (only && !only.has(name)) return;
+    await step(steps, name, fn);
+    await onStep?.(steps, discovery).catch((e) => console.error("start-client-cycle: progress save failed:", e));
+  };
 
   await run("learn", async () => {
     const r = await refineClientContext(supabase, clientId);
@@ -298,7 +332,8 @@ async function replanCycle(supabase: Supabase, cycle: CycleRow): Promise<Record<
 
   const merged = { ...prior, ...fresh };
   const scheduledNow = prior.social_schedule?.status === "skipped" && fresh.social_schedule?.status === "ok";
-  const plan: Record<string, any> = { ...cycle.plan, steps: merged, discovery: { ...(cycle.plan?.discovery ?? {}), ...discovery } };
+  const mergedDiscovery = { ...(cycle.plan?.discovery ?? {}), ...discovery };
+  const plan: Record<string, any> = { ...cycle.plan, steps: merged, discovery: mergedDiscovery, issues: planIssues(merged, mergedDiscovery) };
 
   if (scheduledNow && cycle.cycle_no === 1 && !plan.ready_email_sent && client.email) {
     const slots = Number(String(fresh.social_schedule?.detail ?? "").match(/^(\d+)/)?.[1] ?? 0);
@@ -337,6 +372,7 @@ async function sweep(supabase: Supabase): Promise<Record<string, unknown>> {
       if (new Date(latest.period_end).getTime() > cpe + HOUR_MS) continue; // already ahead
       if (sameEnd && (latest.status === "active" || latest.status === "closed")) continue;
       if (sameEnd && Number(latest.plan?.attempts ?? 0) >= MAX_ATTEMPTS) continue;
+      if (sameEnd && isRunInProgress(latest.plan)) continue;
     }
     due.push(c.id);
   }

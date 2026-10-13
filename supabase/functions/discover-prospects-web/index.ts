@@ -78,6 +78,7 @@ async function apolloSearchCompanies(
   geography: string,
   maxResults: number,
   focus?: string,
+  page = 1,
 ): Promise<FoundCompany[]> {
   // Note: Apollo's organization search has no keyword/tag exclusion filter
   // (only organization_not_locations / not_organization_websites_list) --
@@ -89,7 +90,7 @@ async function apolloSearchCompanies(
     q_organization_keyword_tags: focus?.trim() ? [...keywords, focus.trim()] : keywords,
     // Over-fetch: results on known non-prospect domains are dropped afterwards.
     per_page: Math.min(maxResults * 2, 100),
-    page: 1,
+    page,
   };
   if (!/global/i.test(geography)) body.organization_locations = [normalizeGeographyForApollo(geography)];
   const employeeRange = parseEmployeeRange(icp.company_size);
@@ -266,7 +267,19 @@ Respond with ONLY a JSON array, no prose:
         // so a niche client doesn't get every "technology" company on earth.
         const keywords = await ensureSearchKeywords(supabase, client, icp);
         const tags = keywords.length > 0 ? keywords : icp.industries;
-        companies = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geography, maxResults, body.focus));
+        // Page 1 is the same top-ranked set every cycle, so by cycle 2 it is all
+        // already-known companies. Walk deeper pages until enough are new.
+        const { data: known } = await supabase.from("prospects").select("website_url").eq("client_id", body.client_id);
+        const knownNorm = new Set((known ?? []).map((p: { website_url: string }) => normalizeUrl(p.website_url || "")));
+        const pool: FoundCompany[] = [];
+        let freshCount = 0;
+        for (let page = 1; page <= 5 && freshCount < maxResults; page++) {
+          const batch = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geography, maxResults, body.focus, page));
+          if (batch.length === 0) break;
+          pool.push(...batch);
+          freshCount += batch.filter((c) => { const n = normalizeUrl(c.website_url); return n && !knownNorm.has(n); }).length;
+        }
+        companies = pool;
         via = "apollo";
       } catch (e) {
         console.error("Apollo search failed, falling back to web search:", e instanceof Error ? e.message : e);
@@ -307,7 +320,7 @@ Respond with ONLY a JSON array, no prose:
       if (!norm || existingNorm.has(norm) || seen.has(norm)) return false;
       seen.add(norm);
       return true;
-    });
+    }).slice(0, maxResults);
 
     let inserted: { id: string; name: string; website_url: string; city: string | null }[] = [];
     if (fresh.length === 0) await recordEmptyRun();

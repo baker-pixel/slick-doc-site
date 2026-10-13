@@ -40,6 +40,7 @@ import { EmailTemplatesPanel } from "@/components/admin/email/EmailTemplatesPane
 import { CampaignSenderPanel } from "@/components/admin/email/CampaignSenderPanel";
 import { QuickActionsPanel } from "@/components/admin/core/QuickActionsPanel";
 import PipelineDashboard from "@/components/admin/sales/PipelineDashboard";
+import CycleOverviewPanel from "@/components/admin/workflow/CycleOverviewPanel";
 import AutomationAlertsPanel from "@/components/admin/workflow/AutomationAlertsPanel";
 import ClientDocumentsPanel from "@/components/admin/clients/ClientDocumentsPanel";
 import ClientMessagesAdminPanel from "@/components/admin/clients/ClientMessagesAdminPanel";
@@ -1389,6 +1390,8 @@ const AdminInner = () => {
         return <TaskNotificationsPanel />;
       case "pipeline":
         return renderLeadsHub();
+      case "cycles":
+        return <CycleOverviewPanel />;
       case "alerts":
         return <AutomationAlertsPanel />;
       case "quick-actions":
@@ -1544,6 +1547,7 @@ const AdminInner = () => {
       "reports-review": "Reports Review",
       "task-notifications": "Task Notifications",
       "daily-digest": "Daily Digest",
+      cycles: "Work Cycles",
       alerts: "Automation Alerts",
       "activity-feed": "Activity Feed",
       "feature-guide": "Feature Guide",
@@ -1573,7 +1577,7 @@ const AdminInner = () => {
   const globalSections: AdminSection[] = [
     "home", "daily-digest", "task-notifications",
     "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
-    "emails", "templates", "sequences", "campaigns", "alerts",
+    "emails", "templates", "sequences", "campaigns", "alerts", "cycles",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "team-performance", "workload-balancer",
     "integrations",

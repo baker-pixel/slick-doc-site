@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { pipelineOnly } from "./campaignBoundary.ts";
-import { collectRecentTopics } from "./topicLedger.ts";
+import { collectRecentTopics, findRepeatedTopics } from "./topicLedger.ts";
 
 export type CycleTrigger = "invoice_paid" | "sweep" | "manual";
 
@@ -76,6 +76,7 @@ export interface SocialDigest {
   rejection_reasons: string[];
   by_platform: Record<string, { approved: number; rejected: number }>;
   topics_used: string[];
+  repeated_topics?: string[];
 }
 
 export function summarizeSocial(
@@ -223,6 +224,7 @@ export async function computeDigest(supabase: SupabaseClient, cycle: CycleRow) {
     published.count ?? 0,
     collectRecentTopics(calendar.data ?? [], 60),
   );
+  social.repeated_topics = findRepeatedTopics(calendar.data ?? []);
   const prospect = summarizeProspects((prospects.data ?? []) as ProspectRow[]);
   return { social, prospect, learned: buildLearned(social, prospect), computed_at: new Date().toISOString() };
 }
@@ -238,4 +240,55 @@ export async function closeCycle(supabase: SupabaseClient, cycle: CycleRow) {
   }).eq("id", cycle.id);
   if (error) throw error;
   return digest;
+}
+
+// ─── Run control (retry cap, resume, concurrency) ───────────────────────────
+
+/** A run that started recently is assumed still working (edge functions are killed well within this). */
+export const RUN_STALE_MS = 10 * 60 * 1000;
+
+export function isRunInProgress(plan: Record<string, any> | null | undefined, now = Date.now()): boolean {
+  return !!plan?.last_attempt_at && now - new Date(plan.last_attempt_at).getTime() < RUN_STALE_MS;
+}
+
+export interface StepRecord { status: "ok" | "skipped" | "error"; detail?: string; retry_when_ready?: boolean }
+
+/** A skip caused by onboarding not being finished yet; retried once the client is ready. */
+export const isRetryableSkip = (r?: StepRecord) => r?.status === "skipped" && !!r?.retry_when_ready;
+
+/**
+ * Steps still to run when resuming a cycle whose earlier run died or failed.
+ * Done = succeeded, or deliberately skipped for a permanent reason. Errored,
+ * retryable-skipped and never-reached steps run again. undefined = run all
+ * (nothing recorded yet), so a first run is not restricted.
+ */
+export function remainingSteps(prior: Record<string, StepRecord>, all: string[]): Set<string> | undefined {
+  const done = Object.entries(prior)
+    .filter(([, r]) => r.status === "ok" || (r.status === "skipped" && !isRetryableSkip(r)))
+    .map(([n]) => n);
+  return done.length ? new Set(all.filter((n) => !done.includes(n))) : undefined;
+}
+
+// ─── Quality checks ─────────────────────────────────────────────────────────
+
+/**
+ * Things that "succeeded" but probably shouldn't be trusted: a step reporting
+ * ok while producing nothing. Shown in the admin cycle view; never blocks a cycle.
+ */
+export function planIssues(
+  steps: Record<string, StepRecord>,
+  discovery: Record<string, any> | null | undefined,
+): string[] {
+  const out: string[] = [];
+  if (steps.prospect_discovery?.status === "ok" && discovery?.discovered === 0) {
+    out.push("Prospect discovery ran but found no new leads (search may be exhausted or returning only known companies).");
+  }
+  const sched = steps.social_schedule;
+  if (sched?.status === "ok" && /^0 slots/.test(sched.detail ?? "")) {
+    out.push("Scheduling ran but created no new slots.");
+  }
+  for (const [name, r] of Object.entries(steps)) {
+    if (r.status === "error") out.push(`${name} failed: ${r.detail ?? "unknown error"}`);
+  }
+  return out;
 }
