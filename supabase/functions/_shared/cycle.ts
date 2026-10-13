@@ -239,3 +239,30 @@ export async function closeCycle(supabase: SupabaseClient, cycle: CycleRow) {
   if (error) throw error;
   return digest;
 }
+
+// ─── Run control (retry cap, resume, concurrency) ───────────────────────────
+
+/** A run that started recently is assumed still working (edge functions are killed well within this). */
+export const RUN_STALE_MS = 10 * 60 * 1000;
+
+export function isRunInProgress(plan: Record<string, any> | null | undefined, now = Date.now()): boolean {
+  return !!plan?.last_attempt_at && now - new Date(plan.last_attempt_at).getTime() < RUN_STALE_MS;
+}
+
+export interface StepRecord { status: "ok" | "skipped" | "error"; detail?: string; retry_when_ready?: boolean }
+
+/** A skip caused by onboarding not being finished yet; retried once the client is ready. */
+export const isRetryableSkip = (r?: StepRecord) => r?.status === "skipped" && !!r?.retry_when_ready;
+
+/**
+ * Steps still to run when resuming a cycle whose earlier run died or failed.
+ * Done = succeeded, or deliberately skipped for a permanent reason. Errored,
+ * retryable-skipped and never-reached steps run again. undefined = run all
+ * (nothing recorded yet), so a first run is not restricted.
+ */
+export function remainingSteps(prior: Record<string, StepRecord>, all: string[]): Set<string> | undefined {
+  const done = Object.entries(prior)
+    .filter(([, r]) => r.status === "ok" || (r.status === "skipped" && !isRetryableSkip(r)))
+    .map(([n]) => n);
+  return done.length ? new Set(all.filter((n) => !done.includes(n))) : undefined;
+}
