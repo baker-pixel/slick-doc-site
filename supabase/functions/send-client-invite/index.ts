@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
+import { emailLogo } from "../_shared/brandEmail.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -104,7 +105,7 @@ serve(async (req) => {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto;">
     <tr>
       <td style="padding-bottom: 28px;">
-        <span style="font-size: 15px; font-weight: 700; letter-spacing: 0.02em; color: #1a1a1a;">ORANGE DOOR</span>
+        ${emailLogo(false)}
       </td>
     </tr>
     <tr>

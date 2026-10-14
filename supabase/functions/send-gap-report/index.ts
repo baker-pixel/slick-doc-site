@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { cleanText, escapeHtml, guardPublicSender } from "../_shared/publicEmailGuard.ts";
+import { emailLogo } from "../_shared/brandEmail.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 const APP_URL = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
@@ -131,8 +132,7 @@ function buildEmailHtml(params: ReportEmailRequest): string {
 
   <!-- Header -->
   <div style="background:#1A1410;padding:32px 40px;">
-    <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2.5px;margin-bottom:2px;">ORANGE DOOR</div>
-    <div style="color:#8A7A6D;font-size:10px;letter-spacing:1.5px;">DIGITAL MARKETING</div>
+    ${emailLogo(true)}
   </div>
 
   <!-- Body -->

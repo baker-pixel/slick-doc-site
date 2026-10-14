@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import logo from "@/assets/logo-stacked.png";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function Hero() {
   return (
@@ -166,11 +166,7 @@ export function Hero() {
               transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
               className="relative"
             >
-              <img
-                src={logo}
-                alt="Orange Door Marketing logo"
-                className="w-full max-w-md h-auto"
-              />
+              <BrandLogo variant="stacked" tone="onLight" className="w-full max-w-md h-auto" />
               {/* Decorative glow behind image */}
               <div className="absolute -inset-4 bg-primary/20 blur-3xl rounded-full -z-10" />
             </motion.div>

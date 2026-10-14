@@ -1,4 +1,5 @@
 import { filterEngagedClients } from "./engagedClients.ts";
+import { emailLogo } from "./brandEmail.ts";
 
 const RESEND_API_URL = "https://api.resend.com";
 
@@ -17,7 +18,7 @@ function buildBlockerEmail(firstName: string, title: string, description: string
 <body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
 <div style="max-width:600px;margin:20px auto;background:#ffffff;border-radius:8px;overflow:hidden;">
   <div style="background:#1a1a1a;padding:24px 40px;">
-    <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2px;">ORANGE DOOR</div>
+    ${emailLogo(true)}
   </div>
   <div style="padding:30px 40px;font-size:15px;color:#444;line-height:1.7;">
     <p>Hi ${firstName},</p>

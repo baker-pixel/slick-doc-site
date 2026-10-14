@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { BrandLogo } from "@/components/BrandLogo";
 import { acceptFailureMessage, acceptInvitation, fetchInvitationByToken } from "@/lib/invitations";
 
 export default function ClientPortalAuth() {
@@ -568,6 +569,7 @@ export default function ClientPortalAuth() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
             <CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
             <CardDescription>
               We've sent a confirmation link to {invitation?.email ?? email}. Click it to finish setting up your account.
@@ -588,6 +590,7 @@ export default function ClientPortalAuth() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
             <CardTitle className="text-2xl font-bold">Set New Password</CardTitle>
             <CardDescription>Enter your new password below</CardDescription>
           </CardHeader>
@@ -636,6 +639,7 @@ export default function ClientPortalAuth() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
             <CardTitle className="text-2xl font-bold">
               {resetEmailSent ? "Check Your Email" : "Reset Password"}
             </CardTitle>
@@ -710,6 +714,7 @@ export default function ClientPortalAuth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
           <CardTitle className="text-2xl font-bold">
             {invitation 
               ? (existingUserMode ? "Sign In to Accept Invitation" : "Accept Invitation") 

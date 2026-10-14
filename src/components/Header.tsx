@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
-import logo from "@/assets/logo-horizontal.png";
+import { BrandLogo } from "@/components/BrandLogo";
 import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 
 const navLinks = [
@@ -32,11 +32,7 @@ export function Header() {
         <div className="flex items-center justify-between gap-8">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 shrink-0">
-            <img 
-              src={logo} 
-              alt="Orange Door Marketing" 
-              className="h-9 sm:h-10 md:h-12 w-auto object-contain" 
-            />
+            <BrandLogo className="h-9 sm:h-10 md:h-12" />
           </Link>
 
           {/* Desktop Navigation */}

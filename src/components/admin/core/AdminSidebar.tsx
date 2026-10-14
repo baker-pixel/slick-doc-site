@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 import {
   Users,
   Settings,
@@ -265,9 +266,14 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-2">
-          <Settings className="h-5 w-5 text-primary" />
-          <span className="font-semibold group-data-[collapsible=icon]:hidden">Admin</span>
+        <div className="flex flex-col gap-1 px-2 py-2 group-data-[collapsible=icon]:items-center">
+          <div className="group-data-[collapsible=icon]:hidden">
+            <BrandLogo variant="horizontal" className="h-8" />
+          </div>
+          <div className="hidden group-data-[collapsible=icon]:block">
+            <BrandLogo variant="icon" className="h-5" />
+          </div>
+          <span className="text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">Admin</span>
         </div>
       </SidebarHeader>
 
