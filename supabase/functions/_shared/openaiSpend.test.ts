@@ -156,3 +156,13 @@ Deno.test("a server that never stops paginating is cut off, not looped forever",
   await fetchBuckets("costs", "k", { start_time: "1" }, stuck);
   assertEquals(seen.length, 20);
 });
+
+Deno.test("a refusal of the everyday key is explained as 'create an Admin key', not as a broken connection", () => {
+  const refused = explainError(new OpenAIApiError("forbidden", "Missing scopes: api.usage.read", 403), "standard");
+  assertEquals(refused.title, "OpenAI won't let our everyday key read billing");
+  assertEquals(refused.fix.includes("Admin key"), true);
+  // The same refusal of a real Admin key is a different problem (wrong permissions), explained differently.
+  assertEquals(explainError(new OpenAIApiError("forbidden", "nope", 403), "admin").title, "The key doesn't have permission to read usage");
+  // Outages are the same either way.
+  assertEquals(explainError(new OpenAIApiError("server", "boom", 500), "standard").title, "Couldn't reach OpenAI right now");
+});
