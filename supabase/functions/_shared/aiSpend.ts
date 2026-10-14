@@ -123,6 +123,7 @@ export function buildSpendReport(raw: RawUsage, now: Date) {
   const byModel = new Map<string, { calls: number; failed: number; prompt: number; completion: number; cost: number; priced: boolean }>();
   const byClient = new Map<string, { calls: number; cost: number }>();
   const unpricedModels = new Map<string, { calls: number; tokens: number }>();
+  const providerText = new Map<string, number>();
 
   for (const r of raw.usage) {
     const m = monthOf(r.day);
@@ -137,7 +138,11 @@ export function buildSpendReport(raw: RawUsage, now: Date) {
     if (m !== thisMonth) continue;
 
     monthCalls += calls; monthFailed += failed; monthTokens += p + c;
-    if (cost !== null) monthSpend += cost;
+    if (cost !== null) {
+      monthSpend += cost;
+      const prov = rates.get(r.model)?.provider ?? "Unknown";
+      providerText.set(prov, (providerText.get(prov) ?? 0) + cost);
+    }
 
     const a = byAgent.get(r.source) ?? { calls: 0, failed: 0, tokens: 0, cost: 0 };
     a.calls += calls; a.failed += failed; a.tokens += p + c; a.cost += cost ?? 0;
@@ -182,6 +187,17 @@ export function buildSpendReport(raw: RawUsage, now: Date) {
       key: r.key, label: r.label, provider: r.provider, note: r.note, area: UNIT_AREA[r.key] ?? "other",
       this_month: t.month, last_month: t.last, unit_cost: r.unit_cost,
       cost: r.unit_cost === null ? null : round2(t.month * r.unit_cost), verified: r.verified,
+    };
+  });
+
+  // What each provider should be billing us this month, so it can be checked against their invoice.
+  const providers = [...new Set([...providerText.keys(), ...unitLines.map((u) => u.provider)])].map((provider) => {
+    const lines = unitLines.filter((u) => u.provider === provider);
+    return {
+      provider,
+      text_cost: round2(providerText.get(provider) ?? 0),
+      unit_cost: round2(lines.reduce((t, u) => t + (u.cost ?? 0), 0)),
+      units: lines.map((u) => ({ key: u.key, label: u.label, count: u.this_month, unit_cost: u.unit_cost })),
     };
   });
 
@@ -250,8 +266,13 @@ export function buildSpendReport(raw: RawUsage, now: Date) {
   } else {
     insights.push(`At this pace you'll spend about ${money(forecast)} this month. Set a monthly budget above to track it.`);
   }
-  if (agents[0] && agents[0].cost > 0) {
-    insights.push(`${agents[0].label} is your biggest AI cost: ${money(agents[0].cost)}, ${agents[0].pct}% of this month.${agents[0].pct >= 50 ? " Savings would come from here first." : ""}`);
+  const costItems = [
+    ...agents.map((a) => ({ label: a.label, cost: a.cost })),
+    ...unitLines.filter((u) => u.cost !== null).map((u) => ({ label: u.label, cost: u.cost as number })),
+  ].sort((a, b) => b.cost - a.cost);
+  if (costItems[0] && costItems[0].cost > 0 && total > 0) {
+    const share = pct(costItems[0].cost, total);
+    insights.push(`${costItems[0].label} is your biggest cost: ${money(costItems[0].cost)}, ${share}% of this month.${share >= 50 ? " Savings would come from here first." : ""}`);
   }
   if (clients[0] && clients[0].cost > 0 && clients.filter((c) => c.cost > 0).length > 1) {
     insights.push(`${clients[0].name} costs the most: ${money(clients[0].cost)} (${clients[0].pct}% of AI spend).`);
@@ -275,7 +296,29 @@ export function buildSpendReport(raw: RawUsage, now: Date) {
       calls: monthCalls, failed_calls: monthFailed, tokens: monthTokens,
     },
     last_month: { spent: round2(lastMonthSpend), same_period: round2(lastMonthToDate) },
-    daily, areas, agents, models, clients, units: unitLines, not_included: notIncluded, insights,
+    daily, areas, agents, models, clients, units: unitLines, providers, not_included: notIncluded, insights,
     rates: raw.rates,
+  };
+}
+
+export type Report = ReturnType<typeof buildSpendReport>;
+
+/**
+ * Compare our estimate for one provider with the number on their own usage page
+ * or invoice. If the provider's per-item line is the only thing we can't price
+ * (e.g. OpenAI images) the gap implies a per-item price; suggest it.
+ */
+export function reconcile(report: Report, provider: string, theirTotal: number) {
+  const p = report.providers.find((x) => x.provider.toLowerCase() === provider.toLowerCase());
+  const ours = p ? round2(p.text_cost + p.unit_cost) : 0;
+  const gap = round2(theirTotal - ours);
+  let suggestion: { key: string; label: string; unit_cost: number; count: number } | null = null;
+  if (p && p.units.length === 1 && p.units[0].count > 0) {
+    const implied = (theirTotal - p.text_cost) / p.units[0].count;
+    if (implied >= 0 && Number.isFinite(implied)) suggestion = { key: p.units[0].key, label: p.units[0].label, unit_cost: Math.round(implied * 1000) / 1000, count: p.units[0].count };
+  }
+  return {
+    provider, their_total: round2(theirTotal), our_text: p?.text_cost ?? 0, our_units: p?.unit_cost ?? 0,
+    our_total: ours, gap, gap_pct: theirTotal > 0 ? Math.round((gap / theirTotal) * 1000) / 10 : 0, suggestion,
   };
 }

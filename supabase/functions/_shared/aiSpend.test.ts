@@ -1,5 +1,5 @@
 import { assertAlmostEquals, assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { agentInfo, budgetStatus, buildSpendReport, parseBudget, tokenCost, type RateRow, type RawUsage } from "./aiSpend.ts";
+import { agentInfo, budgetStatus, buildSpendReport, parseBudget, reconcile, tokenCost, type RateRow, type RawUsage } from "./aiSpend.ts";
 
 const rate = (over: Partial<RateRow>): RateRow => ({
   key: "m", kind: "tokens", provider: "OpenAI", label: "M", input_per_mtok: 1, output_per_mtok: 2, unit_cost: null, note: null, verified: false, ...over,
@@ -134,4 +134,38 @@ Deno.test("daily series is 30 zero-filled days ending today", () => {
   assertEquals(r.daily.length, 30);
   assertEquals(r.daily[29].day, "2026-10-15");
   assertEquals(r.daily.every((d) => d.cost === 0), true);
+});
+
+Deno.test("providers roll up this month's text and per-item cost, ready to check against an invoice", () => {
+  const raw = base();
+  raw.rates = raw.rates.map((x) => (x.key === "image_gpt_image_2" ? { ...x, unit_cost: 0.15 } : x));
+  raw.usage = [row("2026-10-10", "gpt-4.1-mini", "analyze-website", "c1", 1, 2_000_000, 0)]; // 0.80
+  raw.images = [{ day: "2026-10-10", n: 10 }];                                                   // 1.50
+  const r = buildSpendReport(raw, NOW);
+  const openai = r.providers.find((p) => p.provider === "OpenAI")!;
+  assertAlmostEquals(openai.text_cost, 0.8, 0.001);
+  assertAlmostEquals(openai.unit_cost, 1.5, 0.001);
+});
+
+Deno.test("reconcile reports the gap and implies a per-image price when images are the unpriced part", () => {
+  const raw = base();
+  raw.usage = [row("2026-10-10", "gpt-4.1-mini", "x", "c1", 1, 2_000_000, 0)]; // text = 0.80
+  raw.images = [{ day: "2026-10-10", n: 20 }];                                    // images unpriced
+  const r = buildSpendReport(raw, NOW);
+  const out = reconcile(r, "OpenAI", 4.8); // their bill: 4.80 -> images = 4.00 over 20 = 0.20 each
+  assertAlmostEquals(out.our_total, 0.8, 0.001);
+  assertAlmostEquals(out.gap, 4.0, 0.001);
+  assertEquals(out.suggestion?.unit_cost, 0.2);
+  assertEquals(out.suggestion?.count, 20);
+  // an unknown provider reconciles against zero and gives no suggestion
+  assertEquals(reconcile(r, "Nobody", 5).suggestion, null);
+});
+
+Deno.test("once images are priced the biggest-cost line can be images, not a text task", () => {
+  const raw = base();
+  raw.rates = raw.rates.map((x) => (x.key === "image_gpt_image_2" ? { ...x, unit_cost: 0.15 } : x));
+  raw.usage = [row("2026-10-10", "gpt-4.1-mini", "analyze-website", "c1", 1, 2_000_000, 0)]; // 0.80
+  raw.images = [{ day: "2026-10-10", n: 39 }];                                                  // 5.85
+  const r = buildSpendReport(raw, NOW);
+  assertEquals(r.insights.some((i) => i.startsWith("Images is your biggest cost: $5.85, 88%")), true);
 });

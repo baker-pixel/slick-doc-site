@@ -2,10 +2,11 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { buildSpendReport, type RawUsage } from "../_shared/aiSpend.ts";
+import { buildSpendReport, reconcile, type RawUsage } from "../_shared/aiSpend.ts";
 
 // Admin AI Spend & Budget backend.
 //   { action: "overview" }                                         -> the whole report
+//   { action: "reconcile", provider?, total }                      -> compare our estimate with a provider's invoice/usage page
 //   { action: "set_budget", amount }                               -> monthly budget in USD (null/0 clears it)
 //   { action: "set_rate", key, kind?, label?, provider?,
 //     input_per_mtok?, output_per_mtok?, unit_cost?, verified? }   -> edit or add a price
@@ -33,6 +34,15 @@ serve(async (req) => {
         const { data, error } = await supabase.rpc("ai_spend_usage");
         if (error) throw error;
         return jsonResponse({ generated_at: new Date().toISOString(), ...buildSpendReport(data as RawUsage, new Date()) });
+      }
+
+      case "reconcile": {
+        const total = Number(body.total);
+        if (!isMoney(total, MAX_BUDGET)) return errorResponse("Enter the provider's total as a number", 400);
+        const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim().slice(0, 40) : "OpenAI";
+        const { data, error } = await supabase.rpc("ai_spend_usage");
+        if (error) throw error;
+        return jsonResponse(reconcile(buildSpendReport(data as RawUsage, new Date()), provider, total));
       }
 
       case "set_budget": {

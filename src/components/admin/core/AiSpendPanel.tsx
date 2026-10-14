@@ -33,6 +33,10 @@ interface Report {
   not_included: Array<{ what: string; amount: string }>;
   insights: string[];
 }
+interface Reconciliation {
+  provider: string; their_total: number; our_text: number; our_units: number; our_total: number; gap: number; gap_pct: number;
+  suggestion: { key: string; label: string; unit_cost: number; count: number } | null;
+}
 
 // ---------- helpers ----------
 
@@ -173,6 +177,8 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
         <Kpi label="Images made" value={String(images?.this_month ?? 0)} sub={`${images?.last_month ?? 0} last month`} />
       </div>
 
+      <ReconcileCard adminPassword={adminPassword} onApply={(key, value, note) => save.mutate({ action: "set_rate", key, unit_cost: value, verified: false, note })} />
+
       {/* Daily chart */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Daily spend, last 30 days</h2>
@@ -267,7 +273,9 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
               </div>
               <div className="text-muted-foreground">{u.this_month.toLocaleString("en-US")} this month · {u.last_month.toLocaleString("en-US")} last month</div>
               <UnitPrice unit={u} saving={save.isPending} onSave={(v) => save.mutate({ action: "set_rate", key: u.key, unit_cost: v })} />
-              <div className="w-24 text-right font-medium">{u.cost === null ? <Badge variant="outline">Not priced</Badge> : money(u.cost)}</div>
+              <div className="w-28 text-right">
+                {u.cost === null ? <Badge variant="outline">Not priced</Badge> : <><p className="font-medium">{money(u.cost)}</p><p className="text-[10px] text-muted-foreground">{u.verified ? "Confirmed price" : "Estimated price"}</p></>}
+              </div>
             </div>
           ))}
         </CardContent></Card>
@@ -297,6 +305,57 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
 }
 
 // ---------- pieces ----------
+
+/** "Does this match OpenAI's own number?" The owner types what the provider shows; we show the gap and, when images are the unpriced part, the per-image price that would close it. */
+function ReconcileCard({ adminPassword, onApply }: { adminPassword: string; onApply: (key: string, value: number, note: string) => void }) {
+  const [provider, setProvider] = useState("OpenAI");
+  const [total, setTotal] = useState("");
+  const check = useMutation({
+    mutationFn: () => api<Reconciliation>(adminPassword, { action: "reconcile", provider, total: Number(total) }),
+    onError: (e) => toast({ title: "Could not compare", description: e instanceof Error ? e.message : String(e), variant: "destructive" }),
+  });
+  const res = check.data;
+  const close = res && Math.abs(res.gap_pct) <= 5;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Check this against your invoice</CardTitle>
+        <CardDescription>Type the total your provider shows for this month so far (OpenAI: Settings → Usage → "October spend"). We'll show how close we are.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label htmlFor="prov" className="text-xs text-muted-foreground">Provider</label>
+            <select id="prov" value={provider} onChange={(e) => { setProvider(e.target.value); check.reset(); }} className="flex h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option>OpenAI</option><option>Groq</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="theirs" className="text-xs text-muted-foreground">Their total this month (USD)</label>
+            <Input id="theirs" type="number" min="0" step="0.01" placeholder="e.g. 7.58" value={total} onChange={(e) => setTotal(e.target.value)} className="w-40" />
+          </div>
+          <Button disabled={check.isPending || total === ""} onClick={() => check.mutate()}>{check.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Compare"}</Button>
+        </div>
+        {res && (
+          <div className={cn("space-y-2 rounded-lg border p-3 text-sm", close ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900")}>
+            <p className="font-medium">
+              {close
+                ? `Close: we estimate ${money(res.our_total)} and ${res.provider} shows ${money(res.their_total)} (${Math.abs(res.gap_pct)}% apart).`
+                : `We estimate ${money(res.our_total)} but ${res.provider} shows ${money(res.their_total)}: ${money(Math.abs(res.gap))} ${res.gap > 0 ? "missing from our total" : "more than they charged"}.`}
+            </p>
+            <p className="text-xs">Our estimate = {money(res.our_text)} for text + {money(res.our_units)} for priced items.</p>
+            {!close && res.suggestion && res.gap > 0 && (
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span>If the gap is all {res.suggestion.label.toLowerCase()}, each one costs about <strong>${res.suggestion.unit_cost}</strong> ({res.suggestion.count} so far).</span>
+                <Button size="sm" variant="outline" onClick={() => onApply(res.suggestion!.key, res.suggestion!.unit_cost, `Calibrated to the ${res.provider} usage page (${money(res.their_total)} this month, ${res.suggestion!.count} items)`)}>Use ${res.suggestion.unit_cost} each</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function Kpi({ label, value, sub, warn }: { label: string; value: string; sub?: string; warn?: boolean }) {
   return (
