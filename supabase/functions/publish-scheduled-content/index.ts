@@ -256,7 +256,7 @@ serve(async (req) => {
 
             if (recipients.length > 0 && resend) {
               const emailRes = await resend.emails.send({
-                from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+                from: "Orange Door Marketing <hello@orangedoormarketing.com>",
                 to: recipients,
                 subject: metadata?.subject || item.title,
                 html: item.content,

@@ -12,7 +12,7 @@ export function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <Link to="/" className="flex items-center gap-3 mb-4">
-              <img src={logo} alt="Orange Door Consultants" className="h-10 w-auto" />
+              <img src={logo} alt="Orange Door Marketing" className="h-10 w-auto" />
             </Link>
             <p className="text-cream/60 max-w-sm">
               East Tennessee&apos;s digital marketing consultancy built for small
@@ -81,7 +81,7 @@ export function Footer() {
 
         <div className="border-t border-cream/10 mt-12 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-cream/50 text-sm">
-            © {new Date().getFullYear()} Orange Door Consultants. All rights
+            © {new Date().getFullYear()} Orange Door Marketing. All rights
             reserved.
           </p>
           <p className="text-cream/50 text-sm">

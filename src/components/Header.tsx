@@ -34,7 +34,7 @@ export function Header() {
           <Link to="/" className="flex items-center gap-3 shrink-0">
             <img 
               src={logo} 
-              alt="Orange Door Consultants" 
+              alt="Orange Door Marketing" 
               className="h-12 sm:h-16 md:h-24 lg:h-28 w-auto object-contain drop-shadow-md brightness-105 contrast-105 md:-my-3" 
             />
           </Link>

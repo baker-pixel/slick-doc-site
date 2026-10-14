@@ -204,7 +204,7 @@ function buildEmailHtml(prospect: ProspectData): string {
 
   <!-- Footer -->
   <div style="background:#FAF7F2;padding:20px 40px;text-align:center;font-size:11px;color:#A0968C;border-top:1px solid #F0EBE2;">
-    Orange Door Consulting · AI-Powered Marketing for Local Businesses
+    Orange Door Marketing · AI-Powered Marketing for Local Businesses
   </div>
 </div>
 </body></html>`;
@@ -272,7 +272,7 @@ serve(async (req) => {
     const html = buildEmailHtml(prospect as ProspectData);
 
     const emailResponse = await resend.emails.send({
-      from: Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>",
+      from: Deno.env.get("EMAIL_FROM") || "Orange Door Marketing <hello@orangedoormarketing.com>",
       to: [prospect.email],
       subject: `Your free marketing report for ${prospect.website_url}`,
       html,

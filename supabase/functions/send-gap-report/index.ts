@@ -184,7 +184,7 @@ function buildEmailHtml(params: ReportEmailRequest): string {
 
   <!-- Footer -->
   <div style="background:#FAF7F2;padding:20px 40px;text-align:center;font-size:11px;color:#A0968C;border-top:1px solid #F0EBE2;">
-    Orange Door Consulting · AI-Powered Marketing for Local Businesses
+    Orange Door Marketing · AI-Powered Marketing for Local Businesses
   </div>
 </div>
 </body></html>`;
@@ -218,7 +218,7 @@ const handler = async (req: Request): Promise<Response> => {
     const emailHtml = buildEmailHtml(body);
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+      from: "Orange Door Marketing <hello@orangedoormarketing.com>",
       to: [email],
       subject: `Your SYSTEM Gap Report for ${businessName}`,
       html: emailHtml,

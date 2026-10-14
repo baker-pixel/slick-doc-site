@@ -81,7 +81,7 @@ function generateICS(
   
   return `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Orange Door Consultants//Strategy Call//EN
+PRODID:-//Orange Door Marketing//Strategy Call//EN
 CALSCALE:GREGORIAN
 METHOD:REQUEST
 BEGIN:VEVENT
@@ -89,16 +89,16 @@ UID:${uid}
 DTSTAMP:${now}
 DTSTART;TZID=America/New_York:${startDate}
 DTEND;TZID=America/New_York:${endDate}
-SUMMARY:Strategy Call with Orange Door Consultants
+SUMMARY:Strategy Call with Orange Door Marketing
 DESCRIPTION:30-minute strategy call to review your marketing performance and identify growth opportunities for ${businessName}.\\n\\nAttendee: ${firstName} ${lastName}\\nEmail: ${email}\\n\\nWe'll discuss:\\n- Current marketing performance\\n- Quick wins and opportunities\\n- Customized recommendations
-ORGANIZER;CN=Orange Door Consultants:mailto:hello@orangedoor.com
+ORGANIZER;CN=Orange Door Marketing:mailto:hello@orangedoor.com
 ATTENDEE;CN=${firstName} ${lastName};RSVP=TRUE:mailto:${email}
 STATUS:CONFIRMED
 SEQUENCE:0
 BEGIN:VALARM
 TRIGGER:-PT15M
 ACTION:DISPLAY
-DESCRIPTION:Strategy Call with Orange Door Consultants starts in 15 minutes
+DESCRIPTION:Strategy Call with Orange Door Marketing starts in 15 minutes
 END:VALARM
 END:VEVENT
 END:VCALENDAR`;
@@ -144,7 +144,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Generated ICS file for calendar attachment");
 
     const emailResponse = await resend.emails.send({
-      from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+      from: "Orange Door Marketing <hello@orangedoormarketing.com>",
       reply_to: "hello@orangedoormarketing.com",
       to: [email],
       subject: "Your Strategy Call is Booked! 🎯",
@@ -168,7 +168,7 @@ const handler = async (req: Request): Promise<Response> => {
                 <div style="background-color: #ffffff; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
                   <!-- Logo/Header -->
                   <div style="text-align: center; margin-bottom: 32px;">
-                    <h1 style="margin: 0; color: #1a1a1a; font-size: 24px;">Orange Door Consultants</h1>
+                    <h1 style="margin: 0; color: #1a1a1a; font-size: 24px;">Orange Door Marketing</h1>
                   </div>
                   
                   <!-- Main Content -->
@@ -220,7 +220,7 @@ const handler = async (req: Request): Promise<Response> => {
                       Questions? Reply to this email or call us.
                     </p>
                     <p style="color: #a0aec0; font-size: 12px; margin: 0;">
-                      Orange Door Consultants | East Tennessee
+                      Orange Door Marketing | East Tennessee
                     </p>
                   </div>
                 </div>

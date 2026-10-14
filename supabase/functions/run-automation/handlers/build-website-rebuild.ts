@@ -36,7 +36,7 @@ Return JSON:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+        from: "Orange Door Marketing <hello@orangedoormarketing.com>",
         to: client.email,
         subject: `Your Website Rebuild Has Started – ${client.business_name}`,
         html: `
