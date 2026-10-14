@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
-import logo from "@/assets/logo-transparent.png";
+import logo from "@/assets/logo-horizontal.png";
 import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 
 const navLinks = [
@@ -35,7 +35,7 @@ export function Header() {
             <img 
               src={logo} 
               alt="Orange Door Marketing" 
-              className="h-12 sm:h-16 md:h-24 lg:h-28 w-auto object-contain drop-shadow-md brightness-105 contrast-105 md:-my-3" 
+              className="h-9 sm:h-10 md:h-12 w-auto object-contain" 
             />
           </Link>
 

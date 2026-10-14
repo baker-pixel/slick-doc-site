@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import logo from "@/assets/logo-white.png";
+import logo from "@/assets/logo-horizontal-white.png";
 
 export function Footer() {
   // Section anchors only exist on the homepage; from any other page they must
@@ -12,7 +12,7 @@ export function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <Link to="/" className="flex items-center gap-3 mb-4">
-              <img src={logo} alt="Orange Door Marketing" className="h-10 w-auto" />
+              <img src={logo} alt="Orange Door Marketing" className="h-12 w-auto" />
             </Link>
             <p className="text-cream/60 max-w-sm">
               East Tennessee&apos;s digital marketing consultancy built for small
