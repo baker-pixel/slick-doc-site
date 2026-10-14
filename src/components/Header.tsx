@@ -73,7 +73,7 @@ export function Header() {
                 Sign Up
               </Button>
             </Link>
-            <Link to="/gap-analysis">
+            <Link to="/quick-analysis">
               <Button className="bg-primary hover:bg-orange-dark text-primary-foreground">
                 Get Your Gap Analysis
               </Button>
@@ -133,7 +133,7 @@ export function Header() {
                     Sign Up
                   </Button>
                 </Link>
-                <Link to="/gap-analysis" onClick={() => setIsMenuOpen(false)}>
+                <Link to="/quick-analysis" onClick={() => setIsMenuOpen(false)}>
                   <Button className="bg-primary hover:bg-orange-dark text-primary-foreground w-full mt-2">
                     Get Your Gap Analysis
                   </Button>

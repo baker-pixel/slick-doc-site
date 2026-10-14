@@ -232,3 +232,6 @@ verify_jwt = false
 # stripe-webhook on a paid invoice and by the daily cycle sweep cron.
 [functions.start-client-cycle]
 verify_jwt = false
+
+[functions.submit-followup]
+verify_jwt = false

@@ -55,7 +55,7 @@ export function ClientLoginCTA() {
 
             <p className="text-sm text-background/60 mt-6">
               Not a client yet?{" "}
-              <Link to="/gap-analysis" className="text-primary hover:underline">
+              <Link to="/quick-analysis" className="text-primary hover:underline">
                 Start with a free Gap Analysis
               </Link>
             </p>

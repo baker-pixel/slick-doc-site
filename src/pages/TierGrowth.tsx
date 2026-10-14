@@ -132,7 +132,7 @@ export default function TierGrowth() {
                     </Link>
                   </Button>
                   <Button size="lg" variant="outline" asChild>
-                    <Link to="/gap-analysis">Take Gap Analysis</Link>
+                    <Link to="/quick-analysis">Take Gap Analysis</Link>
                   </Button>
                 </div>
               </motion.div>

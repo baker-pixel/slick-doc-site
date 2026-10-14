@@ -9,6 +9,8 @@ import { ReportView } from "@/components/report/ReportView";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { downloadReportPdf } from "@/lib/downloadReportPdf";
+import { FollowUpCard } from "@/components/quick-analysis/FollowUpCard";
+import type { FollowUpScores } from "@/lib/followUp";
 import {
   type AnalysisResult,
   buildReportData,
@@ -23,6 +25,7 @@ interface LoadedReport {
   createdAt: string;
   analysis: AnalysisResult;
   aiReadinessScore: number | null;
+  followUp: FollowUpScores | null;
 }
 
 type LoadState = "loading" | "ready" | "not_found" | "error";
@@ -82,6 +85,7 @@ export default function QuickReport() {
         day: "numeric",
       }),
       aiReadinessScore: report.aiReadinessScore ?? undefined,
+      followUp: report.followUp,
     });
   }, [report]);
 
@@ -160,6 +164,16 @@ export default function QuickReport() {
                 <div className="rounded-2xl border border-border overflow-hidden text-left">
                   <ReportView data={reportData} hideFooterCta />
                 </div>
+
+                {!report.followUp && token && (
+                  <FollowUpCard
+                    token={token}
+                    onComplete={({ scores }) => {
+                      setReport((r) => (r ? { ...r, followUp: scores } : r));
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
+                )}
 
                 <Card className="border-primary/30 bg-primary/5">
                   <CardContent className="p-8 text-center">

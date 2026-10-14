@@ -184,7 +184,7 @@ export default function Pricing() {
                   and the results help us recommend the right tier for your business.
                 </p>
               </div>
-              <Link to="/gap-analysis" className="shrink-0">
+              <Link to="/quick-analysis" className="shrink-0">
                 <Button size="lg" className="bg-primary hover:bg-orange-dark text-primary-foreground">
                   Take Gap Analysis
                   <ArrowRight className="ml-2" size={18} />
@@ -483,7 +483,7 @@ export default function Pricing() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <Button size="lg" asChild>
-                    <Link to="/gap-analysis">
+                    <Link to="/quick-analysis">
                       Get Free Gap Analysis
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
