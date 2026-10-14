@@ -8,7 +8,23 @@ import { checkScanRateLimit } from "../_shared/scanRateLimit.ts";
 import { isPublicHttpUrl } from "../_shared/urlSafety.ts";
 import { recommendTier } from "../_shared/systemTier.ts";
 import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
+import { SCAN_SCORE_VERSION, scoreConversion, scoreSearchAndTechnical } from "../_shared/scanScore.ts";
 
+
+function measuredSummary(m: ReturnType<typeof scoreSearchAndTechnical>, c: ReturnType<typeof scoreConversion>): string {
+  const checks = m.checks.length
+    ? m.checks.slice(0, 8).map((x) => `  - ${x.title} (${x.severity}; on ${x.pages} of ${m.pagesChecked} pages checked)`).join("\n")
+    : "  - none found";
+  const signals = c.signals.map((x) => `  - ${x.found ? "FOUND" : "NOT FOUND"}: ${x.label}`).join("\n");
+  return `MEASURED RESULTS (fixed rules over ${m.pagesChecked} page(s); copy these scores exactly):
+- SEO score: ${m.seo}
+- Technical score: ${m.technical}
+- Conversion score: ${c.score}
+Problems the SEO/technical rules found:
+${checks}
+What a visitor can do on the homepage:
+${signals}${m.limited ? "\nNOTE: the homepage content is built with JavaScript and could not be fully read, so body-content checks were skipped." : ""}`;
+}
 
 function factsSummary(signals: ReturnType<typeof parseOnPage>): string {
   return `DETECTED FACTS (parsed directly from the HTML — this is ground truth, not a guess. Cite any MISSING item by name in your findings):
@@ -221,7 +237,11 @@ serve(async (req) => {
       );
     }
     const audit = auditResult.audit;
-    const { html: htmlContent, signals, readiness, additionalPages } = audit;
+    const { html: htmlContent, signals, readiness, additionalPages, pageSignals } = audit;
+
+    // The numbers come from fixed, evidence-backed rules; the AI below only explains them.
+    const measured = scoreSearchAndTechnical(pageSignals);
+    const conversion = scoreConversion(htmlContent);
     console.log("Fetched HTML length:", htmlContent.length, "| additional pages found:", additionalPages.length);
 
     const truncatedHtml = htmlContent.substring(0, 50000);
@@ -248,30 +268,25 @@ serve(async (req) => {
       ? `\nThe visitor picked "${industryHint}" as their business type. Treat that as an UNVERIFIED HINT, never as fact. What the website itself says always wins: if the site clearly describes a different kind of business, base every finding, recommendation and quick win on what the site actually does, and NEVER recommend features that only make sense for the hinted industry (for example menus, table reservations, appointment booking, product catalogs) unless the site's own content supports them. Use the hint only to break ties when the site is ambiguous.`
       : "";
 
-    const systemPrompt = `You are an expert digital marketing and web development analyst. Analyze the website HTML thoroughly and provide HONEST, VARIED scores based on what you ACTUALLY find.${industryContext}
+    const systemPrompt = `You are an expert digital marketing and web development analyst. Explain a website's MEASURED results to the business owner in plain, specific language.${industryContext}
 
-CRITICAL: Do NOT default to average scores. Each website is different - scores should range from 20-95 based on actual evidence:
-- If meta tags are missing/poor: SEO score should be 30-50
-- If there are no clear CTAs: Conversion score should be 25-45
-- If the site has excellent SEO with proper h1, meta descriptions, schema: Score 80-95
-- If mediocre: 50-65
-- Base EVERY score on specific evidence from the HTML
+The scores were measured by fixed rules and are given to you under MEASURED RESULTS in the user message. Do not re-score, argue with or soften them: copy each score into its "score" field exactly as given. Your job is the explanation: what the measured problems mean for this business, what to fix first, and how. Only discuss problems that appear in MEASURED RESULTS or in the DETECTED FACTS; never claim the page has or lacks something those do not show.
 
 Return your analysis as a JSON object with this exact structure:
 {
-  "overallScore": <number 0-100 - weighted average of sub-scores>,
+  "overallScore": <any number; it is replaced by the measured overall score>,
   "seo": {
-    "score": <number 0-100 based on: title tag quality, meta description, h1 tags, heading hierarchy, image alts, schema markup, canonical tags>,
+    "score": <the measured SEO score, copied exactly>,
     "findings": [<3-4 SPECIFIC findings citing actual HTML elements found or missing>],
     "recommendations": [<2-3 actionable SEO recommendations>]
   },
   "conversion": {
-    "score": <number 0-100 based on: clear CTAs, form presence, phone numbers visible, trust signals, testimonials, pricing clarity>,
+    "score": <the measured conversion score, copied exactly>,
     "findings": [<3-4 SPECIFIC findings about conversion elements>],
     "recommendations": [<2-3 actionable conversion recommendations>]
   },
   "technical": {
-    "score": <number 0-100 based on: clean HTML structure, accessibility attributes, mobile viewport, script/style organization>,
+    "score": <the measured technical score, copied exactly>,
     "findings": [<3-4 SPECIFIC technical findings>],
     "recommendations": [<2-3 actionable technical recommendations>]
   },
@@ -311,14 +326,7 @@ Return your analysis as a JSON object with this exact structure:
 
 Additionally, extract a context_profile object from the website with the fields shown above. Be specific about services — list actual offerings, not generic terms. Every field must come from something actually present on the page(s) — if a field genuinely isn't determinable from the content given, leave it empty rather than guessing or inventing a plausible-sounding value. This context_profile becomes the source of truth other tools use to write marketing copy about this business, so it must never contain a claim the site itself doesn't make.
 
-SCORING RUBRIC (be strict):
-- 85-100: ONLY if you find: proper meta tags, schema markup, multiple CTAs, testimonials, proper heading hierarchy
-- 70-84: Good basics present, some optimization needed
-- 50-69: Major elements missing (like no meta description, weak CTAs)
-- 30-49: Significant issues (missing h1, no clear conversion path)
-- 0-29: Critical failures (broken structure, no SEO elements at all)
-
-Reference SPECIFIC elements from the HTML to justify each score. Any item flagged MISSING in the DETECTED FACTS block below is confirmed absent — always name it explicitly in the relevant findings, never omit it.${NO_FABRICATION_GUARDRAIL}`;
+Reference SPECIFIC elements from the HTML to explain each finding. Any item flagged MISSING in the DETECTED FACTS block below is confirmed absent — always name it explicitly in the relevant findings, never omit it.${NO_FABRICATION_GUARDRAIL}`;
 
     const userPrompt = `Analyze this website HTML for SEO, conversion optimization, and technical performance:
 
@@ -326,6 +334,8 @@ URL: ${url}
 ${industryHint ? `Business type (visitor-selected hint, unverified): ${industryHint}` : ""}
 
 ${factsSummary(signals)}
+
+${measuredSummary(measured, conversion)}
 
 HTML Content:
 ${truncatedHtml}
@@ -364,6 +374,15 @@ Provide your analysis as a valid JSON object.`;
 
     applyDetectedFacts(analysis, signals);
 
+    // Scores are the measured ones whatever the model wrote.
+    analysis.seo.score = measured.seo;
+    analysis.technical.score = measured.technical;
+    analysis.conversion ??= { findings: [], recommendations: [] };
+    analysis.conversion.score = conversion.score;
+    // Conversion text comes from the same signals as the score, so the words can't contradict the number.
+    analysis.conversion.findings = conversion.findings;
+    analysis.conversion.recommendations = conversion.recommendations;
+
     // Two more SYSTEM categories a page fetch can honestly speak to --
     // ground-truth detected (regex over the HTML), never LLM-guessed. The
     // other two SYSTEM categories (Sequence & Nurture, Transaction
@@ -383,6 +402,15 @@ Provide your analysis as a valid JSON object.`;
     const systemOverallScore = Math.round(
       (searchVisibilityScore + analysis.conversion.score + analysis.engagement.score + analysis.metrics.score) / 4,
     );
+
+    analysis.overallScore = systemOverallScore;
+    analysis.measurement = {
+      version: SCAN_SCORE_VERSION,
+      pages_checked: measured.pagesChecked,
+      limited: measured.limited,
+      checks: measured.checks.slice(0, 8),
+      conversion_signals: conversion.signals,
+    };
 
     if (prospectId) {
       const topWeaknesses = [
