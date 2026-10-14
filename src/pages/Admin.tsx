@@ -23,6 +23,7 @@ import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar, type AdminSection } from "@/components/admin/core/AdminSidebar";
+import { BrandLogo } from "@/components/BrandLogo";
 import { AdminStatsCards } from "@/components/admin/core/AdminStatsCards";
 import { AdminAnalyticsSection } from "@/components/admin/core/AdminAnalyticsSection";
 import { AdminOnboarding } from "@/components/admin/core/AdminOnboarding";
@@ -600,10 +601,8 @@ const AdminInner = () => {
         <main className="min-h-screen flex items-center justify-center">
           <Card className="w-full max-w-md mx-4">
             <CardHeader className="text-center">
-              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <Lock className="w-6 h-6 text-primary" />
-              </div>
-              <CardTitle>Admin Access</CardTitle>
+              <BrandLogo className="h-12 mx-auto mb-4" />
+              <CardTitle className="flex items-center justify-center gap-2"><Lock className="w-4 h-4 text-primary" />Admin Access</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLogin} className="space-y-4">

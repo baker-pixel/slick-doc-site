@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
+import { emailLogo } from "../_shared/brandEmail.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,7 +45,7 @@ function buildReminderEmail(
 <body style="margin:0;padding:0;background:#f9f9f9;font-family:Arial,Helvetica,sans-serif;">
 <div style="max-width:600px;margin:20px auto;background:#ffffff;border-radius:8px;overflow:hidden;">
   <div style="background:#1a1a1a;padding:24px 40px;">
-    <div style="color:#E8521A;font-weight:bold;font-size:13px;letter-spacing:2px;">ORANGE DOOR</div>
+    ${emailLogo(true)}
   </div>
   <div style="padding:30px 40px;font-size:15px;color:#444;line-height:1.7;">
     <p>Hi ${firstName},</p>
