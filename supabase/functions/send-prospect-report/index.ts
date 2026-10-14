@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { recommendTier, tierLabel } from "../_shared/systemTier.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,9 +56,7 @@ function scoreToStatus(score: number): "Strong" | "Moderate" | "Weak" | "Critica
 }
 
 function getTierLabel(score: number): string {
-  if (score <= 39) return "Transformation";
-  if (score <= 64) return "Growth";
-  return "Optimization";
+  return tierLabel(recommendTier(score));
 }
 
 const LOCKED_SYSTEM_CATEGORIES = [

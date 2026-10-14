@@ -6,13 +6,9 @@ import { parseOnPage } from "../_shared/seoSignals.ts";
 import { auditWebsiteDetailed, AUDIT_FAILURE_MESSAGES } from "../_shared/websiteAudit.ts";
 import { checkScanRateLimit } from "../_shared/scanRateLimit.ts";
 import { isPublicHttpUrl } from "../_shared/urlSafety.ts";
+import { recommendTier } from "../_shared/systemTier.ts";
 import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
 
-function getTier(score: number): "transformation" | "growth" | "optimization" {
-  if (score <= 39) return "transformation";
-  if (score <= 64) return "growth";
-  return "optimization";
-}
 
 function factsSummary(signals: ReturnType<typeof parseOnPage>): string {
   return `DETECTED FACTS (parsed directly from the HTML — this is ground truth, not a guess. Cite any MISSING item by name in your findings):
@@ -404,7 +400,7 @@ Provide your analysis as a valid JSON object.`;
         .update({
           gap_score: systemOverallScore,
           top_weaknesses: topWeaknesses,
-          recommended_tier: getTier(systemOverallScore),
+          recommended_tier: recommendTier(systemOverallScore),
           analysis_snapshot: analysis,
           ...(contextProfile ? { context_profile: contextProfile } : {}),
         })
