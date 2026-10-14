@@ -111,7 +111,7 @@ export function Hero() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="flex flex-col sm:flex-row gap-4"
             >
-              <Link to="/gap-analysis" className="w-full sm:w-auto">
+              <Link to="/quick-analysis" className="w-full sm:w-auto">
                 <Button
                   size="lg"
                   className="w-full sm:w-auto bg-primary hover:bg-orange-dark text-primary-foreground text-base sm:text-lg px-6 sm:px-8 py-5 sm:py-6 shadow-glow hover:shadow-xl transition-all"
@@ -130,22 +130,6 @@ export function Hero() {
                 </Button>
               </a>
             </motion.div>
-
-            {/* Quick Analysis Link */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-sm text-muted-foreground mt-4"
-            >
-              Short on time?{" "}
-              <Link
-                to="/quick-analysis"
-                className="text-primary hover:text-orange-dark underline underline-offset-2 transition-colors"
-              >
-                Get an instant AI audit of your website
-              </Link>
-            </motion.p>
 
             {/* Social Proof */}
             <motion.div

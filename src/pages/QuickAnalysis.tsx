@@ -23,6 +23,8 @@ import {
   getTierLabel,
 } from "@/lib/quickAnalysisReport";
 import { ReportView } from "@/components/report/ReportView";
+import { FollowUpCard } from "@/components/quick-analysis/FollowUpCard";
+import type { FollowUpScores } from "@/lib/followUp";
 
 const BUSINESS_TYPES = [
   "Restaurant",
@@ -45,6 +47,9 @@ const QuickAnalysis = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [prospectId, setProspectId] = useState<string | null>(null);
+  const [reportToken, setReportToken] = useState<string | null>(null);
+  // Set once the visitor answers the optional follow-up questions; unlocks the last two categories.
+  const [followUp, setFollowUp] = useState<FollowUpScores | null>(null);
   const [aiReadinessScore, setAiReadinessScore] = useState<number | undefined>(undefined);
   const [isDownloading, setIsDownloading] = useState(false);
   const { toast } = useToast();
@@ -107,6 +112,7 @@ const QuickAnalysis = () => {
       const analysis: AnalysisResult = data.analysis;
       const pId = data?.prospectId ?? null;
       setProspectId(pId);
+      setReportToken(data?.reportToken ?? null);
       setResult(analysis);
       setStep(3);
 
@@ -135,7 +141,7 @@ const QuickAnalysis = () => {
     }
   };
 
-  const categoryScores = result ? buildCategoryScores(result) : null;
+  const categoryScores = result ? buildCategoryScores(result, followUp) : null;
   const displayOverallScore = categoryScores ? computeOverallScore(categoryScores.scored) : 0;
 
   const reportViewData: ReportData | null = result
@@ -145,6 +151,7 @@ const QuickAnalysis = () => {
         domain: validatedUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
         reportDate: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
         aiReadinessScore,
+        followUp,
       })
     : null;
 
@@ -189,13 +196,13 @@ const QuickAnalysis = () => {
             </div>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto text-center">
               <span className="inline-block px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-4">
-                AI-Powered Analysis
+                Free, about a minute
               </span>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-semibold text-foreground mb-4">
-                Free Website Marketing Check-Up
+                Your Free Gap Analysis
               </h1>
               <p className="text-muted-foreground text-lg mb-8">
-                Find out exactly what&apos;s working, what&apos;s not, and what to fix first — explained in plain English.
+                Scored from what we measure on your site, then explained in plain English: what&apos;s working, what&apos;s not, and what to fix first.
               </p>
 
               {/* Progress indicator */}
@@ -357,6 +364,18 @@ const QuickAnalysis = () => {
                   <div className="rounded-2xl border border-border overflow-hidden text-left">
                     <ReportView data={reportViewData} hideFooterCta />
                   </div>
+                )}
+
+                {/* Optional step 2: unlocks Sequence & Nurture and Transaction Activation. */}
+                {reportToken && !followUp && (
+                  <FollowUpCard
+                    token={reportToken}
+                    onComplete={({ scores }) => {
+                      setFollowUp(scores);
+                      toast({ title: "Full score unlocked", description: "Your report now covers all six areas." });
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
                 )}
 
                 {/* CTA -- the only "book a call" ask on this page; ReportView's

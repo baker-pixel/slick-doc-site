@@ -60,8 +60,8 @@ function getTierLabel(score: number): string {
 }
 
 const LOCKED_SYSTEM_CATEGORIES = [
-  { label: "Sequence & Nurture", reason: "Needs the full Gap Analysis — email/SMS follow-up setup isn't visible from a website scan." },
-  { label: "Transaction Activation", reason: "Needs the full Gap Analysis — sales response time and close rate aren't visible from a website scan." },
+  { label: "Sequence & Nurture", reason: "Answer a few quick questions on your online report to unlock this. Follow-up setup isn't visible from a website scan." },
+  { label: "Transaction Activation", reason: "Answer a few quick questions on your online report to unlock this. Response time and close rate aren't visible from a website scan." },
 ];
 
 // --- PDF: rendered server-side from the exact same <ReportView> component tree the

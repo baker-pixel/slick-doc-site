@@ -114,6 +114,7 @@ serve(async (req) => {
   try {
     const { url, industry, prospect, hp } = await req.json();
     let prospectId: string | null = null;
+    let reportToken: string | null = null;
 
     if (!url) {
       return new Response(
@@ -176,7 +177,7 @@ serve(async (req) => {
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: existing } = await supabase
         .from("prospects")
-        .select("id")
+        .select("id, report_token")
         .eq("email", prospectEmail)
         .eq("website_url", url)
         .eq("source", "inbound")
@@ -187,6 +188,7 @@ serve(async (req) => {
 
       if (existing) {
         prospectId = existing.id;
+        reportToken = existing.report_token;
       } else {
         const { data: savedProspect, error: prospectError } = await supabase
           .from("prospects")
@@ -196,7 +198,7 @@ serve(async (req) => {
             business_type: prospectBusinessType,
             website_url: url,
           })
-          .select("id")
+          .select("id, report_token")
           .single();
 
         if (prospectError) {
@@ -205,6 +207,7 @@ serve(async (req) => {
         }
 
         prospectId = savedProspect.id;
+        reportToken = savedProspect.report_token;
       }
     }
 
@@ -504,7 +507,7 @@ Provide your analysis as a valid JSON object.`;
     console.log("Analysis complete:", analysis.overallScore);
 
     return new Response(
-      JSON.stringify({ analysis, prospectId }),
+      JSON.stringify({ analysis, prospectId, reportToken }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

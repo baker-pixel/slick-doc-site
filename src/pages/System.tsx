@@ -198,7 +198,7 @@ export default function System() {
               </p>
               <div className="flex flex-wrap justify-center gap-4">
                 <Button size="lg" asChild>
-                  <Link to="/gap-analysis">
+                  <Link to="/quick-analysis">
                     Get Your Free Analysis
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
@@ -401,7 +401,7 @@ export default function System() {
                 across all six SYSTEM areas and get personalized recommendations.
               </p>
               <Button size="lg" asChild>
-                <Link to="/gap-analysis">
+                <Link to="/quick-analysis">
                   Start Your Free Gap Analysis
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>

@@ -281,7 +281,7 @@ const AboutUs = () => {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button asChild size="lg">
-                  <Link to="/gap-analysis">
+                  <Link to="/quick-analysis">
                     Get Your Free Gap Analysis
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>

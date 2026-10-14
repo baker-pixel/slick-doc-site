@@ -26,7 +26,7 @@ serve(async (req) => {
 
     const { data: prospect, error } = await supabase
       .from("prospects")
-      .select("id, name, website_url, created_at, analysis_snapshot")
+      .select("id, name, website_url, created_at, analysis_snapshot, followup_scores")
       .eq("report_token", token)
       .maybeSingle();
 
@@ -47,6 +47,7 @@ serve(async (req) => {
         createdAt: prospect.created_at,
         analysis: prospect.analysis_snapshot,
         aiReadinessScore: readiness?.total_score ?? null,
+        followUp: prospect.followup_scores ?? null,
       },
     });
   } catch (e) {

@@ -384,7 +384,7 @@ export default function Portfolio() {
               Start with a free gap analysis to identify your biggest growth opportunities.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/gap-analysis">
+              <Link to="/quick-analysis">
                 <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   Get Your Free Gap Analysis
                   <ArrowRight className="ml-2 w-4 h-4" />

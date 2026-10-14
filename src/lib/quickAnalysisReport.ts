@@ -1,4 +1,5 @@
 import { scoreToStatus, mapPriority, type ReportData } from "@/components/report/ReportConfig";
+import type { FollowUpScores } from "@/lib/followUp";
 
 // One definition of how a Quick Analysis scan becomes a report, shared by the
 // on-screen result (QuickAnalysis.tsx) and the shareable online report
@@ -43,8 +44,8 @@ export interface AnalysisResult {
 // locked rather than guessed, so this report never looks like it's
 // inventing a number the full Gap Analysis form actually earns for real.
 export const LOCKED_SYSTEM_CATEGORIES: { label: string; reason: string }[] = [
-  { label: "Sequence & Nurture", reason: "Needs the full Gap Analysis — email/SMS follow-up setup isn't visible from a website scan." },
-  { label: "Transaction Activation", reason: "Needs the full Gap Analysis — sales response time and close rate aren't visible from a website scan." },
+  { label: "Sequence & Nurture", reason: "Answer a few quick questions to unlock this. Follow-up setup isn't visible from a website scan." },
+  { label: "Transaction Activation", reason: "Answer a few quick questions to unlock this. Response time and close rate aren't visible from a website scan." },
 ];
 
 // One shared rule (see supabase/functions/_shared/systemTier.ts) so the scan, the email and the stored lead agree.
@@ -84,17 +85,26 @@ export const buildActions = (r: AnalysisResult) => {
 // conversion score; Engagement/Metrics come from ground-truth signals in
 // systemSignals.ts). Sequence & Nurture and Transaction Activation stay
 // locked -- they describe internal business operations no page fetch can see.
-export const buildCategoryScores = (r: AnalysisResult) => {
+export const buildCategoryScores = (r: AnalysisResult, followUp?: Pick<FollowUpScores, "S2" | "T"> | null) => {
   const searchVisibilityScore = Math.round((r.seo.score + r.technical.score) / 2);
   const scored = [
     { label: "Search & Visibility", score: searchVisibilityScore, status: scoreToStatus(searchVisibilityScore) },
     { label: "Yield Optimization", score: r.conversion.score, status: scoreToStatus(r.conversion.score) },
     ...(r.engagement ? [{ label: "Engagement & Retention", score: r.engagement.score, status: scoreToStatus(r.engagement.score) }] : []),
     ...(r.metrics ? [{ label: "Metrics & Improvement", score: r.metrics.score, status: scoreToStatus(r.metrics.score) }] : []),
+    // Answered by the visitor in the optional follow-up; until then these two stay locked below.
+    ...(followUp
+      ? [
+          { label: "Sequence & Nurture", score: followUp.S2.score, status: scoreToStatus(followUp.S2.score) },
+          { label: "Transaction Activation", score: followUp.T.score, status: scoreToStatus(followUp.T.score) },
+        ]
+      : []),
   ];
-  const locked = LOCKED_SYSTEM_CATEGORIES.map((c) => ({
-    label: c.label, score: 0, status: "Critical" as const, locked: true, lockedReason: c.reason,
-  }));
+  const locked = followUp
+    ? []
+    : LOCKED_SYSTEM_CATEGORIES.map((c) => ({
+        label: c.label, score: 0, status: "Critical" as const, locked: true, lockedReason: c.reason,
+      }));
   return { scored, all: [...scored, ...locked] };
 };
 
@@ -105,9 +115,9 @@ export const computeOverallScore = (scored: { score: number }[]) =>
 
 export function buildReportData(
   r: AnalysisResult,
-  meta: { businessName: string; domain: string; reportDate: string; aiReadinessScore?: number },
+  meta: { businessName: string; domain: string; reportDate: string; aiReadinessScore?: number; followUp?: Pick<FollowUpScores, "S2" | "T"> | null },
 ): ReportData {
-  const categories = buildCategoryScores(r);
+  const categories = buildCategoryScores(r, meta.followUp);
   return {
     businessName: meta.businessName,
     clientDomain: meta.domain,
