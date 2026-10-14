@@ -13,7 +13,7 @@ export async function sendReviewScripts(supabase: any, client: ClientData) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+        from: "Orange Door Marketing <hello@orangedoormarketing.com>",
         to: client.email,
         subject: "Your Google Review Toolkit – Orange Door Marketing",
         html: `

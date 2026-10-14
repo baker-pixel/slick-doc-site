@@ -15,7 +15,7 @@ export async function sendIntakeForm(supabase: any, client: ClientData) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+        from: "Orange Door Marketing <hello@orangedoormarketing.com>",
         to: client.email,
         subject: "Welcome to Orange Door – Complete Your Intake Form",
         html: `

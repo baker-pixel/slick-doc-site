@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
         `;
 
         await resend.emails.send({
-          from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+          from: "Orange Door Marketing <hello@orangedoormarketing.com>",
           to: [client.email],
           subject,
           html,

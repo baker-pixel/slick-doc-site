@@ -3,7 +3,7 @@
 // full-form path both need the same real, ground-truth facts about the
 // submitted website. One implementation, so both flows can't drift into two
 // different ideas of what's "true" about a site.
-import { parseOnPage, discoverPages } from "./seoSignals.ts";
+import { parseOnPage, discoverPages, type PageSignals } from "./seoSignals.ts";
 import { computeAiReadiness, type AiReadinessScores } from "./aiReadiness.ts";
 import { isPublicHttpUrl } from "./urlSafety.ts";
 
@@ -22,6 +22,12 @@ export interface WebsiteAudit {
   signals: ReturnType<typeof parseOnPage>;
   readiness: AiReadinessScores;
   additionalPages: { url: string; text: string }[];
+  /** Homepage first, then the extra real pages that could be fetched: parsed signals for the deterministic checks. */
+  pageSignals: PageSignals[];
+}
+
+function toPageSignals(html: string, url: string): PageSignals {
+  return { url, reachable: true, fetched_via: "plain", status_code: 200, ...parseOnPage(html, url), performance: null };
 }
 
 function stripToText(html: string): string {
@@ -33,7 +39,7 @@ function stripToText(html: string): string {
     .trim();
 }
 
-async function fetchPageText(url: string, timeoutMs = 8000): Promise<string | null> {
+async function fetchPageHtml(url: string, timeoutMs = 8000): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
@@ -43,7 +49,7 @@ async function fetchPageText(url: string, timeoutMs = 8000): Promise<string | nu
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;
-    return stripToText(await res.text()).slice(0, CONTEXT_PAGE_CHAR_CAP);
+    return await res.text();
   } catch {
     return null;
   }
@@ -56,7 +62,7 @@ async function fetchPageText(url: string, timeoutMs = 8000): Promise<string | nu
  * worst case this returns [] and callers fall back to homepage-only, same
  * as before this existed.
  */
-async function fetchAdditionalPages(homeUrl: string): Promise<{ url: string; text: string }[]> {
+async function fetchAdditionalPages(homeUrl: string): Promise<Array<{ url: string; text: string; signals: PageSignals }>> {
   try {
     const { pages } = await discoverPages(homeUrl, CONTEXT_PAGE_CAP);
     const extra = pages.filter((p) => {
@@ -67,12 +73,14 @@ async function fetchAdditionalPages(homeUrl: string): Promise<{ url: string; tex
       }
     });
     const results = await Promise.allSettled(
-      extra.map(async (u) => ({ url: u, text: await fetchPageText(u) })),
+      extra.map(async (u) => ({ url: u, html: await fetchPageHtml(u) })),
     );
     return results
-      .filter((r): r is PromiseFulfilledResult<{ url: string; text: string | null }> => r.status === "fulfilled")
+      .filter((r): r is PromiseFulfilledResult<{ url: string; html: string | null }> => r.status === "fulfilled")
       .map((r) => r.value)
-      .filter((r): r is { url: string; text: string } => !!r.text && r.text.length > 40);
+      .filter((r): r is { url: string; html: string } => !!r.html)
+      .map((r) => ({ url: r.url, text: stripToText(r.html).slice(0, CONTEXT_PAGE_CHAR_CAP), signals: toPageSignals(r.html, r.url) }))
+      .filter((r) => r.text.length > 40);
   } catch {
     return [];
   }
@@ -172,8 +180,10 @@ export async function auditWebsiteDetailed(url: string, timeoutMs = 12000): Prom
   const html = outcome.html;
   const signals = parseOnPage(html, finalUrl);
   const readiness = await computeAiReadiness(html, finalUrl, signals);
-  const additionalPages = await fetchAdditionalPages(finalUrl);
-  return { ok: true, audit: { html, signals, readiness, additionalPages } };
+  const extras = await fetchAdditionalPages(finalUrl);
+  const additionalPages = extras.map(({ url: u, text }) => ({ url: u, text }));
+  const pageSignals = [toPageSignals(html, finalUrl), ...extras.map((e) => e.signals)];
+  return { ok: true, audit: { html, signals, readiness, additionalPages, pageSignals } };
 }
 
 export async function auditWebsite(url: string, timeoutMs = 12000): Promise<WebsiteAudit | null> {

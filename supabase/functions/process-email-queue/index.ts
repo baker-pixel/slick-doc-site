@@ -642,7 +642,7 @@ const handler = async (req: Request): Promise<Response> => {
           sentVia = clientSendResult.provider!;
         } else {
           const emailResponse = await resend.emails.send({
-            from: Deno.env.get("EMAIL_FROM") || "Orange Door Consultants <hello@orangedoormarketing.com>",
+            from: Deno.env.get("EMAIL_FROM") || "Orange Door Marketing <hello@orangedoormarketing.com>",
             to: [email.recipient_email],
             subject: email.subject,
             html: trackedHtml,

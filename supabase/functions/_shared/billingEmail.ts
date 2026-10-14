@@ -17,7 +17,7 @@ export async function send(to: string, subject: string, html: string) {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "Orange Door Consultants <hello@orangedoormarketing.com>",
+      from: "Orange Door Marketing <hello@orangedoormarketing.com>",
       to: [to],
       subject,
       html,
