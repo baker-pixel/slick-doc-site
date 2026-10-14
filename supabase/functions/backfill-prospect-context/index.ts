@@ -34,6 +34,9 @@ serve(async (req: Request) => {
   let fromWebsite = 0;
   let skipped = 0;
   let errors = 0;
+  // Sites we could not fetch (dead domain, bot-blocked, test data). Expected
+  // and handled by the retry/give-up stub below; not worth an alert.
+  let unreachable = 0;
 
   // The gateway cuts a request off at ~150s, and this pass has three stages
   // (website scans, Apollo email lookup, fit scoring). Scans used to run one at
@@ -143,7 +146,12 @@ serve(async (req: Request) => {
             body: JSON.stringify({ url: prospect.website_url }),
           });
 
-          if (!res.ok) throw new Error(`analyze-website returned ${res.status}`);
+          if (!res.ok) {
+            // analyze-website answers 400 when the site itself can't be
+            // fetched. Anything else (5xx, 429, 401) means the scanner is
+            // the problem and should still alert.
+            throw new Error(`analyze-website returned ${res.status}`, { cause: res.status === 400 ? "unreachable" : undefined });
+          }
           const result = await res.json();
           const websiteCtx = result.analysis?.context_profile;
           if (!websiteCtx) throw new Error("No context_profile in analyze-website response");
@@ -168,8 +176,13 @@ serve(async (req: Request) => {
         console.log("Skipping prospect", prospect.id, "— no submission_id or website_url");
         skipped++;
       } catch (err) {
-        console.error("Backfill error for prospect", prospect.id, err);
-        errors++;
+        if (err instanceof Error && err.cause === "unreachable") {
+          console.warn("Site unreachable for prospect", prospect.id, err.message);
+          unreachable++;
+        } else {
+          console.error("Backfill error for prospect", prospect.id, err);
+          errors++;
+        }
         // A site that can't be scanned (bot-blocked corporate site, dead
         // domain, timeout) used to stay context_profile=null and get
         // re-scanned -- and re-alerted -- every run forever, hogging the
@@ -444,7 +457,7 @@ serve(async (req: Request) => {
         title: "Prospect context backfill completed with errors",
         message: `${errors} prospects failed during backfill`,
         source: "backfill-prospect-context",
-        metadata: { processed, fromForm, fromWebsite, skipped, errors },
+        metadata: { processed, fromForm, fromWebsite, skipped, errors, unreachable },
       });
     }
 
@@ -455,7 +468,7 @@ serve(async (req: Request) => {
       .is("context_profile", null);
 
     return new Response(
-      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, emailsEnriched, scored, dropped, hasMore: (count ?? 0) > 0 }),
+      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, unreachable, emailsEnriched, scored, dropped, hasMore: (count ?? 0) > 0 }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
