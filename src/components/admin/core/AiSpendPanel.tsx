@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Info, Lightbulb, Loader2, RefreshCw } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { AlertTriangle, CheckCircle2, Copy, Info, KeyRound, Lightbulb, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,30 +9,33 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { friendlyEdgeMessage, getEdgeErrorMessage } from "@/lib/edge-error";
-import { pricingData, type TierId } from "@/lib/pricingData";
 import { cn } from "@/lib/utils";
 
-// ---------- types (mirror admin-ai-spend) ----------
+// ---------- types (mirror admin-ai-spend / openaiSpend.ts) ----------
 
 type Status = "no_budget" | "on_track" | "watch" | "will_exceed" | "over";
 interface Report {
-  generated_at: string;
   month: {
     label: string; spent: number; budget: number | null; pct_of_budget: number | null; forecast: number; status: Status;
-    day_of_month: number; days_in_month: number; daily_avg_7d: number; calls: number; failed_calls: number; tokens: number;
+    day_of_month: number; days_in_month: number; daily_avg_7d: number; openai_requests: number; openai_tokens: number;
   };
   last_month: { spent: number; same_period: number };
-  daily: Array<{ day: string; cost: number; calls: number }>;
-  areas: Array<{ area: string; label: string; cost: number; calls: number; pct: number }>;
-  agents: Array<{ source: string; label: string; what: string; area: string; calls: number; failed: number; tokens: number; cost: number; pct: number }>;
-  models: Array<{
-    model: string; label: string; provider: string; calls: number; failed: number; prompt_tokens: number; completion_tokens: number;
-    cost: number; priced: boolean; input_per_mtok: number | null; output_per_mtok: number | null; verified: boolean;
-  }>;
-  clients: Array<{ id: string | null; name: string; tier: string | null; status: string | null; calls: number; cost: number; pct: number }>;
-  units: Array<{ key: string; label: string; provider: string; note: string | null; this_month: number; last_month: number; unit_cost: number | null; cost: number | null; verified: boolean }>;
-  not_included: Array<{ what: string; amount: string }>;
+  daily: Array<{ day: string; usd: number }>;
+  lines: Array<{ line_item: string; usd: number; pct: number; image: boolean }>;
   insights: string[];
+  attribution: {
+    tasks: Array<{ source: string; label: string; what: string; area: string; calls: number; failed: number; tokens: number; share: number }>;
+    clients: Array<{ id: string | null; name: string; tier: string | null; calls: number; tokens: number; share: number }>;
+    our_requests: number; our_tokens: number; groq_requests: number;
+  };
+}
+interface Overview {
+  state: "ok" | "stale" | "error" | "not_connected";
+  problem: { title: string; fix: string; detail?: string } | null;
+  fetched_at: string | null;
+  usage_available: boolean;
+  other_currencies: string[];
+  report: Report;
 }
 
 // ---------- helpers ----------
@@ -46,15 +50,17 @@ async function api<T>(password: string, body: Record<string, unknown>): Promise<
 
 const money = (n: number) => (n === 0 ? "$0.00" : n < 0.01 ? "<$0.01" : n >= 100 ? `$${Math.round(n).toLocaleString("en-US")}` : `$${n.toFixed(2)}`);
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3).toLocaleString("en-US")}K` : String(n));
-const rate = (n: number | null) => (n === null ? "—" : `$${n}`);
+const ago = (iso: string | null) => (iso ? formatDistanceToNow(new Date(iso), { addSuffix: true }) : "never");
 
-const STATUS: Record<Status, { bar: string; box: string; icon: typeof Info; text: (r: Report["month"]) => string }> = {
-  no_budget: { bar: "bg-sky-500", box: "border-sky-200 bg-sky-50 text-sky-900", icon: Info, text: () => "No monthly budget set yet. Set one below to track your pace." },
-  on_track: { bar: "bg-emerald-500", box: "border-emerald-200 bg-emerald-50 text-emerald-900", icon: CheckCircle2, text: () => "On track: you're pacing under your budget." },
-  watch: { bar: "bg-amber-500", box: "border-amber-200 bg-amber-50 text-amber-900", icon: AlertTriangle, text: () => "Watch this: you're on pace to use most of your budget." },
-  will_exceed: { bar: "bg-orange-500", box: "border-orange-200 bg-orange-50 text-orange-900", icon: AlertTriangle, text: () => "At this pace you'll go over your budget before the month ends." },
-  over: { bar: "bg-red-500", box: "border-red-200 bg-red-50 text-red-900", icon: AlertTriangle, text: () => "You've already spent more than your monthly budget." },
+const STATUS: Record<Status, { bar: string; box: string; icon: typeof Info; text: string }> = {
+  no_budget: { bar: "bg-sky-500", box: "border-sky-200 bg-sky-50 text-sky-900", icon: Info, text: "No monthly budget set yet. Set one to track your pace." },
+  on_track: { bar: "bg-emerald-500", box: "border-emerald-200 bg-emerald-50 text-emerald-900", icon: CheckCircle2, text: "On track: you're pacing under your budget." },
+  watch: { bar: "bg-amber-500", box: "border-amber-200 bg-amber-50 text-amber-900", icon: AlertTriangle, text: "Watch this: you're on pace to use most of your budget." },
+  will_exceed: { bar: "bg-orange-500", box: "border-orange-200 bg-orange-50 text-orange-900", icon: AlertTriangle, text: "At this pace you'll go over your budget before the month ends." },
+  over: { bar: "bg-red-500", box: "border-red-200 bg-red-50 text-red-900", icon: AlertTriangle, text: "You've already spent more than your monthly budget." },
 };
+
+const SETUP_COMMAND = `read -rs "K?Paste your OpenAI admin key (hidden): " && supabase secrets set OPENAI_ADMIN_KEY="$K" --project-ref axbeaqpjyzzmbvyaofbn`;
 
 // ---------- component ----------
 
@@ -64,15 +70,19 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
 
   const q = useQuery({
     queryKey: ["ai-spend", adminPassword],
-    queryFn: () => api<Report>(adminPassword, { action: "overview" }),
+    queryFn: () => api<Overview>(adminPassword, { action: "overview" }),
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
     enabled: !!adminPassword,
   });
-
-  const save = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api(adminPassword, body),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ai-spend"] }); toast({ title: "Saved" }); },
+  const refresh = useMutation({
+    mutationFn: () => api<Overview>(adminPassword, { action: "overview", force: true }),
+    onSuccess: (data) => queryClient.setQueryData(["ai-spend", adminPassword], data),
+    onError: (e) => toast({ title: "Could not refresh", description: e instanceof Error ? e.message : String(e), variant: "destructive" }),
+  });
+  const saveBudget = useMutation({
+    mutationFn: (amount: number) => api(adminPassword, { action: "set_budget", amount }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ai-spend"] }); toast({ title: "Budget saved" }); },
     onError: (e) => toast({ title: "Could not save", description: e instanceof Error ? e.message : String(e), variant: "destructive" }),
   });
 
@@ -87,254 +97,204 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
     );
   }
 
-  const r = q.data;
+  const o = q.data;
+  const r = o.report;
   const m = r.month;
+  const live = o.state === "ok" || o.state === "stale";
   const st = STATUS[m.status];
   const StIcon = st.icon;
   const barPct = m.budget ? Math.min(100, (m.spent / m.budget) * 100) : 0;
   const forecastPct = m.budget ? Math.min(100, (m.forecast / m.budget) * 100) : 0;
-  const maxDaily = Math.max(0.01, ...r.daily.map((d) => d.cost));
-  const images = r.units.find((u) => u.key === "image_gpt_image_2");
-  const unpricedModels = r.models.filter((x) => !x.priced);
+  const maxDaily = Math.max(0.01, ...r.daily.map((d) => d.usd));
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">AI Spend &amp; Budget</h1>
-          <p className="text-sm text-muted-foreground">What the platform's AI costs to run, where it goes, and whether you're on budget.</p>
+          <p className="text-sm text-muted-foreground">What OpenAI actually bills us, straight from OpenAI.</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => q.refetch()} disabled={q.isFetching}>
-          <RefreshCw className={cn("mr-2 h-4 w-4", q.isFetching && "animate-spin")} />Refresh
-        </Button>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {live && <span>From OpenAI · updated {ago(o.fetched_at)}</span>}
+          <Button size="sm" variant="outline" onClick={() => refresh.mutate()} disabled={refresh.isPending || o.state === "not_connected"}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", refresh.isPending && "animate-spin")} />Refresh from OpenAI
+          </Button>
+        </div>
       </div>
 
-      {/* Hero: spend vs budget */}
+      {/* Connection problem or setup */}
+      {o.problem && (
+        <Card className={cn(o.state === "stale" ? "border-amber-300" : "border-red-200")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base"><KeyRound className="h-5 w-5" />{o.problem.title}</CardTitle>
+            <CardDescription>{o.problem.fix}{o.state === "stale" && " Showing the last good numbers."}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {o.problem.detail && <p className="text-xs text-muted-foreground">OpenAI said: {o.problem.detail}</p>}
+            {(o.state === "not_connected" || o.state === "error") && (
+              <ol className="list-inside list-decimal space-y-2">
+                <li>In OpenAI open <strong>Settings → Admin keys</strong> and create a new admin key. You must be an organization Owner. If it offers permissions, allow reading usage.</li>
+                <li>Copy the key (it starts with <code className="rounded bg-muted px-1">sk-admin-</code>). Treat it like a password.</li>
+                <li>
+                  Run this in Terminal. It asks for the key with the typing hidden, so it never appears on screen:
+                  <div className="mt-2 flex items-start gap-2 rounded-md border bg-muted p-2">
+                    <code className="flex-1 break-all text-xs">{SETUP_COMMAND}</code>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" title="Copy" onClick={() => { navigator.clipboard.writeText(SETUP_COMMAND); toast({ title: "Copied" }); }}><Copy className="h-4 w-4" /></Button>
+                  </div>
+                </li>
+                <li>Come back and press <strong>Refresh from OpenAI</strong>.</li>
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {live && o.other_currencies.length > 0 && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">OpenAI also reported charges in {o.other_currencies.join(", ").toUpperCase()}. Only USD is added up here.</p>
+      )}
+
+      {/* Hero */}
       <Card><CardContent className="space-y-5 p-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm text-muted-foreground">{m.label} so far (day {m.day_of_month} of {m.days_in_month})</p>
-            <p className="text-5xl font-bold tracking-tight">{money(m.spent)}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              On pace for about <span className="font-semibold text-foreground">{money(m.forecast)}</span> by month end
-              <span className="text-xs"> (based on the last 7 days, about {money(m.daily_avg_7d)} a day)</span>
-            </p>
+            <p className="text-5xl font-bold tracking-tight">{live ? money(m.spent) : "—"}</p>
+            {live && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                On pace for about <span className="font-semibold text-foreground">{money(m.forecast)}</span> by month end
+                <span className="text-xs"> (projection from the last 7 days, about {money(m.daily_avg_7d)} a day)</span>
+              </p>
+            )}
           </div>
           <div className="flex items-end gap-2">
             <div>
               <label htmlFor="budget" className="text-xs text-muted-foreground">Monthly budget (USD)</label>
               <Input id="budget" type="number" min="0" step="1" placeholder={m.budget ? String(m.budget) : "e.g. 50"} value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} className="w-36" />
             </div>
-            <Button disabled={save.isPending || budgetInput === ""} onClick={() => { save.mutate({ action: "set_budget", amount: Number(budgetInput) }); setBudgetInput(""); }}>Save budget</Button>
-            {m.budget && <Button variant="ghost" onClick={() => save.mutate({ action: "set_budget", amount: 0 })}>Clear</Button>}
+            <Button disabled={saveBudget.isPending || budgetInput === ""} onClick={() => { saveBudget.mutate(Number(budgetInput)); setBudgetInput(""); }}>Save budget</Button>
+            {m.budget && <Button variant="ghost" onClick={() => saveBudget.mutate(0)}>Clear</Button>}
           </div>
         </div>
 
-        {m.budget ? (
+        {live && m.budget ? (
           <div className="space-y-2">
             <div className="relative h-4 overflow-hidden rounded-full bg-muted">
               <div className="absolute inset-y-0 left-0 bg-foreground/10" style={{ width: `${forecastPct}%` }} title="Projected by month end" />
               <div className={cn("absolute inset-y-0 left-0", st.bar)} style={{ width: `${barPct}%` }} />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{money(m.spent)} spent ({m.pct_of_budget}% of budget)</span>
+              <span>{money(m.spent)} billed ({m.pct_of_budget}% of budget)</span>
               <span>Budget {money(m.budget)} · pale bar = projected month end</span>
             </div>
           </div>
         ) : null}
 
-        <div className={cn("flex items-center gap-3 rounded-lg border p-3 text-sm font-medium", st.box)}>
-          <StIcon className="h-5 w-5 shrink-0" />{st.text(m)}
-        </div>
-
-        {r.not_included.length > 0 && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-medium">This total is a minimum. It does not yet include:</p>
-            <ul className="mt-1 list-inside list-disc text-xs">
-              {r.not_included.map((n) => <li key={n.what}>{n.what}: {n.amount}</li>)}
-            </ul>
-            <p className="mt-1 text-xs">Enter the missing prices in the price list at the bottom of this page to include them.</p>
+        {live && (
+          <div className={cn("flex items-center gap-3 rounded-lg border p-3 text-sm font-medium", st.box)}>
+            <StIcon className="h-5 w-5 shrink-0" />{st.text}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">Estimated from how much AI the platform used and the price list below. Confirm against your OpenAI and Groq invoices.</p>
+        <p className="text-xs text-muted-foreground">These dollar amounts are OpenAI's own billing data, not our calculation. OpenAI can take a few hours to post the latest usage, so today's figure may still grow.</p>
       </CardContent></Card>
 
-      {/* Plain-English takeaways */}
-      <Card><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Lightbulb className="h-5 w-5 text-amber-500" />What this means</CardTitle></CardHeader>
-        <CardContent><ul className="space-y-2 text-sm">{r.insights.map((i) => <li key={i} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/40" />{i}</li>)}</ul></CardContent>
-      </Card>
+      {live && (
+        <>
+          <Card><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Lightbulb className="h-5 w-5 text-amber-500" />What this means</CardTitle></CardHeader>
+            <CardContent><ul className="space-y-2 text-sm">{r.insights.map((i) => <li key={i} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/40" />{i}</li>)}</ul></CardContent>
+          </Card>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Kpi label="Last month (total)" value={money(r.last_month.spent)} sub={`${money(r.last_month.same_period)} by this day`} />
-        <Kpi label="Average per day" value={money(m.daily_avg_7d)} sub="last 7 days" />
-        <Kpi label="AI requests this month" value={m.calls.toLocaleString("en-US")} sub={m.failed_calls ? `${m.failed_calls} failed` : "none failed"} warn={m.failed_calls > 0} />
-        <Kpi label="AI usage this month" value={compact(m.tokens)} sub="tokens (≈ ¾ of a word each)" />
-        <Kpi label="Images made" value={String(images?.this_month ?? 0)} sub={`${images?.last_month ?? 0} last month`} />
-      </div>
-
-      {/* Daily chart */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Daily spend, last 30 days</h2>
-        <Card><CardContent className="p-4">
-          <div className="flex h-36 items-end gap-1">
-            {r.daily.map((d) => (
-              <div key={d.day} className="group relative flex-1" title={`${d.day}: ${money(d.cost)} · ${d.calls} requests`}>
-                <div className={cn("w-full rounded-t", d.cost > 0 ? "bg-primary/70 group-hover:bg-primary" : "bg-muted")} style={{ height: `${Math.max(2, (d.cost / maxDaily) * 100)}%` }} />
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Kpi label="Last month (total)" value={money(r.last_month.spent)} sub={`${money(r.last_month.same_period)} by this day`} />
+            <Kpi label="Average per day" value={money(m.daily_avg_7d)} sub="last 7 full days" />
+            <Kpi label="Requests to OpenAI" value={o.usage_available ? m.openai_requests.toLocaleString("en-US") : "—"} sub={o.usage_available ? "this month, per OpenAI" : "usage data unavailable"} />
+            <Kpi label="Tokens used" value={o.usage_available ? compact(m.openai_tokens) : "—"} sub="this month, per OpenAI (≈ ¾ word each)" />
           </div>
-          <div className="mt-2 flex justify-between text-[10px] text-muted-foreground"><span>{r.daily[0]?.day}</span><span>today</span></div>
-        </CardContent></Card>
-      </section>
 
-      {/* By area */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Where the money goes</h2>
-        <Card><CardContent className="space-y-3 p-4">
-          {r.areas.length === 0 && <p className="text-sm text-muted-foreground">No priced usage yet this month.</p>}
-          {r.areas.map((a) => (
-            <div key={a.area} className="space-y-1">
-              <div className="flex justify-between text-sm"><span className="font-medium">{a.label}</span><span>{money(a.cost)} <span className="text-muted-foreground">({a.pct}%)</span></span></div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${a.pct}%` }} /></div>
-            </div>
-          ))}
-        </CardContent></Card>
-      </section>
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Daily spend, last 30 days</h2>
+            <Card><CardContent className="p-4">
+              <div className="flex h-36 items-end gap-1">
+                {r.daily.map((d) => (
+                  <div key={d.day} className="group relative flex-1" title={`${d.day}: ${money(d.usd)}`}>
+                    <div className={cn("w-full rounded-t", d.usd > 0 ? "bg-primary/70 group-hover:bg-primary" : "bg-muted")} style={{ height: `${Math.max(2, (d.usd / maxDaily) * 100)}%` }} />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex justify-between text-[10px] text-muted-foreground"><span>{r.daily[0]?.day}</span><span>today</span></div>
+            </CardContent></Card>
+          </section>
 
-      {/* By task */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">What OpenAI is charging for</h2>
+            <p className="-mt-2 text-sm text-muted-foreground">Exactly as OpenAI itemises this month's bill.</p>
+            <Card><CardContent className="space-y-3 p-4">
+              {r.lines.length === 0 && <p className="text-sm text-muted-foreground">No charges posted yet this month.</p>}
+              {r.lines.map((l) => (
+                <div key={l.line_item} className="space-y-1">
+                  <div className="flex justify-between text-sm"><span className="font-medium">{l.line_item}{l.image && <Badge variant="outline" className="ml-2 text-[10px]">images</Badge>}</span><span>{money(l.usd)} <span className="text-muted-foreground">({l.pct}%)</span></span></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${l.pct}%` }} /></div>
+                </div>
+              ))}
+            </CardContent></Card>
+          </section>
+        </>
+      )}
+
+      {/* Attribution: usage only */}
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">What each AI task costs</h2>
+        <h2 className="text-lg font-semibold">Where our AI usage goes</h2>
+        <p className="-mt-2 text-sm text-muted-foreground">OpenAI doesn't say which task or client caused a charge, so this shows how much each one <em>used</em> (requests and tokens from our own logs), not dollars. The task that uses the most is the first place to look for savings.</p>
         <Card><CardContent className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead><tr className="border-b text-left text-xs text-muted-foreground">
-              <th className="p-3 font-medium">Task</th><th className="p-3 font-medium">Requests</th><th className="p-3 font-medium">Usage</th><th className="p-3 text-right font-medium">Cost</th><th className="p-3 text-right font-medium">Share</th>
+              <th className="p-3 font-medium">Task</th><th className="p-3 font-medium">Requests</th><th className="p-3 font-medium">Tokens</th><th className="p-3 text-right font-medium">Share of usage</th>
             </tr></thead>
             <tbody>
-              {r.agents.map((a) => (
-                <tr key={a.source} className="border-b last:border-0">
-                  <td className="p-3"><p className="font-medium">{a.label}</p>{a.what && <p className="text-xs text-muted-foreground">{a.what}</p>}</td>
-                  <td className="p-3 text-muted-foreground">{a.calls.toLocaleString("en-US")}{a.failed > 0 && <span className="text-red-600"> ({a.failed} failed)</span>}</td>
-                  <td className="p-3 text-muted-foreground">{compact(a.tokens)}</td>
-                  <td className="p-3 text-right font-medium">{money(a.cost)}</td>
-                  <td className="p-3 text-right text-muted-foreground">{a.pct}%</td>
+              {r.attribution.tasks.map((t) => (
+                <tr key={t.source} className="border-b last:border-0">
+                  <td className="p-3"><p className="font-medium">{t.label}</p>{t.what && <p className="text-xs text-muted-foreground">{t.what}</p>}</td>
+                  <td className="p-3 text-muted-foreground">{t.calls.toLocaleString("en-US")}{t.failed > 0 && <span className="text-red-600"> ({t.failed} failed)</span>}</td>
+                  <td className="p-3 text-muted-foreground">{compact(t.tokens)}</td>
+                  <td className="p-3 text-right"><span className="font-medium">{t.share}%</span></td>
                 </tr>
               ))}
-              {r.agents.length === 0 && <tr><td colSpan={5} className="p-4 text-muted-foreground">No AI activity this month yet.</td></tr>}
+              {r.attribution.tasks.length === 0 && <tr><td colSpan={4} className="p-4 text-muted-foreground">No AI activity this month yet.</td></tr>}
             </tbody>
           </table>
         </CardContent></Card>
-      </section>
 
-      {/* By client */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Cost per client</h2>
-        <p className="-mt-2 text-sm text-muted-foreground">AI cost this month against what each client pays per month. Images are not tied to a client, so they are not in this table.</p>
         <Card><CardContent className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead><tr className="border-b text-left text-xs text-muted-foreground">
-              <th className="p-3 font-medium">Client</th><th className="p-3 font-medium">Plan</th><th className="p-3 font-medium">Requests</th><th className="p-3 text-right font-medium">AI cost</th><th className="p-3 text-right font-medium">% of what they pay</th>
+              <th className="p-3 font-medium">Client</th><th className="p-3 font-medium">Plan</th><th className="p-3 font-medium">Requests</th><th className="p-3 font-medium">Tokens</th><th className="p-3 text-right font-medium">Share of usage</th>
             </tr></thead>
             <tbody>
-              {r.clients.map((c) => {
-                const price = c.tier && c.tier in pricingData ? pricingData[c.tier as TierId].price : null;
-                const share = price ? (c.cost / price) * 100 : null;
-                return (
-                  <tr key={c.id ?? "none"} className="border-b last:border-0">
-                    <td className="p-3 font-medium">{c.name}</td>
-                    <td className="p-3 capitalize text-muted-foreground">{c.tier ? `${c.tier} · $${price}/mo` : "—"}</td>
-                    <td className="p-3 text-muted-foreground">{c.calls.toLocaleString("en-US")}</td>
-                    <td className="p-3 text-right font-medium">{money(c.cost)}</td>
-                    <td className={cn("p-3 text-right", share !== null && share > 10 ? "font-medium text-red-600" : "text-muted-foreground")}>{share === null ? "—" : `${share.toFixed(1)}%`}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </CardContent></Card>
-      </section>
-
-      {/* Images & lookups */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Images and lookups</h2>
-        <p className="-mt-2 text-sm text-muted-foreground">These are charged per item, not per word, so enter what each one costs you (your average from the invoice).</p>
-        <Card><CardContent className="divide-y p-0">
-          {r.units.map((u) => (
-            <div key={u.key} className="flex flex-wrap items-center gap-4 p-4 text-sm">
-              <div className="min-w-[200px] flex-1">
-                <p className="font-medium">{u.label}</p>
-                {u.note && <p className="text-xs text-muted-foreground">{u.note}</p>}
-              </div>
-              <div className="text-muted-foreground">{u.this_month.toLocaleString("en-US")} this month · {u.last_month.toLocaleString("en-US")} last month</div>
-              <UnitPrice unit={u} saving={save.isPending} onSave={(v) => save.mutate({ action: "set_rate", key: u.key, unit_cost: v })} />
-              <div className="w-24 text-right font-medium">{u.cost === null ? <Badge variant="outline">Not priced</Badge> : money(u.cost)}</div>
-            </div>
-          ))}
-        </CardContent></Card>
-      </section>
-
-      {/* Rate card */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">AI models and their prices</h2>
-        <p className="-mt-2 text-sm text-muted-foreground">Prices are per 1 million tokens. The starting prices are estimates from the providers' public price lists, so confirm them against an invoice and edit them here. Retired models stay listed because last month's usage still used them.</p>
-        <Card><CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b text-left text-xs text-muted-foreground">
-              <th className="p-3 font-medium">Model</th><th className="p-3 font-medium">Used this month</th><th className="p-3 font-medium">Price in</th><th className="p-3 font-medium">Price out</th><th className="p-3 font-medium">Status</th><th className="p-3" />
-            </tr></thead>
-            <tbody>
-              {r.models.map((x) => (
-                <ModelRow key={x.model} m={x} saving={save.isPending} onConfirm={() => save.mutate({ action: "set_rate", key: x.model, verified: true })} onSave={(i, o) => save.mutate({ action: "set_rate", key: x.model, label: x.label, provider: x.provider, input_per_mtok: i, output_per_mtok: o })} />
+              {r.attribution.clients.map((c) => (
+                <tr key={c.id ?? "none"} className="border-b last:border-0">
+                  <td className="p-3 font-medium">{c.name}</td>
+                  <td className="p-3 capitalize text-muted-foreground">{c.tier ?? "—"}</td>
+                  <td className="p-3 text-muted-foreground">{c.calls.toLocaleString("en-US")}</td>
+                  <td className="p-3 text-muted-foreground">{compact(c.tokens)}</td>
+                  <td className="p-3 text-right font-medium">{c.share}%</td>
+                </tr>
               ))}
-              {r.models.length === 0 && <tr><td colSpan={6} className="p-4 text-muted-foreground">No AI models used this month yet.</td></tr>}
             </tbody>
           </table>
         </CardContent></Card>
-        {unpricedModels.length > 0 && <p className="text-xs text-amber-700">{unpricedModels.length} model(s) above have no price, so their usage is not in the totals.</p>}
+        {r.attribution.groq_requests > 0 && <p className="text-xs text-muted-foreground">Not included above: {r.attribution.groq_requests.toLocaleString("en-US")} requests this month ran on Groq (our backup provider), which is billed separately and not shown here.</p>}
+        <p className="text-xs text-muted-foreground">Image generation is billed by OpenAI but isn't tied to a client or task in our logs, so it appears only in the charges list above.</p>
       </section>
     </div>
   );
 }
 
-// ---------- pieces ----------
-
-function Kpi({ label, value, sub, warn }: { label: string; value: string; sub?: string; warn?: boolean }) {
+function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <Card><CardContent className="space-y-1 p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-2xl font-semibold">{value}</p>
-      {sub && <p className={cn("text-xs", warn ? "text-red-600" : "text-muted-foreground")}>{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </CardContent></Card>
-  );
-}
-
-function UnitPrice({ unit, onSave, saving }: { unit: Report["units"][number]; onSave: (v: number | null) => void; saving: boolean }) {
-  const [v, setV] = useState("");
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">$ each</span>
-      <Input type="number" min="0" step="0.001" placeholder={unit.unit_cost === null ? "e.g. 0.04" : String(unit.unit_cost)} value={v} onChange={(e) => setV(e.target.value)} className="h-8 w-24" />
-      <Button size="sm" variant="outline" disabled={saving || v === ""} onClick={() => { onSave(Number(v)); setV(""); }}>Save</Button>
-    </div>
-  );
-}
-
-function ModelRow({ m, onSave, onConfirm, saving }: { m: Report["models"][number]; onSave: (i: number, o: number) => void; onConfirm: () => void; saving: boolean }) {
-  const [i, setI] = useState("");
-  const [o, setO] = useState("");
-  const ready = i !== "" && o !== "";
-  return (
-    <tr className="border-b last:border-0">
-      <td className="p-3"><p className="font-medium">{m.label}</p><p className="text-xs text-muted-foreground">{m.provider} · {m.model}</p></td>
-      <td className="p-3 text-muted-foreground">{m.calls.toLocaleString("en-US")} requests · {money(m.cost)}</td>
-      <td className="p-3"><Input type="number" min="0" step="0.01" placeholder={rate(m.input_per_mtok)} value={i} onChange={(e) => setI(e.target.value)} className="h-8 w-24" /></td>
-      <td className="p-3"><Input type="number" min="0" step="0.01" placeholder={rate(m.output_per_mtok)} value={o} onChange={(e) => setO(e.target.value)} className="h-8 w-24" /></td>
-      <td className="p-3">{!m.priced ? <Badge variant="destructive">No price</Badge> : m.verified ? <Badge>Confirmed</Badge> : <Badge variant="outline">Estimate</Badge>}</td>
-      <td className="space-x-2 whitespace-nowrap p-3 text-right">
-        {m.priced && !m.verified && <Button size="sm" variant="ghost" disabled={saving} onClick={onConfirm} title="The current prices match my invoice">Looks right</Button>}
-        <Button size="sm" variant="outline" disabled={saving || !ready} onClick={() => { onSave(Number(i), Number(o)); setI(""); setO(""); }}>Save &amp; confirm</Button>
-      </td>
-    </tr>
   );
 }
 
