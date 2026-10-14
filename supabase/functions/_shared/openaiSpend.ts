@@ -29,8 +29,18 @@ export class OpenAIApiError extends Error {
   }
 }
 
+export type KeyKind = "admin" | "standard";
+
 /** Plain-English explanation and fix for each failure, shown to the owner. */
-export function explainError(e: OpenAIApiError): { title: string; fix: string } {
+export function explainError(e: OpenAIApiError, keyKind: KeyKind = "admin"): { title: string; fix: string } {
+  // We try the platform's everyday OpenAI key when no Admin key is set. OpenAI only lets
+  // an Admin key read billing, so a refusal there means "create an Admin key", not "broken".
+  if (keyKind === "standard" && (e.kind === "unauthorized" || e.kind === "forbidden" || e.kind === "not_found")) {
+    return {
+      title: "OpenAI won't let our everyday key read billing",
+      fix: "We tried the OpenAI key the platform already uses to write content, and OpenAI only allows a separate Admin key to read spend. Create one (steps below) and this page will show your real numbers.",
+    };
+  }
   switch (e.kind) {
     case "not_connected":
       return { title: "OpenAI isn't connected yet", fix: "Add an OpenAI Admin key (steps below) and this page will show your real spend." };

@@ -4,13 +4,15 @@ import { serviceClient } from "../_shared/supabase.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 import {
   buildReport, explainError, fetchBuckets, OpenAIApiError, parseCostBuckets, parseUsageBuckets,
-  type Attribution, type CostRow, type UsageRow,
+  type Attribution, type CostRow, type KeyKind, type UsageRow,
 } from "../_shared/openaiSpend.ts";
 
 // Admin AI Spend & Budget backend. OpenAI is the source of truth for dollars.
 //   { action: "overview", force? }  -> the report (live from OpenAI's Costs/Usage APIs, cached 10 min)
 //   { action: "set_budget", amount } -> monthly budget in USD (0/null clears it)
-// Needs the OPENAI_ADMIN_KEY secret (an organization Admin key). It never leaves this function.
+// Uses the OPENAI_ADMIN_KEY secret (an organization Admin key). If it isn't set we try the platform's
+// everyday OPENAI_API_KEY, which OpenAI normally refuses for billing; the page then says to create an
+// Admin key. Neither key ever leaves this function.
 // Admin only (session or password).
 
 const BUDGET_KEY = "ai_monthly_budget_usd";
@@ -46,7 +48,8 @@ async function overview(supabase: Supabase, force: boolean) {
   const attribution = data as Attribution;
   const build = (s: Snapshot | null) => buildReport({ costs: s?.costs ?? [], usage: s?.usage ?? [], attribution, now });
 
-  const adminKey = Deno.env.get("OPENAI_ADMIN_KEY");
+  const adminKey = Deno.env.get("OPENAI_ADMIN_KEY") ?? Deno.env.get("OPENAI_API_KEY");
+  const keyKind: KeyKind = Deno.env.get("OPENAI_ADMIN_KEY") ? "admin" : "standard";
   if (!adminKey) {
     const problem = explainError(new OpenAIApiError("not_connected", "no admin key"));
     return { state: "not_connected", problem, fetched_at: null, usage_available: false, other_currencies: [], report: build(null) };
@@ -62,11 +65,11 @@ async function overview(supabase: Supabase, force: boolean) {
   try {
     const snap = await loadFromOpenAI(adminKey, now);
     await supabase.from("ai_spend_cache").upsert({ key: CACHE_KEY, payload: snap, fetched_at: snap.fetched_at }, { onConflict: "key" });
-    return { state: "ok", problem: null, fetched_at: snap.fetched_at, usage_available: snap.usage_available, other_currencies: snap.other_currencies, report: build(snap) };
+    return { state: "ok", key_kind: keyKind, problem: null, fetched_at: snap.fetched_at, usage_available: snap.usage_available, other_currencies: snap.other_currencies, report: build(snap) };
   } catch (e) {
     const err = e instanceof OpenAIApiError ? e : new OpenAIApiError("server", e instanceof Error ? e.message : "unknown error");
     console.error("OpenAI spend fetch failed:", err.kind, err.status, err.message);
-    const problem = { ...explainError(err), detail: err.message };
+    const problem = { ...explainError(err, keyKind), detail: err.message };
     // Show the last good numbers if we have them, clearly marked as out of date.
     if (cachedSnap) return { state: "stale", problem, fetched_at: cachedSnap.fetched_at, usage_available: cachedSnap.usage_available, other_currencies: cachedSnap.other_currencies, report: build(cachedSnap) };
     return { state: "error", problem, fetched_at: null, usage_available: false, other_currencies: [], report: build(null) };
