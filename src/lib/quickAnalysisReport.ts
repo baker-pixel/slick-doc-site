@@ -47,29 +47,8 @@ export const LOCKED_SYSTEM_CATEGORIES: { label: string; reason: string }[] = [
   { label: "Transaction Activation", reason: "Needs the full Gap Analysis — sales response time and close rate aren't visible from a website scan." },
 ];
 
-export function getTier(score: number): "transformation" | "growth" | "optimization" {
-  if (score <= 39) return "transformation";
-  if (score <= 64) return "growth";
-  return "optimization";
-}
-
-export function getTierLabel(tier: string) {
-  switch (tier) {
-    case "transformation": return "Transformation";
-    case "growth": return "Growth";
-    case "optimization": return "Optimization";
-    default: return tier;
-  }
-}
-
-export function getTierColor(tier: string) {
-  switch (tier) {
-    case "transformation": return "text-red-600 bg-red-50 border-red-200";
-    case "growth": return "text-amber-600 bg-amber-50 border-amber-200";
-    case "optimization": return "text-green-600 bg-green-50 border-green-200";
-    default: return "";
-  }
-}
+// One shared rule (see supabase/functions/_shared/systemTier.ts) so the scan, the email and the stored lead agree.
+export { recommendTier as getTier, tierLabel as getTierLabel, tierColor as getTierColor } from "../../supabase/functions/_shared/systemTier";
 
 export const buildStrengths = (r: AnalysisResult): string[] =>
   (r.detectedStrengths?.length ? r.detectedStrengths : r.seo.findings).slice(0, 4);
