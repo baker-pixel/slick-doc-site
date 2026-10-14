@@ -21,6 +21,7 @@ import {
   Radar,
   Activity,
   LayoutDashboard,
+  DollarSign,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -71,6 +72,7 @@ export type AdminSection =
   | "content-review"
   | "reports-review"
   | "alerts"
+  | "ai-spend"
   | "cycles"
   | "activity-feed"
   | "feature-guide"
@@ -129,6 +131,7 @@ const agentItems: NavItem[] = [
 const monitoringItems: NavItem[] = [
   { id: "cycles", label: "Work cycles", icon: RefreshCw },
   { id: "alerts", label: "Alerts", icon: Bell },
+  { id: "ai-spend", label: "AI spend", icon: DollarSign },
   { id: "activity-feed", label: "Activity log", icon: Activity },
 ];
 

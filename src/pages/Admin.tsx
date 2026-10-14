@@ -74,6 +74,7 @@ import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientH
 import { UnifiedClientView } from "@/components/admin/clients/UnifiedClientView";
 import { AdminHomeDashboard } from "@/components/admin/core/AdminHomeDashboard";
 import { CommandCenter } from "@/components/admin/core/CommandCenter";
+import { AiSpendPanel } from "@/components/admin/core/AiSpendPanel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
@@ -1376,6 +1377,8 @@ const AdminInner = () => {
         return <CycleOverviewPanel />;
       case "alerts":
         return <AutomationAlertsPanel />;
+      case "ai-spend":
+        return <AiSpendPanel adminPassword={storedPassword} />;
       case "quick-actions":
         return <QuickActionsPanel />;
       case "analytics":
@@ -1504,6 +1507,7 @@ const AdminInner = () => {
       "reports-review": "Reports Review",
       cycles: "Work Cycles",
       alerts: "Automation Alerts",
+      "ai-spend": "AI Spend & Budget",
       "activity-feed": "Activity Feed",
       "feature-guide": "Feature Guide",
       "quick-actions": "Quick Actions",
@@ -1527,7 +1531,7 @@ const AdminInner = () => {
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
     "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
-    "emails", "templates", "sequences", "campaigns", "alerts", "cycles",
+    "emails", "templates", "sequences", "campaigns", "alerts", "cycles", "ai-spend",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "integrations",
     "quick-actions", "activity-feed",
