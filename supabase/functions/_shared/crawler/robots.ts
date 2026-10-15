@@ -21,7 +21,7 @@ export function parseRobots(text: string, botName = BOT_NAME): RobotsRules {
   let lastWasAgent = false;
   let sawDirective = false;
 
-  const body = text.replace(/^﻿/, "");
+  const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text; // drop a byte-order mark
   if (/^\s*<(!doctype|html|head|body)/i.test(body)) return { rules: [], crawlDelaySeconds: null, sitemaps, unparseable: true };
 
   for (const rawLine of body.split(/\r?\n/)) {
