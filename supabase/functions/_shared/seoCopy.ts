@@ -70,7 +70,7 @@ export function cleanDraft(raw: string): string {
   const unquote = (t: string) => t.trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "").trim();
   return unquote(
     unquote(raw.replace(/[*_`#>]+/g, "").replace(/\s+/g, " "))
-      .replace(/^(?:meta description|description|title|page title)\s*[:\-]\s*/i, ""),
+      .replace(/^(?:meta description|description|title|page title)\s*[:-]\s*/i, ""),
   );
 }
 
