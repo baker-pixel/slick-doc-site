@@ -33,6 +33,8 @@ export interface SiteHealth {
   };
   broken_links: { url: string; status: number; found_on: string[] }[];
   links_checked: number;
+  /** Sitemap pages nothing links to (only filled from a full crawl). */
+  orphan_pages: string[];
 }
 
 export function emptySiteHealth(origin: string): SiteHealth {
@@ -41,7 +43,7 @@ export function emptySiteHealth(origin: string): SiteHealth {
     http: { redirects_to_https: null, final_url: null },
     hosts: { split: null, main: null, variant: null },
     sitemap: { found: false, checked: false, url: null, url_count: 0, sampled: 0, dead: [], redirected: [], blocked_by_robots: [] },
-    broken_links: [], links_checked: 0,
+    broken_links: [], links_checked: 0, orphan_pages: [],
   };
 }
 
@@ -82,7 +84,17 @@ export function normalizeUrlKey(u: string): string {
 }
 
 /** Network half. Every probe checks the deadline first, so a slow site yields a partial, honest result. */
-export async function gatherSiteHealth(origin: string, signals: PageSignals[]): Promise<SiteHealth> {
+export interface CrawlLinkData {
+  broken: { url: string; status: number; found_on: string[] }[];
+  orphans: string[];
+  linksChecked: number;
+}
+
+/**
+ * `crawl` is supplied when the audit runs on a stored full crawl: broken links and orphans then come from
+ * the link graph (every link, not a sample), and only the cheap site-level probes run live.
+ */
+export async function gatherSiteHealth(origin: string, signals: PageSignals[], crawl?: CrawlLinkData): Promise<SiteHealth> {
   const health = emptySiteHealth(origin);
   const deadline = Date.now() + BUDGET_MS;
   const withinBudget = () => Date.now() < deadline;
@@ -151,6 +163,13 @@ export async function gatherSiteHealth(origin: string, signals: PageSignals[]): 
       if (isBroken(r.status)) health.sitemap.dead.push({ url: u, status: r.status });
       else if (r.hops > 0 && normalizeUrlKey(r.final_url) !== normalizeUrlKey(u)) health.sitemap.redirected.push({ url: u, to: r.final_url });
     }
+  }
+
+  if (crawl) {
+    health.broken_links = crawl.broken;
+    health.links_checked = crawl.linksChecked;
+    health.orphan_pages = crawl.orphans;
+    return health;
   }
 
   // Broken internal links: targets found on the crawled pages that we did not crawl ourselves.
@@ -227,11 +246,18 @@ export function runSiteChecks(health: SiteHealth, signals: PageSignals[]): SiteF
       { broken: health.broken_links, links_checked: health.links_checked }), sources.length ? sources : [home]));
   }
 
+  if (health.orphan_pages.length) {
+    out.push(site(mk(CHECKS.orphan_pages, home,
+      `${health.orphan_pages.length} page${health.orphan_pages.length === 1 ? " is" : "s are"} listed in your sitemap but no other page on your site links to ${health.orphan_pages.length === 1 ? "it" : "them"}. Visitors and Google rarely find pages like this, and Google treats them as unimportant.`,
+      `Orphan pages: ${list(health.orphan_pages)}.`,
+      { orphans: health.orphan_pages.slice(0, 50), count: health.orphan_pages.length }), health.orphan_pages.slice(0, 25)));
+  }
+
   // Duplicates: only across pages that were actually read.
   const dupes = (pick: (s: PageSignals) => string) => {
     const groups = new Map<string, string[]>();
     for (const s of signals) {
-      if (!s.reachable || s.looks_like_empty_spa) continue;
+      if (!s.reachable || s.looks_like_empty_spa || s.noindex) continue;
       const v = pick(s).trim().toLowerCase().replace(/\s+/g, " ");
       if (!v) continue;
       groups.set(v, [...(groups.get(v) ?? []), s.url]);

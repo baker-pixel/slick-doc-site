@@ -34,6 +34,8 @@ export function mk(check: CheckDef, page: string, plain: string, technical: stri
 
 // Deterministic checks over one page's signals. Each finding carries the raw
 // signal that produced it (evidence) -- nothing is invented.
+const IMPORTANT_TYPES = new Set(["home", "service", "product", "about", "contact", "location", "pricing", "faq"]);
+
 export function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">> {
   const out: Array<Omit<Finding, "id" | "status">> = [];
   const p = s.url;
@@ -50,6 +52,11 @@ export function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">>
       `HTTP ${http}.`, { status: http }));
     return out;
   }
+
+  // A crawled page that is deliberately noindex (date archives, thank-you and landing pages) is not
+  // meant to rank, so auditing its title or alt text would only add noise. Important page types,
+  // and anything the sitemap lists, are different: noindex there is a real problem and falls through.
+  if (s.noindex && s.page_type !== undefined && !IMPORTANT_TYPES.has(s.page_type) && !s.in_sitemap) return out;
 
   if (s.looks_like_empty_spa || (!s.reachable)) {
     out.push(mk(CHECKS.render_required, p,

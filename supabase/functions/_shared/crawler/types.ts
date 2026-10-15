@@ -11,6 +11,9 @@ export interface CrawlConfig {
   sitemapsSkipped?: string[];
   sitemapTruncated?: boolean;
   renders?: number;
+  carriedByDate?: number;
+  carriedByServer?: number;
+  errors?: number;
   [k: string]: unknown;
 }
 
@@ -31,6 +34,10 @@ export interface CrawlRow {
   started_at: string | null;
   finished_at: string | null;
   last_step_at: string | null;
+  previous_crawl_id: string | null;
+  mode: "full" | "incremental";
+  run_audit: boolean;
+  audit_enqueued_at: string | null;
 }
 
 export interface PageRow {
@@ -45,6 +52,7 @@ export interface PageRow {
   priority: number;
   status: PageStatus;
   attempts: number;
+  sitemap_lastmod?: string | null;
 }
 
 export type NewPage = Omit<PageRow, "id" | "status" | "attempts"> & { client_account_id: string };
@@ -63,6 +71,25 @@ export interface PagePatch {
   title?: string | null;
   content_text?: string | null;
   fetched_at?: string | null;
+  etag?: string | null;
+  last_modified?: string | null;
+}
+
+/** What the previous crawl knew about a URL: enough to skip it or ask the server "changed since?". */
+export interface PreviousPage {
+  url_key: string;
+  status: PageStatus;
+  etag: string | null;
+  last_modified: string | null;
+  http_status: number | null;
+  final_url: string | null;
+  fetched_via: "plain" | "render" | null;
+  content_type: string | null;
+  title: string | null;
+  signals: Record<string, unknown> | null;
+  links: string[] | null;
+  content_text: string | null;
+  fetched_at: string | null;
 }
 
 export interface PageCounts { total: number; pending: number; done: number; failed: number; skipped: number }
@@ -80,6 +107,8 @@ export interface CrawlStore {
   /** Pending pages due now (next_attempt_at passed), best priority first. */
   takePending(crawlId: string, limit: number): Promise<PageRow[]>;
   savePage(pageId: string, patch: PagePatch): Promise<void>;
+  /** The previous crawl's rows for these keys (incremental re-crawls only). */
+  loadPrevious(prevCrawlId: string, keys: string[]): Promise<Map<string, PreviousPage>>;
 }
 
 export interface FetchResult {
@@ -92,11 +121,12 @@ export interface FetchResult {
   truncated: boolean;
   error?: string;
   blocked?: string;          // SSRF / policy refusal: never retried
-  headers: { xRobotsTag: string };
+  headers: { xRobotsTag: string; etag?: string; lastModified?: string };
 }
 
 export interface CrawlDeps {
-  fetchPage(url: string): Promise<FetchResult>;
+  /** `conditional` carries If-None-Match / If-Modified-Since for pages we already have. */
+  fetchPage(url: string, conditional?: { etag?: string | null; lastModified?: string | null }): Promise<FetchResult>;
   fetchText(url: string): Promise<string | null>;
   /** Optional JavaScript renderer, used only for pages that look empty without it. */
   render?(url: string): Promise<string | null>;
@@ -116,6 +146,8 @@ export interface CrawlTuning {
   maxRenders: number;
   /** A crawl still unfinished after this long is failed, not left running forever. */
   maxCrawlMs: number;
+  /** An incremental crawl falls back to reading everything once the previous one is older than this. */
+  maxCarryForwardMs: number;
 }
 
 export const DEFAULT_TUNING: CrawlTuning = {
@@ -127,4 +159,5 @@ export const DEFAULT_TUNING: CrawlTuning = {
   maxVariantsPerPath: 4,
   maxRenders: 60,
   maxCrawlMs: 12 * 60 * 60 * 1000,
+  maxCarryForwardMs: 30 * 24 * 60 * 60 * 1000,
 };

@@ -30,6 +30,7 @@ interface CrawlStatus {
   percent: number;
   eta_seconds: number | null;
   message: string;
+  audit: "analysing" | "done" | "failed" | null;
   breakdown: { page_type: string; pages: number; errors: number; noindex: number }[];
 }
 
@@ -50,11 +51,13 @@ const formatEta = (seconds: number | null): string | null => {
 interface Props {
   clientId: string;
   adminPassword: string | null | undefined;
-  /** Called when a crawl finishes, so the page can refresh anything built from it. */
+  /** Called when what we were watching (a crawl, or the audit that follows it) finishes, so the page can refresh. */
   onFinished?: () => void;
+  /** Bump to make the card look again right now (e.g. after "Run audit" queued a crawl). */
+  refreshKey?: number;
 }
 
-export default function SiteCrawlCard({ clientId, adminPassword, onFinished }: Props) {
+export default function SiteCrawlCard({ clientId, adminPassword, onFinished, refreshKey = 0 }: Props) {
   const [status, setStatus] = useState<CrawlStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -82,8 +85,11 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished }: P
   }, [call]);
 
   useEffect(() => { setStatus(null); setLoading(true); wasActive.current = false; refresh(); }, [clientId, refresh]);
+  useEffect(() => { if (refreshKey > 0) refresh(); }, [refreshKey, refresh]);
 
-  const active = status?.crawl?.status === "queued" || status?.crawl?.status === "running";
+  const crawling = status?.crawl?.status === "queued" || status?.crawl?.status === "running";
+  const analysing = status?.audit === "analysing";
+  const active = crawling || analysing;
   useEffect(() => {
     if (!active) return;
     const t = setInterval(refresh, POLL_MS);
@@ -127,8 +133,10 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished }: P
           </div>
           {c && <Badge variant={c.status === "failed" ? "destructive" : "secondary"} className="capitalize">{c.status === "running" && c.phase === "seed" ? "starting" : c.status}</Badge>}
           <div className="flex-1" />
-          {active ? (
+          {crawling ? (
             <Button variant="outline" size="sm" onClick={cancel} disabled={busy} className="gap-2"><XCircle className="w-4 h-4" /> Cancel</Button>
+          ) : analysing ? (
+            <Badge variant="secondary" className="gap-1"><Loader2 className="w-3 h-3 animate-spin" /> analysing</Badge>
           ) : (
             <Button size="sm" onClick={start} disabled={busy || loading} className="gap-2">
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : c ? <RefreshCw className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -145,7 +153,13 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished }: P
           </p>
         )}
 
-        {c && active && (
+        {c && analysing && !crawling && (
+          <p className="text-sm text-muted-foreground">
+            Read {c.pages_crawled} pages. Checking every one of them now: this takes a minute or two, and the audit below updates when it's ready.
+          </p>
+        )}
+
+        {c && crawling && (
           <div className="space-y-2">
             <Progress value={status?.percent ?? 0} />
             <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
@@ -156,7 +170,11 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished }: P
           </div>
         )}
 
-        {c && c.status === "complete" && (
+        {c && status?.audit === "failed" && (
+          <p className="text-sm text-red-600">The pages were read, but the analysis didn't finish. Try "Run new audit" again; if it keeps happening we've been alerted.</p>
+        )}
+
+        {c && c.status === "complete" && !analysing && (
           <div className="space-y-2">
             <p className="text-sm">
               {status?.message} <span className="text-muted-foreground">Finished {c.finished_at ? format(new Date(c.finished_at), "MMM d, h:mm a") : ""}.</span>

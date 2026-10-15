@@ -7,7 +7,7 @@ import { contentSample, parseOnPage } from "../seoSignals.ts";
 import { fetchableUrl, isTrap, pageTypeOf, pathOnly, urlKey, crawlPriority, sameSite } from "./urlRules.ts";
 import { parseRobots, robotsAllows, robotsBlocksEverything, type RobotsRules } from "./robots.ts";
 import { walkSitemaps } from "./sitemaps.ts";
-import { DEFAULT_TUNING, type CrawlDeps, type CrawlRow, type CrawlStore, type CrawlTuning, type NewPage, type PagePatch, type PageRow, type PageSource } from "./types.ts";
+import { DEFAULT_TUNING, type CrawlDeps, type CrawlRow, type CrawlStore, type CrawlTuning, type NewPage, type PagePatch, type PageRow, type PageSource, type PreviousPage } from "./types.ts";
 
 export interface StepSummary {
   status: CrawlRow["status"];
@@ -18,6 +18,31 @@ export interface StepSummary {
 
 const MAX_CRAWL_DELAY_MS = 10_000;
 
+/** Rebuild a fetchable URL from a stored link key ("host/path?query", www stripped) on the site's own host. */
+export function urlFromKey(origin: string, key: string): string | null {
+  try {
+    const o = new URL(origin);
+    const slash = key.indexOf("/");
+    const host = slash < 0 ? key : key.slice(0, slash);
+    if (host.replace(/^www\./, "") !== o.hostname.replace(/^www\./, "")) return null;
+    return `${o.origin}${slash < 0 ? "/" : key.slice(slash)}`;
+  } catch { return null; }
+}
+
+/** A page copied unchanged from the previous crawl. */
+function carryPatch(prev: PreviousPage, attempts: number, fetchedAt: string): PagePatch {
+  return {
+    status: "done", attempts, http_status: prev.http_status, final_url: prev.final_url, fetched_via: prev.fetched_via,
+    content_type: prev.content_type, title: prev.title, signals: prev.signals, links: prev.links, content_text: prev.content_text,
+    etag: prev.etag, last_modified: prev.last_modified, error: null, fetched_at: fetchedAt,
+  };
+}
+
+/** Can this previous row stand in for a fresh fetch? Only healthy HTML pages, never redirects or errors. */
+function reusable(prev: PreviousPage | undefined): prev is PreviousPage {
+  return !!prev && prev.status === "done" && !!prev.http_status && prev.http_status < 400 && !!prev.signals && !("redirected_to" in prev.signals);
+}
+
 function pathAndQuery(u: string): string {
   try { const x = new URL(u); return x.pathname + x.search; } catch { return "/"; }
 }
@@ -25,7 +50,7 @@ function pathAndQuery(u: string): string {
 /** Turns discovered URLs into insertable rows: same site, crawlable, not a trap, allowed by robots, new, within the page cap. */
 async function admitUrls(
   store: CrawlStore, crawl: CrawlRow, robots: RobotsRules | null, tuning: CrawlTuning,
-  found: { url: string; base: string; depth: number; source: PageSource }[],
+  found: { url: string; base: string; depth: number; source: PageSource; lastmod?: string | null }[],
   capacityLeft: number,
 ): Promise<NewPage[]> {
   if (capacityLeft <= 0 || !found.length) return [];
@@ -41,6 +66,7 @@ async function admitUrls(
     byKey.set(key, {
       crawl_id: crawl.id, client_account_id: crawl.client_account_id, url, url_key: key, path_key: pathOnly(url),
       depth: f.depth, source: f.source, page_type: type, priority: crawlPriority(type, f.depth, f.source),
+      sitemap_lastmod: f.lastmod ?? null,
     });
   }
   if (!byKey.size) return [];
@@ -84,7 +110,7 @@ async function seed(store: CrawlStore, deps: CrawlDeps, crawl: CrawlRow, tuning:
 
   const found = [
     { url: origin + "/", base: origin, depth: 0, source: "seed" as PageSource },
-    ...walk.entries.map((e) => ({ url: e.loc, base: origin, depth: 1, source: "sitemap" as PageSource })),
+    ...walk.entries.map((e) => ({ url: e.loc, base: origin, depth: 1, source: "sitemap" as PageSource, lastmod: e.lastmod })),
   ];
   const rows = await admitUrls(store, live, robots, tuning, found, crawl.max_pages);
   if (!rows.some((r) => r.depth === 0)) {
@@ -137,6 +163,18 @@ export async function crawlStep(
     robots = { ...crawl.config.robots, unparseable: crawl.config.robots.unparseable };
   }
 
+  // Incremental crawl: only if the previous crawl exists and is recent enough to trust.
+  let previousId: string | null = null;
+  if (crawl.mode === "incremental" && crawl.previous_crawl_id) {
+    try {
+      const prevCrawl = await store.loadCrawl(crawl.previous_crawl_id);
+      const finished = prevCrawl.finished_at ? Date.parse(prevCrawl.finished_at) : NaN;
+      if (prevCrawl.status === "complete" && Number.isFinite(finished) && deps.now() - finished <= tuning.maxCarryForwardMs) previousId = prevCrawl.id;
+    } catch { /* previous crawl was pruned: just read everything */ }
+  }
+  let carriedByDate = crawl.config.carriedByDate ?? 0;
+  let carriedByServer = crawl.config.carriedByServer ?? 0;
+
   const delayMs = Math.min(MAX_CRAWL_DELAY_MS, Math.max(tuning.minDelayMs, (robots?.crawlDelaySeconds ?? 0) * 1000));
   let renders = crawl.config.renders ?? 0;
   let processed = 0;
@@ -149,6 +187,7 @@ export async function crawlStep(
     if (!batch.length) break;
 
     const discoveries: { url: string; base: string; depth: number; source: PageSource }[] = [];
+    const previous = previousId ? await store.loadPrevious(previousId, batch.map((p) => p.url_key)) : new Map<string, PreviousPage>();
     let next = 0;
     const worker = async () => {
       while (next < batch.length && deps.now() < opts.deadline) {
@@ -163,9 +202,28 @@ export async function crawlStep(
     const processPage = async (page: PageRow) => {
       let patch: PagePatch;
       try {
-        const res = await deps.fetchPage(page.url);
         const attempts = page.attempts + 1;
-        const retryable = !res.blocked && (res.status === 0 || res.status >= 500 || res.status === 429);
+        const prev = previous.get(page.url_key);
+        const carry = (p: PreviousPage, fetchedAt: string) => {
+          for (const k of p.links ?? []) { const u = urlFromKey(crawl.origin, k); if (u) discoveries.push({ url: u, base: page.url, depth: page.depth + 1, source: "link" }); }
+          return carryPatch(p, attempts, fetchedAt);
+        };
+
+        // The sitemap says this page hasn't changed since we last read it: don't even ask the server.
+        if (reusable(prev) && page.sitemap_lastmod && prev.fetched_at && Date.parse(page.sitemap_lastmod) <= Date.parse(prev.fetched_at)) {
+          carriedByDate++;
+          await store.savePage(page.id, carry(prev, prev.fetched_at));
+          return;
+        }
+        const conditional = reusable(prev) && (prev.etag || prev.last_modified) ? { etag: prev.etag, lastModified: prev.last_modified } : undefined;
+        const res = await deps.fetchPage(page.url, conditional);
+        if (res.status === 304 && reusable(prev)) {
+          carriedByServer++;
+          patch = carry(prev, nowIso());
+          await store.savePage(page.id, patch);
+          return;
+        }
+        const retryable = !res.blocked && (res.status === 0 || res.status >= 500 || res.status === 429 || res.status === 304);
 
         if (res.blocked) {
           patch = { status: "failed", attempts, error: res.blocked, fetched_at: nowIso() };
@@ -206,6 +264,7 @@ export async function crawlStep(
               status: "done", attempts, http_status: res.status, final_url: res.finalUrl, fetched_via: via, content_type: res.contentType,
               signals: { ...signals, noindex: signals.noindex || /noindex/i.test(res.headers.xRobotsTag), x_robots_tag: res.headers.xRobotsTag, redirect_hops: res.hops, body_truncated: res.truncated },
               links: linkKeys, title: parsed.title || null, content_text: contentSample(html, 6000), error: null, fetched_at: nowIso(),
+              etag: res.headers.etag ?? null, last_modified: res.headers.lastModified ?? null,
             };
           }
         }
@@ -226,11 +285,11 @@ export async function crawlStep(
     const admitted = await admitUrls(store, crawl, robots, tuning, discoveries, crawl.max_pages - counts.total);
     if (admitted.length) await store.insertPages(admitted);
     const after = await store.counts(crawlId);
-    await store.patchCrawl(crawlId, { pages_discovered: after.total, pages_crawled: after.done, pages_failed: after.failed, last_step_at: nowIso(), config: { ...crawl.config, renders } });
+    await store.patchCrawl(crawlId, { pages_discovered: after.total, pages_crawled: after.done, pages_failed: after.failed, last_step_at: nowIso(), config: { ...crawl.config, renders, carriedByDate, carriedByServer } });
   }
 
   const counts = await store.counts(crawlId);
-  await store.patchCrawl(crawlId, { pages_discovered: counts.total, pages_crawled: counts.done, pages_failed: counts.failed, last_step_at: nowIso(), config: { ...crawl.config, renders } });
+  await store.patchCrawl(crawlId, { pages_discovered: counts.total, pages_crawled: counts.done, pages_failed: counts.failed, last_step_at: nowIso(), config: { ...crawl.config, renders, carriedByDate, carriedByServer } });
 
   if (counts.pending === 0) {
     if (counts.done === 0 && counts.failed > 0) {

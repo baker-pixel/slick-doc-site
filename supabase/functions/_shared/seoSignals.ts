@@ -58,6 +58,9 @@ export interface PageSignals {
   h1_text?: string;
   /** Page body text without nav/header/footer/forms (prefers <main>/<article>) -- what the page is actually about. */
   content_sample?: string;
+  /** Set when the page came from a full crawl: its type from the URL, and whether the sitemap lists it. */
+  page_type?: string;
+  in_sitemap?: boolean;
 }
 
 export interface PageSpeed {
@@ -220,7 +223,7 @@ export async function fetchHtml(url: string): Promise<{ html: string; via: "rend
 }
 
 // ── PageSpeed ───────────────────────────────────────────────────────────────
-async function getPageSpeed(url: string): Promise<PageSpeed | null> {
+export async function getPageSpeed(url: string): Promise<PageSpeed | null> {
   const key = Deno.env.get("PAGESPEED_API_KEY");
   if (!key) return null; // caller emits an explicit "not measured" finding
   try {
@@ -356,6 +359,9 @@ export function normalizeForCompare(u: string, base?: string): string | null {
   } catch { return null; }
 }
 
+/** Links kept per page. A page with more is flagged (internal_links_capped) so nothing treats its link list as complete. */
+const MAX_PAGE_LINKS = 300;
+
 export function parseCrawlHealth(html: string, url: string) {
   let noindex = false;
   let canonical_href: string | null = null;
@@ -379,6 +385,7 @@ export function parseCrawlHealth(html: string, url: string) {
   }
 
   const internal_link_urls: string[] = [];
+  let internal_links_capped = false;
   try {
     const host = stripWww(new URL(url).hostname);
     const seen = new Set<string>();
@@ -394,11 +401,11 @@ export function parseCrawlHealth(html: string, url: string) {
       if (seen.has(key)) continue;
       seen.add(key);
       internal_link_urls.push(key);
-      if (internal_link_urls.length >= 100) break;
+      if (internal_link_urls.length >= MAX_PAGE_LINKS) { internal_links_capped = true; break; }
     }
   } catch { /* bad base url: no links */ }
 
-  return { noindex, canonical_href, mixed_content_count, internal_link_urls };
+  return { noindex, canonical_href, mixed_content_count, internal_link_urls, internal_links_capped };
 }
 
 /** The page's own content: <main>/<article> if present, else the body minus site chrome. */

@@ -14,6 +14,8 @@ export interface CrawlStatus {
   percent: number;
   eta_seconds: number | null;
   message: string;
+  /** After a crawl that feeds an audit: "analysing" until the audit lands, "failed" if it never does. */
+  audit: "analysing" | "done" | "failed" | null;
   breakdown: { page_type: string; pages: number; errors: number; noindex: number }[];
 }
 
@@ -22,6 +24,7 @@ export function shapeStatus(c: CrawlRow | null, now = Date.now()): Pick<CrawlSta
   if (!c) return { percent: 0, eta_seconds: null, message: "No crawl yet." };
   const finished = c.pages_crawled + c.pages_failed;
   const known = Math.max(c.pages_discovered, finished, 1);
+  if (c.status === "complete" && c.run_audit && !c.audit_enqueued_at) return { percent: 100, eta_seconds: 0, message: `Read ${c.pages_crawled} pages. Analysing them now…` };
   if (c.status === "complete") return { percent: 100, eta_seconds: 0, message: `Read ${c.pages_crawled} pages${c.pages_failed ? `, ${c.pages_failed} could not be read` : ""}.` };
   if (c.status === "failed") return { percent: Math.min(99, Math.round((finished / known) * 100)), eta_seconds: null, message: c.error ?? "The crawl failed." };
   if (c.status === "cancelled") return { percent: Math.min(99, Math.round((finished / known) * 100)), eta_seconds: null, message: "Cancelled." };
@@ -38,10 +41,27 @@ export function shapeStatus(c: CrawlRow | null, now = Date.now()): Pick<CrawlSta
   return { percent, eta_seconds: eta, message: `Reading your website: ${finished} of ${known} pages found so far.` };
 }
 
+const AUDIT_GRACE_MS = 20 * 60 * 1000;
+
+/** Where the audit that follows a crawl stands. Pure, so the timeout is tested. */
+export function auditState(c: Pick<CrawlRow, "status" | "run_audit" | "audit_enqueued_at"> | null, latestAuditAt: string | null, now = Date.now()): CrawlStatus["audit"] {
+  if (!c || c.status !== "complete" || !c.run_audit) return null;
+  if (!c.audit_enqueued_at) return "analysing"; // crawl just finished; the worker is about to queue it
+  const queued = Date.parse(c.audit_enqueued_at);
+  if (latestAuditAt && Date.parse(latestAuditAt) >= queued) return "done";
+  return now - queued > AUDIT_GRACE_MS ? "failed" : "analysing";
+}
+
 export async function buildCrawlStatus(supabase: SupabaseClient, clientId: string): Promise<CrawlStatus> {
   const { data } = await supabase.from("site_crawls").select("*").eq("client_account_id", clientId).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const c = (data as CrawlRow | null) ?? null;
   const shaped = shapeStatus(c);
+  let latestAuditAt: string | null = null;
+  if (c?.run_audit) {
+    const { data: a } = await supabase.from("seo_audits").select("created_at").eq("client_account_id", clientId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    latestAuditAt = a?.created_at ?? null;
+  }
+  const audit = auditState(c, latestAuditAt);
   let breakdown: CrawlStatus["breakdown"] = [];
   if (c && (c.status === "complete" || c.pages_crawled > 0)) {
     const { data: rows } = await supabase.rpc("site_crawl_breakdown", { p_crawl: c.id });
@@ -57,6 +77,7 @@ export async function buildCrawlStatus(supabase: SupabaseClient, clientId: strin
       truncated: !!c.config.sitemapTruncated || c.pages_discovered >= c.max_pages,
     },
     breakdown,
+    audit,
     ...shaped,
   };
 }

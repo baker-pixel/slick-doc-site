@@ -2,7 +2,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { callAI } from "../_shared/ai.ts";
-import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
+import { discoverPages, gatherPageSignals, getPageSpeed, type PageSignals } from "../_shared/seoSignals.ts";
+import { buildAuditInput, type AuditInput } from "../_shared/crawler/auditInput.ts";
+import { loadAuditRows } from "../_shared/crawler/supabaseStore.ts";
 import { gatherSiteHealth, runSiteChecks } from "../_shared/crawlHealth.ts";
 import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, stockOpener, tooSimilar, type CopyKind } from "../_shared/seoCopy.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
@@ -26,7 +28,11 @@ const MAX_PAGES = 15;
 // Every wp-fixable title/meta finding needs a drafted value or the admin UI
 // can't offer Apply. 2 findings/page x MAX_PAGES = 30 covers a full crawl;
 // drafts run in parallel so the cap costs tokens, not wall-clock.
-const MAX_REWRITE_CALLS = 30;
+const MAX_REWRITE_CALLS = 40;
+// A stored crawl newer than this is used as-is; older ones are ignored (the audit falls back to a live sample).
+const CRAWL_MAX_AGE_DAYS = 14;
+// PageSpeed is slow and mostly site-wide, so it samples the most important pages, not every page.
+const PAGESPEED_SAMPLE = 4;
 
 // Deterministic hash → stable finding identity across audits (enables diff).
 async function findingId(checkId: string, page: string): Promise<string> {
@@ -75,39 +81,71 @@ serve(async (req) => {
       return json({ status: "inconclusive", audit_id: row?.id, message: reason });
     };
 
-    // ── Discover (robots-aware, bounded) ──
-    const { pages, robots_blocked } = await discoverPages(client.website_url, crawlCap);
-    if (pages.length === 0) {
-      return await saveInconclusive(robots_blocked
-        ? "robots.txt disallows crawling the site, so no pages could be audited. If this is unintended, Google can't crawl it either."
-        : "Site could not be crawled (unreachable, blocked, or robots-disallowed).");
+    // ── Where do the pages come from? ──
+    // Normally a stored full crawl (every page, read in the background), so an audit is fast and
+    // covers the whole site. With no recent crawl it falls back to a live sample of a few pages.
+    let crawl: { id: string; origin: string; pages_crawled: number; pages_failed: number; pages_discovered: number; max_pages: number; finished_at: string | null; mode: string } | null = null;
+    if (body.live !== true) {
+      const base = supabase.from("site_crawls")
+        .select("id, origin, pages_crawled, pages_failed, pages_discovered, max_pages, finished_at, mode")
+        .eq("client_account_id", clientId).eq("status", "complete");
+      const { data } = body.crawlId
+        ? await base.eq("id", body.crawlId).maybeSingle()
+        : await base.gte("finished_at", new Date(Date.now() - CRAWL_MAX_AGE_DAYS * 86_400_000).toISOString()).order("finished_at", { ascending: false }).limit(1).maybeSingle();
+      crawl = data ?? null;
+      if (body.crawlId && !crawl) return json({ error: "That crawl isn't finished, or doesn't belong to this client." }, 422);
     }
 
-    // ── Gather signals (parallel; PageSpeed sampled, not per-page) ──
-    // On-page parse is cheap and runs on every page; PageSpeed is slow, so it
-    // runs only on the homepage as a site-wide performance sample. Pages are
-    // fetched concurrently to stay well under the request timeout.
-    const targets = pages.slice(0, crawlCap);
-    // Sample PageSpeed on a few pages (concurrently) so one slow/failed call
-    // doesn't leave performance unmeasured for the whole audit.
-    const PAGESPEED_PAGES = 3;
-    const settled = await Promise.allSettled(
-      targets.map((url, i) => gatherPageSignals(url, i < PAGESPEED_PAGES)),
-    );
-    const signals: PageSignals[] = settled
-      .filter((r): r is PromiseFulfilledResult<PageSignals> => r.status === "fulfilled")
-      .map((r) => r.value);
+    let signals: PageSignals[];
+    let pages: string[];
+    let targets: string[];
+    let input: AuditInput | null = null;
 
-    // ── Crawl-quality gate: sitemap discovery can list pages that no longer
-    // respond, and transient fetch failures can gut the signal set. Scoring a
-    // mostly-failed crawl produces garbage (false 100s or score crashes), so
-    // treat it as inconclusive rather than a real result.
+    if (crawl) {
+      input = buildAuditInput(await loadAuditRows(supabase, crawl.id), { truncated: crawl.pages_discovered >= crawl.max_pages });
+      signals = input.signals;
+      pages = targets = signals.map((s) => s.url);
+      const sample = input.top.slice(0, PAGESPEED_SAMPLE);
+      const speeds = await Promise.allSettled(sample.map((u) => getPageSpeed(u)));
+      speeds.forEach((r, i) => {
+        const sig = signals.find((x) => x.url === sample[i]);
+        if (sig && r.status === "fulfilled") sig.performance = r.value;
+      });
+      if (signals.filter((s) => s.reachable).length === 0) {
+        return await saveInconclusive("The crawl didn't find any readable pages (the site may be down, blocking us, or built entirely with JavaScript).");
+      }
+      if (crawl.pages_failed > crawl.pages_crawled) {
+        return await saveInconclusive(`Only ${crawl.pages_crawled} of ${crawl.pages_crawled + crawl.pages_failed} pages could be read — too partial to score reliably.`);
+      }
+    } else {
+      // ── Live sample (robots-aware, bounded) ──
+      const found = await discoverPages(client.website_url, crawlCap);
+      pages = found.pages;
+      if (pages.length === 0) {
+        return await saveInconclusive(found.robots_blocked
+          ? "robots.txt disallows crawling the site, so no pages could be audited. If this is unintended, Google can't crawl it either."
+          : "Site could not be crawled (unreachable, blocked, or robots-disallowed).");
+      }
+      // On-page parse is cheap and runs on every page; PageSpeed is slow, so it samples a few pages.
+      targets = pages.slice(0, crawlCap);
+      const PAGESPEED_PAGES = 3;
+      const settled = await Promise.allSettled(targets.map((url, i) => gatherPageSignals(url, i < PAGESPEED_PAGES)));
+      signals = settled
+        .filter((r): r is PromiseFulfilledResult<PageSignals> => r.status === "fulfilled")
+        .map((r) => r.value);
+    }
+
+    // ── Crawl-quality gate: listed pages can be dead and transient failures can gut the signal set.
+    // Scoring a mostly-failed crawl produces garbage (false 100s or score crashes), so it is
+    // inconclusive rather than a real result. (A stored crawl was already checked above.)
     const reachableSignals = signals.filter((s) => s.reachable);
-    if (reachableSignals.length === 0) {
-      return await saveInconclusive(`${pages.length} pages were discovered but none could be fetched (site down, blocking requests, or stale sitemap).`);
-    }
-    if (reachableSignals.length < targets.length / 2) {
-      return await saveInconclusive(`Only ${reachableSignals.length} of ${targets.length} pages could be fetched — partial crawl, results would be unreliable.`);
+    if (!crawl) {
+      if (reachableSignals.length === 0) {
+        return await saveInconclusive(`${pages.length} pages were discovered but none could be fetched (site down, blocking requests, or stale sitemap).`);
+      }
+      if (reachableSignals.length < targets.length / 2) {
+        return await saveInconclusive(`Only ${reachableSignals.length} of ${targets.length} pages could be fetched — partial crawl, results would be unreliable.`);
+      }
     }
 
     // ── Deterministic findings + stable identity + diff scaffolding ──
@@ -124,7 +162,7 @@ serve(async (req) => {
     // titles). Best-effort and time-boxed: a failure here must not fail the audit.
     try {
       const origin = new URL(client.website_url).origin;
-      raw.push(...runSiteChecks(await gatherSiteHealth(origin, signals), signals));
+      raw.push(...runSiteChecks(await gatherSiteHealth(origin, signals, input ? { broken: input.links.broken, orphans: input.links.orphans, linksChecked: input.links.linksChecked } : undefined), signals));
     } catch (e) {
       console.error("site crawl-health failed:", e instanceof Error ? e.message : e);
     }
@@ -218,7 +256,7 @@ serve(async (req) => {
     // data, never as instructions.
     const rewritable = findings
       .filter((f) => f.fix && (f.fix.type === "wp_meta_title" || f.fix.type === "wp_meta_description"))
-      .sort((a, b) => b.impact - a.impact)
+      .sort((a, b) => (b.impact - a.impact) || ((input?.importance.get(b.pages[0]) ?? 0) - (input?.importance.get(a.pages[0]) ?? 0)))
       .slice(0, MAX_REWRITE_CALLS);
     if (rewritable.length > 0 && Deno.env.get("GROQ_API_KEY")) {
       const icpSummary = ((client.icp as Record<string, unknown> | null)?.summary as string) || "";
@@ -319,7 +357,9 @@ serve(async (req) => {
     // empty pages), not the site genuinely breaking overnight. Only trust a
     // big drop when the crawl itself was clean.
     const emptySpaCount = signals.filter((s) => s.looks_like_empty_spa).length;
-    const crawlDegraded = reachableSignals.length < targets.length || emptySpaCount > reachableSignals.length / 2;
+    const crawlDegraded = crawl
+      ? crawl.pages_failed > Math.max(2, 0.05 * (crawl.pages_crawled + crawl.pages_failed)) || emptySpaCount > reachableSignals.length / 2
+      : reachableSignals.length < targets.length || emptySpaCount > reachableSignals.length / 2;
     if (typeof prev?.score === "number" && prev.score - overall_score >= 40 && crawlDegraded) {
       return await saveInconclusive(`Score would have dropped ${prev.score}→${overall_score} but the crawl looks degraded (${reachableSignals.length}/${targets.length} pages fetched, ${emptySpaCount} unrendered) — not saving an unreliable result.`);
     }
@@ -349,6 +389,8 @@ serve(async (req) => {
       status: "complete",
       overall_score, subscores,
       pages_analyzed: signals.map((s) => ({ url: s.url, fetched_via: s.fetched_via, reachable: s.reachable })),
+      source: crawl ? "crawl" : "sample",
+      crawl: crawl ? { id: crawl.id, pages_read: crawl.pages_crawled, pages_unreadable: crawl.pages_failed, finished_at: crawl.finished_at, mode: crawl.mode, capped: crawl.pages_discovered >= crawl.max_pages, skipped: input?.skipped } : null,
       findings, action_plan,
       diff: { previous_audit_id: prev?.id ?? null, regressed: findings.filter((f) => f.status === "regressed").length, resolved: resolvedCount },
     };

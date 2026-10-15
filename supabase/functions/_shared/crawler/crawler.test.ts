@@ -156,3 +156,31 @@ Deno.test("status: percent, ETA from the observed rate, and never 100% until com
   assertStringIncludes(shapeStatus(row({ status: "failed", error: "robots.txt tells crawlers" })).message, "robots.txt");
   assertEquals(shapeStatus(null).percent, 0);
 });
+
+
+// ── queue planning and audit state ──────────────────────────────────────────
+import { planCrawlMode } from "./queue.ts";
+import { auditState } from "./status.ts";
+
+Deno.test("planCrawlMode: incremental only when the last crawl is recent; full otherwise or when forced", () => {
+  const now = Date.parse("2026-10-15T12:00:00Z");
+  const day = 86_400_000;
+  assertEquals(planCrawlMode({ id: "p", finished_at: new Date(now - 3 * day).toISOString() }, now, false), { mode: "incremental", previous_crawl_id: "p" });
+  assertEquals(planCrawlMode({ id: "p", finished_at: new Date(now - 45 * day).toISOString() }, now, false), { mode: "full", previous_crawl_id: null });
+  assertEquals(planCrawlMode({ id: "p", finished_at: new Date(now - 3 * day).toISOString() }, now, true), { mode: "full", previous_crawl_id: null });
+  assertEquals(planCrawlMode(null, now, false), { mode: "full", previous_crawl_id: null });
+  assertEquals(planCrawlMode({ id: "p", finished_at: null }, now, false), { mode: "full", previous_crawl_id: null });
+});
+
+Deno.test("auditState: analysing until the audit lands, done after, failed if it never does, nothing when no audit was wanted", () => {
+  const now = Date.parse("2026-10-15T12:00:00Z");
+  const c = (over: Record<string, unknown>) => ({ status: "complete" as const, run_audit: true, audit_enqueued_at: "2026-10-15T11:55:00Z", ...over });
+  assertEquals(auditState(c({}), null, now), "analysing");
+  assertEquals(auditState(c({}), "2026-10-15T11:58:00Z", now), "done");
+  assertEquals(auditState(c({}), "2026-10-14T09:00:00Z", now), "analysing"); // an OLD audit does not count
+  assertEquals(auditState(c({ audit_enqueued_at: "2026-10-15T11:30:00Z" }), null, now), "failed");
+  assertEquals(auditState(c({ audit_enqueued_at: null }), null, now), "analysing");
+  assertEquals(auditState(c({ run_audit: false }), null, now), null);
+  assertEquals(auditState(c({ status: "running" as unknown as "complete" }), null, now), null);
+  assertEquals(auditState(null, null, now), null);
+});

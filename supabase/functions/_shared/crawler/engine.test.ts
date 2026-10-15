@@ -4,7 +4,7 @@ import { MemoryStore } from "./memoryStore.ts";
 import type { CrawlDeps, FetchResult } from "./types.ts";
 
 // ── a fake website, and a virtual clock so back-off and crawl-delay cost no real time ──
-interface FakePage { status?: number; html?: string; redirect?: string; contentType?: string; blocked?: string; netError?: boolean; flaky?: number }
+interface FakePage { etag?: string; status?: number; html?: string; redirect?: string; contentType?: string; blocked?: string; netError?: boolean; flaky?: number }
 const WORDS = "We help local businesses grow with clear plain-language marketing, honest reporting and steady work every single month. ".repeat(4);
 const page = (title: string, links: string[] = [], extra = "") =>
   `<html><head><title>${title}</title><meta name="description" content="${title} description for the test site"></head><body><main><h1>${title}</h1><p>${WORDS}</p>${links.map((l) => `<a href="${l}">link</a>`).join(" ")}${extra}</main></body></html>`;
@@ -16,7 +16,7 @@ function world(site: Record<string, FakePage | string>, opts: { start?: number }
   const renders: string[] = [];
   const get = (u: string) => site[u] as FakePage | string | undefined;
 
-  const fetchPage = async (url: string): Promise<FetchResult> => {
+  const fetchPage = async (url: string, conditional?: { etag?: string | null; lastModified?: string | null }): Promise<FetchResult> => {
     let cur = url, hops = 0;
     for (; hops < 6; hops++) {
       hits.set(cur, (hits.get(cur) ?? 0) + 1);
@@ -29,7 +29,8 @@ function world(site: Record<string, FakePage | string>, opts: { start?: number }
       if (f.flaky && (hits.get(cur) ?? 0) <= f.flaky) return { ...base, status: 503 };
       if (f.redirect) { cur = f.redirect; continue; }
       const status = f.status ?? 200;
-      return { ...base, ok: status < 400, status, contentType: f.contentType ?? "text/html", html: status < 400 && (f.contentType ?? "text/html").includes("html") ? (f.html ?? "") : "" };
+      if (f.etag && conditional?.etag === f.etag) return { ...base, ok: true, status: 304, headers: { xRobotsTag: "", etag: f.etag } };
+      return { ...base, headers: { xRobotsTag: "", etag: f.etag }, ok: status < 400, status, contentType: f.contentType ?? "text/html", html: status < 400 && (f.contentType ?? "text/html").includes("html") ? (f.html ?? "") : "" };
     }
     return { ok: false, status: 310, finalUrl: cur, hops, contentType: "", html: "", truncated: false, error: "too many redirects", headers: { xRobotsTag: "" } };
   };
@@ -264,4 +265,124 @@ Deno.test("duplicate spellings of a URL are fetched once; non-HTML responses are
   assertEquals(s.pages.filter((p) => p.url_key === "a.com/about").length, 1);
   assertEquals(s.pages.find((p) => p.url.endsWith("/report"))!.signals, null);
   assertEquals(s.pages.find((p) => p.url.endsWith("/report"))!.status, "done");
+});
+
+
+// ── incremental re-crawl ────────────────────────────────────────────────────
+const urlsetLm = (items: [string, string][]) => `<urlset>${items.map(([l, m]) => `<url><loc>${l}</loc><lastmod>${m}</lastmod></url>`).join("")}</urlset>`;
+
+function twoCrawls(site: Record<string, FakePage | string>, secondTuning: Record<string, unknown> = {}) {
+  const w = world(site);
+  const store = new MemoryStore(w.now);
+  return { w, store, secondTuning };
+}
+
+Deno.test("incremental: unchanged pages (sitemap lastmod) are not fetched again, changed ones are; carried pages still reveal their links", async () => {
+  const lm = (d: string) => `${d}T00:00:00Z`;
+  const site: Record<string, FakePage | string> = {
+    "https://a.com/": page("Home", ["/about/", "/news/"]),
+    "https://a.com/sitemap.xml": urlsetLm([["https://a.com/about/", lm("2026-01-01")], ["https://a.com/news/", lm("2026-01-01")], ["https://a.com/old/", lm("2026-01-01")]]),
+    "https://a.com/about/": page("About v1"), "https://a.com/news/": page("News", ["/news/new-post/"]), "https://a.com/old/": page("Old"),
+    "https://a.com/news/new-post/": page("New post"),
+  };
+  const { w, store } = twoCrawls(site);
+  store.addCrawl({ id: "c1", origin: "https://a.com" });
+  await runToEnd(store, w.deps, "c1", w.now, w.advance);
+  await store.patchCrawl("c1", { finished_at: new Date(w.now()).toISOString() });
+  const firstHits = new Map(w.hits);
+
+  // A week later: /about/ changed (lastmod newer, title edited); the rest unchanged.
+  w.advance(7 * 24 * 3600_000);
+  site["https://a.com/about/"] = page("About v2");
+  site["https://a.com/sitemap.xml"] = urlsetLm([["https://a.com/about/", new Date(w.now() - 3600_000).toISOString()], ["https://a.com/news/", lm("2026-01-01")], ["https://a.com/old/", lm("2026-01-01")]]);
+  store.addCrawl({ id: "c2", origin: "https://a.com", mode: "incremental", previous_crawl_id: "c1" });
+  const { last } = await runToEnd(store, w.deps, "c2", w.now, w.advance);
+  assertEquals(last.status, "complete");
+  const hit = (u: string) => (w.hits.get(u) ?? 0) - (firstHits.get(u) ?? 0);
+  assertEquals(hit("https://a.com/about/"), 1);        // changed: re-read
+  assertEquals(hit("https://a.com/old/"), 0);          // unchanged: carried forward, no request
+  assertEquals(hit("https://a.com/news/"), 0);
+  assertEquals(hit("https://a.com/news/new-post/"), 0); // reached through the carried page's links, still crawled in crawl 1 -> carried too
+  const c2 = store.pages.filter((p) => p.crawl_id === "c2" && p.status === "done");
+  assertEquals(c2.find((p) => p.url === "https://a.com/about/")!.title, "About v2");
+  assertEquals(c2.find((p) => p.url === "https://a.com/old/")!.title, "Old");
+  assertEquals(c2.length, 5);
+  assertEquals((await store.loadCrawl("c2")).config.carriedByDate! >= 2, true);
+});
+
+Deno.test("incremental: a page that appeared since last time is found through a carried page's links and read fresh", async () => {
+  const site: Record<string, FakePage | string> = {
+    "https://a.com/": page("Home", ["/blog/"]),
+    "https://a.com/sitemap.xml": urlsetLm([["https://a.com/blog/", "2026-01-01T00:00:00Z"]]),
+    "https://a.com/blog/": page("Blog", []),
+  };
+  const { w, store } = twoCrawls(site);
+  store.addCrawl({ id: "c1", origin: "https://a.com" });
+  await runToEnd(store, w.deps, "c1", w.now, w.advance);
+  await store.patchCrawl("c1", { finished_at: new Date(w.now()).toISOString() });
+  // The home page (no lastmod, no etag) is always re-read; it now links to a new page.
+  w.advance(86_400_000);
+  site["https://a.com/"] = page("Home", ["/blog/", "/new-offer/"]);
+  site["https://a.com/new-offer/"] = page("New offer");
+  store.addCrawl({ id: "c2", origin: "https://a.com", mode: "incremental", previous_crawl_id: "c1" });
+  await runToEnd(store, w.deps, "c2", w.now, w.advance);
+  assertEquals(store.pages.some((p) => p.crawl_id === "c2" && p.url === "https://a.com/new-offer/" && p.status === "done" && p.title === "New offer"), true);
+});
+
+Deno.test("incremental: ETag / 304 carries a page forward when the sitemap has no lastmod", async () => {
+  const site: Record<string, FakePage | string> = {
+    "https://a.com/": page("Home", ["/a/", "/b/"]),
+    "https://a.com/a/": { html: page("A"), etag: '"v1"' }, "https://a.com/b/": { html: page("B"), etag: '"b1"' },
+  };
+  const { w, store } = twoCrawls(site);
+  store.addCrawl({ id: "c1", origin: "https://a.com" });
+  await runToEnd(store, w.deps, "c1", w.now, w.advance);
+  await store.patchCrawl("c1", { finished_at: new Date(w.now()).toISOString() });
+  assertEquals(store.pages.find((p) => p.url === "https://a.com/a/")!.etag, '"v1"');
+
+  w.advance(86_400_000);
+  site["https://a.com/b/"] = { html: page("B changed"), etag: '"b2"' };
+  store.addCrawl({ id: "c2", origin: "https://a.com", mode: "incremental", previous_crawl_id: "c1" });
+  await runToEnd(store, w.deps, "c2", w.now, w.advance);
+  const c2 = store.pages.filter((p) => p.crawl_id === "c2");
+  assertEquals(c2.find((p) => p.url === "https://a.com/a/")!.title, "A");            // 304: carried
+  assertEquals(c2.find((p) => p.url === "https://a.com/b/")!.title, "B changed");    // etag differs: fresh read
+  assertEquals((await store.loadCrawl("c2")).config.carriedByServer, 1);
+});
+
+Deno.test("incremental: a stale previous crawl (older than 30 days) or a full-mode crawl re-reads everything", async () => {
+  const lm = "2026-01-01T00:00:00Z";
+  const mk = () => ({
+    "https://a.com/": page("Home", ["/x/"]), "https://a.com/sitemap.xml": urlsetLm([["https://a.com/x/", lm]]), "https://a.com/x/": page("X"),
+  } as Record<string, FakePage | string>);
+  for (const [label, ageDays, mode] of [["stale", 45, "incremental"], ["full", 1, "full"]] as const) {
+    const { w, store } = twoCrawls(mk());
+    store.addCrawl({ id: "c1", origin: "https://a.com" });
+    await runToEnd(store, w.deps, "c1", w.now, w.advance);
+    await store.patchCrawl("c1", { finished_at: new Date(w.now()).toISOString() });
+    const before = w.hits.get("https://a.com/x/") ?? 0;
+    w.advance(ageDays * 86_400_000);
+    store.addCrawl({ id: "c2", origin: "https://a.com", mode, previous_crawl_id: "c1" });
+    await runToEnd(store, w.deps, "c2", w.now, w.advance);
+    assertEquals((w.hits.get("https://a.com/x/") ?? 0) - before, 1, label);
+  }
+});
+
+Deno.test("incremental: error and redirect pages from the last crawl are never carried forward", async () => {
+  const lm = "2026-01-01T00:00:00Z";
+  const site: Record<string, FakePage | string> = {
+    "https://a.com/": page("Home", ["/gone/", "/moved/"]), "https://a.com/sitemap.xml": urlsetLm([["https://a.com/gone/", lm], ["https://a.com/moved/", lm]]),
+    "https://a.com/gone/": { status: 404 }, "https://a.com/moved/": { redirect: "https://a.com/landing/" }, "https://a.com/landing/": page("Landing"),
+  };
+  const { w, store } = twoCrawls(site);
+  store.addCrawl({ id: "c1", origin: "https://a.com" });
+  await runToEnd(store, w.deps, "c1", w.now, w.advance);
+  await store.patchCrawl("c1", { finished_at: new Date(w.now()).toISOString() });
+  const gone = w.hits.get("https://a.com/gone/") ?? 0;
+  w.advance(86_400_000);
+  site["https://a.com/gone/"] = page("Back again");
+  store.addCrawl({ id: "c2", origin: "https://a.com", mode: "incremental", previous_crawl_id: "c1" });
+  await runToEnd(store, w.deps, "c2", w.now, w.advance);
+  assertEquals((w.hits.get("https://a.com/gone/") ?? 0) - gone, 1);
+  assertEquals(store.pages.find((p) => p.crawl_id === "c2" && p.url === "https://a.com/gone/")!.title, "Back again");
 });

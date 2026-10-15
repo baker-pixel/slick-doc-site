@@ -43,7 +43,7 @@ async function readCapped(res: Response, max: number): Promise<{ text: string; t
   return { text: new TextDecoder().decode(buf), truncated };
 }
 
-export async function safeFetch(url: string, opts: { timeoutMs?: number; maxBytes?: number; wantBody?: boolean } = {}): Promise<FetchResult> {
+export async function safeFetch(url: string, opts: { timeoutMs?: number; maxBytes?: number; wantBody?: boolean; etag?: string | null; lastModified?: string | null } = {}): Promise<FetchResult> {
   const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? MAX_BYTES;
   let cur = url;
@@ -58,7 +58,12 @@ export async function safeFetch(url: string, opts: { timeoutMs?: number; maxByte
     let res: Response;
     try {
       res = await fetch(cur, {
-        headers: { "User-Agent": CRAWLER_UA, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5" },
+        headers: {
+          "User-Agent": CRAWLER_UA, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+          // Conditional request: only for the URL we already have, never after a redirect hop.
+          ...(hop === 0 && opts.etag ? { "If-None-Match": opts.etag } : {}),
+          ...(hop === 0 && opts.lastModified && !opts.etag ? { "If-Modified-Since": opts.lastModified } : {}),
+        },
         redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -75,13 +80,19 @@ export async function safeFetch(url: string, opts: { timeoutMs?: number; maxByte
 
     const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
     const xRobotsTag = res.headers.get("x-robots-tag") ?? "";
+    const etag = res.headers.get("etag") ?? undefined;
+    const lastModified = res.headers.get("last-modified") ?? undefined;
+    if (res.status === 304) {
+      res.body?.cancel().catch(() => {});
+      return { ok: true, status: 304, finalUrl: cur, hops: hop, contentType, html: "", truncated: false, headers: { xRobotsTag, etag, lastModified } };
+    }
     const isHtml = /text\/html|application\/xhtml/.test(contentType) || contentType === "";
     if (!res.ok || !isHtml || opts.wantBody === false) {
       res.body?.cancel().catch(() => {});
-      return { ok: res.ok, status: res.status, finalUrl: cur, hops: hop, contentType, html: "", truncated: false, headers: { xRobotsTag } };
+      return { ok: res.ok, status: res.status, finalUrl: cur, hops: hop, contentType, html: "", truncated: false, headers: { xRobotsTag, etag, lastModified } };
     }
     const { text, truncated } = await readCapped(res, maxBytes);
-    return { ok: true, status: res.status, finalUrl: cur, hops: hop, contentType, html: text, truncated, headers: { xRobotsTag } };
+    return { ok: true, status: res.status, finalUrl: cur, hops: hop, contentType, html: text, truncated, headers: { xRobotsTag, etag, lastModified } };
   }
   return empty({ status: 310, error: "too many redirects", hops: MAX_HOPS });
 }

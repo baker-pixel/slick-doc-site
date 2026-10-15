@@ -1,6 +1,7 @@
 // CrawlStore over Supabase (service role). Thin on purpose: all logic lives in the engine.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { CrawlRow, CrawlStore, NewPage, PageCounts, PagePatch, PageRow } from "./types.ts";
+import type { AuditPageRow } from "./auditInput.ts";
+import type { CrawlRow, CrawlStore, NewPage, PageCounts, PagePatch, PageRow, PreviousPage } from "./types.ts";
 
 const chunk = <T>(xs: T[], n: number): T[][] => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
@@ -73,4 +74,25 @@ export class SupabaseCrawlStore implements CrawlStore {
   async savePage(pageId: string, patch: PagePatch): Promise<void> {
     check(await this.db.from("site_pages").update(patch).eq("id", pageId).select("id"), "save page");
   }
+
+  async loadPrevious(prevCrawlId: string, keys: string[]): Promise<Map<string, PreviousPage>> {
+    const out = new Map<string, PreviousPage>();
+    for (const part of chunk(keys, 100)) {
+      const rows = check(await this.db.rpc("site_pages_previous", { p_crawl: prevCrawlId, p_keys: part }), "load previous") as PreviousPage[];
+      for (const r of rows ?? []) out.set(r.url_key, r);
+    }
+    return out;
+  }
+}
+
+/** All of a crawl's pages, in the shape the audit needs, read in pages so no crawl size hits a row limit. */
+export async function loadAuditRows(db: SupabaseClient, crawlId: string): Promise<AuditPageRow[]> {
+  const out: AuditPageRow[] = [];
+  const PAGE = 500;
+  for (let from = 0; ; from += PAGE) {
+    const rows = check(await db.rpc("site_pages_for_audit", { p_crawl: crawlId }).range(from, from + PAGE - 1), "load crawl pages") as AuditPageRow[];
+    out.push(...(rows ?? []));
+    if (!rows || rows.length < PAGE) break;
+  }
+  return out;
 }

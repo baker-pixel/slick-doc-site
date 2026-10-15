@@ -2,8 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { handleOptions, jsonResponse } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { checkAdminAuth, checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { checkUrlSafe } from "../_shared/crawler/ssrf.ts";
+import { enqueueAuditForCrawl, queueCrawl } from "../_shared/crawler/queue.ts";
 import { buildCrawlStatus } from "../_shared/crawler/status.ts";
 
 // Start, watch and cancel a full-site crawl. Starting only queues the job: the worker
@@ -11,6 +10,8 @@ import { buildCrawlStatus } from "../_shared/crawler/status.ts";
 // progress card polls. A client can start and watch their own crawl; only an admin can
 // cancel one or override the page cap.
 const RECENT_CRAWL_HOURS = 6;
+// A crawl this fresh is good enough for "run audit": no need to read the whole site again.
+const FRESH_CRAWL_HOURS = 12;
 
 serve(async (req) => {
   const preflight = handleOptions(req);
@@ -43,24 +44,26 @@ serve(async (req) => {
 
     if (action === "status") return jsonResponse(await buildCrawlStatus(supabase, clientId));
 
-    if (action !== "start") return jsonResponse({ error: `Unknown action "${action}"` }, 400);
+    if (action !== "start" && action !== "audit") return jsonResponse({ error: `Unknown action "${action}"` }, 400);
 
-    const { data: client } = await supabase
-      .from("client_accounts").select("id, business_name, website_url, tier, status").eq("id", clientId).maybeSingle();
-    if (!client) return jsonResponse({ error: "Client not found" }, 404);
-    if (!client.website_url?.trim()) return jsonResponse({ error: "This client has no website address yet. Add one first." }, 422);
+    const full = body.full === true;
+    const maxPages = isAdmin && Number.isFinite(Number(body.max_pages)) ? Number(body.max_pages) : undefined;
+    const trigger: string = body.trigger ?? (isAdmin ? "manual" : "client");
 
-    let origin: string;
-    try {
-      const raw = client.website_url.trim();
-      origin = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).origin;
-    } catch { return jsonResponse({ error: "The website address isn't a valid URL." }, 422); }
-    const safe = checkUrlSafe(origin + "/");
-    if (!safe.ok) return jsonResponse({ error: `That website address can't be crawled: ${safe.reason}.` }, 422);
-
-    // One active crawl per client: return it instead of starting another.
-    const { data: active } = await supabase.from("site_crawls").select("id").eq("client_account_id", clientId).in("status", ["queued", "running"]).maybeSingle();
-    if (active) return jsonResponse({ ...(await buildCrawlStatus(supabase, clientId)), started: false, reason: "already_running" });
+    // "audit" = what the Run audit button does: audit from a recent crawl straight away, else crawl first and let the audit follow.
+    if (action === "audit") {
+      const since = new Date(Date.now() - FRESH_CRAWL_HOURS * 3600_000).toISOString();
+      const { data: fresh } = await supabase.from("site_crawls").select("id").eq("client_account_id", clientId).eq("status", "complete").gte("finished_at", since).order("finished_at", { ascending: false }).limit(1).maybeSingle();
+      const { data: running } = await supabase.from("site_crawls").select("id").eq("client_account_id", clientId).in("status", ["queued", "running"]).maybeSingle();
+      if (fresh && !running && !full) {
+        const ok = await enqueueAuditForCrawl(supabase, fresh.id, clientId, { again: true });
+        if (!ok) return jsonResponse({ error: "Couldn't queue the analysis. Try again in a moment." }, 500);
+        return jsonResponse({ ...(await buildCrawlStatus(supabase, clientId)), started: true, mode: "audit_only" });
+      }
+      const q = await queueCrawl(supabase, clientId, { trigger, runAudit: true, full, maxPages });
+      if (!q.ok) return jsonResponse({ error: q.error }, q.status);
+      return jsonResponse({ ...(await buildCrawlStatus(supabase, clientId)), started: q.started, reason: q.reason, mode: "crawl_then_audit" });
+    }
 
     // Clients can't hammer it: a crawl that finished recently is reused.
     if (!isAdmin) {
@@ -69,17 +72,9 @@ serve(async (req) => {
       if (recent) return jsonResponse({ ...(await buildCrawlStatus(supabase, clientId)), started: false, reason: "recent" });
     }
 
-    const policyMax = tierPolicy(client.tier).seo.crawlMaxPages;
-    const requested = isAdmin && Number.isFinite(Number(body.max_pages)) ? Math.floor(Number(body.max_pages)) : policyMax;
-    const maxPages = Math.min(5000, Math.max(1, requested));
-
-    const { error: insErr } = await supabase.from("site_crawls").insert({
-      client_account_id: clientId, origin, max_pages: maxPages, trigger: body.trigger ?? (isAdmin ? "manual" : "client"),
-    });
-    // 23505 = another request started one a moment ago: that's fine, report it.
-    if (insErr && insErr.code !== "23505") throw new Error(`could not queue crawl: ${insErr.message}`);
-
-    return jsonResponse({ ...(await buildCrawlStatus(supabase, clientId)), started: !insErr });
+    const q = await queueCrawl(supabase, clientId, { trigger, runAudit: body.then_audit === true, full, maxPages });
+    if (!q.ok) return jsonResponse({ error: q.error }, q.status);
+    return jsonResponse({ ...(await buildCrawlStatus(supabase, clientId)), started: q.started, reason: q.reason });
   } catch (err) {
     console.error("[site-crawl]", err);
     return jsonResponse({ error: err instanceof Error ? err.message : "Unexpected error" }, 500);
