@@ -16,6 +16,18 @@ export interface CrawlStatus {
   message: string;
   /** After a crawl that feeds an audit: "analysing" until the audit lands, "failed" if it never does. */
   audit: "analysing" | "done" | "failed" | null;
+  /** The latest company-profile run for this client, if any. */
+  profile: {
+    status: "running" | "complete" | "failed" | "skipped";
+    created_at: string;
+    path: string | null;
+    filled: string[];
+    suggestions_count: number;
+    dropped_count: number;
+    pages_read: number | null;
+    note: string | null;
+    error: string | null;
+  } | null;
   breakdown: { page_type: string; pages: number; errors: number; noindex: number }[];
 }
 
@@ -68,6 +80,12 @@ export async function buildCrawlStatus(supabase: SupabaseClient, clientId: strin
     breakdown = ((rows ?? []) as { page_type: string; pages: number | string; errors: number | string; noindex: number | string }[])
       .map((r) => ({ page_type: r.page_type, pages: Number(r.pages), errors: Number(r.errors), noindex: Number(r.noindex) }));
   }
+  const { data: pr } = await supabase.from("company_profile_runs")
+    .select("status, created_at, path, filled, suggestions_count, dropped, pages_read, note, error")
+    .eq("client_account_id", clientId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const profile: CrawlStatus["profile"] = pr
+    ? { status: pr.status, created_at: pr.created_at, path: pr.path ?? null, filled: pr.filled ?? [], suggestions_count: pr.suggestions_count ?? 0, dropped_count: Array.isArray(pr.dropped) ? pr.dropped.length : 0, pages_read: pr.pages_read ?? null, note: pr.note ?? null, error: pr.error ?? null }
+    : null;
   return {
     crawl: c && {
       id: c.id, status: c.status, phase: c.phase, origin: c.origin, max_pages: c.max_pages,
@@ -78,6 +96,16 @@ export async function buildCrawlStatus(supabase: SupabaseClient, clientId: strin
     },
     breakdown,
     audit,
+    profile,
     ...shaped,
   };
+}
+
+
+/** The latest finished profile with every claim's evidence, and what the checker rejected (admin "Show evidence"). */
+export async function buildProfileDetail(supabase: SupabaseClient, clientId: string) {
+  const { data } = await supabase.from("company_profile_runs")
+    .select("id, created_at, path, model, turns, tool_calls, proposal, dropped, filled, note")
+    .eq("client_account_id", clientId).eq("status", "complete").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data ?? null;
 }

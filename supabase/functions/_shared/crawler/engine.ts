@@ -7,6 +7,7 @@ import { contentSample, parseOnPage } from "../seoSignals.ts";
 import { fetchableUrl, isTrap, pageTypeOf, pathOnly, urlKey, crawlPriority, sameSite } from "./urlRules.ts";
 import { parseRobots, robotsAllows, robotsBlocksEverything, type RobotsRules } from "./robots.ts";
 import { walkSitemaps } from "./sitemaps.ts";
+import { extractFacts } from "../profile/facts.ts";
 import { DEFAULT_TUNING, type CrawlDeps, type CrawlRow, type CrawlStore, type CrawlTuning, type NewPage, type PagePatch, type PageRow, type PageSource, type PreviousPage } from "./types.ts";
 
 export interface StepSummary {
@@ -262,7 +263,7 @@ export async function crawlStep(
             }
             patch = {
               status: "done", attempts, http_status: res.status, final_url: res.finalUrl, fetched_via: via, content_type: res.contentType,
-              signals: { ...signals, noindex: signals.noindex || /noindex/i.test(res.headers.xRobotsTag), x_robots_tag: res.headers.xRobotsTag, redirect_hops: res.hops, body_truncated: res.truncated },
+              signals: { ...signals, noindex: signals.noindex || /noindex/i.test(res.headers.xRobotsTag), x_robots_tag: res.headers.xRobotsTag, redirect_hops: res.hops, body_truncated: res.truncated, facts: extractFacts(html, res.finalUrl) },
               links: linkKeys, title: parsed.title || null, content_text: contentSample(html, 6000), error: null, fetched_at: nowIso(),
               etag: res.headers.etag ?? null, last_modified: res.headers.lastModified ?? null,
             };

@@ -7,7 +7,7 @@ import { crawlStep } from "../_shared/crawler/engine.ts";
 import { SupabaseCrawlStore } from "../_shared/crawler/supabaseStore.ts";
 import { fetchTextSafe, safeFetch } from "../_shared/crawler/fetcher.ts";
 import { makeRenderer } from "../_shared/crawler/render.ts";
-import { enqueueAuditForCrawl } from "../_shared/crawler/queue.ts";
+import { enqueueAuditForCrawl, enqueueProfileForCrawl } from "../_shared/crawler/queue.ts";
 import type { CrawlRow } from "../_shared/crawler/types.ts";
 
 // The crawl worker. pg_cron calls this every minute (only while a crawl is queued or
@@ -54,6 +54,9 @@ serve(async (req) => {
         const queued = await enqueueAuditForCrawl(supabase, crawl.id, crawl.client_account_id);
         if (!queued) await logAlert(supabase, { source: "process-site-crawl", alertType: "site_crawl_audit_not_queued", severity: "error", sourceId: crawl.id, title: `Crawl finished but the audit could not be queued (${fresh.origin})`, message: "enqueue failed; the client will see the crawl but no new audit until it is re-run.", metadata: { crawl_id: crawl.id } });
       }
+      // Every finished crawl also offers itself to the company-profile builder, which skips the run when the
+      // site's key pages haven't changed since the last profile.
+      await enqueueProfileForCrawl(supabase, crawl.id, crawl.client_account_id);
       // Keep the three most recent crawls per client; older ones and their pages are dropped.
       await supabase.rpc("prune_site_crawls", { p_client: crawl.client_account_id, p_keep: 3 }).then(() => {}, (e: unknown) => console.error("prune failed", e));
     }

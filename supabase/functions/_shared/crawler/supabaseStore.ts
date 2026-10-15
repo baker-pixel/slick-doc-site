@@ -1,6 +1,7 @@
 // CrawlStore over Supabase (service role). Thin on purpose: all logic lives in the engine.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { AuditPageRow } from "./auditInput.ts";
+import type { ProfileRow } from "../profile/corpus.ts";
 import type { CrawlRow, CrawlStore, NewPage, PageCounts, PagePatch, PageRow, PreviousPage } from "./types.ts";
 
 const chunk = <T>(xs: T[], n: number): T[][] => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
@@ -91,6 +92,18 @@ export async function loadAuditRows(db: SupabaseClient, crawlId: string): Promis
   const PAGE = 500;
   for (let from = 0; ; from += PAGE) {
     const rows = check(await db.rpc("site_pages_for_audit", { p_crawl: crawlId }).range(from, from + PAGE - 1), "load crawl pages") as AuditPageRow[];
+    out.push(...(rows ?? []));
+    if (!rows || rows.length < PAGE) break;
+  }
+  return out;
+}
+
+/** A crawl's pages with full stored text, for the company-profile builder. */
+export async function loadProfileRows(db: SupabaseClient, crawlId: string): Promise<ProfileRow[]> {
+  const out: ProfileRow[] = [];
+  const PAGE = 200; // full text per row: keep pages small
+  for (let from = 0; ; from += PAGE) {
+    const rows = check(await db.rpc("site_pages_for_profile", { p_crawl: crawlId }).range(from, from + PAGE - 1), "load profile pages") as ProfileRow[];
     out.push(...(rows ?? []));
     if (!rows || rows.length < PAGE) break;
   }

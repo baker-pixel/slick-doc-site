@@ -66,3 +66,19 @@ export async function enqueueAuditForCrawl(supabase: SupabaseClient, crawlId: st
   await supabase.from("site_crawls").update({ audit_enqueued_at: new Date().toISOString(), run_audit: true }).eq("id", crawlId);
   return true;
 }
+
+/**
+ * Hands a finished crawl to the company-profile builder through the same durable queue. The builder itself decides
+ * whether anything changed enough to be worth rebuilding, unless `force` is set (the "Rebuild" button).
+ */
+export async function enqueueProfileForCrawl(supabase: SupabaseClient, crawlId: string, clientId: string, opts: { force?: boolean } = {}): Promise<boolean> {
+  const { error } = await supabase.rpc("agent_jobs_enqueue", {
+    msg: {
+      target: "build-company-profile",
+      idempotencyKey: opts.force ? `profile-crawl:${crawlId}:${Date.now()}` : `profile-crawl:${crawlId}`,
+      body: { clientId, crawlId, force: !!opts.force },
+    },
+  });
+  if (error) { console.error("[queue] could not enqueue profile build:", error.message); return false; }
+  return true;
+}

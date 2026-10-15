@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import CompanyProfileSection, { type ProfileRun } from "./CompanyProfileSection";
 
 interface CrawlStatus {
   crawl: {
@@ -31,6 +32,7 @@ interface CrawlStatus {
   eta_seconds: number | null;
   message: string;
   audit: "analysing" | "done" | "failed" | null;
+  profile: ProfileRun | null;
   breakdown: { page_type: string; pages: number; errors: number; noindex: number }[];
 }
 
@@ -62,8 +64,10 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished, ref
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const wasActive = useRef(false);
+  // set when "Rebuild" is clicked, cleared once a newer profile run shows up (or after a few minutes)
+  const [profileAsked, setProfileAsked] = useState<number | null>(null);
 
-  const call = useCallback(async (action: "status" | "start" | "cancel", extra: Record<string, unknown> = {}) => {
+  const call = useCallback(async (action: "status" | "start" | "cancel" | "profile", extra: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("site-crawl", {
       body: { action, client_id: clientId, password: adminPassword, ...extra },
     });
@@ -87,9 +91,11 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished, ref
   useEffect(() => { setStatus(null); setLoading(true); wasActive.current = false; refresh(); }, [clientId, refresh]);
   useEffect(() => { if (refreshKey > 0) refresh(); }, [refreshKey, refresh]);
 
+  const profileRunning = status?.profile?.status === "running";
+  const profilePending = profileAsked !== null && !(status?.profile && Date.parse(status.profile.created_at) >= profileAsked && status.profile.status !== "running") && Date.now() - profileAsked < 5 * 60_000;
   const crawling = status?.crawl?.status === "queued" || status?.crawl?.status === "running";
   const analysing = status?.audit === "analysing";
-  const active = crawling || analysing;
+  const active = crawling || analysing || profileRunning || profilePending;
   useEffect(() => {
     if (!active) return;
     const t = setInterval(refresh, POLL_MS);
@@ -111,6 +117,17 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished, ref
     } catch (e) {
       toast({ title: "Couldn't start the crawl", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     } finally { setBusy(false); }
+  };
+
+  const rebuildProfile = async () => {
+    setProfileAsked(Date.now());
+    try {
+      const res = await call("profile");
+      setStatus(res);
+    } catch (e) {
+      setProfileAsked(null);
+      toast({ title: "Couldn't start the profile build", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    }
   };
 
   const cancel = async () => {
@@ -200,6 +217,12 @@ export default function SiteCrawlCard({ clientId, adminPassword, onFinished, ref
 
         {c && (c.status === "failed" || c.status === "cancelled") && (
           <p className={`text-sm ${c.status === "failed" ? "text-red-600" : "text-muted-foreground"}`}>{status?.message}</p>
+        )}
+        {c && c.status === "complete" && !analysing && (
+          <CompanyProfileSection
+            clientId={clientId} adminPassword={adminPassword} profile={status?.profile ?? null}
+            pending={profilePending} canBuild={!crawling} onRebuild={rebuildProfile}
+          />
         )}
       </CardContent>
     </Card>

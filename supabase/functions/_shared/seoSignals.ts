@@ -287,7 +287,7 @@ export function decodeEntities(s: string): string {
   });
 }
 
-const toText = (html: string) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+export const toText = (html: string) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 
 // Headings that are calls to action or page chrome, not questions the business answers.
 const CTA_HEADING = /^(have|got|any|still have)\b.*\bquestions?\b|\b(contact us|get in touch|reach out|subscribe|sign up|newsletter|leave a (reply|comment)|request a (demo|quote)|get started|ready to|search)\b/i;

@@ -241,3 +241,6 @@ verify_jwt = false
 
 [functions.site-crawl]
 verify_jwt = false
+
+[functions.build-company-profile]
+verify_jwt = false
