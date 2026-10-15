@@ -5,7 +5,9 @@
 // ranking is reproducible and debuggable. Bump RUBRIC_VERSION whenever these
 // anchors change; scores are only comparable within one version.
 
-export const RUBRIC_VERSION = "seo-rubric.v1";
+// v2: a category with no checks in the catalog (off_page today) is "not measured"
+// (null) instead of scoring a free 100 on every page. v1 scores ran ~10% high.
+export const RUBRIC_VERSION = "seo-rubric.v2";
 
 export type SeoCategory = "technical" | "on_page" | "performance" | "content" | "off_page";
 export type Severity = "critical" | "warning" | "good";
@@ -67,8 +69,13 @@ export function computeScores(
   const cats = Object.keys(CATEGORY_WEIGHT) as SeoCategory[];
   const pages = opts.pages.length ? opts.pages : [...new Set(findings.map((f) => f.page))];
 
+  // Only categories the catalog can actually flag are scored. A category with
+  // no checks would otherwise read 100 for every page and inflate the total.
+  const measurable = new Set(Object.values(CHECKS).map((c) => c.category));
+
   const subscores = {} as Record<SeoCategory, number | null>;
   for (const cat of cats) {
+    if (!measurable.has(cat)) { subscores[cat] = null; continue; }
     // Performance is sampled, not run on every page -- average it ONLY over
     // the pages actually measured, so a genuinely slow site isn't diluted by
     // pages we never tested. No measured pages = "not measured" (null).
