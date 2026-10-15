@@ -2,6 +2,9 @@
 // no scoring, no LLM. Discovery respects robots.txt; rendering degrades
 // honestly (a plain-fetch fallback is reported, never silently scored low).
 
+import { walkSitemaps } from "./crawler/sitemaps.ts";
+import { pageTypeOf } from "./crawler/urlRules.ts";
+
 const UA = "OrangeDoorSEOBot/1.0 (+https://orangedoormarketing.com/bot)";
 
 export interface PageSignals {
@@ -51,6 +54,13 @@ export interface PageSignals {
   mixed_content_count?: number;
   /** Same-site link targets found on the page, absolute, no hash, capped. */
   internal_link_urls?: string[];
+  /** First H1's text, decoded. */
+  h1_text?: string;
+  /** Page body text without nav/header/footer/forms (prefers <main>/<article>) -- what the page is actually about. */
+  content_sample?: string;
+  /** Set when the page came from a full crawl: its type from the URL, and whether the sitemap lists it. */
+  page_type?: string;
+  in_sitemap?: boolean;
 }
 
 export interface PageSpeed {
@@ -96,16 +106,6 @@ export function isAllowed(path: string, disallows: string[]): boolean {
   return !disallows.some((d) => d !== "" && path.startsWith(d));
 }
 
-function pageType(path: string): string {
-  const p = path.toLowerCase();
-  if (p === "/" || p === "") return "home";
-  if (/\/blog|\/news|\/articles?|\/posts?\//.test(p)) return "blog";
-  if (/\/services?|\/solutions?|\/products?|\/pricing|\/plans?/.test(p)) return "service";
-  if (/\/about|\/team|\/company/.test(p)) return "about";
-  if (/\/contact/.test(p)) return "contact";
-  return "other";
-}
-
 /**
  * Discover pages to audit: prefer sitemap.xml, fall back to homepage internal
  * links. Select by importance (internal-link frequency proxy) while ensuring
@@ -132,21 +132,14 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
   };
   add("/", 100); // homepage always, highest weight
 
-  // Sitemap
-  const sm = await fetchText(`${origin}/sitemap.xml`);
-  if (sm.ok && sm.body) {
-    const locs = [...sm.body.matchAll(/<loc>([^<]+)<\/loc>/gi)].map((m) => m[1].trim());
-    // sitemap index -> pull first child sitemap
-    if (locs.some((l) => l.endsWith(".xml"))) {
-      const child = locs.find((l) => l.endsWith(".xml"));
-      if (child) {
-        const cs = await fetchText(child);
-        [...cs.body.matchAll(/<loc>([^<]+)<\/loc>/gi)].forEach((m) => add(m[1].trim(), 2));
-      }
-    } else {
-      locs.forEach((l) => add(l, 2));
-    }
-  }
+  // Sitemap: the whole tree (index -> every child), not just the first child, skipping
+  // plumbing sitemaps (author, attachments, overlays). Sites like Yoast/WordPress put
+  // posts in the first child and real pages in the second.
+  const walk = await walkSitemaps([`${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`, `${origin}/wp-sitemap.xml`], {
+    fetchText: async (u) => { const r = await fetchText(u); return r.ok && r.body ? r.body : null; },
+    maxSitemaps: 12, maxUrls: 2000,
+  });
+  walk.entries.forEach((e) => add(e.loc, 2));
 
   // Homepage internal links (importance proxy: link frequency)
   const hp = await fetchText(home);
@@ -157,19 +150,17 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
     return { pages: [], robots_blocked: false };
   }
 
-  // Select: homepage first, then top by weight, ensuring type coverage.
+  // Select: homepage first, then the heaviest page of each type (so a big blog can't crowd out
+  // the services page), then fill the rest by weight.
   const paths = [...found.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
   const selected: string[] = [];
-  const typesSeen = new Set<string>();
-  for (const p of paths) {
-    if (selected.length >= cap) break;
-    const t = pageType(p);
-    // take if under cap and (type not yet seen OR we still have room)
-    if (!typesSeen.has(t) || selected.length < cap) {
-      selected.push(p);
-      typesSeen.add(t);
-    }
-  }
+  const taken = new Set<string>();
+  const take = (p: string) => { if (!taken.has(p) && selected.length < cap) { taken.add(p); selected.push(p); } };
+  const typeOrder = ["home", "service", "contact", "about", "pricing", "location", "product", "faq", "other", "blog"];
+  const byType = new Map<string, string[]>();
+  for (const p of paths) { const t = pageTypeOf(p, origin); byType.set(t, [...(byType.get(t) ?? []), p]); }
+  for (const t of typeOrder) { const first = byType.get(t)?.[0]; if (first) take(first); }
+  for (const p of paths) take(p);
   return { pages: selected.slice(0, cap).map((p) => origin + p), robots_blocked: disallows.length > 0 && selected.length === 0 };
 }
 
@@ -232,7 +223,7 @@ export async function fetchHtml(url: string): Promise<{ html: string; via: "rend
 }
 
 // ── PageSpeed ───────────────────────────────────────────────────────────────
-async function getPageSpeed(url: string): Promise<PageSpeed | null> {
+export async function getPageSpeed(url: string): Promise<PageSpeed | null> {
   const key = Deno.env.get("PAGESPEED_API_KEY");
   if (!key) return null; // caller emits an explicit "not measured" finding
   try {
@@ -280,22 +271,72 @@ function jsonLdTypes(html: string): Set<string> {
   return types;
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "\u2013", mdash: "\u2014",
+  hellip: "\u2026", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201d", ldquo: "\u201c", copy: "\u00a9", reg: "\u00ae", trade: "\u2122",
+};
+
+/** Decodes HTML entities (named + numeric) so titles and answers read as text, not markup. */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const code = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      try { return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m; } catch { return m; }
+    }
+    return NAMED_ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
+
+export const toText = (html: string) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+
+// Headings that are calls to action or page chrome, not questions the business answers.
+const CTA_HEADING = /^(have|got|any|still have)\b.*\bquestions?\b|\b(contact us|get in touch|reach out|subscribe|sign up|newsletter|leave a (reply|comment)|request a (demo|quote)|get started|ready to|search)\b/i;
+// An "answer" made only of form labels is a form, not an answer.
+const FORM_LABELS = /^(?:(?:first|last|full)?\s*name|e-?mail(?: address)?|phone(?: number)?|message|comments?|subject|company|submit|send|your \w+|required|\*|\s)+$/i;
+
+// An answer whose last sentence announces a list ("Here are the top 6 tips...") is only an
+// intro: the list it promises sits outside the extracted text, so marking it up would publish
+// an answer that answers nothing.
+const LEAD_IN = /\b(here are|here's|here is|the following|as follows|these are|listed below|below)\b/i;
+function endsWithLeadIn(text: string): boolean {
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+  return LEAD_IN.test(sentences[sentences.length - 1] ?? "");
+}
+
+/** Cut at a sentence end when there is one in range, else at a word, so answers never end mid-word. */
+function trimAnswer(text: string, max = 400): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  if (sentence >= 150) return cut.slice(0, sentence + 1);
+  return cut.slice(0, cut.lastIndexOf(" ")).replace(/[,;:\s]+$/, "") + "\u2026";
+}
+
 // Extracts real on-page Q&A: a heading phrased as a question, paired with the
 // text that follows it up to the next heading. Only content actually visible
 // on the page qualifies -- this is what makes the FAQPage fix safe to
 // auto-apply (it can't invent a question or answer the business never wrote).
+// Form blocks, nav and call-to-action headings are excluded: marking those up
+// would publish wrong structured data.
 function extractQaPairs(html: string): { question: string; answer: string }[] {
   const pairs: { question: string; answer: string }[] = [];
   const headingRe = /<h[234][^>]*>([\s\S]*?)<\/h[234]>/gi;
   const matches = [...html.matchAll(headingRe)];
   for (let i = 0; i < matches.length && pairs.length < 8; i++) {
-    const question = matches[i][1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const question = toText(matches[i][1]);
     if (!question.endsWith("?") || question.length < 10 || question.length > 200) continue;
+    if (CTA_HEADING.test(question)) continue;
     const start = matches[i].index! + matches[i][0].length;
     const end = i + 1 < matches.length ? matches[i + 1].index! : start + 2000;
-    const answer = html.slice(start, end).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
-    if (answer.length < 20) continue; // no real answer text -- just a bare heading, don't fabricate one
-    pairs.push({ question, answer });
+    const slice = html.slice(start, end)
+      .replace(/<(script|style|nav|footer|button|select|textarea)\b[\s\S]*?(<\/\1>|$)/gi, " ")
+      .replace(/<form\b[\s\S]*?(<\/form>|$)/gi, " ")
+      .replace(/<input\b[^>]*>/gi, " ");
+    const answer = toText(slice);
+    if (answer.length < 40 || answer.split(" ").length < 6 || FORM_LABELS.test(answer)) continue; // a bare heading or a form, don't fabricate an answer
+    const trimmed = trimAnswer(answer);
+    if (endsWithLeadIn(trimmed)) continue; // an intro to a list we did not capture, not an answer
+    pairs.push({ question, answer: trimmed });
   }
   return pairs;
 }
@@ -317,6 +358,9 @@ export function normalizeForCompare(u: string, base?: string): string | null {
     return `${stripWww(url.hostname)}${path}`.toLowerCase();
   } catch { return null; }
 }
+
+/** Links kept per page. A page with more is flagged (internal_links_capped) so nothing treats its link list as complete. */
+const MAX_PAGE_LINKS = 300;
 
 export function parseCrawlHealth(html: string, url: string) {
   let noindex = false;
@@ -341,6 +385,7 @@ export function parseCrawlHealth(html: string, url: string) {
   }
 
   const internal_link_urls: string[] = [];
+  let internal_links_capped = false;
   try {
     const host = stripWww(new URL(url).hostname);
     const seen = new Set<string>();
@@ -356,18 +401,27 @@ export function parseCrawlHealth(html: string, url: string) {
       if (seen.has(key)) continue;
       seen.add(key);
       internal_link_urls.push(key);
-      if (internal_link_urls.length >= 100) break;
+      if (internal_link_urls.length >= MAX_PAGE_LINKS) { internal_links_capped = true; break; }
     }
   } catch { /* bad base url: no links */ }
 
-  return { noindex, canonical_href, mixed_content_count, internal_link_urls };
+  return { noindex, canonical_href, mixed_content_count, internal_link_urls, internal_links_capped };
+}
+
+/** The page's own content: <main>/<article> if present, else the body minus site chrome. */
+export function contentSample(html: string, max = 1200): string {
+  const strip = (h: string) => h
+    .replace(/<(script|style|noscript|nav|header|footer|aside|form|svg|iframe)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+  const region = html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ?? html.match(/<article\b[\s\S]*?<\/article>/i)?.[0] ?? html.match(/<body\b[\s\S]*<\/body>/i)?.[0] ?? html;
+  return decodeEntities(strip(region).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, max);
 }
 
 // ── On-page parse ─────────────────────────────────────────────────────────
 export function parseOnPage(html: string, url: string) {
   const low = html.toLowerCase();
-  const title = (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim();
-  const meta_description = (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim();
+  const title = decodeEntities((html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim());
+  const meta_description = decodeEntities((html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim());
   const h1_count = (html.match(/<h1[\s>]/gi) ?? []).length;
   const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const word_count = text ? text.split(/\s+/).length : 0;
@@ -386,8 +440,11 @@ export function parseOnPage(html: string, url: string) {
   const has_entity_schema = [...ldTypes].some((t) => t.includes("localbusiness") || t.includes("organization") || t.includes("professionalservice"));
   const has_faq_schema = [...ldTypes].some((t) => t.includes("faqpage"));
   const crawl = parseCrawlHealth(html, url);
+  const h1_text = toText(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "").slice(0, 200);
   return {
     ...crawl,
+    h1_text,
+    content_sample: contentSample(html),
     title, meta_description, h1_count, word_count,
     image_count: imgs.length, images_missing_alt,
     internal_links: internal, external_links: external,

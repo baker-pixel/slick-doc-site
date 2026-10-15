@@ -62,6 +62,7 @@ export const CHECKS: Record<string, CheckDef> = {
   sitemap_missing:      { id: "sitemap_missing", category: "technical", title: "No XML sitemap found", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
   sitemap_bad_urls:     { id: "sitemap_bad_urls", category: "technical", title: "Sitemap lists pages Google can't use", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
   broken_internal_links:{ id: "broken_internal_links", category: "technical", title: "Broken internal links", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
+  orphan_pages:         { id: "orphan_pages", category: "technical", title: "Pages no other page links to", severity: "warning", impact: 2, effort: 2, wp_applyable: false, scope: "site" },
   duplicate_titles:     { id: "duplicate_titles", category: "on_page", title: "Several pages share the same title", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
   duplicate_meta:       { id: "duplicate_meta", category: "on_page", title: "Several pages share the same meta description", severity: "warning", impact: 2, effort: 2, wp_applyable: false, scope: "site" },
   render_required:      { id: "render_required", category: "technical", title: "Page needs JavaScript to render", severity: "warning", impact: 3, effort: 3, wp_applyable: false },

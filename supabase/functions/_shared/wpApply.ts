@@ -6,6 +6,7 @@
 // check (skip if the page changed since the fix was generated), and an
 // optional post-apply verify (confirm the write actually landed, not just
 // that the plugin returned 200).
+import { decodeEntities } from "./seoSignals.ts";
 
 export interface WpFixRequest {
   fixType: string; // "wp_meta_title" | "wp_meta_description" | "wp_image_alt" | "wp_canonical" | ...
@@ -261,8 +262,11 @@ export async function currentWpFieldValue(fixType: string, postUrl: string): Pro
     const res = await fetch(postUrl, { headers: { "User-Agent": "OrangeDoorSEOBot/1.0" }, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const html = await res.text();
-    if (fixType === "wp_meta_title") return (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim();
-    if (fixType === "wp_meta_description") return (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim();
+    // Decoded to match what the audit stored as expected_baseline (parseOnPage
+    // decodes entities); comparing raw here would call every title containing
+    // "&amp;" or a curly quote "changed since the audit".
+    if (fixType === "wp_meta_title") return decodeEntities((html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim());
+    if (fixType === "wp_meta_description") return decodeEntities((html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim());
     return null;
   } catch {
     return null;

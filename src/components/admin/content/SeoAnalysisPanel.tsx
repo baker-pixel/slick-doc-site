@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import SiteCrawlCard from "./SiteCrawlCard";
+import { groupFindings, pagesLabel } from "@/lib/seoFindings";
 
 interface ClientOption { id: string; business_name: string; }
 
@@ -41,6 +43,8 @@ interface AuditResults {
   findings?: Finding[];
   action_plan?: string[];
   diff?: { previous_audit_id: string | null; regressed: number; resolved: number };
+  source?: "crawl" | "sample";
+  crawl?: { id: string; pages_read: number; pages_unreadable: number; finished_at: string | null; mode: string; capped: boolean } | null;
 }
 interface SeoAudit {
   id: string;
@@ -73,6 +77,73 @@ const sevIcon = (sev: Severity) => {
 const CATEGORY_LABELS: Record<string, string> = {
   technical: "Technical", on_page: "On-Page", performance: "Performance", content: "Content", off_page: "Off-Page",
 };
+
+interface FindingRowProps {
+  f: Finding;
+  wpConnected: boolean;
+  applyingId: string | null;
+  applyFix: (f: Finding) => void;
+  compact?: boolean;
+}
+
+function FindingRow({ f, wpConnected, applyingId, applyFix, compact }: FindingRowProps) {
+  return (
+    <div className={`flex items-start gap-3 px-4 py-3${compact ? " pl-10" : ""}`}>
+                    {sevIcon(f.severity)}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{f.title}</span>
+                        {f.wp_applyable && (
+                          <Badge variant="outline" className="text-[10px] gap-1 text-orange-700 border-orange-200">
+                            <Wrench className="w-3 h-3" /> WordPress-fixable
+                          </Badge>
+                        )}
+                        {f.status === "regressed" && (
+                          <Badge variant="outline" className="text-[10px] text-red-700 border-red-200">regressed</Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-0.5">{f.plain_english}</p>
+                      <div className="text-xs text-muted-foreground/70 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                        <span>{f.technical_detail}</span>
+                        <span>· impact {f.impact}/5 · effort {f.effort}/5</span>
+                      </div>
+                      {f.pages.length > 0 && (
+                        <details className="text-xs text-muted-foreground/70 mt-1">
+                          <summary className="cursor-pointer hover:text-foreground">
+                            affects {f.pages.length} page{f.pages.length === 1 ? "" : "s"}
+                          </summary>
+                          <ul className="mt-1 ml-4 list-disc space-y-0.5">
+                            {f.pages.map(url => (
+                              <li key={url}>
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground break-all">
+                                  {url}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                      {f.fix?.payload?.value && (
+                        <div className="text-xs mt-1.5 rounded bg-muted/50 px-2 py-1 text-muted-foreground">
+                          Suggested: <span className="text-foreground">{f.fix.payload.value}</span>
+                        </div>
+                      )}
+                    </div>
+                    {f.wp_applyable && f.fix?.payload?.value && (
+                      <Button
+                        size="sm" variant="outline"
+                        className="flex-shrink-0 gap-1 text-orange-700 border-orange-200 hover:bg-orange-50"
+                        disabled={applyingId === f.id || !wpConnected}
+                        title={wpConnected ? undefined : "Connect WordPress to enable one-click fixes"}
+                        onClick={() => applyFix(f)}
+                      >
+                        {applyingId === f.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+                        Apply
+                      </Button>
+                    )}
+                  </div>
+  );
+}
 
 export default function SeoAnalysisPanel({ selectedClientId, selectedClientName }: SeoAnalysisPanelProps) {
   const { adminPassword } = useAdminAuth();
@@ -144,28 +215,31 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
     for (const id of order) { const f = byId.get(id); if (f && !seen.has(id)) { out.push(f); seen.add(id); } }
     return out;
   }, [results]);
+  const groups = useMemo(() => groupFindings(orderedFindings), [orderedFindings]);
 
+  const [crawlTick, setCrawlTick] = useState(0);
+
+  // "Run new audit" reads the whole site in the background first (or reuses a crawl from the last 12 hours),
+  // then the audit follows by itself. The crawl card shows progress and calls onCrawlFinished when it lands.
   const runAudit = async () => {
     if (!clientId) { toast({ title: "Select a client first", variant: "destructive" }); return; }
     setRunning(true);
     try {
-      const { data, error } = await supabase.functions.invoke("seo-audit", {
-        body: { clientId, password: adminPassword },
+      const { data, error } = await supabase.functions.invoke("site-crawl", {
+        body: { action: "audit", client_id: clientId, password: adminPassword },
       });
-      if (error) {
+      if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Audit failed");
+        throw new Error(msg ? friendlyEdgeMessage(msg) : data?.error ?? "Could not start the audit");
       }
-      if (data?.error) throw new Error(data.error);
-      if (data?.status === "inconclusive") {
-        toast({ title: "Audit inconclusive", description: "The site couldn't be crawled (unreachable, blocked, or robots-disallowed)." });
-      } else {
-        toast({ title: `Audit complete — score ${data.overall_score}`, description: `${data.findings} findings across ${data.pages} pages.` });
-      }
-      loadAudits();
+      toast({
+        title: data?.mode === "audit_only" ? "Analysing the latest crawl" : "Audit started",
+        description: data?.mode === "audit_only" ? "This takes a minute or two." : "Reading the whole website in the background. This can take 5–10 minutes; the results appear here when it's done.",
+      });
+      setCrawlTick((n) => n + 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Audit failed", description: msg, variant: "destructive" });
+      toast({ title: "Couldn't start the audit", description: msg, variant: "destructive" });
     } finally {
       setRunning(false);
     }
@@ -212,9 +286,11 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
         </Button>
         <Button onClick={runAudit} disabled={running || !clientId} className="gap-2">
           {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-          {running ? "Auditing..." : "Run new audit"}
+          {running ? "Starting..." : "Run new audit"}
         </Button>
       </div>
+
+      {clientId && <SiteCrawlCard clientId={clientId} adminPassword={adminPassword} refreshKey={crawlTick} onFinished={loadAudits} />}
 
       {!clientId ? (
         <Card><CardContent className="py-16 text-center text-muted-foreground">Select a client to view its SEO analysis.</CardContent></Card>
@@ -267,8 +343,10 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
                 </div>
                 {results?.pages_analyzed && (
                   <div className="text-xs text-muted-foreground mt-4 pt-3 border-t">
-                    {results.pages_analyzed.length} pages analyzed
-                    {results.pages_analyzed.some(p => p.fetched_via === "plain") && " · some pages not JS-rendered"}
+                    {results.source === "crawl" && results.crawl
+                      ? `Full-site audit: ${results.crawl.pages_read} pages read${results.crawl.mode === "incremental" ? " (changed pages re-read)" : ""}${results.crawl.capped ? " · reached the plan's page limit" : ""}`
+                      : `${results.pages_analyzed.length} pages sampled`}
+                    {results.pages_analyzed.some(p => p.fetched_via === "plain") && results.pages_analyzed.some(p => p.fetched_via === "render" ) === false && " · some pages not JS-rendered"}
                   </div>
                 )}
               </CardContent>
@@ -289,61 +367,32 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y">
-                {orderedFindings.map(f => (
-                  <div key={f.id} className="flex items-start gap-3 px-4 py-3">
-                    {sevIcon(f.severity)}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{f.title}</span>
-                        {f.wp_applyable && (
-                          <Badge variant="outline" className="text-[10px] gap-1 text-orange-700 border-orange-200">
-                            <Wrench className="w-3 h-3" /> WordPress-fixable
-                          </Badge>
-                        )}
-                        {f.status === "regressed" && (
-                          <Badge variant="outline" className="text-[10px] text-red-700 border-red-200">regressed</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">{f.plain_english}</p>
-                      <div className="text-xs text-muted-foreground/70 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                        <span>{f.technical_detail}</span>
-                        <span>· impact {f.impact}/5 · effort {f.effort}/5</span>
-                      </div>
-                      {f.pages.length > 0 && (
-                        <details className="text-xs text-muted-foreground/70 mt-1">
-                          <summary className="cursor-pointer hover:text-foreground">
-                            affects {f.pages.length} page{f.pages.length === 1 ? "" : "s"}
-                          </summary>
-                          <ul className="mt-1 ml-4 list-disc space-y-0.5">
-                            {f.pages.map(url => (
-                              <li key={url}>
-                                <a href={url} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground break-all">
-                                  {url}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
-                      {f.fix?.payload?.value && (
-                        <div className="text-xs mt-1.5 rounded bg-muted/50 px-2 py-1 text-muted-foreground">
-                          Suggested: <span className="text-foreground">{f.fix.payload.value}</span>
+                {groups.map(g => g.items.length === 1 ? (
+                  <FindingRow key={g.items[0].id} f={g.items[0]} wpConnected={wpConnected} applyingId={applyingId} applyFix={applyFix} />
+                ) : (
+                  <details key={g.check_id} className="group">
+                    <summary className="flex cursor-pointer list-none items-start gap-3 px-4 py-3 hover:bg-muted/40">
+                      {sevIcon(g.severity)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{g.title}</span>
+                          <Badge variant="secondary" className="text-[10px]">{pagesLabel(g.pages.length)}</Badge>
+                          {g.fixable > 0 && (
+                            <Badge variant="outline" className="text-[10px] gap-1 text-orange-700 border-orange-200">
+                              <Wrench className="w-3 h-3" /> {g.fixable} fixable
+                            </Badge>
+                          )}
                         </div>
-                      )}
+                        {g.explanation && <p className="text-sm text-muted-foreground mt-0.5">{g.explanation}</p>}
+                        <div className="text-xs text-muted-foreground/70 mt-1">impact {g.impact}/5 · effort {g.effort}/5 · click to see each page</div>
+                      </div>
+                    </summary>
+                    <div className="divide-y border-t bg-muted/20">
+                      {g.items.map(f => (
+                        <FindingRow key={f.id} f={f} wpConnected={wpConnected} applyingId={applyingId} applyFix={applyFix} compact />
+                      ))}
                     </div>
-                    {f.wp_applyable && f.fix?.payload?.value && (
-                      <Button
-                        size="sm" variant="outline"
-                        className="flex-shrink-0 gap-1 text-orange-700 border-orange-200 hover:bg-orange-50"
-                        disabled={applyingId === f.id || !wpConnected}
-                        title={wpConnected ? undefined : "Connect WordPress to enable one-click fixes"}
-                        onClick={() => applyFix(f)}
-                      >
-                        {applyingId === f.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
-                        Apply
-                      </Button>
-                    )}
-                  </div>
+                  </details>
                 ))}
                 {orderedFindings.length === 0 && (
                   <div className="py-10 text-center text-muted-foreground text-sm">No findings — this site looks healthy.</div>

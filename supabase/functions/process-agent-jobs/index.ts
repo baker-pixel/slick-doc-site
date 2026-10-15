@@ -17,6 +17,7 @@ const TARGET_PATHS: Record<string, string> = {
   "run-automation": "run-automation",
   "generate-approval-draft": "generate-approval-draft",
   "seo-audit": "seo-audit",
+  "build-company-profile": "build-company-profile",
 };
 
 interface AgentJobMessage {

@@ -114,6 +114,6 @@ Deno.test("scoring: a site-wide finding deducts once, not diluted across pages",
 
 Deno.test("rubric v3 is registered and every site-scoped check is manual-fix", () => {
   const site = Object.values(CHECKS).filter((c) => c.scope === "site");
-  assertEquals(site.length, 7);
+  assertEquals(site.length, 8);
   assertEquals(site.every((c) => !c.wp_applyable), true);
 });
