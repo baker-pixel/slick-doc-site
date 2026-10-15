@@ -280,22 +280,61 @@ function jsonLdTypes(html: string): Set<string> {
   return types;
 }
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "\u2013", mdash: "\u2014",
+  hellip: "\u2026", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201d", ldquo: "\u201c", copy: "\u00a9", reg: "\u00ae", trade: "\u2122",
+};
+
+/** Decodes HTML entities (named + numeric) so titles and answers read as text, not markup. */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const code = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      try { return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m; } catch { return m; }
+    }
+    return NAMED_ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
+
+const toText = (html: string) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+
+// Headings that are calls to action or page chrome, not questions the business answers.
+const CTA_HEADING = /^(have|got|any|still have)\b.*\bquestions?\b|\b(contact us|get in touch|reach out|subscribe|sign up|newsletter|leave a (reply|comment)|request a (demo|quote)|get started|ready to|search)\b/i;
+// An "answer" made only of form labels is a form, not an answer.
+const FORM_LABELS = /^(?:(?:first|last|full)?\s*name|e-?mail(?: address)?|phone(?: number)?|message|comments?|subject|company|submit|send|your \w+|required|\*|\s)+$/i;
+
+/** Cut at a sentence end when there is one in range, else at a word, so answers never end mid-word. */
+function trimAnswer(text: string, max = 400): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  if (sentence >= 150) return cut.slice(0, sentence + 1);
+  return cut.slice(0, cut.lastIndexOf(" ")).replace(/[,;:\s]+$/, "") + "\u2026";
+}
+
 // Extracts real on-page Q&A: a heading phrased as a question, paired with the
 // text that follows it up to the next heading. Only content actually visible
 // on the page qualifies -- this is what makes the FAQPage fix safe to
 // auto-apply (it can't invent a question or answer the business never wrote).
+// Form blocks, nav and call-to-action headings are excluded: marking those up
+// would publish wrong structured data.
 function extractQaPairs(html: string): { question: string; answer: string }[] {
   const pairs: { question: string; answer: string }[] = [];
   const headingRe = /<h[234][^>]*>([\s\S]*?)<\/h[234]>/gi;
   const matches = [...html.matchAll(headingRe)];
   for (let i = 0; i < matches.length && pairs.length < 8; i++) {
-    const question = matches[i][1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const question = toText(matches[i][1]);
     if (!question.endsWith("?") || question.length < 10 || question.length > 200) continue;
+    if (CTA_HEADING.test(question)) continue;
     const start = matches[i].index! + matches[i][0].length;
     const end = i + 1 < matches.length ? matches[i + 1].index! : start + 2000;
-    const answer = html.slice(start, end).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
-    if (answer.length < 20) continue; // no real answer text -- just a bare heading, don't fabricate one
-    pairs.push({ question, answer });
+    const slice = html.slice(start, end)
+      .replace(/<(script|style|nav|footer|button|select|textarea)\b[\s\S]*?(<\/\1>|$)/gi, " ")
+      .replace(/<form\b[\s\S]*?(<\/form>|$)/gi, " ")
+      .replace(/<input\b[^>]*>/gi, " ");
+    const answer = toText(slice);
+    if (answer.length < 40 || answer.split(" ").length < 6 || FORM_LABELS.test(answer)) continue; // a bare heading or a form, don't fabricate an answer
+    pairs.push({ question, answer: trimAnswer(answer) });
   }
   return pairs;
 }
@@ -366,8 +405,8 @@ export function parseCrawlHealth(html: string, url: string) {
 // ── On-page parse ─────────────────────────────────────────────────────────
 export function parseOnPage(html: string, url: string) {
   const low = html.toLowerCase();
-  const title = (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim();
-  const meta_description = (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim();
+  const title = decodeEntities((html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? "").trim());
+  const meta_description = decodeEntities((html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? "").trim());
   const h1_count = (html.match(/<h1[\s>]/gi) ?? []).length;
   const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const word_count = text ? text.split(/\s+/).length : 0;
