@@ -2,6 +2,9 @@
 // no scoring, no LLM. Discovery respects robots.txt; rendering degrades
 // honestly (a plain-fetch fallback is reported, never silently scored low).
 
+import { walkSitemaps } from "./crawler/sitemaps.ts";
+import { pageTypeOf } from "./crawler/urlRules.ts";
+
 const UA = "OrangeDoorSEOBot/1.0 (+https://orangedoormarketing.com/bot)";
 
 export interface PageSignals {
@@ -100,16 +103,6 @@ export function isAllowed(path: string, disallows: string[]): boolean {
   return !disallows.some((d) => d !== "" && path.startsWith(d));
 }
 
-function pageType(path: string): string {
-  const p = path.toLowerCase();
-  if (p === "/" || p === "") return "home";
-  if (/\/blog|\/news|\/articles?|\/posts?\//.test(p)) return "blog";
-  if (/\/services?|\/solutions?|\/products?|\/pricing|\/plans?/.test(p)) return "service";
-  if (/\/about|\/team|\/company/.test(p)) return "about";
-  if (/\/contact/.test(p)) return "contact";
-  return "other";
-}
-
 /**
  * Discover pages to audit: prefer sitemap.xml, fall back to homepage internal
  * links. Select by importance (internal-link frequency proxy) while ensuring
@@ -136,21 +129,14 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
   };
   add("/", 100); // homepage always, highest weight
 
-  // Sitemap
-  const sm = await fetchText(`${origin}/sitemap.xml`);
-  if (sm.ok && sm.body) {
-    const locs = [...sm.body.matchAll(/<loc>([^<]+)<\/loc>/gi)].map((m) => m[1].trim());
-    // sitemap index -> pull first child sitemap
-    if (locs.some((l) => l.endsWith(".xml"))) {
-      const child = locs.find((l) => l.endsWith(".xml"));
-      if (child) {
-        const cs = await fetchText(child);
-        [...cs.body.matchAll(/<loc>([^<]+)<\/loc>/gi)].forEach((m) => add(m[1].trim(), 2));
-      }
-    } else {
-      locs.forEach((l) => add(l, 2));
-    }
-  }
+  // Sitemap: the whole tree (index -> every child), not just the first child, skipping
+  // plumbing sitemaps (author, attachments, overlays). Sites like Yoast/WordPress put
+  // posts in the first child and real pages in the second.
+  const walk = await walkSitemaps([`${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`, `${origin}/wp-sitemap.xml`], {
+    fetchText: async (u) => { const r = await fetchText(u); return r.ok && r.body ? r.body : null; },
+    maxSitemaps: 12, maxUrls: 2000,
+  });
+  walk.entries.forEach((e) => add(e.loc, 2));
 
   // Homepage internal links (importance proxy: link frequency)
   const hp = await fetchText(home);
@@ -161,19 +147,17 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
     return { pages: [], robots_blocked: false };
   }
 
-  // Select: homepage first, then top by weight, ensuring type coverage.
+  // Select: homepage first, then the heaviest page of each type (so a big blog can't crowd out
+  // the services page), then fill the rest by weight.
   const paths = [...found.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
   const selected: string[] = [];
-  const typesSeen = new Set<string>();
-  for (const p of paths) {
-    if (selected.length >= cap) break;
-    const t = pageType(p);
-    // take if under cap and (type not yet seen OR we still have room)
-    if (!typesSeen.has(t) || selected.length < cap) {
-      selected.push(p);
-      typesSeen.add(t);
-    }
-  }
+  const taken = new Set<string>();
+  const take = (p: string) => { if (!taken.has(p) && selected.length < cap) { taken.add(p); selected.push(p); } };
+  const typeOrder = ["home", "service", "contact", "about", "pricing", "location", "product", "faq", "other", "blog"];
+  const byType = new Map<string, string[]>();
+  for (const p of paths) { const t = pageTypeOf(p, origin); byType.set(t, [...(byType.get(t) ?? []), p]); }
+  for (const t of typeOrder) { const first = byType.get(t)?.[0]; if (first) take(first); }
+  for (const p of paths) take(p);
   return { pages: selected.slice(0, cap).map((p) => origin + p), robots_blocked: disallows.length > 0 && selected.length === 0 };
 }
 

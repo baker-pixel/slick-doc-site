@@ -13,6 +13,8 @@ export interface TierPolicy {
   seo: {
     /** pages crawled per audit */
     crawlPages: number;
+    /** most pages the background site crawler reads per crawl (the full-site crawl, not the audit sample) */
+    crawlMaxPages: number;
     /** how often a re-audit should run (consumed by the re-audit cron, Phase E) */
     reauditCadenceDays: number;
     /** how far the WordPress apply path may go */
@@ -55,7 +57,7 @@ export interface TierPolicy {
 const POLICIES: Record<Tier, TierPolicy> = {
   foundation: {
     tier: "foundation",
-    seo: { crawlPages: 5, reauditCadenceDays: 90, applyMode: "off" },
+    seo: { crawlPages: 5, crawlMaxPages: 100, reauditCadenceDays: 90, applyMode: "off" },
     social: { contentTypes: ["social_post"], postsPerMonth: 4 },
     prospect: { enabled: false, discoveryBatch: 0, listUpload: false, maxListSize: 0, dailySendCap: 0 },
     aiVisibility: { enabled: false, promptsPerMonth: 0 },
@@ -63,7 +65,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
   },
   growth: {
     tier: "growth",
-    seo: { crawlPages: 10, reauditCadenceDays: 30, applyMode: "key_pages" },
+    seo: { crawlPages: 10, crawlMaxPages: 300, reauditCadenceDays: 30, applyMode: "key_pages" },
     social: { contentTypes: ["google_post", "social_post", "email_newsletter"], postsPerMonth: 12 },
     prospect: { enabled: true, discoveryBatch: 10, listUpload: false, maxListSize: 0, dailySendCap: 40 },
     aiVisibility: { enabled: true, promptsPerMonth: 8 },
@@ -71,7 +73,7 @@ const POLICIES: Record<Tier, TierPolicy> = {
   },
   transformation: {
     tier: "transformation",
-    seo: { crawlPages: 15, reauditCadenceDays: 30, applyMode: "full" },
+    seo: { crawlPages: 15, crawlMaxPages: 1000, reauditCadenceDays: 30, applyMode: "full" },
     social: { contentTypes: ["google_post", "social_post", "email_newsletter"], postsPerMonth: 20 },
     prospect: { enabled: true, discoveryBatch: 20, listUpload: true, maxListSize: 5000, dailySendCap: 80 },
     aiVisibility: { enabled: true, promptsPerMonth: 8 },

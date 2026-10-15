@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import SiteCrawlCard from "./SiteCrawlCard";
 
 interface ClientOption { id: string; business_name: string; }
 
@@ -215,6 +216,8 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
           {running ? "Auditing..." : "Run new audit"}
         </Button>
       </div>
+
+      {clientId && <SiteCrawlCard clientId={clientId} adminPassword={adminPassword} />}
 
       {!clientId ? (
         <Card><CardContent className="py-16 text-center text-muted-foreground">Select a client to view its SEO analysis.</CardContent></Card>

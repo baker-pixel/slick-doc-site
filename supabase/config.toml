@@ -235,3 +235,9 @@ verify_jwt = false
 
 [functions.submit-followup]
 verify_jwt = false
+
+[functions.process-site-crawl]
+verify_jwt = false
+
+[functions.site-crawl]
+verify_jwt = false
