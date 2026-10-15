@@ -15,7 +15,7 @@ Deno.test("overall score is not lifted by an unmeasured category", () => {
   assertEquals(overall_score, Math.round((100 * 0.25 + 78 * 0.25 + 100 * 0.15) / 0.65));
 });
 
-Deno.test("every scored category has at least one check, and the rubric is v2", () => {
-  assertEquals(RUBRIC_VERSION, "seo-rubric.v2");
+Deno.test("every scored category has at least one check, and the rubric is v3", () => {
+  assertEquals(RUBRIC_VERSION, "seo-rubric.v3");
   assertEquals(new Set(Object.values(CHECKS).map((c) => c.category)).has("off_page"), false);
 });

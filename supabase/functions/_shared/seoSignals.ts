@@ -36,6 +36,21 @@ export interface PageSignals {
   text_sample: string;
   // performance (null when not measured)
   performance: PageSpeed | null;
+  // Crawl-health signals (v3). All optional so older fixtures and the free
+  // scan (which has no network probe) stay valid; checks skip what is absent.
+  /** HTTP status from the redirect-aware probe (may differ from status_code when rendered). */
+  probe_status?: number | null;
+  final_url?: string;
+  redirect_hops?: number;
+  redirect_loop?: boolean;
+  /** Raw X-Robots-Tag response header. */
+  x_robots_tag?: string;
+  noindex?: boolean;
+  canonical_href?: string | null;
+  /** http:// subresources (img/script/stylesheet/iframe) on an https page. */
+  mixed_content_count?: number;
+  /** Same-site link targets found on the page, absolute, no hash, capped. */
+  internal_link_urls?: string[];
 }
 
 export interface PageSpeed {
@@ -58,7 +73,7 @@ async function fetchText(url: string, timeoutMs = 8000): Promise<{ ok: boolean; 
 }
 
 /** Robots.txt disallow rules for our UA (and *). Minimal but honest. */
-async function getDisallows(origin: string): Promise<string[]> {
+export async function getDisallows(origin: string): Promise<string[]> {
   const { ok, body } = await fetchText(`${origin}/robots.txt`);
   if (!ok || !body) return [];
   const lines = body.split("\n").map((l) => l.trim());
@@ -77,7 +92,7 @@ async function getDisallows(origin: string): Promise<string[]> {
   return disallows;
 }
 
-function isAllowed(path: string, disallows: string[]): boolean {
+export function isAllowed(path: string, disallows: string[]): boolean {
   return !disallows.some((d) => d !== "" && path.startsWith(d));
 }
 
@@ -156,6 +171,46 @@ export async function discoverPages(siteUrl: string, cap = 12): Promise<{ pages:
     }
   }
   return { pages: selected.slice(0, cap).map((p) => origin + p), robots_blocked: disallows.length > 0 && selected.length === 0 };
+}
+
+// ── Redirect-aware probe ──────────────────────────────────────────────────
+export interface ProbeResult {
+  status: number;          // 0 = network error / timeout (unknown, never "broken")
+  final_url: string;
+  hops: number;
+  chain: string[];
+  loop: boolean;
+  x_robots_tag: string;
+  error: boolean;
+}
+
+/** Follows redirects by hand so chains and loops are visible. Never reads bodies. */
+export async function probeUrl(url: string, timeoutMs = 6000, maxHops = 6): Promise<ProbeResult> {
+  const chain = [url];
+  let cur = url;
+  for (let i = 0; i <= maxHops; i++) {
+    let res: Response;
+    try {
+      res = await fetch(cur, { headers: { "User-Agent": UA }, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+    } catch {
+      return { status: 0, final_url: cur, hops: chain.length - 1, chain, loop: false, x_robots_tag: "", error: true };
+    }
+    const loc = res.headers.get("location");
+    const xr = res.headers.get("x-robots-tag") ?? "";
+    res.body?.cancel().catch(() => {});
+    if (res.status >= 300 && res.status < 400 && loc) {
+      let next: string;
+      try { next = new URL(loc, cur).toString(); } catch {
+        return { status: res.status, final_url: cur, hops: chain.length - 1, chain, loop: false, x_robots_tag: xr, error: false };
+      }
+      if (chain.includes(next)) return { status: res.status, final_url: next, hops: chain.length, chain: [...chain, next], loop: true, x_robots_tag: xr, error: false };
+      chain.push(next);
+      cur = next;
+      continue;
+    }
+    return { status: res.status, final_url: cur, hops: chain.length - 1, chain, loop: false, x_robots_tag: xr, error: false };
+  }
+  return { status: 310, final_url: cur, hops: chain.length - 1, chain, loop: true, x_robots_tag: "", error: false };
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────
@@ -245,6 +300,69 @@ function extractQaPairs(html: string): { question: string; answer: string }[] {
   return pairs;
 }
 
+// ── Crawl-health parse (pure) ─────────────────────────────────────────────
+const ASSET_EXT = /\.(pdf|jpg|jpeg|png|gif|svg|webp|avif|zip|xml|css|js|mjs|ico|woff2?|json|webmanifest|txt|map|mp4|mp3|docx?|xlsx?)$/i;
+const stripWww = (h: string) => h.toLowerCase().replace(/^www\./, "");
+
+function attr(tag: string, name: string): string | null {
+  const m = tag.match(new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i"));
+  return m ? (m[1] ?? m[2] ?? "") : null;
+}
+
+/** Comparable form of a URL: no scheme, no www, no query/hash, no trailing slash. */
+export function normalizeForCompare(u: string, base?: string): string | null {
+  try {
+    const url = new URL(u, base);
+    const path = url.pathname.replace(/\/+$/, "") || "";
+    return `${stripWww(url.hostname)}${path}`.toLowerCase();
+  } catch { return null; }
+}
+
+export function parseCrawlHealth(html: string, url: string) {
+  let noindex = false;
+  let canonical_href: string | null = null;
+  for (const m of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const name = (attr(m[0], "name") ?? "").toLowerCase();
+    if ((name === "robots" || name === "googlebot") && /noindex/i.test(attr(m[0], "content") ?? "")) noindex = true;
+  }
+  for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+    if ((attr(m[0], "rel") ?? "").toLowerCase().split(/\s+/).includes("canonical")) {
+      canonical_href = attr(m[0], "href")?.trim() || null;
+      break;
+    }
+  }
+
+  let mixed_content_count = 0;
+  if (url.startsWith("https://")) {
+    mixed_content_count += (html.match(/<(?:img|script|iframe|source|video|audio)\b[^>]*\ssrc\s*=\s*["']http:\/\//gi) ?? []).length;
+    for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+      if (/stylesheet/i.test(attr(m[0], "rel") ?? "") && /^http:\/\//i.test(attr(m[0], "href") ?? "")) mixed_content_count++;
+    }
+  }
+
+  const internal_link_urls: string[] = [];
+  try {
+    const host = stripWww(new URL(url).hostname);
+    const seen = new Set<string>();
+    for (const m of html.matchAll(/<a\b[^>]*>/gi)) {
+      const href = (attr(m[0], "href") ?? "").trim();
+      if (!href || /^(#|mailto:|tel:|sms:|javascript:|data:)/i.test(href)) continue;
+      let abs: URL;
+      try { abs = new URL(href, url); } catch { continue; }
+      if (!/^https?:$/.test(abs.protocol) || stripWww(abs.hostname) !== host) continue;
+      if (ASSET_EXT.test(abs.pathname)) continue;
+      abs.hash = "";
+      const key = abs.toString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      internal_link_urls.push(key);
+      if (internal_link_urls.length >= 100) break;
+    }
+  } catch { /* bad base url: no links */ }
+
+  return { noindex, canonical_href, mixed_content_count, internal_link_urls };
+}
+
 // ── On-page parse ─────────────────────────────────────────────────────────
 export function parseOnPage(html: string, url: string) {
   const low = html.toLowerCase();
@@ -267,7 +385,9 @@ export function parseOnPage(html: string, url: string) {
   const ldTypes = jsonLdTypes(html);
   const has_entity_schema = [...ldTypes].some((t) => t.includes("localbusiness") || t.includes("organization") || t.includes("professionalservice"));
   const has_faq_schema = [...ldTypes].some((t) => t.includes("faqpage"));
+  const crawl = parseCrawlHealth(html, url);
   return {
+    ...crawl,
     title, meta_description, h1_count, word_count,
     image_count: imgs.length, images_missing_alt,
     internal_links: internal, external_links: external,
@@ -294,7 +414,14 @@ export function parseOnPage(html: string, url: string) {
 // slow leg (~20-40s/page) and performance is largely site-wide, so we sample
 // it rather than run it on every page and blow the request timeout.
 export async function gatherPageSignals(url: string, withPageSpeed = true): Promise<PageSignals> {
-  const { html, via, status } = await fetchHtml(url);
+  const [{ html, via, status }, probe] = await Promise.all([fetchHtml(url), probeUrl(url)]);
+  const probeFields = {
+    probe_status: probe.error ? null : probe.status,
+    final_url: probe.final_url,
+    redirect_hops: probe.hops,
+    redirect_loop: probe.loop,
+    x_robots_tag: probe.x_robots_tag,
+  };
   if (!html) {
     return {
       url, reachable: false, fetched_via: via, status_code: status || null,
@@ -303,9 +430,11 @@ export async function gatherPageSignals(url: string, withPageSpeed = true): Prom
       has_canonical: false, has_schema: false, has_entity_schema: false, has_faq_schema: false, qa_pairs: [],
       has_open_graph: false,
       looks_like_empty_spa: false, text_sample: "", performance: null,
+      ...probeFields,
     };
   }
   const parsed = parseOnPage(html, url);
   const performance = withPageSpeed ? await getPageSpeed(url) : null;
-  return { url, reachable: true, fetched_via: via, status_code: status, ...parsed, performance };
+  const headerNoindex = /noindex/i.test(probe.x_robots_tag);
+  return { url, reachable: true, fetched_via: via, status_code: status, ...parsed, performance, ...probeFields, noindex: parsed.noindex || headerNoindex };
 }
