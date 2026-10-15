@@ -2,7 +2,7 @@
 // free website scan, so a "4" means the same thing in both and the free score is the same
 // measurement a client sees. Pure functions over PageSignals: no network, no LLM.
 import { CHECKS, type CheckDef, type SeoCategory, type Severity } from "./seoRubric.ts";
-import type { PageSignals } from "./seoSignals.ts";
+import { normalizeForCompare, type PageSignals } from "./seoSignals.ts";
 
 export interface Finding {
   id: string;
@@ -15,6 +15,8 @@ export interface Finding {
   plain_english: string;
   technical_detail: string;
   evidence: { source: string; value: unknown };
+  /** "site" = whole-site finding (identity and scoring don't depend on a single page). */
+  scope?: "site";
   impact: number;
   effort: number;
   wp_applyable: boolean;
@@ -35,6 +37,19 @@ export function mk(check: CheckDef, page: string, plain: string, technical: stri
 export function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">> {
   const out: Array<Omit<Finding, "id" | "status">> = [];
   const p = s.url;
+
+  // Definitive HTTP errors only. 401/403/429 are usually bot protection, not a
+  // broken page, so they fall through to the old "couldn't read it" handling.
+  const http = s.probe_status ?? s.status_code;
+  if (http === 404 || http === 410 || (http !== null && http >= 500 && http < 600)) {
+    const gone = http === 404 || http === 410;
+    out.push(mk(CHECKS.page_error, p,
+      gone
+        ? "This page shows a \"not found\" error. Visitors and Google can't see it, and any links or sitemap entries pointing here are wasted."
+        : "This page returns a server error. Visitors and Google can't load it.",
+      `HTTP ${http}.`, { status: http }));
+    return out;
+  }
 
   if (s.looks_like_empty_spa || (!s.reachable)) {
     out.push(mk(CHECKS.render_required, p,
@@ -59,6 +74,20 @@ export function runChecks(s: PageSignals): Array<Omit<Finding, "id" | "status">>
   // only e.g. BreadcrumbList schema still needs real entity markup.
   if (!s.has_entity_schema) out.push(mk(CHECKS.missing_schema, p, "Missing structured data that helps Google -- and AI answer engines like ChatGPT and Claude -- understand who you are.", "No Organization/LocalBusiness JSON-LD detected.", { has_entity_schema: false }, { type: "wp_schema_jsonld", payload: {}, expected_baseline: null }));
   if (!s.has_faq_schema && s.qa_pairs.length >= 2) out.push(mk(CHECKS.missing_faq_schema, p, "This page already answers real questions in its headings, but that's not marked up as FAQPage schema -- the exact format answer engines like ChatGPT and Perplexity look for to quote you directly.", `${s.qa_pairs.length} question-style heading(s) with answer text found, no FAQPage schema.`, { qa_count: s.qa_pairs.length }, { type: "wp_faq_jsonld", payload: {}, expected_baseline: null }));
+  if (s.noindex) out.push(mk(CHECKS.noindex_page, p, "This page tells Google not to list it. It will not appear in search results at all, whatever else is fixed.", `noindex found in ${/noindex/i.test(s.x_robots_tag ?? "") ? "the X-Robots-Tag header" : "a robots meta tag"}.`, { noindex: true, x_robots_tag: s.x_robots_tag ?? "" }));
+
+  if (s.canonical_href) {
+    const here = normalizeForCompare(s.final_url ?? s.url);
+    const there = normalizeForCompare(s.canonical_href, s.final_url ?? s.url);
+    if (here && there && here !== there) out.push(mk(CHECKS.canonical_mismatch, p, "This page names a different page as the \"real\" version, so Google may drop this one from results.", `Canonical points to ${s.canonical_href}.`, { canonical: s.canonical_href, page: s.final_url ?? s.url }));
+  }
+
+  if (s.redirect_loop || (s.redirect_hops ?? 0) >= 2) out.push(mk(CHECKS.redirect_chain, p,
+    s.redirect_loop ? "This address redirects in a loop and never loads." : "This address passes through several redirects before loading, which slows visitors and wastes Google's crawl.",
+    s.redirect_loop ? "Redirect loop." : `${s.redirect_hops} redirect hops to ${s.final_url}.`, { hops: s.redirect_hops, final_url: s.final_url, loop: !!s.redirect_loop }));
+
+  if ((s.mixed_content_count ?? 0) > 0) out.push(mk(CHECKS.mixed_content, p, `${s.mixed_content_count} file(s) on this secure page load over insecure http. Browsers may block them or show a warning.`, `${s.mixed_content_count} http:// subresource(s) on an https page.`, { count: s.mixed_content_count }));
+
   if (!s.has_viewport) out.push(mk(CHECKS.missing_viewport, p, "No mobile viewport tag — the page may not display well on phones.", "No viewport meta tag.", { has_viewport: false }));
   if (!s.has_open_graph) out.push(mk(CHECKS.missing_open_graph, p, "No Open Graph tags, so shared links look plain on social media.", "No og: tags.", { has_open_graph: false }));
 

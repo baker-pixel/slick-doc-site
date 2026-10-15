@@ -5,7 +5,12 @@
 // ranking is reproducible and debuggable. Bump RUBRIC_VERSION whenever these
 // anchors change; scores are only comparable within one version.
 
-export const RUBRIC_VERSION = "seo-rubric.v1";
+// v2: a category with no checks in the catalog (off_page today) is "not measured"
+// (null) instead of scoring a free 100 on every page. v1 scores ran ~10% high.
+// v3: crawl-health checks (status, noindex, canonical, redirects, mixed content,
+// sitemap, HTTPS, host variants, broken links, duplicate titles/meta). Site-wide
+// checks (scope: "site") deduct once from their category instead of per page.
+export const RUBRIC_VERSION = "seo-rubric.v3";
 
 export type SeoCategory = "technical" | "on_page" | "performance" | "content" | "off_page";
 export type Severity = "critical" | "warning" | "good";
@@ -18,6 +23,8 @@ export interface CheckDef {
   impact: 1 | 2 | 3 | 4 | 5;   // how much fixing it moves the needle
   effort: 1 | 2 | 3 | 4 | 5;   // how hard the fix is (1 = trivial)
   wp_applyable: boolean;        // can the WordPress plugin apply it?
+  /** "site" = one finding for the whole site; deducts once from its category, not per page. */
+  scope?: "site";
   /** Maps to apply-fix-to-wordpress field types when wp_applyable. */
   fixType?: string;
 }
@@ -44,6 +51,19 @@ export const CHECKS: Record<string, CheckDef> = {
   perf_lcp:             { id: "perf_lcp", category: "performance", title: "Slow largest contentful paint (LCP)", severity: "critical", impact: 4, effort: 4, wp_applyable: false },
   perf_cls:             { id: "perf_cls", category: "performance", title: "High layout shift (CLS)", severity: "warning", impact: 3, effort: 3, wp_applyable: false },
   perf_not_measured:    { id: "perf_not_measured", category: "performance", title: "Performance not measured", severity: "warning", impact: 1, effort: 1, wp_applyable: false },
+  // ── Crawl health (v3). Deterministic; fixes are manual, so none are wp_applyable. ──
+  page_error:           { id: "page_error", category: "technical", title: "Page returns an error", severity: "critical", impact: 5, effort: 3, wp_applyable: false },
+  noindex_page:         { id: "noindex_page", category: "technical", title: "Page is blocked from Google (noindex)", severity: "critical", impact: 5, effort: 1, wp_applyable: false },
+  canonical_mismatch:   { id: "canonical_mismatch", category: "technical", title: "Canonical points to a different page", severity: "warning", impact: 3, effort: 2, wp_applyable: false },
+  redirect_chain:       { id: "redirect_chain", category: "technical", title: "Redirect chain or loop", severity: "warning", impact: 2, effort: 2, wp_applyable: false },
+  mixed_content:        { id: "mixed_content", category: "technical", title: "Insecure (http) files on a secure page", severity: "warning", impact: 3, effort: 2, wp_applyable: false },
+  http_not_redirected:  { id: "http_not_redirected", category: "technical", title: "Site does not force HTTPS", severity: "critical", impact: 4, effort: 2, wp_applyable: false, scope: "site" },
+  host_split:           { id: "host_split", category: "technical", title: "www and non-www both load as separate sites", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
+  sitemap_missing:      { id: "sitemap_missing", category: "technical", title: "No XML sitemap found", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
+  sitemap_bad_urls:     { id: "sitemap_bad_urls", category: "technical", title: "Sitemap lists pages Google can't use", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
+  broken_internal_links:{ id: "broken_internal_links", category: "technical", title: "Broken internal links", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
+  duplicate_titles:     { id: "duplicate_titles", category: "on_page", title: "Several pages share the same title", severity: "warning", impact: 3, effort: 2, wp_applyable: false, scope: "site" },
+  duplicate_meta:       { id: "duplicate_meta", category: "on_page", title: "Several pages share the same meta description", severity: "warning", impact: 2, effort: 2, wp_applyable: false, scope: "site" },
   render_required:      { id: "render_required", category: "technical", title: "Page needs JavaScript to render", severity: "warning", impact: 3, effort: 3, wp_applyable: false },
 };
 
@@ -58,7 +78,7 @@ const CATEGORY_WEIGHT: Record<SeoCategory, number> = {
 // a coverage gap, not a defect. They surface as findings, not as a low score.
 const INFORMATIONAL = new Set(["perf_not_measured", "render_required"]);
 
-export interface ScorableFinding { category: SeoCategory; severity: Severity; check_id: string; page: string; }
+export interface ScorableFinding { category: SeoCategory; severity: Severity; check_id: string; page: string; site?: boolean; }
 
 export function computeScores(
   findings: ScorableFinding[],
@@ -67,8 +87,13 @@ export function computeScores(
   const cats = Object.keys(CATEGORY_WEIGHT) as SeoCategory[];
   const pages = opts.pages.length ? opts.pages : [...new Set(findings.map((f) => f.page))];
 
+  // Only categories the catalog can actually flag are scored. A category with
+  // no checks would otherwise read 100 for every page and inflate the total.
+  const measurable = new Set(Object.values(CHECKS).map((c) => c.category));
+
   const subscores = {} as Record<SeoCategory, number | null>;
   for (const cat of cats) {
+    if (!measurable.has(cat)) { subscores[cat] = null; continue; }
     // Performance is sampled, not run on every page -- average it ONLY over
     // the pages actually measured, so a genuinely slow site isn't diluted by
     // pages we never tested. No measured pages = "not measured" (null).
@@ -77,11 +102,17 @@ export function computeScores(
     let total = 0;
     for (const page of scope) {
       const deduction = findings
-        .filter((f) => f.category === cat && f.page === page && !INFORMATIONAL.has(f.check_id))
+        .filter((f) => !f.site && f.category === cat && f.page === page && !INFORMATIONAL.has(f.check_id))
         .reduce((sum, f) => sum + SEVERITY_DEDUCTION[f.severity], 0);
       total += Math.max(0, 100 - deduction);
     }
-    subscores[cat] = Math.round(total / scope.length);
+    // Site-wide findings (sitemap, HTTPS, broken links...) hit the whole site
+    // once, so they come off the category after the per-page average rather
+    // than being diluted across pages.
+    const siteDeduction = findings
+      .filter((f) => f.site && f.category === cat && !INFORMATIONAL.has(f.check_id))
+      .reduce((sum, f) => sum + SEVERITY_DEDUCTION[f.severity], 0);
+    subscores[cat] = Math.max(0, Math.round(total / scope.length) - siteDeduction);
   }
 
   // Overall = weighted blend over MEASURED categories only, renormalized so a

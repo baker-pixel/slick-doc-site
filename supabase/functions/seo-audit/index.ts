@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { callAI } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
+import { gatherSiteHealth, runSiteChecks } from "../_shared/crawlHealth.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
 import { runChecks, mk, type Finding } from "../_shared/seoChecks.ts";
 import { upsertSeoProject } from "../_shared/seoProject.ts";
@@ -74,9 +75,11 @@ serve(async (req) => {
     };
 
     // ── Discover (robots-aware, bounded) ──
-    const { pages } = await discoverPages(client.website_url, crawlCap);
+    const { pages, robots_blocked } = await discoverPages(client.website_url, crawlCap);
     if (pages.length === 0) {
-      return await saveInconclusive("Site could not be crawled (unreachable, blocked, or robots-disallowed).");
+      return await saveInconclusive(robots_blocked
+        ? "robots.txt disallows crawling the site, so no pages could be audited. If this is unintended, Google can't crawl it either."
+        : "Site could not be crawled (unreachable, blocked, or robots-disallowed).");
     }
 
     // ── Gather signals (parallel; PageSpeed sampled, not per-page) ──
@@ -116,9 +119,19 @@ serve(async (req) => {
         "PageSpeed data unavailable (no API key, API disabled, or request error).",
         { performance: null }));
     }
+    // Site-wide crawl health (HTTPS, www split, sitemap, broken links, duplicate
+    // titles). Best-effort and time-boxed: a failure here must not fail the audit.
+    try {
+      const origin = new URL(client.website_url).origin;
+      raw.push(...runSiteChecks(await gatherSiteHealth(origin, signals), signals));
+    } catch (e) {
+      console.error("site crawl-health failed:", e instanceof Error ? e.message : e);
+    }
+    const siteOrigin = (() => { try { return new URL(client.website_url).origin; } catch { return ""; } })();
     const findings: Finding[] = [];
     for (const f of raw) {
-      findings.push({ ...f, id: await findingId(f.check_id, f.pages[0]), status: "open" });
+      // Site-wide findings keep one identity per site, however many pages they list.
+      findings.push({ ...f, id: await findingId(f.check_id, f.scope === "site" ? siteOrigin : f.pages[0]), status: "open" });
     }
 
     // ── Schema JSON-LD fix payload (deterministic, no LLM) ──
@@ -240,7 +253,7 @@ serve(async (req) => {
 
     // ── Score against the rubric (per-page average; renormalized) ──
     const { overall_score, subscores } = computeScores(
-      findings.map((f) => ({ category: f.category, severity: f.severity, check_id: f.check_id, page: f.pages[0] })),
+      findings.map((f) => ({ category: f.category, severity: f.severity, check_id: f.check_id, page: f.pages[0], site: f.scope === "site" })),
       {
         pages: signals.filter((s) => s.reachable).map((s) => s.url),
         performancePages: signals.filter((s) => s.performance !== null).map((s) => s.url),
