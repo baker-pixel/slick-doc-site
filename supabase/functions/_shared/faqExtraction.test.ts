@@ -66,3 +66,9 @@ Deno.test("FAQ JSON-LD built from extracted pairs contains no entities, forms or
   assertEquals(json.includes("&#"), false);
   assertEquals(json.includes("What’s in it"), true);
 });
+
+Deno.test("an answer that only introduces a list is skipped; a self-contained answer is kept", () => {
+  const intro = "(Excerpts taken from the book The Profitable Consultant.) Here are the top 6 tips to building a large and loyal following of readers of your blog. These are in the order in which you should complete them: Write your first five Lead Articles";
+  assertEquals(qa(`<h2>What can I do to grow my Tribe through blogging?</h2><p>${intro}</p><h2>Next?</h2><p>x</p>`), []);
+  assertEquals(qa(`<h2>How long does onboarding take for a new client?</h2><p>${LONG}</p>`).length, 1);
+});

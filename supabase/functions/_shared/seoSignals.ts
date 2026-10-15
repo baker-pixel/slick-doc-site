@@ -307,6 +307,15 @@ const CTA_HEADING = /^(have|got|any|still have)\b.*\bquestions?\b|\b(contact us|
 // An "answer" made only of form labels is a form, not an answer.
 const FORM_LABELS = /^(?:(?:first|last|full)?\s*name|e-?mail(?: address)?|phone(?: number)?|message|comments?|subject|company|submit|send|your \w+|required|\*|\s)+$/i;
 
+// An answer whose last sentence announces a list ("Here are the top 6 tips...") is only an
+// intro: the list it promises sits outside the extracted text, so marking it up would publish
+// an answer that answers nothing.
+const LEAD_IN = /\b(here are|here's|here is|the following|as follows|these are|listed below|below)\b/i;
+function endsWithLeadIn(text: string): boolean {
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+  return LEAD_IN.test(sentences[sentences.length - 1] ?? "");
+}
+
 /** Cut at a sentence end when there is one in range, else at a word, so answers never end mid-word. */
 function trimAnswer(text: string, max = 400): string {
   if (text.length <= max) return text;
@@ -338,7 +347,9 @@ function extractQaPairs(html: string): { question: string; answer: string }[] {
       .replace(/<input\b[^>]*>/gi, " ");
     const answer = toText(slice);
     if (answer.length < 40 || answer.split(" ").length < 6 || FORM_LABELS.test(answer)) continue; // a bare heading or a form, don't fabricate an answer
-    pairs.push({ question, answer: trimAnswer(answer) });
+    const trimmed = trimAnswer(answer);
+    if (endsWithLeadIn(trimmed)) continue; // an intro to a list we did not capture, not an answer
+    pairs.push({ question, answer: trimmed });
   }
   return pairs;
 }

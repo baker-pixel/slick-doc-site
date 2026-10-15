@@ -4,7 +4,7 @@ import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { callAI } from "../_shared/ai.ts";
 import { discoverPages, gatherPageSignals, type PageSignals } from "../_shared/seoSignals.ts";
 import { gatherSiteHealth, runSiteChecks } from "../_shared/crawlHealth.ts";
-import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, tooSimilar, type CopyKind } from "../_shared/seoCopy.ts";
+import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, stockOpener, tooSimilar, type CopyKind } from "../_shared/seoCopy.ts";
 import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
 import { runChecks, mk, type Finding } from "../_shared/seoChecks.ts";
 import { upsertSeoProject } from "../_shared/seoProject.ts";
@@ -262,6 +262,14 @@ serve(async (req) => {
           if (!verdict.ok) { v = await draftOnce(f, { feedback: verdict.reason }); verdict = checkDraft(kind, v); }
           // Still over the limit after a retry: cut cleanly rather than ship something Google truncates.
           if (!verdict.ok && v.length > LIMITS[kind].max) { v = fitToLength(kind, v); verdict = checkDraft(kind, v); }
+          // Valid but formulaic ("Discover...", "Explore..."): one retry, keep whichever is valid and fresher.
+          if (verdict.ok) {
+            const soft = stockOpener(v);
+            if (soft) {
+              const v2 = await draftOnce(f, { feedback: soft });
+              if (checkDraft(kind, v2).ok && !stockOpener(v2)) v = v2;
+            }
+          }
           if (verdict.ok) drafts.set(f.id, v);
           else console.error(`[seo-audit] rejected rewrite for ${f.id} (${f.fix!.type}): ${verdict.reason}: "${v.slice(0, 120)}"`);
         } catch (e) { console.error("rewrite failed", f.id, e); }

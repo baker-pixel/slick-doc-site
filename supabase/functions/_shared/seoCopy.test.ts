@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, similarity, tooSimilar } from "./seoCopy.ts";
+import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, similarity, stockOpener, tooSimilar } from "./seoCopy.ts";
 import { contentSample, parseOnPage } from "./seoSignals.ts";
 
 // Real drafts from the Innermetrix audit that all said the same thing, plus two page-specific ones.
@@ -77,4 +77,12 @@ Deno.test("content sample reads the article, not the site chrome; h1 text is cap
   assertEquals(c.includes("Don’t guess"), true);
   assertEquals(/Home About|Copyright|Site Logo/.test(c), false);
   assertEquals(parseOnPage(html, "https://a.test/").h1_text, "Site Logo");
+});
+
+Deno.test("stock openers are a soft issue; topic-first openings pass", () => {
+  assertEquals(stockOpener("Discover how value-based fees can boost your profits") !== null, true);
+  assertEquals(stockOpener("Explore the four business structures") !== null, true);
+  assertEquals(stockOpener("Work out your true hourly base rate from target income and billable hours."), null);
+  assertEquals(stockOpener("Consulting proposals should confirm what was agreed, not reopen it."), null);
+  assertStringIncludes(buildCopySystem("meta", { business: "X", tone: "" }), "Do not open with Discover");
 });
