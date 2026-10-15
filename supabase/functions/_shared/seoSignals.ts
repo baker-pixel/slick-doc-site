@@ -51,6 +51,10 @@ export interface PageSignals {
   mixed_content_count?: number;
   /** Same-site link targets found on the page, absolute, no hash, capped. */
   internal_link_urls?: string[];
+  /** First H1's text, decoded. */
+  h1_text?: string;
+  /** Page body text without nav/header/footer/forms (prefers <main>/<article>) -- what the page is actually about. */
+  content_sample?: string;
 }
 
 export interface PageSpeed {
@@ -402,6 +406,15 @@ export function parseCrawlHealth(html: string, url: string) {
   return { noindex, canonical_href, mixed_content_count, internal_link_urls };
 }
 
+/** The page's own content: <main>/<article> if present, else the body minus site chrome. */
+export function contentSample(html: string, max = 1200): string {
+  const strip = (h: string) => h
+    .replace(/<(script|style|noscript|nav|header|footer|aside|form|svg|iframe)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ");
+  const region = html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ?? html.match(/<article\b[\s\S]*?<\/article>/i)?.[0] ?? html.match(/<body\b[\s\S]*<\/body>/i)?.[0] ?? html;
+  return decodeEntities(strip(region).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, max);
+}
+
 // ── On-page parse ─────────────────────────────────────────────────────────
 export function parseOnPage(html: string, url: string) {
   const low = html.toLowerCase();
@@ -425,8 +438,11 @@ export function parseOnPage(html: string, url: string) {
   const has_entity_schema = [...ldTypes].some((t) => t.includes("localbusiness") || t.includes("organization") || t.includes("professionalservice"));
   const has_faq_schema = [...ldTypes].some((t) => t.includes("faqpage"));
   const crawl = parseCrawlHealth(html, url);
+  const h1_text = toText(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "").slice(0, 200);
   return {
     ...crawl,
+    h1_text,
+    content_sample: contentSample(html),
     title, meta_description, h1_count, word_count,
     image_count: imgs.length, images_missing_alt,
     internal_links: internal, external_links: external,
