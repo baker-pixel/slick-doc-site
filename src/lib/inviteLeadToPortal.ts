@@ -71,7 +71,7 @@ export async function inviteLeadToPortal(
     if (!createResult?.data) throw new Error("Client account was not created");
     clientId = createResult.data.id;
 
-    // 2b. Seed workflow + client_onboarding + kick off project generation
+    // 2b. Seed workflow + client_onboarding
     try {
       await supabase.functions.invoke("seed-tier-workflow", {
         body: { client_id: clientId, tier, password: adminPassword },
@@ -80,15 +80,14 @@ export async function inviteLeadToPortal(
       console.error("Failed to seed workflow:", wfErr);
     }
 
-    // Fallback: generate projects from browser in case edge-to-edge call failed
-    supabase.functions
-      .invoke("generate-client-projects", {
-        body: { clientAccountId: clientId, returnOnly: false, password: adminPassword },
-      })
-      .catch((err: unknown) => console.error("Auto project generation failed:", err));
-
-    // Brand extraction is handled inside seed-tier-workflow (background fetch)
-    // -- no separate call here to avoid duplicate assets.
+    // No project generation here. The three engine projects (SEO Action Plan,
+    // Social Media Plan, Lead Generation Plan) are created by
+    // bootstrap_client_projects when onboarding completes. LLM "custom"
+    // projects are admin-triggered only (ProjectSetupWizard) -- generating
+    // them at invite time ran before we knew anything about the business and
+    // produced generic, already-"in_progress" projects duplicating the engine
+    // ones.
+    // Brand extraction is the onboarding workflow's step 2 (run-automation).
   }
 
   // 3. Create invitation via admin API
