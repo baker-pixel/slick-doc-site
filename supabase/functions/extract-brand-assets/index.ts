@@ -605,28 +605,43 @@ serve(async (req) => {
       return json({ error: "Invalid website URL" }, 422);
     }
 
-    let html: string;
+    let html = "";
     let rendered: RenderedSignals | null;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15_000);
+    let staticStatus: string | null = null;
+    {
       // Static fetch (fallback source + AI-voice text if render fails) and the
-      // headless-render call run concurrently — neither depends on the other,
+      // headless-render call run concurrently -- neither depends on the other,
       // and the render service already re-validates SSRF on its own side.
-      const [res, renderResult] = await Promise.all([
-        fetch(targetUrl, {
-          signal: controller.signal,
-          headers: { "User-Agent": "Mozilla/5.0 OrangeDoor-BrandBot/1.0", Accept: "text/html" },
-        }),
-        callRenderService(targetUrl),
-      ]);
-      clearTimeout(timeout);
-      if (!res.ok) return json({ error: `Could not fetch website (HTTP ${res.status})` }, 422);
-      html = await res.text();
+      // The static fetch is best-effort when the renderer succeeds: a slow or
+      // bot-blocking origin used to 422 the whole extraction (Truzon Solar:
+      // "Website took too long to respond" -> zero assets, client never told)
+      // even though the rendered signals were fine. One retry with a longer
+      // timeout before giving up.
+      const fetchStatic = async (): Promise<void> => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 25_000);
+          try {
+            const res = await fetch(targetUrl, {
+              signal: controller.signal,
+              headers: { "User-Agent": "Mozilla/5.0 OrangeDoor-BrandBot/1.0", Accept: "text/html" },
+            });
+            if (!res.ok) { staticStatus = `Could not fetch website (HTTP ${res.status})`; return; }
+            html = await res.text();
+            staticStatus = null;
+            return;
+          } catch (e: any) {
+            staticStatus = e?.name === "AbortError"
+              ? "Website took too long to respond"
+              : `Could not reach website: ${e?.message}`;
+          } finally {
+            clearTimeout(timeout);
+          }
+        }
+      };
+      const [, renderResult] = await Promise.all([fetchStatic(), callRenderService(targetUrl)]);
       rendered = renderResult;
-    } catch (e: any) {
-      if (e?.name === "AbortError") return json({ error: "Website took too long to respond" }, 422);
-      return json({ error: `Could not reach website: ${e?.message}` }, 422);
+      if (!html && !rendered) return json({ error: staticStatus ?? "Could not fetch website" }, 422);
     }
 
     // Fetch context_profile for brand voice extraction

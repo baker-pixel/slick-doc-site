@@ -95,6 +95,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   client_oauth: "Connect your social media accounts so we can post on your behalf",
   client_calendar: "Book your kickoff call to align on strategy and goals",
   client_approval: "Review and approve your first piece of content",
+  brand_extraction: "We're pulling your logo, colours and fonts from your website — this usually takes a minute or two",
   website_analysis: "We're reviewing your website for opportunities",
   seo_audit: "We're analysing how you rank on Google",
   gap_report: "We're building your personalised marketing plan",
@@ -151,7 +152,7 @@ const CTA_CONFIG: Record<string, { label: string; icon: React.ComponentType<{ cl
 };
 
 function getStepDescription(step: WorkflowStep): string {
-  return STEP_DESCRIPTIONS[step.task_type] || "Your team is working on this step";
+  return STEP_DESCRIPTIONS[step.task_type] || "Our team is working on this step";
 }
 
 function formatDatePlain(dateStr: string | null): string | null {
@@ -1070,7 +1071,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
           </div>
           <Progress value={0} className="h-3" />
           <p className="text-sm text-muted-foreground">
-            Your step-by-step plan is being configured by your team. Check back shortly.
+            Your step-by-step plan is being configured by our team. Check back shortly.
           </p>
         </div>
 
@@ -1092,7 +1093,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
           <CardContent className="p-4 flex items-start gap-3">
             <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
             <p className="text-sm text-foreground">
-              Your team is setting up your custom marketing roadmap. You'll receive an email once everything is ready to go.
+              Our team is setting up your custom marketing roadmap. You'll receive an email once everything is ready to go.
             </p>
           </CardContent>
         </Card>
@@ -1202,7 +1203,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
                 ? currentStep.task_type.startsWith("client_")
                   ? `${currentStep.step_name} — Step ${clientStepsDone + 1} of ${clientStepsTotal}`
                   : onboardingComplete
-                    ? `Your team is working on: ${currentStep.step_name}`
+                    ? `Our team is working on: ${currentStep.step_name}`
                     : currentStep.step_name
                 : wfAllDone
                   ? "All steps complete! 🎉"
@@ -1338,7 +1339,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {getStepDescription(step)}
                   </p>
-                  {state === "failed" && <p className="text-xs text-destructive mt-0.5">Something went wrong — your team has been notified</p>}
+                  {state === "failed" && <p className="text-xs text-destructive mt-0.5">Something went wrong — our team has been notified</p>}
                   {state === "in_progress" && <p className="text-xs text-amber-600 mt-0.5">In progress…</p>}
 
                   {/* CTA button for client steps that are current/available */}
@@ -1406,7 +1407,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
                 <p className="text-foreground">
                   {currentStep.task_type.startsWith("client_")
                     ? <>Complete this step to unlock the next: <span className="font-semibold">{currentStep.step_name}</span></>
-                    : <>Your team is currently working on: <span className="font-semibold">{currentStep.step_name}</span></>
+                    : <>Our team is currently working on: <span className="font-semibold">{currentStep.step_name}</span></>
                   }
                 </p>
               </div>
@@ -1467,7 +1468,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
           )}
           <p className="text-xs text-primary font-medium flex items-center gap-1 pt-1">
             <ArrowRight className="h-3 w-3" />
-            Your team is working on this
+            Our team is working on this
           </p>
         </div>
       )}
@@ -1514,7 +1515,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
                   {task.name}
                 </p>
                 {isRunning && <p className="text-xs text-primary mt-0.5">Running...</p>}
-                {isFailed && <p className="text-xs text-destructive mt-0.5">Failed — your team has been notified</p>}
+                {isFailed && <p className="text-xs text-destructive mt-0.5">Failed — our team has been notified</p>}
               </div>
               <span className="text-xs text-muted-foreground tabular-nums pt-0.5">
                 {i + 1}

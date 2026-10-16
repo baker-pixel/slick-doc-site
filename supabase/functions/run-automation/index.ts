@@ -34,6 +34,7 @@ import { optimizeCrmPipeline } from "./handlers/optimize-crm-pipeline.ts";
 import { createFullAnalyticsSuite } from "./handlers/create-full-analytics-suite.ts";
 import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { notifyClientBlocked } from "../_shared/clientAlerts.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -227,8 +228,7 @@ serve(async (req) => {
           });
           if (res.ok) {
             result = await res.json();
-            break;
-          }
+          } else {
           const text = await res.text();
           result = { skipped: res.status === 422 ? "scrape_failed" : "extractor_error", status: res.status, detail: text.slice(0, 500) };
           // 422 is expected (site can't be scraped); anything else is ours to look at.
@@ -243,9 +243,30 @@ serve(async (req) => {
               source_id: clientId,
             }).then(undefined, () => {});
           }
+          }
         } catch (extractErr) {
           console.error(`extract-brand-assets threw for ${clientId}; skipping step`, extractErr);
           result = { skipped: "extractor_unreachable", detail: extractErr instanceof Error ? extractErr.message : String(extractErr) };
+        }
+        // Tell the client the outcome either way -- the next step ("Verify
+        // Brand Assets") is theirs, and before this they were never told
+        // extraction had finished or that it found nothing (Truzon Solar sat
+        // on an empty Brand Assets tab with no explanation).
+        {
+          const found = Array.isArray((result as any)?.assets) ? (result as any).assets.length : 0;
+          await notifyClientBlocked(supabase, clientId, found > 0
+            ? {
+                notificationType: "brand_assets_ready",
+                title: "Your brand assets are ready to review",
+                description: `We found ${found} brand asset${found !== 1 ? "s" : ""} on your website (logos, colours, fonts and voice). Open Brand Assets in your portal and pick the ones that are right for you.`,
+                dedupeHours: 1,
+              }
+            : {
+                notificationType: "brand_assets_none",
+                title: "Please add your brand assets",
+                description: "We couldn't automatically pull your logo and colours from your website. Open Brand Assets in your portal and upload your logo so we can keep going.",
+                dedupeHours: 1,
+              }).catch((e: unknown) => console.error("brand extraction notify failed:", e));
         }
         break;
       }

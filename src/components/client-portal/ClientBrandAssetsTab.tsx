@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,46 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
   useEffect(() => {
     fetchAssets();
   }, [clientAccountId]);
+
+  // Status of the automatic "Extract brand assets from website" step, so this
+  // tab can say "extracting…" instead of showing an empty state while the
+  // extractor is still running, and refresh itself the moment it finishes.
+  const { data: extractionStatus } = useQuery({
+    queryKey: ["brand-extraction-status", clientAccountId],
+    queryFn: async (): Promise<string | null> => {
+      const { data: wf } = await supabase
+        .from("client_workflows")
+        .select("id")
+        .eq("client_id", clientAccountId)
+        .in("status", ["active", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!wf) return null;
+      const { data: step } = await supabase
+        .from("workflow_steps")
+        .select("status")
+        .eq("workflow_id", wf.id)
+        .eq("task_type", "brand_extraction")
+        .maybeSingle();
+      return step?.status ?? null;
+    },
+    refetchInterval: (q) => (q.state.data === "in_progress" || q.state.data === "running" ? 4000 : false),
+  });
+  const extracting = extractionStatus === "in_progress" || extractionStatus === "running";
+
+  const prevExtracting = useRef(false);
+  useEffect(() => {
+    // Extraction just finished (or is still running): pull in the new candidates.
+    if (prevExtracting.current && !extracting) {
+      fetchAssets();
+      queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+    }
+    prevExtracting.current = extracting;
+    if (!extracting) return;
+    const t = setInterval(fetchAssets, 4000);
+    return () => clearInterval(t);
+  }, [extracting]);
 
   const fetchAssets = async () => {
     try {
@@ -414,6 +454,19 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
         </Card>
       )}
 
+      {/* Extraction status -- one consistent message while it runs */}
+      {extracting && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-center gap-3">
+          <Loader2 className="h-5 w-5 text-amber-500 animate-spin shrink-0" />
+          <div>
+            <p className="font-medium text-sm">Extracting your brand assets…</p>
+            <p className="text-xs text-muted-foreground">
+              Our team is pulling your logo, colours, fonts and voice from your website. This usually takes a minute or two — we'll notify you when they're ready to review.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Pending confirmation */}
       {pendingAssets.length > 0 && (
         <div className="rounded-xl border bg-card p-4 space-y-3">
@@ -529,14 +582,16 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
       )}
 
       {/* Empty state */}
-      {assets.length === 0 && (
+      {assets.length === 0 && !extracting && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
             <Palette className="h-12 w-12 text-muted-foreground" />
             <div className="text-center">
               <h3 className="font-medium mb-1">No brand assets yet</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Upload your logo, brand colors, fonts, and guidelines.
+                {extractionStatus === "completed"
+                  ? "We couldn't automatically detect your brand from your website. Please upload your logo, brand colors, fonts, and guidelines."
+                  : "Upload your logo, brand colors, fonts, and guidelines."}
               </p>
             </div>
             <Button onClick={() => setUploadDialogOpen(true)}>
