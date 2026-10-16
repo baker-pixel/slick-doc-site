@@ -83,46 +83,6 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
     fetchAssets();
   }, [clientAccountId]);
 
-  // Status of the automatic "Extract brand assets from website" step, so this
-  // tab can say "extracting…" instead of showing an empty state while the
-  // extractor is still running, and refresh itself the moment it finishes.
-  const { data: extractionStatus } = useQuery({
-    queryKey: ["brand-extraction-status", clientAccountId],
-    queryFn: async (): Promise<string | null> => {
-      const { data: wf } = await supabase
-        .from("client_workflows")
-        .select("id")
-        .eq("client_id", clientAccountId)
-        .in("status", ["active", "completed"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!wf) return null;
-      const { data: step } = await supabase
-        .from("workflow_steps")
-        .select("status")
-        .eq("workflow_id", wf.id)
-        .eq("task_type", "brand_extraction")
-        .maybeSingle();
-      return step?.status ?? null;
-    },
-    refetchInterval: (q) => (q.state.data === "in_progress" || q.state.data === "running" ? 4000 : false),
-  });
-  const extracting = extractionStatus === "in_progress" || extractionStatus === "running";
-
-  const prevExtracting = useRef(false);
-  useEffect(() => {
-    // Extraction just finished (or is still running): pull in the new candidates.
-    if (prevExtracting.current && !extracting) {
-      fetchAssets();
-      queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
-    }
-    prevExtracting.current = extracting;
-    if (!extracting) return;
-    const t = setInterval(fetchAssets, 4000);
-    return () => clearInterval(t);
-  }, [extracting]);
-
   const fetchAssets = async () => {
     try {
       const { data, error } = await supabase
@@ -155,6 +115,76 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
       console.error("Error fetching brand assets:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Latest extraction run (brand_extraction_runs is the single source of
+  // truth -- the workflow step is marked completed even when extraction found
+  // nothing, so it can't say whether we're running / done / failed).
+  const STALE_RUN_MS = 6 * 60_000;
+  const { data: latestRun } = useQuery({
+    queryKey: ["brand-extraction-run", clientAccountId],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("brand_extraction_runs")
+        .select("id, status, assets_found, error, started_at, finished_at")
+        .eq("client_account_id", clientAccountId)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as { id: string; status: string; assets_found: number; error: string | null; started_at: string; finished_at: string | null } | null;
+    },
+    refetchInterval: (q) => (q.state.data?.status === "running" ? 4000 : false),
+  });
+  const runStale = latestRun?.status === "running" && Date.now() - new Date(latestRun.started_at).getTime() > STALE_RUN_MS;
+  const extracting = latestRun?.status === "running" && !runStale;
+  const extractionFailed = latestRun?.status === "failed" || runStale;
+  const [rescanning, setRescanning] = useState(false);
+
+  const prevExtracting = useRef(false);
+  useEffect(() => {
+    // Extraction just finished: pull in the new candidates and unlock the next step.
+    if (prevExtracting.current && !extracting) {
+      fetchAssets();
+      queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
+    }
+    prevExtracting.current = extracting;
+    if (!extracting) return;
+    const t = setInterval(fetchAssets, 4000);
+    return () => clearInterval(t);
+  }, [extracting]);
+
+  const handleRescan = async () => {
+    setRescanning(true);
+    try {
+      const { data: client } = await supabase
+        .from("client_accounts")
+        .select("website_url")
+        .eq("id", clientAccountId)
+        .maybeSingle();
+      if (!client?.website_url) {
+        toast({ title: "No website on file", description: "Add your website URL in Settings first.", variant: "destructive" });
+        return;
+      }
+      // Default strategy first, then the fallback one if the site blocked/stalled us.
+      let res = await supabase.functions.invoke("extract-brand-assets", {
+        body: { client_account_id: clientAccountId, website_url: client.website_url, trigger: "client" },
+      });
+      if (res.error || res.data?.error) {
+        res = await supabase.functions.invoke("extract-brand-assets", {
+          body: { client_account_id: clientAccountId, website_url: client.website_url, trigger: "client", mode: "fallback" },
+        });
+      }
+      if (res.error || res.data?.error) {
+        const msg = await getEdgeErrorMessage(res.error, res.data);
+        toast({ title: "Still couldn't read your website", description: msg ? friendlyEdgeMessage(msg) : "Please upload your assets instead.", variant: "destructive" });
+      } else {
+        toast({ title: "Scan complete", description: res.data?.message });
+      }
+    } finally {
+      setRescanning(false);
+      queryClient.invalidateQueries({ queryKey: ["brand-extraction-run", clientAccountId] });
+      fetchAssets();
     }
   };
 
@@ -467,6 +497,20 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
         </div>
       )}
 
+      {extractionFailed && !extracting && assets.length === 0 && (
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 flex flex-wrap items-center gap-3">
+          <Info className="h-5 w-5 text-destructive shrink-0" />
+          <div className="flex-1 min-w-[220px]">
+            <p className="font-medium text-sm">We couldn't read your website automatically</p>
+            <p className="text-xs text-muted-foreground">You can try again, or upload your logo and colours yourself — either works.</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={handleRescan} disabled={rescanning}>
+            {rescanning && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Try again
+          </Button>
+        </div>
+      )}
+
       {/* Pending confirmation */}
       {pendingAssets.length > 0 && (
         <div className="rounded-xl border bg-card p-4 space-y-3">
@@ -589,7 +633,7 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
             <div className="text-center">
               <h3 className="font-medium mb-1">No brand assets yet</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {extractionStatus === "completed"
+                {latestRun && !extracting
                   ? "We couldn't automatically detect your brand from your website. Please upload your logo, brand colors, fonts, and guidelines."
                   : "Upload your logo, brand colors, fonts, and guidelines."}
               </p>
