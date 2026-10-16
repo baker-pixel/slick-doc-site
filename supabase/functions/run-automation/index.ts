@@ -34,6 +34,7 @@ import { optimizeCrmPipeline } from "./handlers/optimize-crm-pipeline.ts";
 import { createFullAnalyticsSuite } from "./handlers/create-full-analytics-suite.ts";
 import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { notifyClientBlocked } from "../_shared/clientAlerts.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -216,36 +217,92 @@ serve(async (req) => {
         // extractor, or a network error) skips the step instead of failing it.
         // Failing it left steps 3-5 locked behind a step the client can't see
         // or retry, i.e. a client silently stuck on day one.
-        try {
-          const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/extract-brand-assets`, {
+        // Up to 2 attempts: default strategy, then "fallback" (browser UA +
+        // alternate www host) for sites that tarpit/block the bot UA or our
+        // datacenter egress. A 409 means a run is already in flight (queue
+        // redelivery / client clicked re-scan) -- wait for it instead of
+        // racing it or reporting a false "found nothing".
+        const callExtractor = (mode: "default" | "fallback") =>
+          fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/extract-brand-assets`, {
             method: "POST",
             headers: {
               Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ client_account_id: clientId, website_url: client.website_url }),
+            body: JSON.stringify({ client_account_id: clientId, website_url: client.website_url, mode, trigger: "onboarding" }),
           });
-          if (res.ok) {
-            result = await res.json();
-            break;
+        const waitForActiveRun = async (): Promise<boolean> => {
+          for (let i = 0; i < 24; i++) {
+            await new Promise((r) => setTimeout(r, 5000));
+            const { data: active } = await supabase
+              .from("brand_extraction_runs")
+              .select("id")
+              .eq("client_account_id", clientId)
+              .eq("status", "running")
+              .maybeSingle();
+            if (!active) return true;
           }
-          const text = await res.text();
-          result = { skipped: res.status === 422 ? "scrape_failed" : "extractor_error", status: res.status, detail: text.slice(0, 500) };
-          // 422 is expected (site can't be scraped); anything else is ours to look at.
-          if (res.status !== 422) {
-            console.error(`extract-brand-assets failed (${res.status}) for ${clientId}; skipping step so onboarding can continue`, text);
-            await supabase.from("automation_alerts").insert({
-              alert_type: "function_error",
-              severity: "warning",
-              title: "Brand extraction failed during onboarding (step skipped)",
-              message: `extract-brand-assets returned ${res.status} for client ${clientId}. Onboarding continued; the client will upload brand assets manually.`,
-              source: "run-automation",
-              source_id: clientId,
-            }).then(undefined, () => {});
+          return false;
+        };
+        let lastStatus = 0;
+        let lastText = "";
+        let done = false;
+        for (const mode of ["default", "fallback"] as const) {
+          try {
+            let res = await callExtractor(mode);
+            if (res.status === 409) {
+              await waitForActiveRun();
+              res = await callExtractor(mode);
+            }
+            if (res.ok) {
+              result = await res.json();
+              done = true;
+              break;
+            }
+            lastStatus = res.status;
+            lastText = await res.text();
+          } catch (extractErr) {
+            lastStatus = 0;
+            lastText = extractErr instanceof Error ? extractErr.message : String(extractErr);
           }
-        } catch (extractErr) {
-          console.error(`extract-brand-assets threw for ${clientId}; skipping step`, extractErr);
-          result = { skipped: "extractor_unreachable", detail: extractErr instanceof Error ? extractErr.message : String(extractErr) };
+          // 4xx other than timeouts/blocks (bad URL, private address) won't improve on retry.
+          if (lastStatus === 400 || lastStatus === 403) break;
+        }
+        if (!done) {
+          result = {
+            skipped: lastStatus === 422 ? "scrape_failed" : lastStatus === 0 ? "extractor_unreachable" : "extractor_error",
+            status: lastStatus,
+            detail: lastText.slice(0, 500),
+          };
+          console.error(`extract-brand-assets failed after retries (${lastStatus}) for ${clientId}`, lastText);
+          await supabase.from("automation_alerts").insert({
+            alert_type: "function_error",
+            severity: "warning",
+            title: "Brand extraction failed after retries (client asked to upload manually)",
+            message: `extract-brand-assets ended with ${lastStatus || "network error"} for client ${clientId} (${client.website_url}): ${lastText.slice(0, 300)}. Onboarding continued; the client was notified to upload brand assets.`,
+            source: "run-automation",
+            source_id: clientId,
+          }).then(undefined, () => {});
+        }
+        // Tell the client the outcome either way -- the next step ("Verify
+        // Brand Assets") is theirs, and before this they were never told
+        // extraction had finished or that it found nothing (Truzon Solar sat
+        // on an empty Brand Assets tab with no explanation).
+        {
+          const found = Array.isArray((result as any)?.assets) ? (result as any).assets.length : 0;
+          await notifyClientBlocked(supabase, clientId, found > 0
+            ? {
+                notificationType: "brand_assets_ready",
+                title: "Your brand assets are ready to review",
+                description: `We found ${found} brand asset${found !== 1 ? "s" : ""} on your website (logos, colours, fonts and voice). Open Brand Assets in your portal and pick the ones that are right for you.`,
+                dedupeHours: 1,
+              }
+            : {
+                notificationType: "brand_assets_none",
+                title: "Please add your brand assets",
+                description: "We couldn't automatically pull your logo and colours from your website. Open Brand Assets in your portal and upload your logo so we can keep going.",
+                dedupeHours: 1,
+              }).catch((e: unknown) => console.error("brand extraction notify failed:", e));
         }
         break;
       }
