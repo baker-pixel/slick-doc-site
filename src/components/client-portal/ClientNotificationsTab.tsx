@@ -13,8 +13,10 @@ import {
   Bell,
   CheckCircle,
   Circle,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle
 } from "lucide-react";
+import { isWinNotification, needsAction } from "./notificationKind";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -110,7 +112,8 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
     }
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: string, win = true) => {
+    if (!win) return needsAction({ notification_type: type }) ? <AlertTriangle className="h-5 w-5" /> : <Bell className="h-5 w-5" />;
     switch (type) {
       case "ranking": return <Search className="h-5 w-5" />;
       case "traffic": return <TrendingUp className="h-5 w-5" />;
@@ -122,7 +125,10 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
     }
   };
 
-  const getTypeColor = (type: string) => {
+  const getTypeColor = (type: string, win = true) => {
+    if (!win) return needsAction({ notification_type: type })
+      ? "bg-red-500/10 text-red-500 border-red-500/20"
+      : "bg-slate-500/10 text-slate-400 border-slate-500/20";
     switch (type) {
       case "ranking": return "bg-purple-500/10 text-purple-500 border-purple-500/20";
       case "traffic": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
@@ -162,7 +168,7 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
           <div>
             <h2 className="text-xl font-semibold">Wins & Updates</h2>
             <p className="text-sm text-muted-foreground">
-              Your marketing wins and achievements
+              Your marketing wins and account updates
             </p>
           </div>
         </div>
@@ -202,11 +208,11 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
                 <CardContent className="p-4">
                   <div className="flex items-center gap-4">
                     <motion.div 
-                      className={`p-3 rounded-lg border ${getTypeColor(notification.notification_type)}`}
+                      className={`p-3 rounded-lg border ${getTypeColor(notification.notification_type, isWinNotification(notification))}`}
                       whileHover={{ scale: 1.1, rotate: 5 }}
                       transition={{ type: "spring", stiffness: 400 }}
                     >
-                      {getTypeIcon(notification.notification_type)}
+                      {getTypeIcon(notification.notification_type, isWinNotification(notification))}
                     </motion.div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">

@@ -64,6 +64,7 @@ export async function notifyClientBlocked(
     title: params.title,
     description: params.description,
     priority: "high",
+    is_positive: false,
     is_read: false,
   });
 

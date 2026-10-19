@@ -14,8 +14,11 @@ import {
   Rocket,
   Zap,
   CheckCircle2,
-  ArrowUpRight
+  ArrowUpRight,
+  AlertTriangle,
+  Bell
 } from "lucide-react";
+import { isWinNotification, needsAction } from "./notificationKind";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 
@@ -84,7 +87,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
   const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
-    if (open && notification) {
+    if (open && notification && isWinNotification(notification)) {
       setShowConfetti(true);
       const timer = setTimeout(() => setShowConfetti(false), 3000);
       return () => clearTimeout(timer);
@@ -93,8 +96,12 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
 
   if (!notification) return null;
 
+  const isWin = isWinNotification(notification);
+  const alert = needsAction(notification);
+
   const getTypeIcon = (type: string) => {
     const iconProps = { className: "h-8 w-8" };
+    if (!isWin) return alert ? <AlertTriangle {...iconProps} /> : <Bell {...iconProps} />;
     switch (type) {
       case "ranking": return <Search {...iconProps} />;
       case "traffic": return <TrendingUp {...iconProps} />;
@@ -107,6 +114,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
   };
 
   const getTypeGradient = (type: string) => {
+    if (!isWin) return alert ? "from-red-500 to-red-700" : "from-slate-500 to-slate-700";
     switch (type) {
       case "ranking": return "from-purple-500 to-purple-700";
       case "traffic": return "from-blue-500 to-blue-700";
@@ -131,6 +139,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
   };
 
   const getEmoji = (type: string) => {
+    if (!isWin) return alert ? "⚠️" : "🔔";
     switch (type) {
       case "ranking": return "🚀";
       case "traffic": return "📈";
@@ -196,7 +205,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
                         {getEmoji(notification.notification_type)}
                       </motion.div>
                       <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                        {notification.notification_type.toUpperCase()} WIN
+                        {isWin ? `${notification.notification_type.toUpperCase()} WIN` : alert ? "ACTION NEEDED" : "UPDATE"}
                       </Badge>
                     </div>
                     <motion.div
@@ -218,7 +227,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
                   >
                     <h2 className="text-2xl font-bold mb-2">{notification.title}</h2>
                     <p className="text-muted-foreground">
-                      {notification.description || "Great progress on your marketing goals!"}
+                      {notification.description || (isWin ? "Great progress on your marketing goals!" : "")}
                     </p>
                   </motion.div>
 
@@ -255,8 +264,8 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
                     </motion.div>
                   )}
 
-                  {/* Motivational message */}
-                  <motion.div
+                  {/* Motivational message (wins only) */}
+                  {isWin && <motion.div
                     className="flex items-center gap-3 p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -271,7 +280,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
                     <p className="font-medium text-primary">
                       {getTypeMessage(notification.notification_type)}
                     </p>
-                  </motion.div>
+                  </motion.div>}
 
                   {/* Date */}
                   <motion.p 
@@ -280,7 +289,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
                   >
-                    Achieved on {new Date(notification.created_at).toLocaleDateString(undefined, {
+                    {isWin ? "Achieved on" : "Posted on"} {new Date(notification.created_at).toLocaleDateString(undefined, {
                       weekday: 'long',
                       month: 'long',
                       day: 'numeric',
@@ -300,7 +309,7 @@ export default function WinDetailModal({ notification, open, onOpenChange }: Win
                       onClick={() => onOpenChange(false)}
                     >
                       <CheckCircle2 className="h-5 w-5 mr-2" />
-                      Celebrate & Close
+                      {isWin ? "Celebrate & Close" : "Got it"}
                     </Button>
                   </motion.div>
                 </div>
