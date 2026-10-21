@@ -1,4 +1,5 @@
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { buildReplyToAddress } from "./inboundReply.ts";
 
 interface SmtpCredentialRow {
   access_token: string | null; // SMTP password
@@ -63,6 +64,7 @@ export async function sendViaClientEmail(
     const sendDomain = cred.page_id.split("@")[1] || "orangedoormarketing.com";
     const extraHeaders: Record<string, string> = {};
     if (args.trackingId) extraHeaders["Message-ID"] = `<odm-${args.trackingId}@${sendDomain}>`;
+    const replyTo = args.trackingId ? buildReplyToAddress(args.trackingId, Deno.env.get("REPLY_INBOX_DOMAIN")) : null;
     if (args.listUnsubscribeUrl) {
       extraHeaders["List-Unsubscribe"] = `<${args.listUnsubscribeUrl}>`;
       extraHeaders["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
@@ -86,6 +88,10 @@ export async function sendViaClientEmail(
           subject: args.subject,
           content: "auto",
           html: args.html,
+          // Central reply inbox (see inboundReply.ts). Only set when
+          // REPLY_INBOX_DOMAIN is configured, so this is inert until the
+          // Resend receiving domain is verified.
+          ...(replyTo ? { replyTo } : {}),
           ...(Object.keys(extraHeaders).length ? { headers: extraHeaders } : {}),
         }),
         new Promise((_, reject) =>
