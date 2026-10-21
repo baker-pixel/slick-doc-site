@@ -243,6 +243,17 @@ Deno.test("merge: an empty record is filled from the website; verified facts are
   assertEquals(plan.filled.includes("website_summary"), true);
 });
 
+Deno.test("merge: a placeholder industry ('General') counts as empty and is replaced by what the site says", () => {
+  for (const industry of ["General", " other ", "N/A"]) {
+    const plan = planWrite({ website_summary: "", industry, context_profile: {} }, proposal());
+    assertEquals(plan.industry, "Residential plumbing");
+    assertEquals(plan.suggestions.industry, undefined);
+  }
+  // A real, different industry is still the client's word: suggested, not replaced.
+  const real = planWrite({ website_summary: "", industry: "Tech", context_profile: {} }, proposal());
+  assertEquals([real.industry, real.suggestions.industry?.length], [null, 1]);
+});
+
 Deno.test("merge: anything a person already wrote is never overwritten; new findings become suggestions, known ones are not repeated", () => {
   const plan = planWrite({
     website_summary: "We fix pipes.", industry: "Tech",

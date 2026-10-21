@@ -3,7 +3,7 @@
 // backfill-prospect-context (scores enriched prospects in the background).
 
 import { callAIJson, MODELS } from "./ai.ts";
-import { hasBusinessContext } from "./businessContext.ts";
+import { hasBusinessContext, isPlaceholderIndustry } from "./businessContext.ts";
 
 export interface ClientICP {
   industries: string[];
@@ -50,11 +50,11 @@ export async function ensureClientICP(
 
 CLIENT:
 - Business name: ${client.business_name}
-- Industry: ${client.industry || "unknown"}
+- Industry: ${isPlaceholderIndustry(client.industry) ? "unknown" : client.industry}
 - Services: ${Array.isArray(ctx.services) ? (ctx.services as string[]).join(", ") : "unknown"}
 - Target audience: ${typeof ctx.target_audience === "string" ? ctx.target_audience : "unknown"}
 - Business summary: ${typeof ctx.business_summary === "string" ? ctx.business_summary : "n/a"}
-- Location: ${typeof ctx.location === "string" ? ctx.location : "unknown"}
+- Location: ${typeof ctx.location === "string" ? ctx.location : typeof ctx.address === "string" ? ctx.address : "unknown"}
 
 Return ONLY valid JSON:
 {
