@@ -1,6 +1,5 @@
 import { ImapLite } from "./imapLite.ts";
-import { notifyClientBlocked } from "./clientAlerts.ts";
-import { logActivity } from "./activityLog.ts";
+import { ingestReply } from "./replyIngest.ts";
 
 interface SmtpMeta {
   host?: string;
@@ -40,7 +39,7 @@ function extractTrackingId(headerValue: string): string | null {
   return m ? m[1] : null;
 }
 
-function getHeader(headers: Record<string, string | string[]> | undefined, name: string): string {
+export function getHeader(headers: Record<string, string | string[]> | undefined, name: string): string {
   if (!headers) return "";
   const target = name.toLowerCase();
   for (const [k, v] of Object.entries(headers)) {
@@ -64,8 +63,8 @@ export function isAutoReply(subject: string, autoSubmitted: string): boolean {
   return AUTO_REPLY_SUBJECT_RE.test(subject.trim());
 }
 
-const BOUNCE_FROM_RE = /mailer-daemon|postmaster|mail delivery (sub)?system/i;
-const BOUNCE_SUBJECT_RE = /undeliver|delivery status notification|delivery (has )?failed|failure notice|returned mail|couldn't be delivered|address not found/i;
+export const BOUNCE_FROM_RE = /mailer-daemon|postmaster|mail delivery (sub)?system/i;
+export const BOUNCE_SUBJECT_RE = /undeliver|delivery status notification|delivery (has )?failed|failure notice|returned mail|couldn't be delivered|address not found/i;
 
 interface MimePart {
   contentType: string;
@@ -143,7 +142,7 @@ function decodeTransferEncoding(body: string, encoding: string): string {
   return body;
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -163,7 +162,7 @@ function stripHtml(html: string): string {
 // what we store is what the prospect actually typed, not the full thread.
 // Best-effort heuristic -- a reply with no recognizable quote marker is kept
 // as-is rather than risk trimming real content.
-function trimQuotedReply(text: string): string {
+export function trimQuotedReply(text: string): string {
   const lines = text.split(/\r?\n/);
   const cutPatterns = [/^On .{0,120}wrote:\s*$/i, /^-{2,}\s*Original Message\s*-{2,}/i, /^>/];
   for (let i = 0; i < lines.length; i++) {
@@ -224,9 +223,6 @@ const POLL_TIMEOUT_MS = 40_000;
 // status guards below), so re-scanning a window every run is safe and does
 // not depend on the client leaving mail unread.
 const LOOKBACK_DAYS = 21;
-// A reply/bounce may only change a prospect that is still in the outreach
-// funnel -- never resurrect an unsubscribed or converted one.
-const REPLYABLE_STATUSES = ["nurture", "exhausted", "pending"];
 
 /**
  * Polls one client's connected mailbox for recent mail, classifies each
@@ -342,87 +338,23 @@ export async function pollClientMailbox(
           }
         }
 
-        const { data: stored, error: storeErr } = await supabase
-          .from("prospect_replies")
-          .upsert({
-            client_id: clientId,
-            prospect_id: prospectId,
-            email_log_id: emailLogId,
-            message_id: messageId,
-            in_reply_to: inReplyTo ? inReplyTo.slice(0, 500) : null,
-            from_address: extractSenderAddress(fromHeader),
-            subject: subject.slice(0, 500),
-            received_at: parseReceivedAt(getHeader(headers, "Date"), startedAt),
-            classification: isBounce ? "bounce" : "reply",
-            match_method: matchMethod,
-            snippet: buildSnippet(replyBody),
-            body_text: replyBody,
-          }, { onConflict: "client_id,message_id" })
-          .select("id")
-          .maybeSingle();
-        // Storing is the new record-keeping layer; if it fails the existing
-        // prospect handling below must still run, so log and carry on.
-        if (storeErr) console.error(`[clientMailboxPoll] ${clientId} uid=${uid}: prospect_replies upsert failed:`, storeErr.message);
-        else if (!existing) result.stored++;
-        const replyRowId: string | null = stored?.id ?? existing?.id ?? null;
-
-        const markProcessed = async () => {
-          if (replyRowId) {
-            await supabase.from("prospect_replies").update({ processed_at: new Date().toISOString() }).eq("id", replyRowId);
-          }
-        };
-
-        if (!prospectId) { await markProcessed(); continue; } // stored for review, nothing to update
-
-        const { data: prospect } = await supabase
-          .from("prospects")
-          .select("name, status, reply_snippet")
-          .eq("id", prospectId)
-          .maybeSingle();
-        if (!prospect) { await markProcessed(); continue; }
-        // A prospect someone already marked "replied" by hand still gets its
-        // reply text captured once; every other settled status is left alone.
-        const needsBackfill = prospect.status === "replied" && !prospect.reply_snippet;
-        if (!REPLYABLE_STATUSES.includes(prospect.status) && !needsBackfill) { await markProcessed(); continue; } // already handled
-
-        if (isBounce) {
-          result.bounced++;
-          await supabase.from("prospects").update({ status: "bounced" }).eq("id", prospectId);
-        } else {
-          // Only counts as a genuine reply when it's tied back to a specific
-          // sent email or a known prospect.
-          result.replied++;
-          const replySnippet = replyBody;
-          await supabase.from("prospects").update({
-            status: "replied",
-            replied_at: new Date().toISOString(),
-            ...(replySnippet ? { reply_snippet: replySnippet } : {}),
-          }).eq("id", prospectId);
-
-          // Tell the client -- a reply is the whole point of outreach and used
-          // to sit unseen until someone opened the prospect. Deduped per
-          // prospect (notifyClientBlocked keys on title) so re-scanning the
-          // lookback window never re-notifies.
-          const who = prospect.name ?? "A prospect";
-          const preview = replySnippet ? `"${replySnippet.replace(/\s+/g, " ").slice(0, 280)}${replySnippet.length > 280 ? "…" : ""}"` : "Open your portal to read it in your inbox.";
-          await notifyClientBlocked(supabase, clientId, {
-            notificationType: "prospect_reply",
-            title: `${who} replied to your outreach`,
-            description: preview,
-            dedupeHours: 24 * 60,
-          });
-          await logActivity(supabase, clientId, {
-            type: "prospect_replied",
-            title: `${who} replied to your outreach`,
-            description: replySnippet ? replySnippet.slice(0, 140) : undefined,
-            icon: "mail",
-            metadata: { prospect_id: prospectId },
-          });
-        }
-        // Stop the rest of the sequence either way.
-        await supabase.from("email_queue").update({ status: "cancelled", error_message: isBounce ? "Prospect bounced" : "Prospect replied" })
-          .filter("metadata->>prospect_id", "eq", prospectId).eq("status", "pending");
-        await markProcessed();
+        const outcome = await ingestReply(supabase, {
+          clientId,
+          prospectId,
+          emailLogId,
+          messageId,
+          inReplyTo: inReplyTo || null,
+          fromAddress: extractSenderAddress(fromHeader),
+          subject,
+          receivedAt: parseReceivedAt(getHeader(headers, "Date"), startedAt),
+          isBounce,
+          matchMethod,
+          replyBody,
+          snippet: buildSnippet(replyBody),
+        });
+        if (outcome.stored) result.stored++;
+        if (outcome.replied) result.replied++;
+        if (outcome.bounced) result.bounced++;
       } catch (msgErr) {
         console.error(`[clientMailboxPoll] ${clientId} uid=${uid}:`, msgErr);
       }
