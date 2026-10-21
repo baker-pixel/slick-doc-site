@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
+import { queueCrawl } from "../_shared/crawler/queue.ts";
 import type { AutomationRequest } from "./types.ts";
 import { normalizeJobType } from "./jobTypeAliases.ts";
 
@@ -303,6 +304,15 @@ serve(async (req) => {
                 description: "We couldn't automatically pull your logo and colours from your website. Open Brand Assets in your portal and upload your logo so we can keep going.",
                 dedupeHours: 1,
               }).catch((e: unknown) => console.error("brand extraction notify failed:", e));
+        }
+        // Read the whole site once so the company profile (services, audience, location, industry) fills in
+        // without anyone pressing "crawl". The worker builds the profile when the crawl finishes. Like the
+        // brand step this is a convenience: a failure to queue is logged, never a reason to fail onboarding.
+        try {
+          const q = await queueCrawl(supabase, clientId, { trigger: "onboarding", runAudit: false });
+          if (!q.ok) console.error(`onboarding crawl not queued for ${clientId}: ${q.error}`);
+        } catch (crawlErr) {
+          console.error(`onboarding crawl not queued for ${clientId}:`, crawlErr instanceof Error ? crawlErr.message : crawlErr);
         }
         break;
       }

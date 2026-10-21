@@ -3,6 +3,7 @@
 // word, so the website only ever suggests to them. Pure; the database function re-checks emptiness under a lock.
 import type { Claim, ValidProfile } from "./evidence.ts";
 import { normalizeForQuote } from "./evidence.ts";
+import { isPlaceholderIndustry } from "../businessContext.ts";
 
 export interface ExistingContext {
   website_summary: string | null;
@@ -56,7 +57,7 @@ export function planWrite(existing: ExistingContext, p: ValidProfile): WritePlan
   }
 
   if (p.industry) {
-    if (blank(existing.industry)) { plan.industry = p.industry.text; plan.filled.push("industry"); }
+    if (blank(existing.industry) || isPlaceholderIndustry(existing.industry)) { plan.industry = p.industry.text; plan.filled.push("industry"); }
     else if (key(existing.industry!) !== key(p.industry.text) && !alreadyThere(p.industry.text, [existing.industry!])) suggest("industry", p.industry);
   }
 
