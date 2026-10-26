@@ -46,9 +46,16 @@ export default function ClientNotificationsTab({ clientAccountId }: ClientNotifi
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (clientAccountId) {
-      fetchNotifications();
-    }
+    if (!clientAccountId) return;
+    fetchNotifications();
+    // Agents add notifications in the background, so keep the list fresh.
+    const refresh = () => { if (document.visibilityState === "visible") fetchNotifications(); };
+    const t = setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [clientAccountId]);
 
   const fetchNotifications = async () => {
