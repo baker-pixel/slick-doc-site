@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { pipelineOnly } from "../_shared/campaignBoundary.ts";
+import { generatedLeadsOnly } from "../_shared/campaignBoundary.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -397,8 +397,8 @@ Deno.serve(async (req) => {
         const periodEndExclusive = new Date(new Date(period_end).getTime() + 24 * 60 * 60 * 1000).toISOString();
 
         const [leadsRes, opensRes, clicksRes] = await Promise.all([
-          // Leads generated = the prospect agent's pipeline only (not uploaded campaign lists).
-          pipelineOnly(supabase.from("prospects").select("id", { count: "exact", head: true })
+          // Leads generated = vetted leads from the prospect agent's pipeline only (not uploaded campaign lists).
+          generatedLeadsOnly(supabase.from("prospects").select("id", { count: "exact", head: true })
             .eq("client_id", client_id).gte("created_at", period_start).lt("created_at", periodEndExclusive)),
           supabase.from("prospects").select("id", { count: "exact", head: true })
             .eq("client_id", client_id).gte("opened_at", period_start).lt("opened_at", periodEndExclusive),

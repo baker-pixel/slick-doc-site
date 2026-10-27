@@ -140,8 +140,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [sender, setSender] = useState<OutreachSender>({ name: "Your team", address: null });
   const [signatureName, setSignatureName] = useState<string | null>(null);
 
-  const loadProspects = async () => {
-    setLoading(true);
+  const loadProspects = async (silent = false) => {
+    if (!silent) setLoading(true);
     const columns = "id, name, business_type, city, website_url, status, source, created_at, gap_score, icp_fit_score, icp_fit_reason, personalization_hook, top_weaknesses, drip_step, opened_at, clicked_at, reply_snippet, replied_at";
     // This list and its stats cover the always-on pipeline only. Campaign leads
     // (an uploaded list can be thousands) are listed and counted per campaign
@@ -157,6 +157,10 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
 
   useEffect(() => {
     loadProspects();
+    // The prospect agent adds and updates rows in the background.
+    const refresh = () => { if (document.visibilityState === "visible") loadProspects(true); };
+    const poll = setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
     supabase.from("client_accounts").select("icp, business_name, outreach_settings").eq("id", clientAccountId).single()
       .then(({ data }) => {
         const icp = data?.icp as { local?: boolean } | null;
@@ -175,6 +179,10 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     (supabase.rpc as any)("client_get_outreach_sequence").then(({ data }: { data: SequenceStep[] | null }) => {
       setSequenceSteps(data ?? []);
     });
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", refresh);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientAccountId]);
 

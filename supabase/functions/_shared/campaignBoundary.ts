@@ -15,6 +15,14 @@ export function pipelineOnly(query: any) {
   return query.is("campaign_id", null);
 }
 
+// "Discovered" prospects are unreviewed candidates the agent hasn't vetted yet;
+// the client's Lead Outreach tab hides them, so they are not yet leads. Any
+// "leads generated" figure must use this so Home agrees with Lead Outreach.
+// deno-lint-ignore no-explicit-any
+export function generatedLeadsOnly(query: any) {
+  return pipelineOnly(query).neq("status", "discovered");
+}
+
 export const EXISTING_CLIENT_SKIP_REASON =
   "Skipped: this address belongs to an existing client account, so no outreach is sent.";
 

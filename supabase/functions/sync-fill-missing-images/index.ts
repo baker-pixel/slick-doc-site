@@ -91,7 +91,7 @@ serve(async (req) => {
     // orphaned content_calendar rows nobody will ever see.
     let approvalsQuery = supabase
       .from("content_approvals")
-      .select("content_id")
+      .select("content_id, status")
       .in("platform", TARGET_PLATFORMS)
       .not("content_id", "is", null);
     if (clientId) approvalsQuery = approvalsQuery.eq("client_account_id", clientId);
@@ -101,13 +101,16 @@ serve(async (req) => {
     if (apprErr) throw new Error(`Failed to fetch approvals needing images: ${apprErr.message}`);
 
     const approvalContentIds = [...new Set((linkedApprovals || []).map((a: any) => a.content_id))];
+    // Posts still waiting on the client must have their image BEFORE review, so
+    // they skip the batch window below; the client can't judge a post without it.
+    const pendingContentIds = new Set((linkedApprovals || []).filter((a: any) => a.status === "pending").map((a: any) => a.content_id));
     if (approvalContentIds.length === 0) {
       return json({ filled: 0, message: "No approvals need images" });
     }
 
     let candidatesQuery = supabase
       .from("content_calendar")
-      .select("id, client_account_id, title, content, platform, metadata, scheduled_for")
+      .select("id, client_account_id, content_id, title, content, platform, metadata, scheduled_for")
       .in("content_id", approvalContentIds)
       .is("metadata->>image_url", null)
       .is("metadata->>image_skip", null)
@@ -126,7 +129,9 @@ serve(async (req) => {
     // otherwise they'd re-enter every future run's candidate pool.
     const imageEligible = [];
     for (const c of candidates as any[]) {
-      if (shouldGenerateImage(c.platform, c.id)) {
+      // A client's image feedback always gets a fresh image, even on a post the
+      // alternating pick would otherwise leave bare.
+      if (c.metadata?.image_feedback || shouldGenerateImage(c.platform, c.id)) {
         imageEligible.push(c);
       } else {
         await supabase
@@ -137,7 +142,7 @@ serve(async (req) => {
     }
 
     const runCap = clientId ? ADMIN_MAX_PER_RUN : MAX_PER_RUN;
-    const slots = (force ? imageEligible : imageEligible.filter(isFallbackEligible)).slice(0, runCap);
+    const slots = (force ? imageEligible : imageEligible.filter((s: any) => pendingContentIds.has(s.content_id) || isFallbackEligible(s))).slice(0, runCap);
 
     if (slots.length === 0) {
       return json({ filled: 0, message: "No slots need fallback yet (batch still within its window)" });
@@ -166,12 +171,17 @@ serve(async (req) => {
       if (!client) continue;
 
       try {
-        const prompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+        const imageFeedback = (slot.metadata?.image_feedback as string | undefined)?.trim();
+        const basePrompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+        const prompt = imageFeedback
+          ? `${basePrompt}\nThe client rejected the previous image and asked for this change, which must be followed: "${imageFeedback}"`
+          : basePrompt;
         const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, brandMap[slot.client_account_id]);
 
+        const { image_feedback: _used, ...keptMeta } = ((slot as any).metadata || {}) as Record<string, unknown>;
         await supabase
           .from("content_calendar")
-          .update({ metadata: { ...((slot as any).metadata || {}), image_url: imageUrl } })
+          .update({ metadata: { ...keptMeta, image_url: imageUrl } })
           .eq("id", slot.id);
 
         filled++;
