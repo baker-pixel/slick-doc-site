@@ -3,7 +3,7 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
 import { checkAdminAuth } from "../_shared/auth.ts";
 import { logActivity } from "../_shared/activityLog.ts";
-import { pipelineOnly } from "../_shared/campaignBoundary.ts";
+import { generatedLeadsOnly } from "../_shared/campaignBoundary.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -88,9 +88,9 @@ Deno.serve(async (req) => {
     for (const client of (clients ?? []) as ClientRow[]) {
       try {
         const [leadsRes, opensRes, existingRes] = await Promise.all([
-          // "Leads generated" = what the prospect agent found; uploaded campaign
+          // "Leads generated" = vetted leads the prospect agent found (not unreviewed "discovered" candidates); uploaded campaign
           // lists are not agent-generated leads (campaignBoundary.ts).
-          pipelineOnly(supabase.from("prospects").select("id", { count: "exact", head: true })
+          generatedLeadsOnly(supabase.from("prospects").select("id", { count: "exact", head: true })
             .eq("client_id", client.id).gte("created_at", periodStartIso).lt("created_at", periodEndIsoExclusive)),
           supabase.from("prospects").select("id", { count: "exact", head: true })
             .eq("client_id", client.id).gte("opened_at", periodStartIso).lt("opened_at", periodEndIsoExclusive),
