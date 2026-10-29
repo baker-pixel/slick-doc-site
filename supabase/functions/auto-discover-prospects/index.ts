@@ -18,8 +18,44 @@ import { logAlert } from "../_shared/alerts.ts";
 // for the next 9am UTC sweep) and skips the queue-floor/cooldown skips below
 // since it's an explicit one-off, not the daily topping-up pass.
 
-const REVIEW_QUEUE_FLOOR = 8; // skip clients who already have plenty to review
-const COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-run discovery for a client more often than this
+// Daily target: every eligible client gets up to tierPolicy.prospect.discoveryBatch
+// new leads per day. The ceiling only stops spend piling up on leads nobody
+// has reviewed; the cooldown only stops a manual run + the cron double-billing
+// the same day (shorter than 24h so the 09:00 sweep is never skipped).
+const REVIEW_QUEUE_CEILING = 40;
+const COOLDOWN_MS = 20 * 60 * 60 * 1000;
+const ALERT_DEDUPE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// A blocked or stalled client would otherwise re-alert every day; one alert
+// per client+reason per week is enough to be seen without becoming noise.
+async function alertOnce(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string,
+  alertType: string,
+  title: string,
+  message: string,
+) {
+  const since = new Date(Date.now() - ALERT_DEDUPE_MS).toISOString();
+  const { data } = await supabase
+    .from("automation_alerts")
+    .select("id")
+    .eq("source", "auto-discover-prospects")
+    .eq("alert_type", alertType)
+    .eq("source_id", clientId)
+    .gte("created_at", since)
+    .limit(1)
+    .maybeSingle();
+  if (data) return;
+  await logAlert(supabase, {
+    source: "auto-discover-prospects",
+    sourceId: clientId,
+    alertType,
+    severity: "warning",
+    title,
+    message,
+  });
+}
 
 interface ClientRow {
   id: string;
@@ -73,13 +109,22 @@ serve(async (req) => {
     let erroredCount = 0;
 
     for (const client of (clients ?? []) as ClientRow[]) {
-      if (!mailboxClients.has(client.id)) {
-        results[client.id] = "skipped: no email mailbox connected";
-        continue;
-      }
       const policy = tierPolicy(client.tier).prospect;
       if (!policy.enabled) {
         results[client.id] = "skipped: prospect agent not enabled for this tier";
+        continue;
+      }
+      if (!mailboxClients.has(client.id)) {
+        results[client.id] = "skipped: no email mailbox connected";
+        if (!onlyClientId) {
+          await alertOnce(
+            supabase,
+            client.id,
+            "prospect_blocked_no_mailbox",
+            `${client.business_name}: lead discovery blocked`,
+            "No email mailbox is connected, so daily lead discovery and outreach are paused for this client until one is.",
+          );
+        }
         continue;
       }
 
@@ -91,8 +136,17 @@ serve(async (req) => {
           .select("id", { count: "exact", head: true })
           .eq("client_id", client.id)
           .eq("status", "discovered");
-        if ((queueCount ?? 0) >= REVIEW_QUEUE_FLOOR) {
-          results[client.id] = `skipped: queue has ${queueCount}`;
+        if ((queueCount ?? 0) >= REVIEW_QUEUE_CEILING) {
+          results[client.id] = `skipped: ${queueCount} leads awaiting review (ceiling ${REVIEW_QUEUE_CEILING})`;
+          if (!onlyClientId) {
+            await alertOnce(
+              supabase,
+              client.id,
+              "prospect_review_backlog",
+              `${client.business_name}: lead review backlog`,
+              `${queueCount} leads are waiting for review, so daily discovery is paused until they're approved or rejected.`,
+            );
+          }
           continue;
         }
 
@@ -123,6 +177,15 @@ serve(async (req) => {
           results[client.id] = `error: ${data.error}`;
         } else {
           results[client.id] = `discovered ${data.discovered ?? 0} via ${fn}`;
+          if (!onlyClientId && (data.discovered ?? 0) === 0) {
+            await alertOnce(
+              supabase,
+              client.id,
+              "prospect_zero_yield",
+              `${client.business_name}: discovery found no new leads`,
+              `Today's ${fn} run returned 0 new leads. The ICP may be too narrow or the search source may be failing.`,
+            );
+          }
         }
       } catch (e) {
         erroredCount++;
