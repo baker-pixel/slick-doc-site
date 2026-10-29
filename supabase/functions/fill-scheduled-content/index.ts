@@ -6,7 +6,7 @@ import { corsHeaders } from "../_shared/http.ts";
 import { callAI, MODELS } from "../_shared/ai.ts";
 import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
 import { critiqueContent, qaNeedsAttention, findUnsupportedClaims } from "../_shared/contentQa.ts";
-import { getSocialPillars } from "../_shared/socialStrategy.ts";
+import { getSocialPillarDetails } from "../_shared/socialStrategy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { toDbContentType } from "../_shared/contentTypeMap.ts";
 import { isUsableCaption } from "../_shared/captionGate.ts";
@@ -225,7 +225,7 @@ serve(async (req) => {
 
     // Cache each client's social pillars. Which pillar a post serves is picked
     // per slot from recent usage (pickPillar), so rotation survives across runs.
-    const pillarsByClient: Record<string, string[]> = {};
+    const pillarsByClient: Record<string, { name: string; description: string }[]> = {};
 
     for (const slot of slots) {
       if (Date.now() - startedAt > LOOP_BUDGET_MS) {
@@ -242,14 +242,35 @@ serve(async (req) => {
 
         // On-strategy: pick the next pillar in rotation for this client.
         if (!(slot.client_account_id in pillarsByClient)) {
-          pillarsByClient[slot.client_account_id] = await getSocialPillars(supabase, slot.client_account_id);
+          pillarsByClient[slot.client_account_id] = await getSocialPillarDetails(supabase, slot.client_account_id);
         }
+        const pillarList = pillarsByClient[slot.client_account_id];
         const pillar = pickPillar(
-          pillarsByClient[slot.client_account_id],
+          pillarList.map((p) => p.name),
           recentPillarsByClient[slot.client_account_id] ?? [],
         );
 
-        let generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar);
+        // Round-robin position for this slot: how many of the client's posts are
+        // scheduled before it. Monotonic across runs and platforms (unlike a
+        // per-run counter), so consecutive posts always move to the next
+        // service / differentiator / angle instead of re-picking the first.
+        const { count: postsBefore } = await supabase
+          .from("content_calendar")
+          .select("id", { count: "exact", head: true })
+          .eq("client_account_id", slot.client_account_id)
+          .eq("content_type", "social_post")
+          .lt("scheduled_for", slot.scheduled_for ?? new Date().toISOString());
+        const rot: Rotation = {
+          index: postsBefore ?? 0,
+          pillarDescription: pillarList.find((p) => p.name === pillar)?.description || undefined,
+          // What was already posted under THIS pillar -- the general recent-topics
+          // list is too coarse to stop "same subject, new wording" within a pillar.
+          pillarTopics: pillar
+            ? collectRecentTopics((recentRowsByClient[slot.client_account_id] ?? []).filter((r) => r.metadata?.pillar === pillar), 8)
+            : [],
+        };
+
+        let generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar, rot);
 
         // Social posts skip both checks below: the client reviews them in their
         // Approvals tab, so an AI/admin gate in front of that is wasted time and
@@ -273,7 +294,7 @@ serve(async (req) => {
             },
             ...recentFeedback,
           ];
-          const retry = await generateContent(supabase, slot, client, recentTopics, retryFeedback, recentApproved, GROQ_API_KEY, pillar);
+          const retry = await generateContent(supabase, slot, client, recentTopics, retryFeedback, recentApproved, GROQ_API_KEY, pillar, rot);
           const retryClaims = await findUnsupportedClaims(retry, factsText, client.id);
           if (isUsableCaption(retry) && retryClaims !== null && retryClaims.length < unsupportedClaims.length) {
             generatedContent = retry;
@@ -528,7 +549,8 @@ async function generateContent(
   recentFeedback: ContentFeedbackItem[],
   recentApproved: ApprovedContentItem[],
   _apiKey: string,
-  pillar?: string
+  pillar?: string,
+  rot?: Rotation,
 ): Promise<string> {
   // Month/season of when the post will PUBLISH, not when it's drafted -- drafts
   // are written weeks ahead, so "now" gave 1 Oct posts a "September tip".
@@ -542,7 +564,7 @@ async function generateContent(
   // entirely even though the onboarding content generator already used it.
   const kit = await getClientBrandKit(supabase, client.id);
 
-  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, kit, recentTopics, recentFeedback, recentApproved, month, season, pillar);
+  const { system, user } = buildPrompt(slot.content_type, slot.platform, client, kit, recentTopics, recentFeedback, recentApproved, month, season, pillar, rot);
 
   // Short-form platforms need fewer tokens — prevents the model padding to fill context
   const PLATFORM_MAX_TOKENS: Record<string, number> = {
@@ -667,6 +689,14 @@ function getBrandVoice(client: ClientInfo): string {
   return map[tone || ""] || "professional yet approachable";
 }
 
+interface Rotation {
+  /** Monotonic position of this post among the client's posts. */
+  index: number;
+  pillarDescription?: string;
+  /** Recent topics already posted under the chosen pillar. */
+  pillarTopics: string[];
+}
+
 function avoidRepetitionInstruction(recentTopics: string[]): string {
   if (!recentTopics.length) return "";
   return `\n\nTopics already covered recently (do NOT repeat any of these subjects or near-variants; pick a clearly different subject or angle): ${recentTopics.slice(0, RECENT_TOPIC_LIMIT).join(" | ")}.`;
@@ -682,7 +712,8 @@ function buildPrompt(
   recentApproved: ApprovedContentItem[],
   month: string,
   season: string,
-  pillar?: string
+  pillar?: string,
+  rot?: Rotation,
 ): { system: string; user: string } {
   const biz = client.business_name;
   const industry = client.industry || "local business";
@@ -698,7 +729,15 @@ function buildPrompt(
     kit.voice.messaging_pillars.length > 0;
   const brandSection = hasBrandKit ? brandKitToPromptBlock(kit) : `BRAND VOICE: ${brandVoice}`;
   const toneLine = kit.voice.tone_descriptors.length > 0 ? kit.voice.tone_descriptors.join(", ") : brandVoice;
-  const pillarLine = pillar ? `\nCONTENT PILLAR (anchor this post to this theme from the client's social plan): ${pillar}` : "";
+  const pillarLine = pillar
+    ? `\nCONTENT PILLAR (anchor this post to this theme from the client's social plan): ${pillar}${rot?.pillarDescription ? ` -- ${rot.pillarDescription}` : ""}`
+    : "";
+  // Round-robin through the client's own services / differentiators / angle
+  // menu by post position. A fixed services[0] / "Pick ONE angle" made every
+  // post for a platform land on the same pitch even though pillars rotated.
+  const rotIdx = rot?.index ?? 0;
+  const rotate = <T,>(arr: T[], offset = 0): T | undefined => (arr.length ? arr[(rotIdx + offset) % arr.length] : undefined);
+  const angleOf = (menu: string[]) => `Use THIS angle and no other: ${rotate(menu)}`;
   // The feedback loop, consumed: whats_working is refined from real outcomes
   // (client-context-refresh) and pulled here so content leans into what has
   // actually been resonating for this client.
@@ -708,7 +747,10 @@ function buildPrompt(
   const workingLine = Array.isArray(working) && working.length
     ? `\nTOPIC HINTS that have performed (themes only -- NOT verified facts about the product): ${working.join("; ")}`
     : "";
-  const avoidRepeat = avoidRepetitionInstruction(recentTopics);
+  const pillarAvoid = rot?.pillarTopics.length
+    ? `\n\nAlready posted under this pillar (pick a different, specific sub-topic -- a reworded version of any of these is a repeat): ${rot.pillarTopics.join(" | ")}.`
+    : "";
+  const avoidRepeat = avoidRepetitionInstruction(recentTopics) + pillarAvoid;
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
   const approvedBlock = approvedContentToPromptBlock(recentApproved);
   const services = client.context_profile?.services || [];
@@ -741,12 +783,13 @@ RULES:
 
 Audience: ${targetAudience}, professionals in ${location || "the area"}.
 
-Pick ONE angle:
-${differentiators.length ? `- Thought leadership around: ${differentiators.slice(0, 2).join(" or ")}` : "- An industry insight"}
-${services.length ? `- A business insight tied to: ${services[0]}` : "- A service highlight"}
-- A behind-the-scenes story showing expertise
-- A lesson learned or industry trend in ${industry} for ${month}
-- A client win (anonymized)
+${angleOf([
+  differentiators.length ? `Thought leadership around: ${rotate(differentiators, 1)}` : "An industry insight",
+  services.length ? `A business insight tied to: ${rotate(services, 2)}` : "A service highlight",
+  "A behind-the-scenes story showing expertise",
+  `A lesson learned or industry trend in ${industry} for ${month}`,
+  "A client win (anonymized)",
+])}
 
 Requirements:
 - 150–250 words
@@ -763,12 +806,13 @@ Requirements:
 
 Audience: ${targetAudience}${location ? ` in ${location}` : ""}.
 
-Pick ONE angle:
-${services.length ? `- A helpful tip related to: ${services[Math.floor(Math.random() * Math.min(services.length, 3))]}` : "- A helpful tip"}
-- A community connection or local story
-${differentiators.length ? `- Show off: ${differentiators[0]}` : "- A trust signal"}
-- A ${season} reminder or seasonal offer
-- Ask a question that drives comments
+${angleOf([
+  services.length ? `A helpful tip related to: ${rotate(services, 1)}` : "A helpful tip",
+  "A community connection or local story",
+  differentiators.length ? `Show off: ${rotate(differentiators, 2)}` : "A trust signal",
+  `A ${season} reminder or seasonal offer`,
+  "Ask a question that drives comments",
+])}
 
 Requirements:
 - 100–200 words
@@ -783,12 +827,13 @@ Requirements:
           system,
           user: `Write an Instagram caption for ${biz}.
 
-Pick ONE angle:
-${services.length ? `- Visual service showcase: ${services[0]}` : "- A service feature"}
-- A transformation or before/after concept
-- A motivational or relatable moment for ${targetAudience}
-- Behind-the-scenes of the ${industry} process
-- A ${month} themed visual moment
+${angleOf([
+  services.length ? `Visual service showcase: ${rotate(services, 1)}` : "A service feature",
+  "A transformation or before/after concept",
+  `A motivational or relatable moment for ${targetAudience}`,
+  `Behind-the-scenes of the ${industry} process`,
+  `A ${month} themed visual moment`,
+])}
 
 Requirements:
 - 80–150 words of caption
@@ -805,10 +850,11 @@ Requirements:
 
 HARD LIMIT: 240 characters total including spaces, punctuation, and hashtags. Count carefully.
 
-Pick ONE angle:
-${services.length ? `- A sharp insight about: ${services[0]}` : "- A sharp industry insight"}
-${differentiators.length ? `- What makes ${biz} different: ${differentiators[0]}` : "- A trust signal"}
-- A ${month} tip for ${targetAudience}
+${angleOf([
+  services.length ? `A sharp insight about: ${rotate(services, 1)}` : "A sharp industry insight",
+  differentiators.length ? `What makes ${biz} different: ${rotate(differentiators, 2)}` : "A trust signal",
+  `A ${month} tip for ${targetAudience}`,
+])}
 
 Requirements:
 - MUST be ≤240 characters
