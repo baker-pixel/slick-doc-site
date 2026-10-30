@@ -244,3 +244,18 @@ verify_jwt = false
 
 [functions.build-company-profile]
 verify_jwt = false
+
+# MCP endpoint authenticates its own odm_ bearer tokens, which are not JWTs.
+[functions.mcp]
+verify_jwt = false
+
+# Admin session JWT required (checked in the function as well).
+[functions.mcp-tokens]
+verify_jwt = true
+
+# Steward functions authenticate in code: admin session or password, or the service key.
+[functions.steward-run]
+verify_jwt = false
+
+[functions.steward-proposals]
+verify_jwt = false
