@@ -108,7 +108,6 @@ export const CRON_INFO: Record<string, { label: string; what: string; run?: stri
   "check-image-batches": { label: "Collect finished images", what: "Attaches images OpenAI has finished to their posts.", run: "check_images" },
   "sync-fill-missing-images": { label: "Make missing images", what: "Generates an image directly for any post still missing one close to its publish time." },
   "check-stalled-workflows": { label: "Stalled onboarding check", what: "Nudges client onboarding steps that have stopped moving." },
-  "poll-client-mailboxes": { label: "Read prospect replies", what: "Checks each client's mailbox for replies and bounces." },
   "process-email-queue": { label: "Send emails", what: "Sends queued outreach and platform emails that are due.", run: "send_emails" },
   "publish-scheduled-content": { label: "Publish posts", what: "Publishes approved posts whose time has come.", run: "publish_posts" },
   "reconcile-postforme-posts": { label: "Confirm posts went live", what: "Double-checks with the social network that published posts really appeared." },
