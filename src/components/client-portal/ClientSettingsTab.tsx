@@ -198,7 +198,7 @@ export function ClientSettingsTab({ userId, clientAccountId, onPreferencesChange
     } catch (error) {
       console.error("Error saving preferences:", error);
       toast({
-        title: "Error saving preferences",
+        title: "Couldn't save preferences",
         description: "Please try again later.",
         variant: "destructive",
       });

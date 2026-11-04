@@ -21,7 +21,7 @@ import { EmailAnalyticsDashboard } from "./EmailAnalyticsDashboard";
 import { EmailDeliverabilityDashboard } from "./EmailDeliverabilityDashboard";
 import { EmailListCleaningPanel } from "./EmailListCleaningPanel";
 import { sanitizeHtml } from "@/lib/sanitize";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 
 // Timezone options
 const TIMEZONES = [
@@ -250,7 +250,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
 
   const handleScheduleEmail = async () => {
     if (!scheduleForm.recipientEmail || !scheduleForm.subject || !scheduleForm.htmlContent) {
-      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+      toast({ title: "A few details are missing", description: "Add a recipient, subject and email content to schedule this email.", variant: "warning" });
       return;
     }
 
@@ -297,7 +297,7 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       fetchEmailData();
     } catch (error) {
       console.error("Error scheduling email:", error);
-      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to schedule email", variant: "destructive" });
+      toast({ title: "Couldn't schedule email", description: describeError(error), variant: "destructive" });
     } finally {
       setIsScheduling(false);
     }
@@ -365,8 +365,8 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
     } catch (error) {
       console.error("Error fetching email data:", error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch email data",
+        title: "Couldn't load email data",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {
@@ -439,8 +439,8 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       fetchEmailData();
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update sequence",
+        title: "Couldn't update sequence",
+        description: describeError(error),
         variant: "destructive",
       });
     }
@@ -459,8 +459,8 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       fetchEmailData();
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete email",
+        title: "Couldn't delete email",
+        description: describeError(error),
         variant: "destructive",
       });
     }
@@ -478,8 +478,8 @@ export const EmailAdminPanel = ({ password }: EmailAdminPanelProps) => {
       fetchEmailData();
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to process queue",
+        title: "Couldn't process queue",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {

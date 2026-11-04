@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -545,7 +546,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
       queryClient.invalidateQueries({ queryKey: ["client-workflow", clientAccountId] });
       queryClient.invalidateQueries({ queryKey: ["onboarding-complete", clientAccountId] });
     } catch (err: any) {
-      toast({ title: "Error completing step", description: err.message, variant: "destructive" });
+      toast({ title: "Error completing step", description: describeError(err), variant: "destructive" });
     } finally {
       setCompletingStep(null);
     }
@@ -604,7 +605,7 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
       }
       setPendingFormStepId(null);
     } catch (err: any) {
-      toast({ title: "Failed to save details", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to save details", description: describeError(err), variant: "destructive" });
     } finally {
       setSubmittingBizForm(false);
     }

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,7 +277,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
       setDialogOpen(false);
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to create asset", variant: "destructive" });
+      toast({ title: "Couldn't create asset", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
       setUploading(false);
@@ -292,7 +292,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
       toast({ title: "Asset confirmed" });
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to confirm asset", variant: "destructive" });
+      toast({ title: "Couldn't confirm asset", description: describeError(error), variant: "destructive" });
     } finally {
       setConfirmingId(null);
     }
@@ -307,7 +307,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
       toast({ title: "Asset deleted" });
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error", description: friendlyEdgeMessage(error.message || "Failed to delete asset"), variant: "destructive" });
+      toast({ title: "Couldn't delete asset", description: describeError(error), variant: "destructive" });
     }
   };
 
@@ -338,7 +338,7 @@ export default function BrandAssetsAdminPanel({ clientId }: { clientId?: string 
         fetchData();
       }
     } catch (err: any) {
-      toast({ title: "Extraction failed", description: err.message, variant: "destructive" });
+      toast({ title: "Extraction failed", description: describeError(err), variant: "destructive" });
     } finally {
       setExtracting(false);
     }

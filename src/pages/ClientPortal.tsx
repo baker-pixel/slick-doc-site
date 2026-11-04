@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
@@ -96,6 +96,7 @@ const tabDescriptions: Record<PortalTab, string> = {
 export default function ClientPortal() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const intentionalSignOutRef = useRef(false);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -221,7 +222,7 @@ export default function ClientPortal() {
       } else {
         // Session ended (expiry, refresh failure, or remote revocation).
         // Tell the user why they're being bounced instead of failing silently.
-        if (event === "SIGNED_OUT") {
+        if (event === "SIGNED_OUT" && !intentionalSignOutRef.current) {
           toast({
             title: "Session ended",
             description: "Please sign in again to continue.",
@@ -347,6 +348,7 @@ export default function ClientPortal() {
     // places but not guaranteed everywhere -- wipe it so a different account
     // logging in on this browser/tab can't see stale data from this session.
     queryClient.clear();
+    intentionalSignOutRef.current = true; // don't tell the user their session "ended" when they chose to leave
     await supabase.auth.signOut();
     // onAuthStateChange SIGNED_OUT fires → setShouldRedirect(true) → navigate("/portal/auth")
   };

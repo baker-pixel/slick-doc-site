@@ -14,7 +14,7 @@ import {
   Upload, Plus, Trash2, CheckCircle2, X, Info, MessageSquare, BookOpen, Volume2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 import { BrandVoiceButton } from "./BrandVoiceButton";
 
@@ -231,7 +231,7 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
       toast({ title: "Confirmed", description: "We'll use this in your marketing materials." });
       fetchAssets();
     } catch (err: any) {
-      toast({ title: "Could not confirm", description: err.message, variant: "destructive" });
+      toast({ title: "Could not confirm", description: describeError(err), variant: "destructive" });
     } finally {
       setConfirmingId(null);
     }
@@ -248,7 +248,7 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
       toast({ title: "Removed", description: "Got it — we won't use that asset." });
       fetchAssets();
     } catch (err: any) {
-      toast({ title: "Could not remove", description: err.message, variant: "destructive" });
+      toast({ title: "Could not remove", description: describeError(err), variant: "destructive" });
     } finally {
       setRejectingId(null);
     }
@@ -312,7 +312,7 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
       resetUploadForm();
       fetchAssets();
     } catch (error: any) {
-      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+      toast({ title: "Upload failed", description: describeError(error), variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -367,7 +367,7 @@ export default function ClientBrandAssetsTab({ clientAccountId, onTabChange, onO
         description: "Available in your deliverables.",
       });
     } catch (err: any) {
-      toast({ title: "Could not generate guidelines", description: err.message, variant: "destructive" });
+      toast({ title: "Could not generate guidelines", description: describeError(err), variant: "destructive" });
     } finally {
       setGeneratingGuidelines(false);
     }

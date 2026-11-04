@@ -14,7 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 
 interface EmailTemplate {
   id: string;
@@ -168,7 +168,7 @@ export function QuickActionsPanel() {
       });
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error sending emails", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't send emails", description: describeError(error), variant: "destructive" });
     } finally {
       setIsSendingAll(false);
     }
@@ -203,7 +203,7 @@ export function QuickActionsPanel() {
       setEditContentModal(false);
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error saving", description: error.message, variant: "destructive" });
+      toast({ title: "Error saving", description: describeError(error), variant: "destructive" });
     } finally {
       setIsSavingContent(false);
     }
@@ -217,7 +217,7 @@ export function QuickActionsPanel() {
       toast({ title: "Content deleted" });
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error deleting", description: error.message, variant: "destructive" });
+      toast({ title: "Error deleting", description: describeError(error), variant: "destructive" });
     }
   };
 
@@ -236,7 +236,7 @@ export function QuickActionsPanel() {
       toast({ title: newStatus === "published" ? "Content published!" : "Moved to draft" });
       fetchData();
     } catch (error: any) {
-      toast({ title: "Error updating status", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update status", description: describeError(error), variant: "destructive" });
     }
   };
 
@@ -336,7 +336,7 @@ export function QuickActionsPanel() {
       fetchData();
 
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Something went wrong", description: describeError(error), variant: "destructive" });
     } finally {
       setIsSendingEmail(false);
     }
@@ -377,7 +377,7 @@ export function QuickActionsPanel() {
       fetchData();
 
     } catch (error: any) {
-      toast({ title: "Error generating content", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't generate content", description: describeError(error), variant: "destructive" });
     } finally {
       setIsGeneratingContent(false);
     }
@@ -418,7 +418,7 @@ export function QuickActionsPanel() {
       toast({ title: "Social post generated!" });
 
     } catch (error: any) {
-      toast({ title: "Error generating post", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't generate post", description: describeError(error), variant: "destructive" });
     } finally {
       setIsGeneratingSocial(false);
     }

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { callAdminApi } from "@/lib/admin-api";
-import { friendlyEdgeMessage } from "@/lib/edge-error";
+import { friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -100,7 +100,7 @@ export default function ClientRequestsAdminPanel({ clientId }: { clientId?: stri
       setRequests((data as any)?.data || []);
     } catch (error: any) {
       console.error("Error fetching requests:", error);
-      toast({ title: "Error loading requests", description: friendlyEdgeMessage(error.message), variant: "destructive" });
+      toast({ title: "Couldn't load requests", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -145,8 +145,8 @@ export default function ClientRequestsAdminPanel({ clientId }: { clientId?: stri
     } catch (error: any) {
       console.error("Error updating request:", error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to update request.",
+        title: "Couldn't update request",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {

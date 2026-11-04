@@ -11,7 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { RefreshCw, Edit, X, FileText, Mail, Megaphone, Eye, Send, Loader2, Sparkles, Share2, ImageIcon, CalendarClock, AlertTriangle, CheckCircle2, Lock } from "lucide-react";
 import { AiFixCard } from "@/components/admin/shared/AiFixCard";
 import { callAdminApi } from "@/lib/admin-api";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { contentStage, isAutoSent, STAGE_TABS, type StageInfo, type StageTone } from "@/lib/contentLifecycle";
 
 interface GeneratedContent {
@@ -299,7 +299,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
       setRejectingContent(null);
       fetchData();
     } catch {
-      toast({ title: "Error", description: "Failed to reject content", variant: "destructive" });
+      toast({ title: "Couldn't reject content", description: "Please try again in a moment.", variant: "destructive" });
     } finally {
       setRejectingId(null);
     }
@@ -386,7 +386,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
       fetchData();
     } catch (error: any) {
       console.error("Publish error:", error);
-      toast({ title: "Error", description: error.message || "Failed to send content for approval", variant: "destructive" });
+      toast({ title: "Couldn't send content for approval", description: describeError(error), variant: "destructive" });
     } finally {
       setIsPublishing(false);
     }
@@ -427,7 +427,7 @@ export const ContentReviewPanel = ({ clientId, adminPassword }: { clientId?: str
       fetchData();
 
     } catch (error: any) {
-      toast({ title: "Error generating content", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't generate content", description: describeError(error), variant: "destructive" });
     } finally {
       setIsGenerating(false);
     }

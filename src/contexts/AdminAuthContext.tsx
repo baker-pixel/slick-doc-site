@@ -1,3 +1,5 @@
+import { setAdminUnauthorizedHandler } from "@/lib/admin-api";
+import { toast } from "@/hooks/use-toast";
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 
 interface AdminAuthContextType {
@@ -50,7 +52,25 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     logoutTimerRef.current = setTimeout(logout, INACTIVITY_TIMEOUT_MS);
   }, [isAuthenticated, logout]);
 
+  // Server rejected our stored credentials mid-session: sign out once, with a
+  // clear reason, rather than leaving a dashboard where every call fails.
+  const endedRef = useRef(false);
+  useEffect(() => {
+    setAdminUnauthorizedHandler(() => {
+      if (endedRef.current || !sessionStorage.getItem(SESSION_FLAG_KEY)) return;
+      endedRef.current = true;
+      logout();
+      toast({
+        title: "Please sign in again",
+        description: "Your admin session is no longer valid. This usually happens after the password is changed.",
+        variant: "warning",
+      });
+    });
+    return () => setAdminUnauthorizedHandler(null);
+  }, [logout]);
+
   const login = useCallback((password: string) => {
+    endedRef.current = false;
     setAdminPassword(password);
     setIsAuthenticated(true);
     sessionStorage.setItem(SESSION_FLAG_KEY, "true");

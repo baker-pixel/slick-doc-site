@@ -327,7 +327,7 @@ export function useGapAnalysis({ resumeToken, prefillEmail, totalSteps }: UseGap
     } catch (err) {
       console.error("Failed to load saved progress:", err);
       toast({
-        title: "Error loading progress",
+        title: "Couldn't load progress",
         description: "Please try again or start fresh.",
         variant: "destructive",
       });

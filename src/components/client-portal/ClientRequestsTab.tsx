@@ -129,8 +129,8 @@ export default function ClientRequestsTab({ clientAccountId }: ClientRequestsTab
     } catch (error) {
       console.error("Error submitting request:", error);
       toast({
-        title: "Error",
-        description: "Failed to submit request. Please try again.",
+        title: "Couldn't submit request. Please try again",
+        description: "Please try again in a moment.",
         variant: "destructive",
       });
     } finally {

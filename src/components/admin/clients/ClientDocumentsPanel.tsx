@@ -88,8 +88,8 @@ export default function ClientDocumentsPanel({ clientId, adminPassword }: { clie
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
-        title: "Error",
-        description: "Failed to load data",
+        title: "Couldn't load data",
+        description: "Please try again in a moment.",
         variant: "destructive",
       });
     } finally {

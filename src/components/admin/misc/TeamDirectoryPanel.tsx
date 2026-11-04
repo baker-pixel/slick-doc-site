@@ -17,7 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Plus, Pencil, Trash2, Users, Upload, X } from "lucide-react";
 
 interface TeamMember {
@@ -89,7 +89,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error adding team member", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't add team member", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -118,7 +118,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error updating team member", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update team member", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -138,7 +138,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       toast({ title: "Team member deleted" });
     },
     onError: (error) => {
-      toast({ title: "Error deleting team member", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't delete team member", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -194,7 +194,7 @@ export default function TeamDirectoryPanel({ adminPassword }: TeamDirectoryPanel
       return publicUrl;
     } catch (error) {
       console.error("Photo upload error:", error);
-      toast({ title: "Error uploading photo", variant: "destructive" });
+      toast({ title: "Couldn't upload photo", variant: "destructive" });
       return null;
     } finally {
       setUploading(false);

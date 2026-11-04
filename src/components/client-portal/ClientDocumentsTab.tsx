@@ -87,8 +87,8 @@ export default function ClientDocumentsTab({ clientAccountId, clientTier }: Clie
     } catch (error) {
       console.error("Error fetching documents:", error);
       toast({
-        title: "Error",
-        description: "Failed to load documents",
+        title: "Couldn't load documents",
+        description: "Please try again in a moment.",
         variant: "destructive",
       });
     } finally {

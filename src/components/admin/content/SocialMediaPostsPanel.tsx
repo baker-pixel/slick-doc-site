@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { isPlaceholderContent } from "@/lib/contentPlaceholder";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
@@ -240,7 +240,7 @@ export default function SocialMediaPostsPanel() {
         description: "After connecting, click Sync Accounts to refresh.",
       });
     },
-    onError: (err) => toast({ title: "Connect failed", description: err.message, variant: "destructive" }),
+    onError: (err) => toast({ title: "Connect failed", description: describeError(err), variant: "destructive" }),
   });
 
   // Sync Post for Me accounts
@@ -260,7 +260,7 @@ export default function SocialMediaPostsPanel() {
       queryClient.invalidateQueries({ queryKey: ["pfm-accounts"] });
       toast({ title: "Synced", description: `${data?.synced ?? 0} account(s) synced from Post for Me` });
     },
-    onError: (err) => toast({ title: "Sync failed", description: err.message, variant: "destructive" }),
+    onError: (err) => toast({ title: "Sync failed", description: describeError(err), variant: "destructive" }),
   });
 
   // Disconnect Post for Me account (remove from our DB only)
@@ -276,7 +276,7 @@ export default function SocialMediaPostsPanel() {
       queryClient.invalidateQueries({ queryKey: ["pfm-accounts"] });
       toast({ title: "Account disconnected" });
     },
-    onError: (err) => toast({ title: "Disconnect failed", description: err.message, variant: "destructive" }),
+    onError: (err) => toast({ title: "Disconnect failed", description: describeError(err), variant: "destructive" }),
   });
 
   // Create post
@@ -311,7 +311,7 @@ export default function SocialMediaPostsPanel() {
       toast({ title: "Post created as draft — approve to make visible to client" });
     },
     onError: (error) => {
-      toast({ title: "Error creating post", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't create post", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -331,7 +331,7 @@ export default function SocialMediaPostsPanel() {
       toast({ title: "Post deleted" });
     },
     onError: (error: Error) => {
-      toast({ title: "Error deleting post", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't delete post", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -371,7 +371,7 @@ export default function SocialMediaPostsPanel() {
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Error updating post", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update post", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -421,7 +421,7 @@ export default function SocialMediaPostsPanel() {
       });
     },
     onError: (error: Error) => {
-      toast({ title: "Generate all failed", description: error.message, variant: "destructive" });
+      toast({ title: "Generate all failed", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -481,7 +481,7 @@ export default function SocialMediaPostsPanel() {
       toast({ title: "Post updated successfully" });
     },
     onError: (error) => {
-      toast({ title: "Error updating post", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update post", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -539,7 +539,7 @@ export default function SocialMediaPostsPanel() {
       toast({ title: "Content generated!" });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      toast({ title: "Error generating content", description: message, variant: "destructive" });
+      toast({ title: "Couldn't generate content", description: message, variant: "destructive" });
     } finally {
       setIsGeneratingContent(false);
     }
@@ -570,7 +570,7 @@ export default function SocialMediaPostsPanel() {
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      toast({ title: "Error generating images", description: message, variant: "destructive" });
+      toast({ title: "Couldn't generate images", description: message, variant: "destructive" });
     } finally {
       setIsGeneratingImages(false);
     }
