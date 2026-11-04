@@ -47,12 +47,15 @@ jobs:
       # approvals, steward gates, alert dedupe...) and the frontend error
       # mapper. --no-check because the type-debt note below applies to test
       # imports too; type safety of _shared is enforced by the step above.
+      # --no-lock: these pull esm.sh packages whose served bytes change between
+      # builds, so deno.lock hashes go stale and fail with "Integrity check
+      # failed for remote specifier" (seen on tslib). Not a code problem.
       - name: Unit tests (shared modules)
         working-directory: supabase/functions
-        run: deno test --no-check --allow-env --allow-read _shared
+        run: deno test --no-check --no-lock --allow-env --allow-read _shared
 
       - name: Unit tests (frontend error mapper)
-        run: deno test --no-check scripts
+        run: deno test --no-check --no-lock scripts
 
       # The legacy functions carry pre-existing type debt (untyped `any`
       # clients, `.catch()` on query builders). Full check is informational
