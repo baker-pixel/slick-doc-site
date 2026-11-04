@@ -58,6 +58,22 @@ export async function applyPfmResult(
     })
     .eq("id", item.id);
 
+  // PfM can deliver the same failed result several times (retries, duplicate
+  // deliveries), and each delivery used to write its own alert -- one failing
+  // post produced six identical admin emails. One alert per PfM post is enough;
+  // a retried post gets a new PfM post id and so alerts again.
+  const { data: existingAlert } = await supabase
+    .from("automation_alerts")
+    .select("id")
+    .eq("alert_type", "content_publish_failure")
+    .eq("source_id", item.id)
+    .eq("metadata->>pfm_post_id", result.post_id)
+    .limit(1);
+  if (existingAlert && existingAlert.length > 0) {
+    console.log(`Publish failure already alerted (${source}): calendar=${item.id} pfm=${result.post_id}`);
+    return;
+  }
+
   await supabase.from("automation_alerts").insert({
     alert_type: "content_publish_failure",
     severity: "error",

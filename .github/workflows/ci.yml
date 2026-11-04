@@ -43,6 +43,17 @@ jobs:
         working-directory: supabase/functions
         run: deno check _shared/*.ts
 
+      # Unit tests for shared edge-function logic (billing, drip schedule,
+      # approvals, steward gates, alert dedupe...) and the frontend error
+      # mapper. --no-check because the type-debt note below applies to test
+      # imports too; type safety of _shared is enforced by the step above.
+      - name: Unit tests (shared modules)
+        working-directory: supabase/functions
+        run: deno test --no-check --allow-env --allow-read _shared
+
+      - name: Unit tests (frontend error mapper)
+        run: deno test --no-check scripts
+
       # The legacy functions carry pre-existing type debt (untyped `any`
       # clients, `.catch()` on query builders). Full check is informational
       # until that debt is cleared — do NOT let new errors hide in here;

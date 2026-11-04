@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { buildSnippet, extractSenderAddress, isAutoReply, normalizeMessageId, parseReceivedAt } from "./clientMailboxPoll.ts";
+import { buildSnippet, extractSenderAddress, isAutoReply, normalizeMessageId, parseReceivedAt } from "./inboundReplyHelpers.ts";
 
 Deno.test("sender address: name+angle, bare, and junk", () => {
   assertEquals(extractSenderAddress('"Prasanna V" <PrasannaV@BNALearning.com>'), "prasannav@bnalearning.com");

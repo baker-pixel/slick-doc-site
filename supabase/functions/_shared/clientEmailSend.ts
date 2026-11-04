@@ -20,7 +20,7 @@ interface SendArgs {
   listUnsubscribeUrl?: string;
   // Tags the outbound Message-ID so a reply/bounce landing back in the
   // client's own mailbox can be matched to this send via the standard
-  // In-Reply-To/References headers -- see _shared/clientMailboxPoll.ts.
+  // In-Reply-To/References headers -- see _shared/inboundReplyHelpers.ts.
   trackingId?: string;
 }
 
