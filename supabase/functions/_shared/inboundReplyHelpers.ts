@@ -163,7 +163,7 @@ export function extractReplySnippet(raw: Uint8Array): string | null {
     const trimmed = trimQuotedReply(decoded) || decoded.trim();
     return trimmed ? trimmed.slice(0, 4000) : null;
   } catch (e) {
-    console.warn("[clientMailboxPoll] reply body parse failed:", e instanceof Error ? e.message : e);
+    console.warn("[inboundReplyHelpers] reply body parse failed:", e instanceof Error ? e.message : e);
     return null;
   }
 }

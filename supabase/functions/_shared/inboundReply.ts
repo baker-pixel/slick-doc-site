@@ -8,7 +8,7 @@ import {
   parseReceivedAt,
   stripHtml,
   trimQuotedReply,
-} from "./clientMailboxPoll.ts";
+} from "./inboundReplyHelpers.ts";
 import { ingestReply } from "./replyIngest.ts";
 
 // Central reply inbox. Client outreach carries
