@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { groupAlerts } from "../_shared/alertDigest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +56,9 @@ serve(async (req) => {
       for (const c of clients ?? []) clientsById.set(c.id, c);
     }
 
-    const errorCount   = alerts.length;
+    // Collapse identical alerts so one failing post isn't N rows / "N errors".
+    const groups = groupAlerts(alerts);
+    const errorCount   = groups.length;
     const warningCount = 0;
 
     // deno-lint-ignore no-explicit-any
@@ -73,12 +76,12 @@ serve(async (req) => {
         : "";
     };
 
-    const rows = alerts.map(a => `
+    const rows = groups.map(({ alert: a, count }) => `
       <tr style="border-bottom:1px solid #E4E2DC;">
         <td style="padding:10px 12px;font-family:monospace;font-size:12px;color:${a.severity === "error" ? "#DC2626" : "#D97706"};">
           ${a.severity.toUpperCase()}
         </td>
-        <td style="padding:10px 12px;font-size:13px;font-weight:600;">${escapeHtml(a.title)}</td>
+        <td style="padding:10px 12px;font-size:13px;font-weight:600;">${escapeHtml(a.title)}${count > 1 ? ` <span style="font-weight:400;color:#6B6B6F;">×${count}</span>` : ""}</td>
         <td style="padding:10px 12px;font-size:12px;color:#6B6B6F;">${escapeHtml(a.source)}</td>
         <td style="padding:10px 12px;font-size:12px;color:#6B6B6F;">
           ${new Date(a.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} ET
@@ -172,7 +175,7 @@ serve(async (req) => {
     // out, whether or not anyone read it or fixed anything, so unresolved
     // errors could vanish from the radar after exactly one notification.
 
-    console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} errors, ${warningCount} warnings)`);
+    console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} distinct, ${warningCount} warnings)`);
 
     return new Response(
       JSON.stringify({ sent: true, count: alerts.length, errorCount, warningCount }),
