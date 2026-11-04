@@ -4,6 +4,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/icp.ts";
 import { getConversionWins } from "../_shared/outcomes.ts";
 import { gateVerdict, isDroppable, minFitFor, normalizeUrl } from "../_shared/prospectGate.ts";
+import { AUTO_APPROVED_BY, selectForAutoApproval, type AutoApproveCandidate } from "../_shared/autoApprove.ts";
+import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
+import { tierPolicy } from "../_shared/tierPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -449,6 +452,102 @@ serve(async (req: Request) => {
       console.log(`Apollo enrichment: ${emailsEnriched} emails found`);
     }
 
+    // ── Auto-approval ───────────────────────────────────────────
+    // Promote leads that are scored, enriched and emailed straight into the
+    // outreach funnel (status "pending", which run-prospect-drip moves to
+    // nurture and drafts at its next hourly run). Replaces the manual review
+    // queue; the rules and their reasons live in _shared/autoApprove.ts. Runs
+    // last so a lead scored or emailed earlier in this same pass is approved
+    // in the same pass. A failure here must not fail enrichment.
+    let autoApproved = 0;
+    try {
+      const { data: ready } = await supabase
+        .from("prospects")
+        .select("id, client_id, status, approved_at, source, campaign_id, submission_id, email, icp_fit_score, context_profile, created_at")
+        .eq("status", "discovered")
+        .eq("source", "outbound")
+        .is("approved_at", null)
+        .is("campaign_id", null)
+        .is("submission_id", null)
+        .not("client_id", "is", null)
+        .not("email", "is", null)
+        .not("icp_fit_score", "is", null)
+        .order("icp_fit_score", { ascending: false })
+        .limit(500);
+
+      const byClient = new Map<string, AutoApproveCandidate[]>();
+      for (const p of (ready ?? []) as AutoApproveCandidate[]) {
+        byClient.set(p.client_id!, [...(byClient.get(p.client_id!) ?? []), p]);
+      }
+
+      if (byClient.size > 0) {
+        const clientIds = [...byClient.keys()];
+        const { data: clientRows } = await supabase
+          .from("client_accounts")
+          .select("id, business_name, status, tier, paused_for_billing, outreach_settings")
+          .in("id", clientIds);
+        const mailboxClients = await clientIdsWithMailbox(supabase, clientIds);
+        const dayStart = new Date();
+        dayStart.setUTCHours(0, 0, 0, 0);
+
+        for (const c of clientRows ?? []) {
+          const candidates = byClient.get(c.id) ?? [];
+          const policy = tierPolicy(c.tier).prospect;
+          // Same pace discovery runs at, so a backlog drains as fast as it
+          // was created and the daily send cap is never what overflows.
+          const { count: approvedToday } = await supabase
+            .from("prospects")
+            .select("id", { count: "exact", head: true })
+            .eq("client_id", c.id)
+            .eq("approved_by", AUTO_APPROVED_BY)
+            .gte("approved_at", dayStart.toISOString());
+          const budget = policy.discoveryBatch - (approvedToday ?? 0);
+          if (budget <= 0) continue;
+
+          // Emails this client already has in the funnel (or a finished one).
+          const { data: inFunnel } = await supabase
+            .from("prospects")
+            .select("email")
+            .eq("client_id", c.id)
+            .neq("status", "discovered")
+            .in("email", candidates.map((p) => p.email!));
+          const taken = new Set((inFunnel ?? []).map((r: { email: string }) => r.email.toLowerCase()));
+
+          const chosen = selectForAutoApproval(
+            candidates,
+            {
+              status: c.status,
+              paused_for_billing: c.paused_for_billing,
+              hasMailbox: mailboxClients.has(c.id),
+              prospectingEnabled: policy.enabled,
+              outreach_settings: c.outreach_settings,
+              minFit: await getMinFit(c.id),
+            },
+            budget,
+            taken,
+          );
+          if (chosen.length === 0) continue;
+
+          // .eq("status","discovered") so a lead a person rejected in the
+          // meantime is not resurrected.
+          const { data: updated, error: approveErr } = await supabase
+            .from("prospects")
+            .update({ status: "pending", approved_at: new Date().toISOString(), approved_by: AUTO_APPROVED_BY })
+            .in("id", chosen.map((p) => p.id))
+            .eq("status", "discovered")
+            .select("id");
+          if (approveErr) {
+            console.warn(`Auto-approve failed for ${c.business_name}:`, approveErr.message);
+            continue;
+          }
+          autoApproved += updated?.length ?? 0;
+          console.log(`Auto-approved ${updated?.length ?? 0} leads for ${c.business_name} (budget ${budget}, ${candidates.length} candidates)`);
+        }
+      }
+    } catch (e) {
+      console.warn("Auto-approval stage failed:", e);
+    }
+
     // Alert if errors
     if (errors > 0) {
       await supabase.from("automation_alerts").insert({
@@ -468,7 +567,7 @@ serve(async (req: Request) => {
       .is("context_profile", null);
 
     return new Response(
-      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, unreachable, emailsEnriched, scored, dropped, hasMore: (count ?? 0) > 0 }),
+      JSON.stringify({ success: true, processed, fromForm, fromWebsite, skipped, errors, unreachable, emailsEnriched, scored, dropped, autoApproved, hasMore: (count ?? 0) > 0 }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
