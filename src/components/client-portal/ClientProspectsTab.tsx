@@ -104,6 +104,16 @@ const STATUS_LABELS: Record<string, string> = {
   exhausted:     "Sequence Complete",
 };
 
+interface OutreachStats {
+  total: number;
+  emailed: number;
+  opened: number;
+  replied: number;
+  bounced: number;
+  converted: number;
+  human_opened_ids: string[];
+}
+
 type SortKey = "name" | "fit" | "status" | "created";
 type SortDir = "asc" | "desc";
 
@@ -137,6 +147,11 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [sortKey, setSortKey] = useState<SortKey>("created");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Server-computed pipeline stats (client_outreach_stats): exact counts
+  // beyond the 200-row list window, "emailed" = actually sent, and opens
+  // with security-scanner pixel fetches removed. Null until loaded / if the
+  // migration isn't applied, in which case the local counts below are used.
+  const [serverStats, setServerStats] = useState<OutreachStats | null>(null);
   // Who the outreach emails come from, so the email view can show a real "From".
   const [sender, setSender] = useState<OutreachSender>({ name: "Your team", address: null });
   const [signatureName, setSignatureName] = useState<string | null>(null);
@@ -154,6 +169,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     if (res.error?.code === "42703") res = await base().order("created_at", { ascending: false }).limit(200);
     setAllProspects(res.data ?? []);
     setLoading(false);
+    const statsRes: any = await (supabase as any).rpc("client_outreach_stats", { p_client_account_id: clientAccountId });
+    setServerStats(statsRes.error ? null : (statsRes.data as OutreachStats));
   };
 
   useEffect(() => {
@@ -237,16 +254,22 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
 
   const visible = allProspects.filter((p) => p.status !== "discovered");
 
-  // Campaign-level stats, computed from what's already fetched -- no new RPC
-  // needed. "Emailed" excludes leads still sitting in the pre-send queue.
-  const emailed = visible.filter((p) => p.status !== "pending").length;
-  const opened = visible.filter((p) => p.opened_at).length;
-  const repliedOrConverted = visible.filter((p) => p.status === "replied" || p.status === "converted").length;
-  const bounced = visible.filter((p) => p.status === "bounced").length;
-  const converted = visible.filter((p) => p.status === "converted").length;
+  // Prefer the server numbers. The local fallback only runs before they load
+  // (or if the RPC is missing) and uses the same rules: emailed = drip_step > 0,
+  // never "not pending" (queued-but-unsent and never-emailed converted leads
+  // used to inflate it).
+  const humanOpened = useMemo(() => new Set(serverStats?.human_opened_ids ?? []), [serverStats]);
+  const wasOpened = (p: Prospect) => (serverStats ? humanOpened.has(p.id) : !!p.opened_at);
+  const sentLeads = visible.filter((p) => p.drip_step > 0);
+  const total = serverStats?.total ?? visible.length;
+  const emailed = serverStats?.emailed ?? sentLeads.length;
+  const opened = serverStats?.opened ?? sentLeads.filter((p) => p.opened_at).length;
+  const repliedOrConverted = serverStats?.replied ?? sentLeads.filter((p) => p.status === "replied" || p.status === "converted").length;
+  const bounced = serverStats?.bounced ?? visible.filter((p) => p.status === "bounced").length;
+  const converted = serverStats?.converted ?? visible.filter((p) => p.status === "converted").length;
 
   const stats = [
-    { label: "Total leads", value: visible.length, icon: Users, color: "text-blue-600" },
+    { label: "Total leads", value: total, icon: Users, color: "text-blue-600" },
     { label: "Emailed", value: emailed, icon: Send, color: "text-indigo-600" },
     { label: "Open rate", value: `${pct(opened, emailed)}%`, icon: Eye, color: "text-sky-600" },
     { label: "Reply rate", value: `${pct(repliedOrConverted, emailed)}%`, icon: Reply, color: "text-emerald-600" },
@@ -451,7 +474,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                           <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
                             <MousePointerClick className="w-3.5 h-3.5" />Clicked
                           </span>
-                        ) : p.opened_at ? (
+                        ) : wasOpened(p) ? (
                           <span className="inline-flex items-center gap-1 text-xs text-blue-500">
                             <Eye className="w-3.5 h-3.5" />Opened
                           </span>
