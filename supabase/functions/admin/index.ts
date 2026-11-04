@@ -1,6 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth } from "../_shared/auth.ts";
-import { pipelineOnly } from "../_shared/campaignBoundary.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -396,25 +395,22 @@ Deno.serve(async (req) => {
         }
         const periodEndExclusive = new Date(new Date(period_end).getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-        const [leadsRes, opensRes, clicksRes] = await Promise.all([
-          // Leads generated = the prospect agent's pipeline only (not uploaded campaign lists).
-          pipelineOnly(supabase.from("prospects").select("id", { count: "exact", head: true })
-            .eq("client_id", client_id).gte("created_at", period_start).lt("created_at", periodEndExclusive)),
-          supabase.from("prospects").select("id", { count: "exact", head: true })
-            .eq("client_id", client_id).gte("opened_at", period_start).lt("opened_at", periodEndExclusive),
-          supabase.from("prospects").select("id", { count: "exact", head: true })
-            .eq("client_id", client_id).gte("clicked_at", period_start).lt("clicked_at", periodEndExclusive),
-        ]);
-        if (leadsRes.error) throw leadsRes.error;
-        if (opensRes.error) throw opensRes.error;
-        if (clicksRes.error) throw clicksRes.error;
+        // Same SQL function the weekly recap uses, so the admin panel and the
+        // client's Home tab can never disagree: contactable, visible pipeline
+        // leads and scanner-filtered opens (outreach_period_metrics).
+        const { data: metrics, error: metricsErr } = await supabase.rpc("outreach_period_metrics", {
+          p_client_id: client_id,
+          p_start: period_start,
+          p_end_exclusive: periodEndExclusive,
+        });
+        if (metricsErr) throw metricsErr;
 
         return new Response(
           JSON.stringify({
             data: {
-              leads_generated: leadsRes.count ?? 0,
-              email_opens: opensRes.count ?? 0,
-              email_clicks: clicksRes.count ?? 0,
+              leads_generated: Number(metrics?.leads_generated ?? 0),
+              email_opens: Number(metrics?.email_opens ?? 0),
+              email_clicks: Number(metrics?.email_clicks ?? 0),
             },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
