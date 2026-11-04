@@ -10,7 +10,7 @@ import {
 import { Loader2, FileCheck, CheckCheck, PartyPopper, Facebook, Instagram, Linkedin, Twitter, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 import { hasCaption } from "./approvals/ContentRenderer";
 import { ApprovalCard } from "./approvals/ApprovalCard";
@@ -303,7 +303,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       finishOnboardingStep();
       fetchApprovals();
     } catch (error) {
-      toast({ title: "Couldn't approve", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't approve", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -347,7 +347,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       advanceFrom(id);
       fetchApprovals();
     } catch (error) {
-      toast({ title: "Couldn't send feedback", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't send feedback", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -361,7 +361,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       toast({ title: "Won't be posted", description: "This post has been declined." });
       advanceFrom(id);
     } catch (error) {
-      toast({ title: "Couldn't update", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't update", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }

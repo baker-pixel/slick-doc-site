@@ -17,7 +17,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { callAdminApi } from "@/lib/admin-api";
-import { friendlyEdgeMessage } from "@/lib/edge-error";
+import { friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { inviteLeadToPortal, type InviteLead } from "@/lib/inviteLeadToPortal";
 import { Lock, Trash2, RefreshCw, Eye, EyeOff, Download, Search, CalendarIcon, X, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, Users, FileText, FileDown, UserPlus, Zap } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -407,10 +407,15 @@ const AdminInner = () => {
       }
 
       authLogin(password);
-      toast({ title: "Access granted" });
+      toast({ title: "Welcome back", description: "You're signed in to the admin dashboard.", variant: "success" });
       fetchData(password);
     } catch (error: any) {
-      toast({ title: "Access denied", description: friendlyEdgeMessage(error.message), variant: "destructive" });
+      const wrongPassword = /couldn't verify your access|unauthorized|401|invalid password/i.test(error.message || "");
+      toast({
+        title: wrongPassword ? "That password isn't right" : "Couldn't sign you in",
+        description: wrongPassword ? "Double-check it and try again — passwords are case-sensitive." : friendlyEdgeMessage(error.message),
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -428,7 +433,7 @@ const AdminInner = () => {
       setPdfLeads(d.pdfLeads || []);
       setQuickScanLeads(d.quickScanLeads || []);
     } catch (error: any) {
-      toast({ title: "Error fetching data", description: friendlyEdgeMessage(error.message), variant: "destructive" });
+      toast({ title: "Couldn't load data", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -442,7 +447,7 @@ const AdminInner = () => {
       toast({ title: "Status updated" });
       fetchData(storedPassword);
     } catch (error: any) {
-      toast({ title: "Error updating status", description: friendlyEdgeMessage(error.message), variant: "destructive" });
+      toast({ title: "Couldn't update status", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     }
   };
 
@@ -454,7 +459,7 @@ const AdminInner = () => {
       toast({ title: "Record deleted" });
       fetchData(storedPassword);
     } catch (error: any) {
-      toast({ title: "Error deleting record", description: friendlyEdgeMessage(error.message), variant: "destructive" });
+      toast({ title: "Couldn't delete record", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     }
   };
 
@@ -477,7 +482,7 @@ const AdminInner = () => {
       }
       fetchData(storedPassword);
     } catch (error: any) {
-      toast({ title: "Error deleting records", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't delete records", description: describeError(error), variant: "destructive" });
     } finally {
       setIsBulkDeleting(false);
     }
@@ -510,7 +515,7 @@ const AdminInner = () => {
       toast({ title: "Invitation sent!", description: `${lead.email} has been invited to the portal.` });
       fetchData(storedPassword);
     } catch (err: any) {
-      toast({ title: "Invite failed", description: err.message, variant: "destructive" });
+      toast({ title: "Invite failed", description: describeError(err), variant: "destructive" });
     } finally {
       setInvitingEmail(null);
     }

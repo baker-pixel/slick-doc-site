@@ -19,6 +19,7 @@ import { OutreachSettingsCard } from "./OutreachSettingsCard";
 import { SmtpSenderSection } from "./SmtpSenderSection";
 import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
 import { CampaignsSection } from "./CampaignsSection";
+import { OutreachInsights } from "./OutreachInsights";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
@@ -348,6 +349,13 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           {findingLeads ? "Searching..." : "Find leads now"}
         </Button>
       </div>
+
+      <OutreachInsights
+        clientAccountId={clientAccountId}
+        prospects={allProspects}
+        hasMailbox={hasMailbox}
+        onOpenLead={openCampaignLead}
+      />
 
       <CampaignsSection clientAccountId={clientAccountId} hasMailbox={hasMailbox} onOpenLead={openCampaignLead} />
 

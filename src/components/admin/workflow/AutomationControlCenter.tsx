@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { handleEdgeError, getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { handleEdgeError, getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { callAdminApi } from "@/lib/admin-api";
 import { 
   Zap, 
@@ -150,7 +150,7 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
     } catch (error) {
       console.error("Error fetching automation data:", error);
       const msg = error instanceof Error ? error.message : "Unknown error";
-      toast({ title: "Error loading data", description: friendlyEdgeMessage(msg), variant: "destructive" });
+      toast({ title: "Couldn't load data", description: friendlyEdgeMessage(msg), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -189,7 +189,7 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
       console.error("Error running automation:", error);
       toast({
         title: "Automation failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {
@@ -264,7 +264,7 @@ export function AutomationControlCenter({ adminPassword }: AutomationControlCent
     } catch (error) {
       console.error("Error saving schedule:", error);
       const msg = error instanceof Error ? error.message : "Unknown error";
-      toast({ title: "Error saving schedule", description: friendlyEdgeMessage(msg), variant: "destructive" });
+      toast({ title: "Couldn't save schedule", description: friendlyEdgeMessage(msg), variant: "destructive" });
     }
   };
 

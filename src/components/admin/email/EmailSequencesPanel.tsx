@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Json } from "@/integrations/supabase/types";
 import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3, Send, Loader2, Play } from "lucide-react";
 import { format } from "date-fns";
@@ -121,7 +121,7 @@ export function EmailSequencesPanel() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast({ title: "Error fetching sequences", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't load sequences", description: describeError(error), variant: "destructive" });
     } else {
       setSequences(data?.map(s => ({
         ...s,
@@ -155,7 +155,7 @@ export function EmailSequencesPanel() {
       .eq("id", sequence.id);
 
     if (error) {
-      toast({ title: "Error updating sequence", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update sequence", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: sequence.is_active ? "Sequence disabled" : "Sequence enabled" });
       fetchSequences();
@@ -232,7 +232,7 @@ export function EmailSequencesPanel() {
     }
 
     if (error) {
-      toast({ title: "Error saving sequence", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't save sequence", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: editingSequence.id ? "Sequence updated" : "Sequence created" });
       setIsEditorOpen(false);
@@ -247,7 +247,7 @@ export function EmailSequencesPanel() {
       .eq("id", id);
 
     if (error) {
-      toast({ title: "Error deleting sequence", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't delete sequence", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: "Sequence deleted" });
       fetchSequences();
@@ -265,7 +265,7 @@ export function EmailSequencesPanel() {
       }]);
 
     if (error) {
-      toast({ title: "Error duplicating sequence", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't duplicate sequence", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: "Sequence duplicated" });
       fetchSequences();
@@ -301,13 +301,13 @@ export function EmailSequencesPanel() {
       });
       if (error) {
         const msg = await getEdgeErrorMessage(error, data);
-        toast({ title: "Error loading preview", description: msg ? friendlyEdgeMessage(msg) : "Failed to load preview", variant: "destructive" });
+        toast({ title: "Couldn't load preview", description: msg ? friendlyEdgeMessage(msg) : "Failed to load preview", variant: "destructive" });
         return;
       }
       setPreviewHtml(data.html);
       setPreviewSubject(data.subject);
     } catch (error: any) {
-      toast({ title: "Error loading preview", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't load preview", description: describeError(error), variant: "destructive" });
     } finally {
       setIsLoadingPreview(false);
     }
@@ -325,12 +325,12 @@ export function EmailSequencesPanel() {
       });
       if (error) {
         const msg = await getEdgeErrorMessage(error, data);
-        toast({ title: "Error sending test email", description: msg ? friendlyEdgeMessage(msg) : "Failed to send test email", variant: "destructive" });
+        toast({ title: "Couldn't send test email", description: msg ? friendlyEdgeMessage(msg) : "Failed to send test email", variant: "destructive" });
         return;
       }
       toast({ title: "Test email sent!", description: `Sent to ${testEmail}` });
     } catch (error: any) {
-      toast({ title: "Error sending test email", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't send test email", description: describeError(error), variant: "destructive" });
     } finally {
       setIsSendingTest(false);
     }
@@ -361,7 +361,7 @@ export function EmailSequencesPanel() {
       });
       if (error) {
         const msg = await getEdgeErrorMessage(error, data);
-        toast({ title: "Error triggering sequence", description: msg ? friendlyEdgeMessage(msg) : "Failed to trigger sequence", variant: "destructive" });
+        toast({ title: "Couldn't trigger sequence", description: msg ? friendlyEdgeMessage(msg) : "Failed to trigger sequence", variant: "destructive" });
         return;
       }
       toast({
@@ -370,7 +370,7 @@ export function EmailSequencesPanel() {
       });
       setIsTriggerModalOpen(false);
     } catch (error: any) {
-      toast({ title: "Error triggering sequence", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't trigger sequence", description: describeError(error), variant: "destructive" });
     } finally {
       setIsTriggering(false);
     }

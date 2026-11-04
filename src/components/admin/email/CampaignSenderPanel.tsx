@@ -17,7 +17,7 @@ import { Send, Calendar, Users, FileText, Clock, CheckCircle, AlertCircle, Loade
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 
 // Variable descriptions for tooltips
 const VARIABLE_DESCRIPTIONS: Record<string, string> = {
@@ -411,7 +411,7 @@ export function CampaignSenderPanel() {
       console.error("AI generation error:", error);
       toast({ 
         title: "Failed to generate email", 
-        description: error.message,
+        description: describeError(error),
         variant: "destructive" 
       });
     } finally {
@@ -509,8 +509,8 @@ export function CampaignSenderPanel() {
 
     } catch (error: any) {
       toast({ 
-        title: "Error sending campaign", 
-        description: error.message,
+        title: "Couldn't send campaign", 
+        description: describeError(error),
         variant: "destructive" 
       });
     } finally {
@@ -525,7 +525,7 @@ export function CampaignSenderPanel() {
       .eq("id", id);
 
     if (error) {
-      toast({ title: "Error canceling email", variant: "destructive" });
+      toast({ title: "Couldn't cancel email", variant: "destructive" });
     } else {
       toast({ title: "Email canceled" });
       fetchQueuedEmails();

@@ -73,7 +73,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
       setSelectedItem(null);
       toast({ title: "Post deleted" });
     } catch {
-      toast({ title: "Error", description: "Failed to delete post.", variant: "destructive" });
+      toast({ title: "Couldn't delete post", description: "Please try again in a moment.", variant: "destructive" });
     }
   };
 

@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -284,7 +285,7 @@ export default function ClientPortalAuth() {
       if (error) {
         toast({
           title: "Reset Failed",
-          description: error.message,
+          description: describeError(error),
           variant: "destructive",
         });
         setLoading(false);
@@ -298,8 +299,8 @@ export default function ClientPortalAuth() {
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "An error occurred",
+        title: "Something went wrong",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {
@@ -313,7 +314,7 @@ export default function ClientPortalAuth() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Something went wrong", description: describeError(error), variant: "destructive" });
         return;
       }
       toast({ title: "Password updated!", description: "You're now signed in." });
@@ -321,7 +322,7 @@ export default function ClientPortalAuth() {
       setIsPasswordRecovery(false);
       navigate("/portal");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "Something went wrong", description: describeError(err), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -378,8 +379,8 @@ export default function ClientPortalAuth() {
       navigate("/portal");
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "An error occurred",
+        title: "Something went wrong",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {

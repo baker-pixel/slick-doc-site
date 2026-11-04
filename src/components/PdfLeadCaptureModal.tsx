@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, FileText, CheckCircle2, Loader2 } from "lucide-react";
@@ -52,8 +53,8 @@ export function PdfLeadCaptureModal({ isOpen, onClose }: PdfLeadCaptureModalProp
     } catch (error: any) {
       console.error("Error sending PDF:", error);
       toast({
-        title: "Error",
-        description: error?.message || "Failed to send the brochure. Please try again.",
+        title: "Couldn't send the brochure",
+        description: describeError(error, "Please check your email address and try again."),
         variant: "destructive",
       });
     } finally {

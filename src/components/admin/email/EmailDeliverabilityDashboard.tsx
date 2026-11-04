@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { 
   RefreshCw, AlertTriangle, CheckCircle, XCircle, Shield, 
   TrendingDown, TrendingUp, Mail, AlertCircle, Activity,
@@ -74,7 +74,7 @@ export const EmailDeliverabilityDashboard = ({ password }: EmailDeliverabilityDa
       if (trackingResponse.data?.data) setTrackingEvents(trackingResponse.data.data);
     } catch (error) {
       console.error("Error fetching deliverability data:", error);
-      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to fetch deliverability data", variant: "destructive" });
+      toast({ title: "Couldn't load deliverability data", description: describeError(error), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }

@@ -163,7 +163,7 @@ export default function ProspectEnginePanel() {
     });
     if (error || data?.error) {
       const msg = await getEdgeErrorMessage(error, data);
-      toast({ title: "Error loading clients", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+      toast({ title: "Couldn't load clients", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
       return;
     }
     const rows = (data?.data ?? [])
@@ -180,7 +180,7 @@ export default function ProspectEnginePanel() {
     });
     if (error || data?.error) {
       const msg = await getEdgeErrorMessage(error, data);
-      toast({ title: "Error loading prospects", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
+      toast({ title: "Couldn't load prospects", description: msg ? friendlyEdgeMessage(msg) : "Something went wrong", variant: "destructive" });
       setProspects([]);
       setLoading(false);
       return;

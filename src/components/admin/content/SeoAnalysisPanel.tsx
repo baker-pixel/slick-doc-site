@@ -174,7 +174,7 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
     });
     if (error || data?.error) {
       const msg = await getEdgeErrorMessage(error, data);
-      toast({ title: "Error loading SEO audits", description: msg ? friendlyEdgeMessage(msg) : "Failed to load SEO audits", variant: "destructive" });
+      toast({ title: "Couldn't load SEO audits", description: msg ? friendlyEdgeMessage(msg) : "Failed to load SEO audits", variant: "destructive" });
       setAudits([]);
     } else {
       setAudits((data?.data ?? []) as SeoAudit[]);

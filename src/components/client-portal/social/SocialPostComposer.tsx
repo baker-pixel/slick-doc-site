@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Sparkles, Send, Save, Loader2, Linkedin, Instagram, Twitter, Facebook, Copy, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -86,7 +86,7 @@ export function SocialPostComposer({ clientAccountId }: SocialPostComposerProps)
       toast({ title: "Content generated!", description: "Review and edit the post before saving." });
     } catch (err) {
       console.error("Error generating content:", err);
-      toast({ title: "Generation failed", description: err instanceof Error ? err.message : "Could not generate content. Please try again.", variant: "destructive" });
+      toast({ title: "Generation failed", description: describeError(err), variant: "destructive" });
     } finally {
       setGenerating(false);
     }

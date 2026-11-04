@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Plus, Pencil, Trash2, Package, Star, Eye, Download } from "lucide-react";
 import { format } from "date-fns";
 
@@ -126,7 +126,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       console.error("Failed to send notification:", error);
       toast({
         title: "Notification not sent",
-        description: error instanceof Error ? error.message : "The client may not have been notified about this deliverable.",
+        description: describeError(error),
         variant: "destructive",
       });
     }
@@ -150,7 +150,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error creating deliverable", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't create deliverable", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -171,7 +171,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       resetForm();
     },
     onError: (error) => {
-      toast({ title: "Error updating deliverable", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update deliverable", description: describeError(error), variant: "destructive" });
     },
   });
 
@@ -191,7 +191,7 @@ export default function DeliverablesAdminPanel({ adminPassword, clientId }: Deli
       toast({ title: "Deliverable deleted" });
     },
     onError: (error) => {
-      toast({ title: "Error deleting deliverable", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't delete deliverable", description: describeError(error), variant: "destructive" });
     },
   });
 
