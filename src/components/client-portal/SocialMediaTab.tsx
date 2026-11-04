@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link2, PenTool } from "lucide-react";
+import { CalendarRange, Link2, PenTool } from "lucide-react";
 import { ClientIntegrationsTab } from "./ClientIntegrationsTab";
 import { SocialPostComposer } from "./social/SocialPostComposer";
+import { PostingPlanCard } from "./social/PostingPlanCard";
 import { BrandVoiceButton } from "./BrandVoiceButton";
 
 interface SocialMediaTabProps {
   clientAccountId: string;
-  initialTab?: "composer" | "accounts";
+  initialTab?: "composer" | "accounts" | "plan";
   onTabChange?: (tab: string) => void;
   onOpenBrandVoice?: () => void;
 }
@@ -28,7 +29,7 @@ export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTab
       </div>
 
       <Tabs value={subTab} onValueChange={setSubTab}>
-        <TabsList className="grid w-full grid-cols-2 max-w-sm">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg">
           <TabsTrigger value="composer" className="gap-1.5">
             <PenTool className="h-3.5 w-3.5" />
             Composer
@@ -36,6 +37,10 @@ export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTab
           <TabsTrigger value="accounts" className="gap-1.5">
             <Link2 className="h-3.5 w-3.5" />
             Connected Accounts
+          </TabsTrigger>
+          <TabsTrigger value="plan" className="gap-1.5">
+            <CalendarRange className="h-3.5 w-3.5" />
+            Posting Plan
           </TabsTrigger>
         </TabsList>
 
@@ -45,6 +50,10 @@ export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTab
 
         <TabsContent value="accounts" className="mt-6">
           <ClientIntegrationsTab clientAccountId={clientAccountId} onTabChange={onTabChange} />
+        </TabsContent>
+
+        <TabsContent value="plan" className="mt-6">
+          <PostingPlanCard clientAccountId={clientAccountId} />
         </TabsContent>
       </Tabs>
     </div>
