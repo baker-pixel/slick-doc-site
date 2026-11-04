@@ -174,6 +174,7 @@ export function buildSocialImagePrompt(client: ImagePromptClient, post: ImagePro
 
   constraints.push(
     `Composition: clean negative space suitable for a text overlay.`,
+    `Keep the bottom 20% of the frame free of key subjects and detail -- a logo is added there afterwards.`,
     `No extra text of any kind -- no on-screen copy, no logos, no watermarks, no illegible or garbled signage, no lettering on clothing/uniforms/props/buildings. If the subject would naturally include text (a screen, a sign, a page, a shirt), render it as soft out-of-focus shapes and color blocks, never as invented words or letters.`,
     `The business name, post title, and content gist above are background context only -- never render any of that wording as literal text, caption, or logo lettering anywhere in the image.`,
   );

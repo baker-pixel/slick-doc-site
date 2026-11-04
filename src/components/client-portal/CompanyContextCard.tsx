@@ -1,3 +1,4 @@
+import WebsiteSuggestionsPanel, { type WebsiteSuggestion, type WebsiteSuggestions } from "./WebsiteSuggestions";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -23,6 +24,10 @@ interface ContextProfile {
   never_say?: string[];
   image_styles?: string[];
   image_never?: string[];
+  /** Findings from the website crawl, waiting for the client to accept or dismiss them. */
+  website_suggestions?: WebsiteSuggestions;
+  website_suggestions_dismissed?: string[];
+  website_profile?: { generated_at?: string; filled?: string[] };
 }
 
 interface CompanyContext {
@@ -191,6 +196,30 @@ export function CompanyContextCard({ clientAccountId, autoOpen = false }: Compan
 
   const handleProfileChange = () => setHasChanges(true);
 
+  // Website suggestions: accepting puts the item into the form (saved with the rest); either way it leaves the list,
+  // and a dismissed item is remembered so the next crawl doesn't offer it again.
+  const withoutSuggestion = (field: string, item: WebsiteSuggestion, dismiss: boolean) =>
+    setCtx((prev) => {
+      const cp = prev.context_profile ?? ({} as ContextProfile);
+      const left = (cp.website_suggestions?.[field] ?? []).filter((x) => x.text !== item.text);
+      const next: WebsiteSuggestions = { ...(cp.website_suggestions ?? {}), [field]: left };
+      return { ...prev, context_profile: { ...cp, website_suggestions: next, ...(dismiss ? { website_suggestions_dismissed: [...(cp.website_suggestions_dismissed ?? []), item.text] } : {}) } };
+    });
+
+  const acceptSuggestion = (field: string, item: WebsiteSuggestion) => {
+    const addTo = (list: string[]) => (list.includes(item.text) ? list : [...list, item.text]);
+    if (field === "website_summary") update("website_summary", item.text);
+    else if (field === "industry") update("industry", item.text);
+    else if (field === "target_audience") setTargetAudience(item.text);
+    else if (field === "services") setServices(addTo(services));
+    else if (field === "differentiators") setDifferentiators(addTo(differentiators));
+    else if (field === "verified_facts") setVerifiedFacts(addTo(verifiedFacts));
+    else if (field === "location") setLocation(location.trim() ? `${location.trim()}, ${item.text}` : item.text);
+    withoutSuggestion(field, item, false);
+    setHasChanges(true);
+  };
+  const dismissSuggestion = (field: string, item: WebsiteSuggestion) => { withoutSuggestion(field, item, true); setHasChanges(true); };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -305,7 +334,18 @@ export function CompanyContextCard({ clientAccountId, autoOpen = false }: Compan
             placeholder="Brief description of what your website covers and what visitors can find..."
             className="min-h-[80px] resize-none"
           />
+          {ctx.context_profile?.website_profile?.filled?.includes("website_summary") && ctx.website_summary && (
+            <p className="text-xs text-muted-foreground">
+              Filled in from your website{ctx.context_profile.website_profile.generated_at ? ` on ${new Date(ctx.context_profile.website_profile.generated_at).toLocaleDateString()}` : ""}. Edit anything that isn't right.
+            </p>
+          )}
         </div>
+
+        <WebsiteSuggestionsPanel
+          suggestions={ctx.context_profile?.website_suggestions ?? {}}
+          onAccept={acceptSuggestion}
+          onDismiss={dismissSuggestion}
+        />
 
         <div className="border-t pt-4 space-y-5">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Content Profile</p>

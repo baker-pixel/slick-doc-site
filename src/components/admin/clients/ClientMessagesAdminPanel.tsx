@@ -122,7 +122,7 @@ export default function ClientMessagesAdminPanel({ clientId }: { clientId?: stri
       }
     } catch (error: any) {
       console.error("Error fetching messages:", error);
-      toast({ title: "Error loading messages", description: friendlyEdgeMessage(error.message), variant: "destructive" });
+      toast({ title: "Couldn't load messages", description: friendlyEdgeMessage(error.message), variant: "destructive" });
     }
   };
 

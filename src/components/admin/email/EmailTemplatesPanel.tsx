@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { FileText, Plus, Edit, Trash2, RefreshCw, Eye, Copy, Code, Variable, Filter, Sparkles, Loader2, Wand2, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -129,7 +129,7 @@ export function EmailTemplatesPanel() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      toast({ title: "Error fetching templates", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't load templates", description: describeError(error), variant: "destructive" });
     } else {
       setTemplates(data?.map(t => ({
         ...t,
@@ -150,7 +150,7 @@ export function EmailTemplatesPanel() {
       .eq("id", template.id);
 
     if (error) {
-      toast({ title: "Error updating template", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't update template", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: template.is_active ? "Template disabled" : "Template enabled" });
       fetchTemplates();
@@ -247,7 +247,7 @@ export function EmailTemplatesPanel() {
     }
 
     if (error) {
-      toast({ title: "Error saving template", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't save template", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: editingTemplate.id ? "Template updated" : "Template created" });
       setIsEditorOpen(false);
@@ -262,7 +262,7 @@ export function EmailTemplatesPanel() {
       .eq("id", id);
 
     if (error) {
-      toast({ title: "Error deleting template", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't delete template", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: "Template deleted" });
       fetchTemplates();
@@ -284,7 +284,7 @@ export function EmailTemplatesPanel() {
       }]);
 
     if (error) {
-      toast({ title: "Error duplicating template", description: error.message, variant: "destructive" });
+      toast({ title: "Couldn't duplicate template", description: describeError(error), variant: "destructive" });
     } else {
       toast({ title: "Template duplicated" });
       fetchTemplates();
@@ -355,7 +355,7 @@ export function EmailTemplatesPanel() {
       console.error("AI generation error:", error);
       toast({ 
         title: "Generation failed", 
-        description: error.message || "Failed to generate template",
+        description: describeError(error),
         variant: "destructive" 
       });
     } finally {

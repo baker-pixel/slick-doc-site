@@ -8,6 +8,14 @@ export interface BusinessContextClient {
   context_profile?: { target_audience?: unknown } | null;
 }
 
+// inviteLeadToPortal stores "General" when a lead had no industry. That is "we don't know", not an
+// answer, so anything that fills or reads the industry treats it as empty.
+const PLACEHOLDER_INDUSTRY = /^(general|other|n\/?a|none|unknown|misc(ellaneous)?)$/i;
+
+export function isPlaceholderIndustry(industry: string | null | undefined): boolean {
+  return !industry?.trim() || PLACEHOLDER_INDUSTRY.test(industry.trim());
+}
+
 export function hasBusinessContext(client: BusinessContextClient): boolean {
   const industry = client.industry?.trim();
   const audience = client.context_profile?.target_audience;

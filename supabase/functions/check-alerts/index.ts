@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { groupAlerts } from "../_shared/alertDigest.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,20 +39,54 @@ serve(async (req) => {
       });
     }
 
-    const errorCount   = alerts.length;
+    // Alerts that carry a client id in metadata get the client's business and
+    // email appended, so whoever reads the email knows who to contact without
+    // opening the admin panel. source_id is deliberately not used: it holds a
+    // content/post id for some sources, a client id for others.
+    // deno-lint-ignore no-explicit-any
+    const clientIdOf = (a: any): string | null =>
+      a.metadata?.client_account_id ?? a.metadata?.client_id ?? null;
+    const clientIds = [...new Set(alerts.map(clientIdOf).filter((id): id is string => !!id))];
+    const clientsById = new Map<string, { business_name: string | null; email: string | null }>();
+    if (clientIds.length > 0) {
+      const { data: clients } = await supabase
+        .from("client_accounts")
+        .select("id, business_name, email")
+        .in("id", clientIds);
+      for (const c of clients ?? []) clientsById.set(c.id, c);
+    }
+
+    // Collapse identical alerts so one failing post isn't N rows / "N errors".
+    const groups = groupAlerts(alerts);
+    const errorCount   = groups.length;
     const warningCount = 0;
 
-    const rows = alerts.map(a => `
+    // deno-lint-ignore no-explicit-any
+    const detailsHtml = (a: any): string => {
+      const client = clientsById.get(clientIdOf(a) ?? "");
+      const lines: string[] = [];
+      if (client) {
+        lines.push(`Client: ${client.business_name ?? "unknown"}${client.email ? ` &lt;${escapeHtml(client.email)}&gt;` : ""}`.replace(
+          client.business_name ?? "unknown", escapeHtml(client.business_name ?? "unknown")));
+      }
+      if (a.metadata?.platform) lines.push(`Platform: ${escapeHtml(String(a.metadata.platform))}`);
+      if (a.metadata?.title) lines.push(`Post: ${escapeHtml(String(a.metadata.title))}`);
+      return lines.length
+        ? `<div style="margin-top:6px;font-size:11px;color:#6B6B6F;line-height:1.5;">${lines.join("<br>")}</div>`
+        : "";
+    };
+
+    const rows = groups.map(({ alert: a, count }) => `
       <tr style="border-bottom:1px solid #E4E2DC;">
         <td style="padding:10px 12px;font-family:monospace;font-size:12px;color:${a.severity === "error" ? "#DC2626" : "#D97706"};">
           ${a.severity.toUpperCase()}
         </td>
-        <td style="padding:10px 12px;font-size:13px;font-weight:600;">${escapeHtml(a.title)}</td>
+        <td style="padding:10px 12px;font-size:13px;font-weight:600;">${escapeHtml(a.title)}${count > 1 ? ` <span style="font-weight:400;color:#6B6B6F;">×${count}</span>` : ""}</td>
         <td style="padding:10px 12px;font-size:12px;color:#6B6B6F;">${escapeHtml(a.source)}</td>
         <td style="padding:10px 12px;font-size:12px;color:#6B6B6F;">
           ${new Date(a.created_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} ET
         </td>
-        <td style="padding:10px 12px;font-size:12px;">${escapeHtml(a.message)}</td>
+        <td style="padding:10px 12px;font-size:12px;">${escapeHtml(a.message)}${detailsHtml(a)}</td>
       </tr>`).join("");
 
     const html = `
@@ -140,7 +175,7 @@ serve(async (req) => {
     // out, whether or not anyone read it or fixed anything, so unresolved
     // errors could vanish from the radar after exactly one notification.
 
-    console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} errors, ${warningCount} warnings)`);
+    console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} distinct, ${warningCount} warnings)`);
 
     return new Response(
       JSON.stringify({ sent: true, count: alerts.length, errorCount, warningCount }),

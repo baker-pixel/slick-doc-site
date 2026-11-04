@@ -59,6 +59,26 @@ export function explainError(e: OpenAIApiError, keyKind: KeyKind = "admin"): { t
 
 type FetchFn = (url: string, init: RequestInit) => Promise<Response>;
 
+/** One authenticated GET to OpenAI with every failure turned into a typed, explainable error. */
+async function getJson(url: string, adminKey: string, fetchFn: FetchFn): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetchFn(url, { headers: { Authorization: `Bearer ${adminKey}`, "Content-Type": "application/json" } });
+  } catch (e) {
+    throw new OpenAIApiError("network", e instanceof Error ? e.message : "network error");
+  }
+  if (!res.ok) {
+    const kind: OpenAIErrorKind = res.status === 401 ? "unauthorized" : res.status === 403 ? "forbidden" : res.status === 404 ? "not_found" : res.status === 429 ? "rate_limited" : "server";
+    let detail = "";
+    try { detail = (await res.json())?.error?.message ?? ""; } catch { /* no body */ }
+    throw new OpenAIApiError(kind, detail || `OpenAI returned HTTP ${res.status}`, res.status);
+  }
+  let body: any;
+  try { body = await res.json(); } catch { throw new OpenAIApiError("bad_response", "OpenAI returned something that isn't JSON"); }
+  if (!Array.isArray(body?.data)) throw new OpenAIApiError("bad_response", "OpenAI's reply had no data list");
+  return body;
+}
+
 /** Follows OpenAI's cursor pagination (`next_page`) and returns every bucket. */
 export async function fetchBuckets(
   endpoint: "costs" | "usage/completions",
@@ -72,22 +92,7 @@ export async function fetchBuckets(
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) for (const one of Array.isArray(v) ? v : [v]) qs.append(k, one);
     if (page) qs.set("page", page);
-
-    let res: Response;
-    try {
-      res = await fetchFn(`${OPENAI_API}/${endpoint}?${qs}`, { headers: { Authorization: `Bearer ${adminKey}`, "Content-Type": "application/json" } });
-    } catch (e) {
-      throw new OpenAIApiError("network", e instanceof Error ? e.message : "network error");
-    }
-    if (!res.ok) {
-      const kind: OpenAIErrorKind = res.status === 401 ? "unauthorized" : res.status === 403 ? "forbidden" : res.status === 404 ? "not_found" : res.status === 429 ? "rate_limited" : "server";
-      let detail = "";
-      try { detail = (await res.json())?.error?.message ?? ""; } catch { /* no body */ }
-      throw new OpenAIApiError(kind, detail || `OpenAI returned HTTP ${res.status}`, res.status);
-    }
-    let body: any;
-    try { body = await res.json(); } catch { throw new OpenAIApiError("bad_response", "OpenAI returned something that isn't JSON"); }
-    if (!Array.isArray(body?.data)) throw new OpenAIApiError("bad_response", "OpenAI's reply had no data list");
+    const body = await getJson(`${OPENAI_API}/${endpoint}?${qs}`, adminKey, fetchFn);
     out.push(...body.data);
     page = typeof body.next_page === "string" && body.next_page ? body.next_page : null;
     if (!page) break;
@@ -95,8 +100,25 @@ export async function fetchBuckets(
   return out;
 }
 
-export interface CostRow { day: string; line_item: string; usd: number }
-export interface UsageRow { day: string; model: string; requests: number; input_tokens: number; output_tokens: number }
+export interface ProjectInfo { id: string; name: string; status: string }
+export const PROJECT_ID = /^proj_[A-Za-z0-9_-]{4,80}$/;
+
+/** The organization's OpenAI projects, so the owner can pick which ones are OrangeDoor's. */
+export async function fetchProjects(adminKey: string, fetchFn: FetchFn = fetch): Promise<ProjectInfo[]> {
+  const out: ProjectInfo[] = [];
+  let after: string | null = null;
+  for (let i = 0; i < 10; i++) {
+    const qs = new URLSearchParams({ limit: "100" });
+    if (after) qs.set("after", after);
+    const body = await getJson(`${OPENAI_API}/projects?${qs}`, adminKey, fetchFn);
+    for (const r of body.data) if (typeof r?.id === "string") out.push({ id: r.id, name: typeof r.name === "string" && r.name ? r.name : r.id, status: typeof r.status === "string" ? r.status : "active" });
+    if (body.has_more === true && typeof body.last_id === "string" && body.last_id) after = body.last_id; else break;
+  }
+  return out;
+}
+
+export interface CostRow { day: string; line_item: string; project_id: string | null; usd: number }
+export interface UsageRow { day: string; model: string; project_id: string | null; requests: number; input_tokens: number; output_tokens: number }
 
 const dayOf = (unixSeconds: number) => new Date(unixSeconds * 1000).toISOString().slice(0, 10);
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
@@ -110,7 +132,7 @@ export function parseCostBuckets(buckets: any[]): { rows: CostRow[]; otherCurren
     for (const r of b?.results ?? []) {
       const currency = String(r?.amount?.currency ?? "usd").toLowerCase();
       if (currency !== "usd") { other.add(currency); continue; }
-      rows.push({ day, line_item: typeof r?.line_item === "string" && r.line_item ? r.line_item : "Other", usd: n(r?.amount?.value) });
+      rows.push({ day, line_item: typeof r?.line_item === "string" && r.line_item ? r.line_item : "Other", project_id: typeof r?.project_id === "string" && r.project_id ? r.project_id : null, usd: n(r?.amount?.value) });
     }
   }
   return { rows, otherCurrencies: [...other] };
@@ -121,7 +143,7 @@ export function parseUsageBuckets(buckets: any[]): UsageRow[] {
   for (const b of buckets) {
     const day = dayOf(n(b?.start_time));
     for (const r of b?.results ?? []) {
-      rows.push({ day, model: typeof r?.model === "string" && r.model ? r.model : "unknown", requests: n(r?.num_model_requests), input_tokens: n(r?.input_tokens), output_tokens: n(r?.output_tokens) });
+      rows.push({ day, model: typeof r?.model === "string" && r.model ? r.model : "unknown", project_id: typeof r?.project_id === "string" && r.project_id ? r.project_id : null, requests: n(r?.num_model_requests), input_tokens: n(r?.input_tokens), output_tokens: n(r?.output_tokens) });
     }
   }
   return rows;
@@ -130,6 +152,16 @@ export function parseUsageBuckets(buckets: any[]): UsageRow[] {
 /** "gpt-4.1-mini-2025-04-14, input" -> "gpt-4.1-mini, input". OpenAI's own wording is kept; only the date stamp is dropped. */
 export function cleanLineItem(s: string): string {
   return s.replace(/-\d{4}-\d{2}-\d{2}(?=\b)/g, "").trim() || "Other";
+}
+/**
+ * Keep only rows from the chosen OpenAI projects (none chosen = everything). We ask OpenAI to filter too,
+ * but also filter here: a row with no project label can't be proven to be ours, so it is left out when a
+ * filter is set, rather than being counted by default.
+ */
+export function filterByProjects<T extends { project_id: string | null }>(rows: T[], projectIds: string[]): T[] {
+  if (projectIds.length === 0) return rows;
+  const keep = new Set(projectIds);
+  return rows.filter((r) => r.project_id !== null && keep.has(r.project_id));
 }
 export const isImageLineItem = (s: string) => /image/i.test(s);
 

@@ -30,7 +30,19 @@ serve(async (req) => {
       stale_automation_step_alert: 0,
       stale_client_approval_reenqueued: 0,
       unpublishable_social_alert: 0,
+      stuck_brand_runs: 0,
     };
+
+    // ── Sweep 1b: brand extraction runs stuck in "running" ──────────────
+    // The extractor finishes its own run row on every path, so a row still
+    // running after this long means the edge function was killed mid-run.
+    const { data: reapedRuns } = await supabase
+      .from("brand_extraction_runs")
+      .update({ status: "failed", error: "Run did not finish (timed out or crashed)", finished_at: now.toISOString() })
+      .eq("status", "running")
+      .lt("started_at", new Date(now.getTime() - 6 * 60_000).toISOString())
+      .select("id");
+    summary.stuck_brand_runs = reapedRuns?.length ?? 0;
 
     // ── Sweep 2: workflow_tasks stuck in "running" ──────────────────────
     // An agent function sets running, then crashes/times out → row is stuck

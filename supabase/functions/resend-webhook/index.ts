@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { handleInboundEmail, resendFetchReceived, type InboundEventData } from "../_shared/inboundReply.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,7 +74,29 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
     const payload: ResendWebhookPayload = JSON.parse(rawBody);
-    console.log("Received Resend webhook:", JSON.stringify(payload, null, 2));
+    console.log("Received Resend webhook:", payload.type, payload.data?.email_id);
+
+    // Inbound mail (prospect replies to the central reply inbox). Unlike the
+    // delivery events below, an unsigned inbound event could forge a reply
+    // and stop a real prospect's sequence, so the secret is mandatory here.
+    if (payload.type === "email.received") {
+      if (!Deno.env.get("RESEND_WEBHOOK_SECRET")) {
+        return new Response(JSON.stringify({ error: "RESEND_WEBHOOK_SECRET required for inbound mail" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const outcome = await handleInboundEmail(
+        supabase,
+        payload.data as unknown as InboundEventData,
+        resendFetchReceived(Deno.env.get("RESEND_API_KEY") ?? ""),
+      );
+      console.log("Inbound email:", JSON.stringify(outcome));
+      return new Response(JSON.stringify({ received: true, inbound: outcome }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Find the email log by resend_id
     const { data: emailLog, error: findError } = await supabase

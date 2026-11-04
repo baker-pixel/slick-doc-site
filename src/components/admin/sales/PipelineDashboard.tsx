@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useEffect, useState } from "react";
 import { inviteLeadToPortal } from "@/lib/inviteLeadToPortal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -249,8 +250,8 @@ export default function PipelineDashboard({ adminPassword }: PipelineDashboardPr
     } catch (error: any) {
       console.error("Error creating client:", error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to create client and send invite",
+        title: "Couldn't create client and send invite",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import {
   Link2,
   Unlink,
@@ -501,7 +501,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
     } catch (err) {
       toast({
         title: "Could not save selection",
-        description: err instanceof Error ? err.message : "Please try again.",
+        description: describeError(err),
         variant: "destructive",
       });
     } finally {
@@ -567,7 +567,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
     } catch (err: unknown) {
       toast({
         title: "Connection failed",
-        description: err instanceof Error ? err.message : "Unable to start OAuth flow",
+        description: describeError(err),
         variant: "destructive",
       });
     } finally {
@@ -588,7 +588,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
       await fetchPfmAccounts();
       toast({ title: "Synced", description: `${data?.synced ?? 0} account${data?.synced === 1 ? "" : "s"} updated` });
     } catch (err: unknown) {
-      toast({ title: "Sync failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      toast({ title: "Sync failed", description: describeError(err), variant: "destructive" });
     } finally {
       setSyncing(false);
     }
@@ -631,7 +631,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
         toast({ title: "Disconnected" });
       }
     } catch (err: unknown) {
-      toast({ title: "Disconnect failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      toast({ title: "Disconnect failed", description: describeError(err), variant: "destructive" });
     } finally {
       setDisconnecting(null);
     }
@@ -744,8 +744,8 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
     } catch (err) {
       console.error("Error disconnecting:", err);
       toast({
-        title: "Error",
-        description: "Failed to disconnect. Please try again.",
+        title: "Couldn't disconnect. Please try again",
+        description: "Please try again in a moment.",
         variant: "destructive",
       });
     } finally {

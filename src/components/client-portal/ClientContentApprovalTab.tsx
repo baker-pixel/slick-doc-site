@@ -10,7 +10,7 @@ import {
 import { Loader2, FileCheck, CheckCheck, PartyPopper, Facebook, Instagram, Linkedin, Twitter, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { completeWorkflowStep } from "@/lib/completeWorkflowStep";
 import { hasCaption } from "./approvals/ContentRenderer";
 import { ApprovalCard } from "./approvals/ApprovalCard";
@@ -67,6 +67,16 @@ function normalizePlatform(platform: string | null): PreviewPlatform {
   if (p === "facebook" || p === "instagram" || p === "linkedin") return p;
   if (p === "twitter" || p === "x") return "twitter";
   return "other";
+}
+
+// Mirrors shouldGenerateImage in supabase/functions/_shared/socialImagePrompt.ts:
+// Instagram always gets an image, the other social platforms every other post
+// (decided by the calendar row's id). Keep the two in step.
+function imageExpected(calendarId: string, platform: string | null): boolean {
+  const p = (platform || "").toLowerCase();
+  if (p === "instagram") return true;
+  if (!["facebook", "linkedin", "twitter"].includes(p)) return false;
+  return parseInt(calendarId.replace(/-/g, "").slice(-1), 16) % 2 === 0;
 }
 
 const BUCKETS: { key: ApprovalBucket; label: string; empty: string }[] = [
@@ -193,7 +203,11 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       const live: ApprovalLive | undefined = cal
         ? { calStatus: cal.status, scheduledFor: cal.scheduled_for, publishedAt: cal.published_at, metadata: cal.metadata, errorMessage: cal.error_message }
         : undefined;
-      const meta = (cal?.metadata ?? {}) as { image_url?: string; platform_post_url?: string };
+      const meta = (cal?.metadata ?? {}) as { image_url?: string; image_skip?: boolean; image_feedback?: string; platform_post_url?: string };
+      // Only a post that is still awaiting review and is due an image holds the
+      // client back; posts that were never meant to have one (image_skip) don't.
+      const imagePending = a.status === "pending" && !!cal && !meta.image_url && !meta.image_skip
+        && (!!meta.image_feedback || imageExpected(cal.id, cal.platform ?? a.platform));
       return {
         id: a.id,
         title: a.title,
@@ -206,6 +220,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
         reviewed_at: a.reviewed_at,
         platform: a.platform,
         image_url: meta.image_url ?? null,
+        imagePending,
         scheduledFor: cal?.scheduled_for ?? a.scheduled_for ?? null,
         postUrl: meta.platform_post_url ?? null,
         display: approvalDisplay(a, live, formatWhen),
@@ -266,8 +281,8 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
     }
   };
 
-  const callHandleApproval = async (approvalId: string, action: "approved" | "changes_requested" | "rejected", feedback?: string) => {
-    const { data, error } = await supabase.functions.invoke("handle-approval", { body: { approval_id: approvalId, action, feedback } });
+  const callHandleApproval = async (approvalId: string, action: "approved" | "changes_requested" | "rejected", feedback?: string, imageFeedback?: string) => {
+    const { data, error } = await supabase.functions.invoke("handle-approval", { body: { approval_id: approvalId, action, feedback, image_feedback: imageFeedback } });
     if (error || data?.error) {
       const msg = await getEdgeErrorMessage(error, data);
       throw new Error(msg ? friendlyEdgeMessage(msg) : "Something went wrong. Please try again.");
@@ -288,7 +303,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       finishOnboardingStep();
       fetchApprovals();
     } catch (error) {
-      toast({ title: "Couldn't approve", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't approve", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -316,10 +331,10 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
     if (rpcErr) throw rpcErr;
   };
 
-  const handleRequestChanges = async (id: string, note: string, neverSay?: string) => {
+  const handleRequestChanges = async (id: string, note: string, neverSay?: string, imageNote?: string) => {
     setSubmitting(true);
     try {
-      await callHandleApproval(id, "changes_requested", note);
+      await callHandleApproval(id, "changes_requested", note, imageNote);
       setApprovals((prev) => prev.map((a) => (a.id === id ? { ...a, status: "changes_requested", feedback: note, reviewed_at: new Date().toISOString() } : a)));
       let savedNeverSay = false;
       if (neverSay) {
@@ -327,11 +342,12 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       }
       toast({
         title: "Feedback sent",
-        description: `Our team will revise it and send it back for your review.${savedNeverSay ? " Future posts will avoid that claim." : neverSay ? " We couldn't save the never-say entry; add it in Settings." : ""}`,
+        description: `We're revising it now. The updated version will show up in "Needs review" so you can check it before anything is posted.${savedNeverSay ? " Future posts will avoid that claim." : neverSay ? " We couldn't save the never-say entry; add it in Settings." : ""}`,
       });
       advanceFrom(id);
+      fetchApprovals();
     } catch (error) {
-      toast({ title: "Couldn't send feedback", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't send feedback", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -345,7 +361,7 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
       toast({ title: "Won't be posted", description: "This post has been declined." });
       advanceFrom(id);
     } catch (error) {
-      toast({ title: "Couldn't update", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't update", description: describeError(error), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }

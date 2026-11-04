@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Link2, Unlink, RefreshCw, CheckCircle2, AlertTriangle, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -173,7 +173,7 @@ export function SmtpSenderSection({ clientAccountId, onConnectionChange }: { cli
       console.error("Error saving SMTP credentials:", err);
       toast({
         title: "Could not save",
-        description: err instanceof Error ? err.message : "Please check your details and try again.",
+        description: describeError(err),
         variant: "destructive",
       });
     } finally {
@@ -195,7 +195,7 @@ export function SmtpSenderSection({ clientAccountId, onConnectionChange }: { cli
     } catch (err) {
       toast({
         title: "Test failed",
-        description: err instanceof Error ? err.message : "Please check your SMTP details.",
+        description: describeError(err),
         variant: "destructive",
       });
     } finally {
@@ -214,7 +214,7 @@ export function SmtpSenderSection({ clientAccountId, onConnectionChange }: { cli
       toast({ title: "Disconnected", description: "Lead outreach is paused until you reconnect a mailbox." });
     } catch (err) {
       console.error("Error disconnecting email:", err);
-      toast({ title: "Error", description: "Failed to disconnect. Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't disconnect. Please try again", description: "Please try again in a moment.", variant: "destructive" });
     } finally {
       setDisconnectingEmail(false);
     }

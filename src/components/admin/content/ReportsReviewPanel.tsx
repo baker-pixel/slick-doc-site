@@ -88,7 +88,7 @@ export const ReportsReviewPanel = () => {
     const { error } = await callAdminApi(adminPassword, { action: "delete", table: "client_reports", id: reportId });
 
     if (error) {
-      toast({ title: "Error", description: "Failed to delete report", variant: "destructive" });
+      toast({ title: "Couldn't delete report", description: "Please try again in a moment.", variant: "destructive" });
     } else {
       toast({ title: "Deleted", description: "Report has been deleted" });
       fetchData();
@@ -119,14 +119,14 @@ export const ReportsReviewPanel = () => {
 
       if (error) {
         console.error("Email error:", error);
-        toast({ title: "Error", description: "Failed to send report", variant: "destructive" });
+        toast({ title: "Couldn't send report", description: "Please try again in a moment.", variant: "destructive" });
       } else {
         toast({ title: "Sent", description: "Report has been sent to the client" });
         setSendingReport(null);
       }
     } catch (error: any) {
       console.error("Send error:", error);
-      toast({ title: "Error", description: "Failed to send report", variant: "destructive" });
+      toast({ title: "Couldn't send report", description: "Please try again in a moment.", variant: "destructive" });
     } finally {
       setIsSending(false);
     }

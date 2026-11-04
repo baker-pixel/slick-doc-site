@@ -29,6 +29,8 @@ export interface ReviewItem {
   reviewed_at: string | null;
   platform: string | null;
   image_url?: string | null;
+  // An image is planned for this post but not generated yet (review waits for it).
+  imagePending?: boolean;
   // Resolved by the tab from the calendar row (falls back to the approval's own value).
   scheduledFor: string | null;
   postUrl: string | null;
@@ -47,7 +49,7 @@ interface Props {
   onPrev?: () => void;
   onNext?: () => void;
   onApprove: (id: string) => void;
-  onRequestChanges: (id: string, note: string, neverSay?: string) => void;
+  onRequestChanges: (id: string, note: string, neverSay?: string, imageNote?: string) => void;
   onDecline: (id: string) => void;
 }
 
@@ -61,6 +63,7 @@ export function ApprovalReviewDialog({
   const [mode, setMode] = useState<"review" | "changes">("review");
   const [note, setNote] = useState("");
   const [neverSay, setNeverSay] = useState("");
+  const [imageNote, setImageNote] = useState("");
   const [confirmDecline, setConfirmDecline] = useState(false);
 
   // Fresh state whenever a different post comes up (e.g. auto-advance).
@@ -68,6 +71,7 @@ export function ApprovalReviewDialog({
     setMode("review");
     setNote(item?.feedback ?? "");
     setNeverSay("");
+    setImageNote("");
     setConfirmDecline(false);
   }, [item?.id]);
 
@@ -92,9 +96,9 @@ export function ApprovalReviewDialog({
 
   const typeConfig = getContentTypeConfig(item.content_type);
   const pending = item.status === "pending";
-  const canApprove = hasCaption(item);
+  const canApprove = hasCaption(item) && !item.imagePending;
   const when = item.scheduledFor ? relativeUntil(item.scheduledFor) : null;
-  const noteOk = note.trim().length > 0;
+  const noteOk = note.trim().length > 0 || imageNote.trim().length > 0;
 
   return (
     <>
@@ -136,6 +140,7 @@ export function ApprovalReviewDialog({
                     text={copy.text}
                     hashtags={copy.hashtags}
                     imageUrl={item.image_url}
+                    imagePending={item.imagePending}
                     whenLabel={item.scheduledFor ? formatWhen(item.scheduledFor) : null}
                   />
                 ) : (
@@ -178,6 +183,13 @@ export function ApprovalReviewDialog({
                   </div>
                 )}
 
+                {item.imagePending && pending && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200 flex gap-2">
+                    <Loader2 className="h-4 w-4 shrink-0 mt-0.5 animate-spin" />
+                    The image is still being created. You can approve once you've seen it. It will appear here automatically.
+                  </div>
+                )}
+
                 {item.feedback && !pending && (
                   <section>
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Your feedback</h4>
@@ -207,10 +219,23 @@ export function ApprovalReviewDialog({
                       autoFocus
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Tell us what to change — we'll revise it and send it back to you."
+                      placeholder="Tell us what to change in the text — we'll revise it and send it back to you."
                       rows={5}
                       className="resize-none"
                     />
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Want a different image? Describe it (optional)
+                      </label>
+                      <Textarea
+                        value={imageNote}
+                        onChange={(e) => setImageNote(e.target.value)}
+                        placeholder="e.g. show a team working together, warmer colors, no people"
+                        rows={2}
+                        className="resize-none text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">We'll create a new image from your note and show it to you before anything is posted.</p>
+                    </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-muted-foreground">
                         Is it claiming something untrue? Tell us what never to say (optional)
@@ -250,7 +275,7 @@ export function ApprovalReviewDialog({
               ) : (
                 <>
                   <Button variant="ghost" onClick={() => setMode("review")} disabled={busy}>Back</Button>
-                  <Button onClick={() => onRequestChanges(item.id, note.trim(), neverSay.trim() || undefined)} disabled={busy || !noteOk}>
+                  <Button onClick={() => onRequestChanges(item.id, note.trim(), neverSay.trim() || undefined, imageNote.trim() || undefined)} disabled={busy || !noteOk}>
                     {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                     Send feedback
                   </Button>

@@ -550,3 +550,112 @@ export async function callAIJson<T = unknown>(opts: AICallOptions): Promise<T> {
     return extractJson<T>(repaired);
   }
 }
+
+// ── Tool calling ────────────────────────────────────────────────────────────
+// One chat-completions turn with tools, through the same providers, retries, fallback
+// (OpenAI -> Groq gpt-oss) and agent_runs logging as callAI. The caller owns the loop and the
+// tools; this only does a single round trip. (An earlier general-purpose run-agent loop was
+// removed in July because nothing used it; this is the minimal, caller-driven replacement.)
+
+export interface ToolCall { id: string; type: "function"; function: { name: string; arguments: string } }
+export type ToolChatMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+export interface ToolTurn {
+  content: string | null;
+  toolCalls: ToolCall[];
+  finishReason: string | null;
+  model: string;
+  usage: { prompt_tokens?: number; completion_tokens?: number } | null;
+}
+
+export interface ToolCallOptions {
+  messages: ToolChatMessage[];
+  tools: readonly unknown[];
+  /** "auto" lets the model answer or call; a named tool forces that call. */
+  toolChoice?: "auto" | "required" | { type: "function"; function: { name: string } };
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  retries?: number;
+  source: string;
+  clientId?: string;
+  promptId?: string;
+  silent?: boolean;
+}
+
+async function toolTurnOnce(model: string, opts: ToolCallOptions): Promise<ToolTurn> {
+  const groq = isGptOssModel(model);
+  const apiKey = Deno.env.get(groq ? "GROQ_API_KEY" : "OPENAI_API_KEY");
+  if (!apiKey) throw new AIError(`${groq ? "GROQ" : "OPENAI"}_API_KEY is not configured`, null, false);
+  const reasoning = isOpenAIReasoningModel(model);
+
+  let res: Response;
+  try {
+    res = await fetch(groq ? GROQ_URL : OPENAI_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages,
+        tools: opts.tools,
+        tool_choice: opts.toolChoice ?? "auto",
+        ...(opts.maxTokens ? (reasoning ? { max_completion_tokens: opts.maxTokens } : { max_tokens: opts.maxTokens }) : {}),
+        ...(!reasoning && !groq && opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(groq ? { reasoning_effort: "low" } : reasoning ? { reasoning_effort: "low" } : {}),
+      }),
+    });
+  } catch (e) {
+    throw new AIError(`AI request failed (network): ${e instanceof Error ? e.message : e}`, null, true);
+  }
+  if (!res.ok) throwForStatus(res, await res.text().catch(() => ""), opts.source);
+
+  const data = await res.json();
+  const choice = data.choices?.[0];
+  const msg = choice?.message;
+  const toolCalls: ToolCall[] = Array.isArray(msg?.tool_calls) ? msg.tool_calls : [];
+  if (!msg || (!msg.content && toolCalls.length === 0)) {
+    throw new AIError("AI returned neither text nor a tool call", null, true, choice?.finish_reason === "length");
+  }
+  return { content: msg.content ?? null, toolCalls, finishReason: choice?.finish_reason ?? null, model, usage: data.usage ?? null };
+}
+
+export async function callAIWithTools(opts: ToolCallOptions): Promise<ToolTurn> {
+  const retries = opts.retries ?? 2;
+  const models = [opts.model ?? MODELS.default];
+  const groqFallback = OPENAI_TO_GROQ_FALLBACK[models[0]];
+  if (groqFallback && Deno.env.get("GROQ_API_KEY")) models.push(groqFallback);
+  const started = Date.now();
+  let lastError: unknown = null;
+  let attempts = 0;
+
+  for (let mi = 0; mi < models.length; mi++) {
+    const model = models[mi];
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      attempts++;
+      try {
+        const turn = await toolTurnOnce(model, opts);
+        logRun({
+          source: opts.source, clientId: opts.clientId, promptId: opts.promptId, model, status: "ok", attemptCount: attempts,
+          fallbackUsed: mi > 0, latencyMs: Date.now() - started, promptTokens: turn.usage?.prompt_tokens, completionTokens: turn.usage?.completion_tokens,
+        });
+        return turn;
+      } catch (e) {
+        lastError = e;
+        const retryable = e instanceof AIError ? e.retryable : true;
+        console.error(`[ai] tools fail source=${opts.source} model=${model} attempt=${attempt + 1}/${retries + 1} retryable=${retryable}:`, e instanceof Error ? e.message : e);
+        if (!retryable) break; // try the next model, if any
+        if (attempt < retries) await sleep(Math.min(1000 * Math.pow(2.5, attempt), 8000));
+      }
+    }
+  }
+  const err = lastError instanceof Error ? lastError : new AIError("AI tool call failed after all retries and fallbacks", null, false);
+  logRun({
+    source: opts.source, clientId: opts.clientId, promptId: opts.promptId, model: models[models.length - 1], status: "error", attemptCount: attempts,
+    fallbackUsed: models.length > 1, latencyMs: Date.now() - started, errorMessage: err.message,
+  });
+  if (!opts.silent) alertOnFinalFailure(opts.source, models[models.length - 1], err);
+  throw err;
+}

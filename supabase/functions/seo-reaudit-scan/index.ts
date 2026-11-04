@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
+import { queueCrawl } from "../_shared/crawler/queue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,24 +52,18 @@ serve(async (req) => {
       if (isDue) due.push({ id: c.id, name: c.business_name });
     }
 
-    // Enqueue a bounded number this invocation onto the agent_jobs durable
-    // queue (process-agent-jobs dispatches to seo-audit on its per-minute
-    // poll) instead of calling seo-audit directly -- gets safe claiming
-    // across overlapping invocations, retry, and dead-letter for free.
-    // Same-day idempotencyKey guards against double-enqueue if this scan
-    // itself overlaps (retry, manual trigger during the cron window).
+    // Start a bounded number of crawls this invocation. Each crawl is incremental when a recent one
+    // exists (only changed pages are re-read), and when it finishes the worker queues the audit on the
+    // durable agent_jobs queue -- so a due client gets: crawl -> audit, with retries at every step.
     const toRun = due.slice(0, MAX_PER_RUN);
-    const today = new Date().toISOString().slice(0, 10);
     const results: { client: string; status: string }[] = [];
     for (const c of toRun) {
-      const { error } = await supabase.rpc("agent_jobs_enqueue", {
-        msg: { target: "seo-audit", idempotencyKey: `seo-audit:${c.id}:${today}`, body: { clientId: c.id } },
-      });
-      results.push({ client: c.name, status: error ? `enqueue error: ${error.message}` : "enqueued" });
+      const q = await queueCrawl(supabase, c.id, { trigger: "scheduled", runAudit: true });
+      results.push({ client: c.name, status: !q.ok ? `not queued: ${q.error}` : q.started ? "crawl started" : "already running" });
     }
 
-    console.log(`seo-reaudit-scan: ${due.length} due, enqueued ${toRun.length}`);
-    return json({ due: due.length, enqueued: toRun.length, results, remaining: Math.max(0, due.length - toRun.length) });
+    console.log(`seo-reaudit-scan: ${due.length} due, started ${toRun.length}`);
+    return json({ due: due.length, started: toRun.length, results, remaining: Math.max(0, due.length - toRun.length) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("seo-reaudit-scan error:", msg);

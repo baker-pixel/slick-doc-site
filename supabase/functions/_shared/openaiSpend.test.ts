@@ -1,14 +1,14 @@
 import { assertAlmostEquals, assertEquals, assertRejects } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import {
-  budgetStatus, buildReport, cleanLineItem, explainError, fetchBuckets, isOpenAIModel, OpenAIApiError, parseBudget, parseCostBuckets, parseUsageBuckets,
+  budgetStatus, buildReport, cleanLineItem, explainError, fetchBuckets, fetchProjects, filterByProjects, isOpenAIModel, OpenAIApiError, parseBudget, parseCostBuckets, parseUsageBuckets, PROJECT_ID,
   type Attribution,
 } from "./openaiSpend.ts";
 
 // Shapes below follow OpenAI's documented Costs / Usage responses.
 const unix = (iso: string) => Math.floor(new Date(iso + "T00:00:00Z").getTime() / 1000);
-const costBucket = (day: string, results: Array<[string, number, string?]>) => ({
+const costBucket = (day: string, results: Array<[string, number, string?, (string | null)?]>) => ({
   object: "bucket", start_time: unix(day), end_time: unix(day) + 86400,
-  results: results.map(([line_item, value, currency]) => ({ object: "organization.costs.result", amount: { value, currency: currency ?? "usd" }, line_item, project_id: "proj_1" })),
+  results: results.map(([line_item, value, currency, project]) => ({ object: "organization.costs.result", amount: { value, currency: currency ?? "usd" }, line_item, project_id: project === undefined ? "proj_1" : project })),
 });
 const usageBucket = (day: string, results: Array<[string, number, number, number]>) => ({
   object: "bucket", start_time: unix(day), end_time: unix(day) + 86400,
@@ -22,13 +22,13 @@ Deno.test("cost buckets become USD rows; other currencies are reported, never ad
     { start_time: unix("2026-10-14"), end_time: unix("2026-10-15"), results: [] }, // empty day
   ]);
   assertEquals(rows.length, 2);
-  assertEquals(rows[0], { day: "2026-10-12", line_item: "gpt-4.1-mini-2025-04-14, input", usd: 0.5 });
+  assertEquals(rows[0], { day: "2026-10-12", line_item: "gpt-4.1-mini-2025-04-14, input", project_id: "proj_1", usd: 0.5 });
   assertEquals(otherCurrencies, ["eur"]);
 });
 
 Deno.test("usage buckets keep OpenAI's own request and token counts", () => {
   const rows = parseUsageBuckets([usageBucket("2026-10-12", [["gpt-4.1-mini", 470, 141201, 9756]])]);
-  assertEquals(rows, [{ day: "2026-10-12", model: "gpt-4.1-mini", requests: 470, input_tokens: 141201, output_tokens: 9756 }]);
+  assertEquals(rows, [{ day: "2026-10-12", model: "gpt-4.1-mini", project_id: null, requests: 470, input_tokens: 141201, output_tokens: 9756 }]);
 });
 
 Deno.test("line items keep OpenAI's wording, minus the date stamp", () => {
@@ -165,4 +165,44 @@ Deno.test("a refusal of the everyday key is explained as 'create an Admin key', 
   assertEquals(explainError(new OpenAIApiError("forbidden", "nope", 403), "admin").title, "The key doesn't have permission to read usage");
   // Outages are the same either way.
   assertEquals(explainError(new OpenAIApiError("server", "boom", 500), "standard").title, "Couldn't reach OpenAI right now");
+});
+
+Deno.test("only the chosen OpenAI projects are counted; unlabelled rows are not assumed to be ours", () => {
+  const rows = parseCostBuckets([costBucket("2026-10-12", [
+    ["image generation", 5, "usd", "proj_orangedoor"],
+    ["image generation", 40, "usd", "proj_someone_else"],
+    ["gpt-4.1-mini, input", 1, "usd", null],
+  ])]).rows;
+  assertEquals(filterByProjects(rows, ["proj_orangedoor"]).map((r) => r.usd), [5]);
+  assertEquals(filterByProjects(rows, []).length, 3); // no filter: everything, as before
+  assertEquals(filterByProjects(rows, ["proj_orangedoor", "proj_someone_else"]).map((r) => r.usd), [5, 40]);
+  // The month total follows the filter, so the headline number is OrangeDoor's only.
+  const r = buildReport({ costs: filterByProjects(rows, ["proj_orangedoor"]), usage: [], attribution: attribution(), now: new Date("2026-10-15T12:00:00Z") });
+  assertAlmostEquals(r.month.spent, 5, 1e-9);
+});
+
+Deno.test("project ids are validated before they are stored or sent to OpenAI", () => {
+  assertEquals(PROJECT_ID.test("proj_abc123XYZ"), true);
+  assertEquals(PROJECT_ID.test("proj_"), false);
+  assertEquals(PROJECT_ID.test("org-123"), false);
+  assertEquals(PROJECT_ID.test("proj_x&group_by=y"), false);
+});
+
+Deno.test("the project list is read across pages", async () => {
+  const seen: string[] = [];
+  const server = mockFetch([
+    { body: { data: [{ id: "proj_1111", name: "OrangeDoor", status: "active" }], has_more: true, last_id: "proj_1111" } },
+    { body: { data: [{ id: "proj_2222", name: "Side project", status: "archived" }, { object: "junk" }], has_more: false } },
+  ], seen);
+  const projects = await fetchProjects("sk-admin", server);
+  assertEquals(projects, [{ id: "proj_1111", name: "OrangeDoor", status: "active" }, { id: "proj_2222", name: "Side project", status: "archived" }]);
+  assertEquals(seen[1].includes("after=proj_1111"), true);
+  assertEquals(seen[0].startsWith("https://api.openai.com/v1/organization/projects?"), true);
+});
+
+Deno.test("the project filter is sent to OpenAI as repeated project_ids with project grouping", async () => {
+  const seen: string[] = [];
+  await fetchBuckets("costs", "k", { start_time: "1", group_by: ["line_item", "project_id"], project_ids: ["proj_a", "proj_b"] }, mockFetch([{ body: { data: [] } }], seen));
+  assertEquals(seen[0].includes("project_ids=proj_a&project_ids=proj_b"), true);
+  assertEquals(seen[0].includes("group_by=line_item&group_by=project_id"), true);
 });

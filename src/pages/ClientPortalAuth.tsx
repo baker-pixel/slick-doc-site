@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Loader2, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { BrandLogo } from "@/components/BrandLogo";
 import { acceptFailureMessage, acceptInvitation, fetchInvitationByToken } from "@/lib/invitations";
 
 export default function ClientPortalAuth() {
@@ -283,7 +285,7 @@ export default function ClientPortalAuth() {
       if (error) {
         toast({
           title: "Reset Failed",
-          description: error.message,
+          description: describeError(error),
           variant: "destructive",
         });
         setLoading(false);
@@ -297,8 +299,8 @@ export default function ClientPortalAuth() {
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "An error occurred",
+        title: "Something went wrong",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {
@@ -312,7 +314,7 @@ export default function ClientPortalAuth() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        toast({ title: "Something went wrong", description: describeError(error), variant: "destructive" });
         return;
       }
       toast({ title: "Password updated!", description: "You're now signed in." });
@@ -320,7 +322,7 @@ export default function ClientPortalAuth() {
       setIsPasswordRecovery(false);
       navigate("/portal");
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "Something went wrong", description: describeError(err), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -377,8 +379,8 @@ export default function ClientPortalAuth() {
       navigate("/portal");
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "An error occurred",
+        title: "Something went wrong",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {
@@ -568,6 +570,7 @@ export default function ClientPortalAuth() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
             <CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
             <CardDescription>
               We've sent a confirmation link to {invitation?.email ?? email}. Click it to finish setting up your account.
@@ -588,6 +591,7 @@ export default function ClientPortalAuth() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
             <CardTitle className="text-2xl font-bold">Set New Password</CardTitle>
             <CardDescription>Enter your new password below</CardDescription>
           </CardHeader>
@@ -636,6 +640,7 @@ export default function ClientPortalAuth() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
             <CardTitle className="text-2xl font-bold">
               {resetEmailSent ? "Check Your Email" : "Reset Password"}
             </CardTitle>
@@ -710,6 +715,7 @@ export default function ClientPortalAuth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
+            <BrandLogo className="h-10 mx-auto mb-3" />
           <CardTitle className="text-2xl font-bold">
             {invitation 
               ? (existingUserMode ? "Sign In to Accept Invitation" : "Accept Invitation") 

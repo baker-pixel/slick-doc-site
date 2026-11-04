@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { RefreshCw, TrendingUp, Users, MousePointerClick, Eye, Mail, Clock, Calendar, Link2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart, Pie } from "recharts";
 import type { Json } from "@/integrations/supabase/types";
@@ -69,7 +69,7 @@ export const EmailAnalyticsDashboard = ({ password }: EmailAnalyticsDashboardPro
       if (trackingResponse.data?.data) setTrackingEvents(trackingResponse.data.data);
     } catch (error) {
       console.error("Error fetching analytics data:", error);
-      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to fetch analytics data", variant: "destructive" });
+      toast({ title: "Couldn't load analytics data", description: describeError(error), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }

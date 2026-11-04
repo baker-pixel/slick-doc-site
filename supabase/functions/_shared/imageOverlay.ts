@@ -9,54 +9,45 @@ export interface OverlayBrand {
   colorHex?: string | null;
 }
 
-function hexToOpaqueInt(hex: string | null | undefined): number | null {
-  if (!hex) return null;
-  const m = hex.trim().replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(m)) return null;
-  return (parseInt(m, 16) << 8 | 0xff) >>> 0;
-}
-
 /**
- * Stamps a bottom brand bar with the client's logo onto a generated image.
- * No-ops when there's no logo. Best-effort throughout -- a bad/unreachable
- * logo or any decode error falls back to returning the original image
- * untouched rather than leaving a post with no image at all.
+ * Stamps the client's logo onto a generated image, bottom-left, over a soft
+ * dark gradient that fades in from nothing -- no hard-edged bar, so the logo
+ * reads as part of the picture rather than a footer strip. No-ops when there's
+ * no logo. Best-effort throughout -- a bad/unreachable logo or any decode
+ * error falls back to returning the original image untouched rather than
+ * leaving a post with no image at all.
  */
 export async function applyBrandOverlay(pngBytes: Uint8Array, brand: OverlayBrand): Promise<Uint8Array> {
   if (!brand.logoUrl) return pngBytes;
 
   try {
     const image = await Image.decode(pngBytes);
-    const barHeight = Math.round(image.height * 0.11);
-    const accentHeight = Math.max(3, Math.round(barHeight * 0.06));
 
-    // Fixed dark, translucent bar -- legible over any AI-generated photo
-    // background regardless of the client's actual brand colors. The real
-    // brand color still shows up, as a thin accent stripe along its top edge.
-    const bar = new Image(image.width, barHeight);
-    bar.fill(0x000000cc);
-    image.composite(bar, 0, image.height - barHeight);
-
-    const accentColor = hexToOpaqueInt(brand.colorHex);
-    if (accentColor !== null) {
-      const accent = new Image(image.width, accentHeight);
-      accent.fill(accentColor);
-      image.composite(accent, 0, image.height - barHeight);
-    }
-
-    const padding = Math.round(barHeight * 0.28);
-    const contentHeight = barHeight - padding * 2;
-
+    let logo: Image;
     try {
       const logoRes = await fetch(brand.logoUrl);
       if (!logoRes.ok) return pngBytes;
-      const logo = await Image.decode(new Uint8Array(await logoRes.arrayBuffer()));
-      logo.resize(Image.RESIZE_AUTO, contentHeight);
-      image.composite(logo, padding, image.height - barHeight + padding);
+      logo = await Image.decode(new Uint8Array(await logoRes.arrayBuffer()));
     } catch (e) {
       console.warn("Brand overlay: logo skipped:", e instanceof Error ? e.message : e);
       return pngBytes;
     }
+
+    // Scrim covers the bottom 20% and eases from fully transparent (top) to
+    // MAX_ALPHA (bottom edge). The curve keeps the top of the fade invisible.
+    const MAX_ALPHA = 0.55;
+    const scrimHeight = Math.round(image.height * 0.2);
+    const scrim = new Image(image.width, scrimHeight);
+    scrim.fill((_x: number, y: number) => {
+      const t = (y - 1) / Math.max(1, scrimHeight - 1);
+      return Math.round(255 * MAX_ALPHA * Math.pow(t, 1.6)) >>> 0; // rgb 0 + alpha
+    });
+    image.composite(scrim, 0, image.height - scrimHeight);
+
+    const margin = Math.round(image.width * 0.04);
+    const logoHeight = Math.round(image.height * 0.075);
+    logo.resize(Image.RESIZE_AUTO, logoHeight);
+    image.composite(logo, margin, image.height - margin - logo.height);
 
     return await image.encode();
   } catch (e) {

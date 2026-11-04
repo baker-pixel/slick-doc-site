@@ -85,7 +85,7 @@ export default function ClientMeetingsTab({ clientAccountId, clientName }: Clien
       setMeetings((data || []) as Meeting[]);
     } catch (error) {
       console.error("Error fetching meetings:", error);
-      toast({ title: "Error", description: "Failed to load meetings", variant: "destructive" });
+      toast({ title: "Couldn't load meetings", description: "Please try again in a moment.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -134,7 +134,7 @@ export default function ClientMeetingsTab({ clientAccountId, clientName }: Clien
       toast({ title: "Meeting cancelled", description: "The meeting has been cancelled" });
     } catch (error) {
       console.error("Error cancelling meeting:", error);
-      toast({ title: "Error", description: "Failed to cancel meeting", variant: "destructive" });
+      toast({ title: "Couldn't cancel meeting", description: "Please try again in a moment.", variant: "destructive" });
     }
   };
 

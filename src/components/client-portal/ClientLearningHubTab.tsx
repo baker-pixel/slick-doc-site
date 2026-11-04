@@ -204,7 +204,7 @@ export function ClientLearningHubTab({ clientAccountId }: ClientLearningHubTabPr
       toast({ title: "Article marked as complete!" });
     } catch (error) {
       console.error("Error updating progress:", error);
-      toast({ title: "Error updating progress", variant: "destructive" });
+      toast({ title: "Couldn't update progress", variant: "destructive" });
     }
   };
 

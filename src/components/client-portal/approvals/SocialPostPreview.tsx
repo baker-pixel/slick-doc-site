@@ -35,6 +35,8 @@ interface Props {
   text: string;
   hashtags: string[];
   imageUrl?: string | null;
+  // An image is planned for this post but hasn't been generated yet.
+  imagePending?: boolean;
   whenLabel?: string | null;
 }
 
@@ -42,7 +44,7 @@ interface Props {
 // real thing (caption length, image crop, character limit) instead of a wall
 // of raw text. Non-interactive: the only controls on this screen are the
 // approval actions.
-export function SocialPostPreview({ platform, businessName, text, hashtags, imageUrl, whenLabel }: Props) {
+export function SocialPostPreview({ platform, businessName, text, hashtags, imageUrl, imagePending, whenLabel }: Props) {
   const meta = PLATFORM_META[platform];
   const [expanded, setExpanded] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
@@ -81,9 +83,9 @@ export function SocialPostPreview({ platform, businessName, text, hashtags, imag
         <div className={cn("w-full bg-muted flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground", meta.imageRatio)}>
           <ImageOff className="h-5 w-5" /> Image couldn't be loaded
         </div>
-      ) : platform === "instagram" ? (
+      ) : imagePending || platform === "instagram" ? (
         <div className={cn("w-full bg-muted flex items-center justify-center text-xs text-muted-foreground", meta.imageRatio)}>
-          Instagram needs an image — one is still being created
+          The image for this post is still being created
         </div>
       ) : null}
 

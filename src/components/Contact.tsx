@@ -136,15 +136,15 @@ export function Contact() {
                 <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                   <Mail className="text-primary" size={20} />
                 </div>
-                <span className="text-accent-foreground/90">
-                  hello@orangedoor.marketing
-                </span>
+                <a href="mailto:hello@orangedoormarketing.com" className="text-accent-foreground/90 hover:text-primary transition-colors">
+                  hello@orangedoormarketing.com
+                </a>
               </div>
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                   <Phone className="text-primary" size={20} />
                 </div>
-                <span className="text-accent-foreground/90">(865) 555-DOOR</span>
+                <a href="tel:+18657194029" className="text-accent-foreground/90 hover:text-primary transition-colors">(865) 719-4029</a>
               </div>
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">

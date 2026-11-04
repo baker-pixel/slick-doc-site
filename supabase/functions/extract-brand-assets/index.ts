@@ -532,9 +532,14 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  let failActiveRun: ((error: string) => Promise<void>) | null = null;
   try {
     const body = await req.json();
     const { client_account_id, website_url, password } = body;
+    // "fallback" = browser-like UA + alternate www/non-www host, for sites that
+    // tarpit or block the default bot user-agent / datacenter egress.
+    const mode: "default" | "fallback" = body.mode === "fallback" ? "fallback" : "default";
+    const trigger: string = typeof body.trigger === "string" ? body.trigger : "onboarding";
 
     if (!client_account_id || !website_url)
       return json({ error: "client_account_id and website_url are required" }, 400);
@@ -605,28 +610,93 @@ serve(async (req) => {
       return json({ error: "Invalid website URL" }, 422);
     }
 
-    let html: string;
+    // ── Run ledger ────────────────────────────────────────────────────────
+    // Every attempt is recorded so the portal/admin/sweeper share one truth.
+    // The partial unique index allows a single "running" row per client; a
+    // concurrent trigger (double click, queue redelivery) gets 409 instead of
+    // racing the first run. A "running" row older than STALE_RUN_MS is a
+    // crashed run -- fail it so it can't block retries forever.
+    const STALE_RUN_MS = 6 * 60_000;
+    await supabase
+      .from("brand_extraction_runs")
+      .update({ status: "failed", error: "Run did not finish (timed out or crashed)", finished_at: new Date().toISOString() })
+      .eq("client_account_id", client_account_id)
+      .eq("status", "running")
+      .lt("started_at", new Date(Date.now() - STALE_RUN_MS).toISOString());
+    const { data: runRow, error: runErr } = await supabase
+      .from("brand_extraction_runs")
+      .insert({ client_account_id, website_url: targetUrl, trigger, strategy: mode })
+      .select("id")
+      .single();
+    if (runErr) {
+      if (runErr.code === "23505") return json({ error: "Extraction is already running for this client", already_running: true }, 409);
+      console.error("[extract-brand-assets] could not record run:", runErr.message);
+    }
+    const runId: string | null = runRow?.id ?? null;
+    const finishRun = async (status: "succeeded" | "empty" | "failed", assetsFound: number, error?: string) => {
+      if (!runId) return;
+      await supabase
+        .from("brand_extraction_runs")
+        .update({ status, assets_found: assetsFound, error: error ?? null, finished_at: new Date().toISOString() })
+        .eq("id", runId)
+        .then(undefined, () => {});
+    };
+    failActiveRun = (error: string) => finishRun("failed", 0, error);
+
+    let html = "";
     let rendered: RenderedSignals | null;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15_000);
+    let staticStatus: string | null = null;
+    {
       // Static fetch (fallback source + AI-voice text if render fails) and the
-      // headless-render call run concurrently — neither depends on the other,
+      // headless-render call run concurrently -- neither depends on the other,
       // and the render service already re-validates SSRF on its own side.
-      const [res, renderResult] = await Promise.all([
-        fetch(targetUrl, {
-          signal: controller.signal,
-          headers: { "User-Agent": "Mozilla/5.0 OrangeDoor-BrandBot/1.0", Accept: "text/html" },
-        }),
-        callRenderService(targetUrl),
-      ]);
-      clearTimeout(timeout);
-      if (!res.ok) return json({ error: `Could not fetch website (HTTP ${res.status})` }, 422);
-      html = await res.text();
+      // The static fetch is best-effort when the renderer succeeds: a slow or
+      // bot-blocking origin used to 422 the whole extraction (Truzon Solar:
+      // "Website took too long to respond" -> zero assets, client never told)
+      // even though the rendered signals were fine. One retry with a longer
+      // timeout before giving up.
+      const BOT_UA = "Mozilla/5.0 OrangeDoor-BrandBot/1.0";
+      const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+      const altHost = (u: string): string => {
+        try {
+          const x = new URL(u);
+          x.hostname = x.hostname.startsWith("www.") ? x.hostname.slice(4) : "www." + x.hostname;
+          return x.href;
+        } catch { return u; }
+      };
+      // default: bot UA twice. fallback: browser UA, then the alternate host.
+      const plan: { url: string; ua: string }[] = mode === "fallback"
+        ? [{ url: targetUrl, ua: BROWSER_UA }, { url: altHost(targetUrl), ua: BROWSER_UA }]
+        : [{ url: targetUrl, ua: BOT_UA }, { url: targetUrl, ua: BROWSER_UA }];
+      const fetchStatic = async (): Promise<void> => {
+        for (const step of plan) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 20_000);
+          try {
+            const res = await fetch(step.url, {
+              signal: controller.signal,
+              headers: { "User-Agent": step.ua, Accept: "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9" },
+            });
+            if (!res.ok) { staticStatus = `Could not fetch website (HTTP ${res.status})`; if (res.status < 500) return; continue; }
+            html = await res.text();
+            staticStatus = null;
+            return;
+          } catch (e: any) {
+            staticStatus = e?.name === "AbortError"
+              ? "Website took too long to respond"
+              : `Could not reach website: ${e?.message}`;
+          } finally {
+            clearTimeout(timeout);
+          }
+        }
+      };
+      const [, renderResult] = await Promise.all([fetchStatic(), callRenderService(targetUrl)]);
       rendered = renderResult;
-    } catch (e: any) {
-      if (e?.name === "AbortError") return json({ error: "Website took too long to respond" }, 422);
-      return json({ error: `Could not reach website: ${e?.message}` }, 422);
+      if (!html && !rendered) {
+        const msg = staticStatus ?? "Could not fetch website";
+        await finishRun("failed", 0, msg);
+        return json({ error: msg }, 422);
+      }
     }
 
     // Fetch context_profile for brand voice extraction
@@ -932,11 +1002,14 @@ serve(async (req) => {
       console.error("Brand voice extraction failed (non-fatal):", e);
     }
 
+    await finishRun(created.length > 0 ? "succeeded" : "empty", created.length);
     return json({
       assets: created,
+      run_id: runId,
       message: `Extracted ${created.length} brand asset${created.length !== 1 ? "s" : ""} from ${targetUrl}`,
     });
   } catch (err: any) {
+    await failActiveRun?.(err?.message || "Internal error");
     return json({ error: err?.message || "Internal error" }, 500);
   }
 });

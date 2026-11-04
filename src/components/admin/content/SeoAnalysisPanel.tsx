@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import SiteCrawlCard from "./SiteCrawlCard";
+import { groupFindings, pagesLabel } from "@/lib/seoFindings";
 
 interface ClientOption { id: string; business_name: string; }
 
@@ -41,6 +43,8 @@ interface AuditResults {
   findings?: Finding[];
   action_plan?: string[];
   diff?: { previous_audit_id: string | null; regressed: number; resolved: number };
+  source?: "crawl" | "sample";
+  crawl?: { id: string; pages_read: number; pages_unreadable: number; finished_at: string | null; mode: string; capped: boolean } | null;
 }
 interface SeoAudit {
   id: string;
@@ -74,223 +78,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   technical: "Technical", on_page: "On-Page", performance: "Performance", content: "Content", off_page: "Off-Page",
 };
 
-export default function SeoAnalysisPanel({ selectedClientId, selectedClientName }: SeoAnalysisPanelProps) {
-  const { adminPassword } = useAdminAuth();
-  const [clients, setClients] = useState<ClientOption[]>([]);
-  const [audits, setAudits] = useState<SeoAudit[]>([]);
-  const [clientId, setClientId] = useState(selectedClientId ?? "");
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [applyingId, setApplyingId] = useState<string | null>(null);
-  const [wpConnected, setWpConnected] = useState(false);
+interface FindingRowProps {
+  f: Finding;
+  wpConnected: boolean;
+  applyingId: string | null;
+  applyFix: (f: Finding) => void;
+  compact?: boolean;
+}
 
-  const loadClients = useCallback(async () => {
-    const { data, error } = await supabase.functions.invoke("admin", {
-      body: { action: "list", table: "client_accounts", password: adminPassword },
-    });
-    if (error || data?.error) return;
-    const rows = (data?.data ?? [])
-      .filter((c: { status?: string }) => c.status === "active")
-      .map((c: { id: string; business_name: string }) => ({ id: c.id, business_name: c.business_name }))
-      .sort((a: ClientOption, b: ClientOption) => a.business_name.localeCompare(b.business_name));
-    setClients(rows);
-  }, [adminPassword]);
-
-  const loadAudits = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase.functions.invoke("admin", {
-      body: { action: "list", table: "seo_audits", password: adminPassword },
-    });
-    if (error || data?.error) {
-      const msg = await getEdgeErrorMessage(error, data);
-      toast({ title: "Error loading SEO audits", description: msg ? friendlyEdgeMessage(msg) : "Failed to load SEO audits", variant: "destructive" });
-      setAudits([]);
-    } else {
-      setAudits((data?.data ?? []) as SeoAudit[]);
-    }
-    setLoading(false);
-  }, [adminPassword]);
-
-  useEffect(() => { loadClients(); }, [loadClients]);
-  useEffect(() => { loadAudits(); }, [loadAudits]);
-  useEffect(() => {
-    if (!clientId) { setWpConnected(false); return; }
-    supabase
-      .from("connected_sites")
-      .select("status")
-      .eq("client_id", clientId)
-      .maybeSingle()
-      .then(({ data }) => setWpConnected(data?.status === "connected"));
-  }, [clientId]);
-  useEffect(() => { if (selectedClientId) setClientId(selectedClientId); }, [selectedClientId]);
-
-  const clientAudits = useMemo(
-    () => audits
-      .filter(a => a.client_account_id === clientId)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [audits, clientId],
-  );
-  const latest = clientAudits[0] ?? null;
-  const results = latest?.results ?? null;
-  const clientName = clients.find(c => c.id === clientId)?.business_name ?? selectedClientName ?? "";
-
-  // findings in action-plan order (falls back to as-stored)
-  const orderedFindings = useMemo(() => {
-    if (!results?.findings) return [];
-    const byId = new Map(results.findings.map(f => [f.id, f]));
-    const order = results.action_plan ?? results.findings.map(f => f.id);
-    const seen = new Set<string>();
-    const out: Finding[] = [];
-    for (const id of order) { const f = byId.get(id); if (f && !seen.has(id)) { out.push(f); seen.add(id); } }
-    return out;
-  }, [results]);
-
-  const runAudit = async () => {
-    if (!clientId) { toast({ title: "Select a client first", variant: "destructive" }); return; }
-    setRunning(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("seo-audit", {
-        body: { clientId, password: adminPassword },
-      });
-      if (error) {
-        const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Audit failed");
-      }
-      if (data?.error) throw new Error(data.error);
-      if (data?.status === "inconclusive") {
-        toast({ title: "Audit inconclusive", description: "The site couldn't be crawled (unreachable, blocked, or robots-disallowed)." });
-      } else {
-        toast({ title: `Audit complete — score ${data.overall_score}`, description: `${data.findings} findings across ${data.pages} pages.` });
-      }
-      loadAudits();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Audit failed", description: msg, variant: "destructive" });
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const applyFix = async (f: Finding) => {
-    if (!f.fix?.payload?.value) return;
-    setApplyingId(f.id);
-    try {
-      const { data, error } = await supabase.functions.invoke("apply-fix-to-wordpress", {
-        body: { client_id: clientId, seo_fix: f.fix, password: adminPassword },
-      });
-      if (error) {
-        const msg = await getEdgeErrorMessage(error, data);
-        throw new Error(msg ? friendlyEdgeMessage(msg) : "Couldn't apply fix");
-      }
-      if (data?.error) throw new Error(data.error);
-      toast({ title: "Applied to WordPress", description: `${f.title} — re-audit will confirm it resolved.` });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Couldn't apply", description: msg, variant: "destructive" });
-    } finally {
-      setApplyingId(null);
-    }
-  };
-
-  const subOrder = ["technical", "on_page", "performance", "content", "off_page"];
-
+function FindingRow({ f, wpConnected, applyingId, applyFix, compact }: FindingRowProps) {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 text-base font-semibold">
-          <Search className="w-4 h-4 text-orange-500" /> SEO Analysis
-        </div>
-        <div className="flex-1" />
-        <Select value={clientId} onValueChange={setClientId}>
-          <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select client..." /></SelectTrigger>
-          <SelectContent>
-            {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Button variant="outline" size="sm" onClick={loadAudits} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
-        <Button onClick={runAudit} disabled={running || !clientId} className="gap-2">
-          {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-          {running ? "Auditing..." : "Run new audit"}
-        </Button>
-      </div>
-
-      {!clientId ? (
-        <Card><CardContent className="py-16 text-center text-muted-foreground">Select a client to view its SEO analysis.</CardContent></Card>
-      ) : loading ? (
-        <Card><CardContent className="py-16 text-center text-muted-foreground">Loading...</CardContent></Card>
-      ) : !latest ? (
-        <Card><CardContent className="py-16 text-center text-muted-foreground">No SEO audits yet for {clientName}. Click "Run new audit" to generate one.</CardContent></Card>
-      ) : latest.status === "inconclusive" ? (
-        <Card><CardContent className="py-12 text-center text-muted-foreground">
-          <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-amber-500" />
-          <p className="font-medium text-foreground">Audit inconclusive</p>
-          <p className="text-sm mt-1">{results?.reason ?? "The site couldn't be crawled."}</p>
-        </CardContent></Card>
-      ) : (
-        <>
-          {/* Score + subscores + history */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-5">
-                <div className="text-xs text-muted-foreground">Overall score</div>
-                <div className={`text-4xl font-bold ${scoreColor(latest.score)}`}>
-                  {latest.score ?? "—"}<span className="text-base text-muted-foreground">/100</span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">{format(new Date(latest.created_at), "MMM d, yyyy")}</div>
-                {results?.diff && (results.diff.resolved > 0 || results.diff.regressed > 0) && (
-                  <div className="text-xs mt-2 flex gap-3">
-                    {results.diff.resolved > 0 && <span className="text-green-600">▲ {results.diff.resolved} resolved</span>}
-                    {results.diff.regressed > 0 && <span className="text-red-600">▼ {results.diff.regressed} regressed</span>}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-2">
-              <CardContent className="p-5">
-                <div className="text-xs text-muted-foreground mb-3">Dimensions</div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {subOrder.map(cat => {
-                    const v = results?.subscores?.[cat];
-                    return (
-                      <div key={cat}>
-                        <div className={`text-xl font-bold ${v == null ? "text-muted-foreground" : scoreColor(v)}`}>
-                          {v == null ? "—" : v}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">{CATEGORY_LABELS[cat]}</div>
-                        {v == null && <div className="text-[10px] text-muted-foreground/70">not measured</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-                {results?.pages_analyzed && (
-                  <div className="text-xs text-muted-foreground mt-4 pt-3 border-t">
-                    {results.pages_analyzed.length} pages analyzed
-                    {results.pages_analyzed.some(p => p.fetched_via === "plain") && " · some pages not JS-rendered"}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Action plan */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Action plan · {orderedFindings.length} findings, highest impact first
-              </CardTitle>
-              {!wpConnected && orderedFindings.some(f => f.wp_applyable) && (
-                <p className="text-xs text-amber-600">
-                  WordPress isn't connected for this client — connect it (Connect Site panel) to enable one-click Apply.
-                </p>
-              )}
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {orderedFindings.map(f => (
-                  <div key={f.id} className="flex items-start gap-3 px-4 py-3">
+    <div className={`flex items-start gap-3 px-4 py-3${compact ? " pl-10" : ""}`}>
                     {sevIcon(f.severity)}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -344,6 +142,257 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
                       </Button>
                     )}
                   </div>
+  );
+}
+
+export default function SeoAnalysisPanel({ selectedClientId, selectedClientName }: SeoAnalysisPanelProps) {
+  const { adminPassword } = useAdminAuth();
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [audits, setAudits] = useState<SeoAudit[]>([]);
+  const [clientId, setClientId] = useState(selectedClientId ?? "");
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [wpConnected, setWpConnected] = useState(false);
+
+  const loadClients = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "client_accounts", password: adminPassword },
+    });
+    if (error || data?.error) return;
+    const rows = (data?.data ?? [])
+      .filter((c: { status?: string }) => c.status === "active")
+      .map((c: { id: string; business_name: string }) => ({ id: c.id, business_name: c.business_name }))
+      .sort((a: ClientOption, b: ClientOption) => a.business_name.localeCompare(b.business_name));
+    setClients(rows);
+  }, [adminPassword]);
+
+  const loadAudits = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke("admin", {
+      body: { action: "list", table: "seo_audits", password: adminPassword },
+    });
+    if (error || data?.error) {
+      const msg = await getEdgeErrorMessage(error, data);
+      toast({ title: "Couldn't load SEO audits", description: msg ? friendlyEdgeMessage(msg) : "Failed to load SEO audits", variant: "destructive" });
+      setAudits([]);
+    } else {
+      setAudits((data?.data ?? []) as SeoAudit[]);
+    }
+    setLoading(false);
+  }, [adminPassword]);
+
+  useEffect(() => { loadClients(); }, [loadClients]);
+  useEffect(() => { loadAudits(); }, [loadAudits]);
+  useEffect(() => {
+    if (!clientId) { setWpConnected(false); return; }
+    supabase
+      .from("connected_sites")
+      .select("status")
+      .eq("client_id", clientId)
+      .maybeSingle()
+      .then(({ data }) => setWpConnected(data?.status === "connected"));
+  }, [clientId]);
+  useEffect(() => { if (selectedClientId) setClientId(selectedClientId); }, [selectedClientId]);
+
+  const clientAudits = useMemo(
+    () => audits
+      .filter(a => a.client_account_id === clientId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [audits, clientId],
+  );
+  const latest = clientAudits[0] ?? null;
+  const results = latest?.results ?? null;
+  const clientName = clients.find(c => c.id === clientId)?.business_name ?? selectedClientName ?? "";
+
+  // findings in action-plan order (falls back to as-stored)
+  const orderedFindings = useMemo(() => {
+    if (!results?.findings) return [];
+    const byId = new Map(results.findings.map(f => [f.id, f]));
+    const order = results.action_plan ?? results.findings.map(f => f.id);
+    const seen = new Set<string>();
+    const out: Finding[] = [];
+    for (const id of order) { const f = byId.get(id); if (f && !seen.has(id)) { out.push(f); seen.add(id); } }
+    return out;
+  }, [results]);
+  const groups = useMemo(() => groupFindings(orderedFindings), [orderedFindings]);
+
+  const [crawlTick, setCrawlTick] = useState(0);
+
+  // "Run new audit" reads the whole site in the background first (or reuses a crawl from the last 12 hours),
+  // then the audit follows by itself. The crawl card shows progress and calls onCrawlFinished when it lands.
+  const runAudit = async () => {
+    if (!clientId) { toast({ title: "Select a client first", variant: "destructive" }); return; }
+    setRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("site-crawl", {
+        body: { action: "audit", client_id: clientId, password: adminPassword },
+      });
+      if (error || data?.error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : data?.error ?? "Could not start the audit");
+      }
+      toast({
+        title: data?.mode === "audit_only" ? "Analysing the latest crawl" : "Audit started",
+        description: data?.mode === "audit_only" ? "This takes a minute or two." : "Reading the whole website in the background. This can take 5–10 minutes; the results appear here when it's done.",
+      });
+      setCrawlTick((n) => n + 1);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Couldn't start the audit", description: msg, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const applyFix = async (f: Finding) => {
+    if (!f.fix?.payload?.value) return;
+    setApplyingId(f.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("apply-fix-to-wordpress", {
+        body: { client_id: clientId, seo_fix: f.fix, password: adminPassword },
+      });
+      if (error) {
+        const msg = await getEdgeErrorMessage(error, data);
+        throw new Error(msg ? friendlyEdgeMessage(msg) : "Couldn't apply fix");
+      }
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Applied to WordPress", description: `${f.title} — re-audit will confirm it resolved.` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Couldn't apply", description: msg, variant: "destructive" });
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const subOrder = ["technical", "on_page", "performance", "content", "off_page"];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 text-base font-semibold">
+          <Search className="w-4 h-4 text-orange-500" /> SEO Analysis
+        </div>
+        <div className="flex-1" />
+        <Select value={clientId} onValueChange={setClientId}>
+          <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select client..." /></SelectTrigger>
+          <SelectContent>
+            {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.business_name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={loadAudits} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
+        <Button onClick={runAudit} disabled={running || !clientId} className="gap-2">
+          {running ? <RefreshCw className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+          {running ? "Starting..." : "Run new audit"}
+        </Button>
+      </div>
+
+      {clientId && <SiteCrawlCard clientId={clientId} adminPassword={adminPassword} refreshKey={crawlTick} onFinished={loadAudits} />}
+
+      {!clientId ? (
+        <Card><CardContent className="py-16 text-center text-muted-foreground">Select a client to view its SEO analysis.</CardContent></Card>
+      ) : loading ? (
+        <Card><CardContent className="py-16 text-center text-muted-foreground">Loading...</CardContent></Card>
+      ) : !latest ? (
+        <Card><CardContent className="py-16 text-center text-muted-foreground">No SEO audits yet for {clientName}. Click "Run new audit" to generate one.</CardContent></Card>
+      ) : latest.status === "inconclusive" ? (
+        <Card><CardContent className="py-12 text-center text-muted-foreground">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-amber-500" />
+          <p className="font-medium text-foreground">Audit inconclusive</p>
+          <p className="text-sm mt-1">{results?.reason ?? "The site couldn't be crawled."}</p>
+        </CardContent></Card>
+      ) : (
+        <>
+          {/* Score + subscores + history */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-5">
+                <div className="text-xs text-muted-foreground">Overall score</div>
+                <div className={`text-4xl font-bold ${scoreColor(latest.score)}`}>
+                  {latest.score ?? "—"}<span className="text-base text-muted-foreground">/100</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">{format(new Date(latest.created_at), "MMM d, yyyy")}</div>
+                {results?.diff && (results.diff.resolved > 0 || results.diff.regressed > 0) && (
+                  <div className="text-xs mt-2 flex gap-3">
+                    {results.diff.resolved > 0 && <span className="text-green-600">▲ {results.diff.resolved} resolved</span>}
+                    {results.diff.regressed > 0 && <span className="text-red-600">▼ {results.diff.regressed} regressed</span>}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardContent className="p-5">
+                <div className="text-xs text-muted-foreground mb-3">Dimensions</div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {subOrder.map(cat => {
+                    const v = results?.subscores?.[cat];
+                    return (
+                      <div key={cat}>
+                        <div className={`text-xl font-bold ${v == null ? "text-muted-foreground" : scoreColor(v)}`}>
+                          {v == null ? "—" : v}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">{CATEGORY_LABELS[cat]}</div>
+                        {v == null && <div className="text-[10px] text-muted-foreground/70">not measured</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+                {results?.pages_analyzed && (
+                  <div className="text-xs text-muted-foreground mt-4 pt-3 border-t">
+                    {results.source === "crawl" && results.crawl
+                      ? `Full-site audit: ${results.crawl.pages_read} pages read${results.crawl.mode === "incremental" ? " (changed pages re-read)" : ""}${results.crawl.capped ? " · reached the plan's page limit" : ""}`
+                      : `${results.pages_analyzed.length} pages sampled`}
+                    {results.pages_analyzed.some(p => p.fetched_via === "plain") && results.pages_analyzed.some(p => p.fetched_via === "render" ) === false && " · some pages not JS-rendered"}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Action plan */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Action plan · {orderedFindings.length} findings, highest impact first
+              </CardTitle>
+              {!wpConnected && orderedFindings.some(f => f.wp_applyable) && (
+                <p className="text-xs text-amber-600">
+                  WordPress isn't connected for this client — connect it (Connect Site panel) to enable one-click Apply.
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {groups.map(g => g.items.length === 1 ? (
+                  <FindingRow key={g.items[0].id} f={g.items[0]} wpConnected={wpConnected} applyingId={applyingId} applyFix={applyFix} />
+                ) : (
+                  <details key={g.check_id} className="group">
+                    <summary className="flex cursor-pointer list-none items-start gap-3 px-4 py-3 hover:bg-muted/40">
+                      {sevIcon(g.severity)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{g.title}</span>
+                          <Badge variant="secondary" className="text-[10px]">{pagesLabel(g.pages.length)}</Badge>
+                          {g.fixable > 0 && (
+                            <Badge variant="outline" className="text-[10px] gap-1 text-orange-700 border-orange-200">
+                              <Wrench className="w-3 h-3" /> {g.fixable} fixable
+                            </Badge>
+                          )}
+                        </div>
+                        {g.explanation && <p className="text-sm text-muted-foreground mt-0.5">{g.explanation}</p>}
+                        <div className="text-xs text-muted-foreground/70 mt-1">impact {g.impact}/5 · effort {g.effort}/5 · click to see each page</div>
+                      </div>
+                    </summary>
+                    <div className="divide-y border-t bg-muted/20">
+                      {g.items.map(f => (
+                        <FindingRow key={f.id} f={f} wpConnected={wpConnected} applyingId={applyingId} applyFix={applyFix} compact />
+                      ))}
+                    </div>
+                  </details>
                 ))}
                 {orderedFindings.length === 0 && (
                   <div className="py-10 text-center text-muted-foreground text-sm">No findings — this site looks healthy.</div>

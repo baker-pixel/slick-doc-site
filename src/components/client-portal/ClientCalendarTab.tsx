@@ -73,7 +73,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
       setSelectedItem(null);
       toast({ title: "Post deleted" });
     } catch {
-      toast({ title: "Error", description: "Failed to delete post.", variant: "destructive" });
+      toast({ title: "Couldn't delete post", description: "Please try again in a moment.", variant: "destructive" });
     }
   };
 
@@ -96,6 +96,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["client-calendar", clientAccountId],
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("content_calendar")
@@ -112,6 +113,7 @@ export function ClientCalendarTab({ clientAccountId, clientTier = "foundation" }
   // every unreviewed draft looked identical to a real pending approval.
   const { data: pendingApprovalContentIds = new Set<string>() } = useQuery({
     queryKey: ["client-calendar-pending-approvals", clientAccountId],
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("content_approvals")

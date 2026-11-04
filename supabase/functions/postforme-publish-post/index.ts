@@ -308,8 +308,21 @@ serve(async (req) => {
     if (!pfmRes.ok) {
       const text = await pfmRes.text();
       let friendlyErr = `PfM API error ${pfmRes.status}`;
-      try { friendlyErr = JSON.parse(text)?.message || friendlyErr; } catch { /* ignore */ }
+      // PfM's `message` is often just "Invalid Request"; the actionable reason
+      // (e.g. "invalid social accounts, not owned by user") is in `errors`.
+      let pfmDetail = "";
+      try {
+        const parsed = JSON.parse(text);
+        friendlyErr = parsed?.message || friendlyErr;
+        if (Array.isArray(parsed?.errors)) pfmDetail = parsed.errors.join("; ");
+      } catch { /* ignore */ }
       console.error("PfM publish error:", pfmRes.status, text);
+      // The stored account id is no longer ours at PfM (disconnected or
+      // reconnected there, which issues a new id). Retrying can never succeed,
+      // and without flagging it the portal keeps showing the account as
+      // connected while every post for it fails.
+      const accountNotOwned = pfmRes.status === 400 && /not owned/i.test(pfmDetail);
+      if (accountNotOwned) friendlyErr = `${friendlyErr}: ${pfmDetail}`;
       // 5xx and rate-limit exhaustion are transient, as expected. 401/403 are
       // ALSO given the normal retry budget rather than failing immediately --
       // confirmed live that a PfM 401 can be a one-off blip that succeeds on
@@ -325,7 +338,7 @@ serve(async (req) => {
       // surfaces as a failed scheduled post, never as something the client
       // sees on the integration itself. Flag the account row and tell the
       // client to reconnect, same as a fully disconnected one.
-      if (final && (pfmRes.status === 401 || pfmRes.status === 403)) {
+      if (final && (pfmRes.status === 401 || pfmRes.status === 403 || accountNotOwned)) {
         await supabase
           .from("client_postforme_accounts")
           .update({ status: "needs_reauth" })

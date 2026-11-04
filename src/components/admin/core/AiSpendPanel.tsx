@@ -29,7 +29,10 @@ interface Report {
     our_requests: number; our_tokens: number; groq_requests: number;
   };
 }
+interface ScopeProject { id: string; name: string }
+interface ProjectList { projects: Array<ScopeProject & { status: string }>; selected: string[]; problem: { title: string; fix: string; detail?: string } | null }
 interface Overview {
+  projects: ScopeProject[];
   state: "ok" | "stale" | "error" | "not_connected";
   problem: { title: string; fix: string; detail?: string } | null;
   fetched_at: string | null;
@@ -112,7 +115,7 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">AI Spend &amp; Budget</h1>
-          <p className="text-sm text-muted-foreground">What OpenAI actually bills us, straight from OpenAI.</p>
+          <p className="text-sm text-muted-foreground">What OpenAI actually bills us, straight from OpenAI{(o.projects ?? []).length > 0 ? ` (${o.projects.map((p) => p.name).join(", ")} only)` : ""}.</p>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {live && <span>From OpenAI · updated {ago(o.fetched_at)}</span>}
@@ -196,6 +199,8 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
         )}
         <p className="text-xs text-muted-foreground">These dollar amounts are OpenAI's own billing data, not our calculation. OpenAI can take a few hours to post the latest usage, so today's figure may still grow.</p>
       </CardContent></Card>
+
+      <ProjectScope adminPassword={adminPassword} selected={o.projects ?? []} />
 
       {live && (
         <>
@@ -285,6 +290,63 @@ export function AiSpendPanel({ adminPassword }: { adminPassword: string }) {
         <p className="text-xs text-muted-foreground">Image generation is billed by OpenAI but isn't tied to a client or task in our logs, so it appears only in the charges list above.</p>
       </section>
     </div>
+  );
+}
+
+/** Which OpenAI projects count as OrangeDoor's. OpenAI can filter its billing by project, so other projects in the same organization are left out. */
+function ProjectScope({ adminPassword, selected }: { adminPassword: string; selected: ScopeProject[] }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const list = useMutation({
+    mutationFn: () => api<ProjectList>(adminPassword, { action: "list_projects" }),
+    onSuccess: (d) => setChosen(new Set(d.selected)),
+    onError: (e) => toast({ title: "Could not load projects", description: e instanceof Error ? e.message : String(e), variant: "destructive" }),
+  });
+  const save = useMutation({
+    mutationFn: (projects: ScopeProject[]) => api(adminPassword, { action: "set_projects", projects }),
+    onSuccess: () => { setOpen(false); queryClient.invalidateQueries({ queryKey: ["ai-spend"] }); toast({ title: "Saved. Spend now counts only these projects." }); },
+    onError: (e) => toast({ title: "Could not save", description: e instanceof Error ? e.message : String(e), variant: "destructive" }),
+  });
+  const data = list.data;
+  const toggle = (id: string) => setChosen((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Which OpenAI projects count as OrangeDoor?</CardTitle>
+        <CardDescription>Your OpenAI organization can hold several projects. Pick OrangeDoor's so other projects aren't added to this spend.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          {selected.length === 0
+            ? <Badge variant="outline">All projects in your OpenAI organization</Badge>
+            : selected.map((p) => <Badge key={p.id} variant="secondary">{p.name}</Badge>)}
+          {!open && <Button size="sm" variant="outline" onClick={() => { setOpen(true); list.mutate(); }}>{selected.length === 0 ? "Choose projects" : "Change"}</Button>}
+        </div>
+        {open && (
+          <div className="space-y-3 rounded-md border p-3">
+            {list.isPending && <p className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading your OpenAI projects…</p>}
+            {data?.problem && <p className="text-amber-800">{data.problem.title}. {data.problem.fix}</p>}
+            {data && !data.problem && data.projects.length === 0 && <p className="text-muted-foreground">OpenAI returned no projects.</p>}
+            {data && data.projects.map((p) => (
+              <label key={p.id} className="flex cursor-pointer items-start gap-3">
+                <input type="checkbox" className="mt-1 h-4 w-4" checked={chosen.has(p.id)} onChange={() => toggle(p.id)} />
+                <span>
+                  <span className="font-medium">{p.name}</span>{p.status === "archived" && <Badge variant="outline" className="ml-2 text-[10px]">archived</Badge>}
+                  <span className="block text-xs text-muted-foreground">{p.id}</span>
+                </span>
+              </label>
+            ))}
+            {data && !data.problem && <p className="text-xs text-muted-foreground">Tick only the OrangeDoor project(s). Leave everything unticked to count the whole organization.</p>}
+            <div className="flex gap-2">
+              <Button size="sm" disabled={save.isPending || !data || !!data.problem} onClick={() => save.mutate((data?.projects ?? []).filter((p) => chosen.has(p.id)).map((p) => ({ id: p.id, name: p.name })))}>Save</Button>
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { getGradeBadge } from "./ReportConfig";
 import { usePrintMode } from "./PrintModeContext";
+import { BrandLogo } from "@/components/BrandLogo";
 
 interface CoverSectionProps {
   businessName?: string;
@@ -80,12 +81,17 @@ export function CoverSection({ businessName, clientDomain, reportDate, overallSc
     <section className="bg-white">
       {/* Page header */}
       <div className="px-10 py-4 border-b border-[rgba(0,0,0,0.07)] flex items-center justify-between flex-wrap gap-3 md:px-14">
-        <span
-          style={{ fontFamily: "'DM Serif Display', serif" }}
-          className="text-[20px] text-[#1A1D23] leading-none"
-        >
-          {displayName}
-        </span>
+        <div className="flex items-center gap-4 min-w-0">
+          {/* The report is always white, so always the dark-text logo (never the theme-aware one). */}
+          <BrandLogo tone="onLight" className="h-8 shrink-0" />
+          <span className="h-6 w-px bg-[rgba(0,0,0,0.12)] shrink-0" aria-hidden="true" />
+          <span
+            style={{ fontFamily: "'DM Serif Display', serif" }}
+            className="text-[20px] text-[#1A1D23] leading-none truncate"
+          >
+            {displayName}
+          </span>
+        </div>
         <div className="text-right">
           <div className="text-[13px] text-[#8A8F9B]">{reportDate}</div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8A8F9B]">

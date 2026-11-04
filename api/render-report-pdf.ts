@@ -89,6 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <html>
 <head>
 <meta charset="utf-8">
+<base href="${origin}/">
 ${FONT_LINKS}
 <style>${css}</style>
 <style>@page { size: A4; margin: 0; } body { margin: 0; }</style>

@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useMemo, useState } from "react";
 import { CheckCircle2, Loader2, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ export function FollowUpCard({ token, onComplete }: Props) {
       if (!data?.scores) throw new Error("We couldn't save your answers. Please try again.");
       onComplete({ scores: data.scores, overallScore: data.overallScore });
     } catch (e) {
-      toast({ title: "Couldn't save your answers", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Couldn't save your answers", description: describeError(e), variant: "destructive" });
     } finally {
       setSaving(false);
     }

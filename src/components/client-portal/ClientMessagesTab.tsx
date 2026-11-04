@@ -68,7 +68,7 @@ export default function ClientMessagesTab({ clientAccountId, clientName }: Clien
       for (const msg of unreadAgencyMessages) await markAsRead(msg.id);
     } catch (error) {
       console.error("Error fetching messages:", error);
-      toast({ title: "Error", description: "Failed to load messages", variant: "destructive" });
+      toast({ title: "Couldn't load messages", description: "Please try again in a moment.", variant: "destructive" });
     } finally {
       setLoading(false);
     }

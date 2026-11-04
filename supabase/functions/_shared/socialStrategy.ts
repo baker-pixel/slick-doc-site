@@ -71,7 +71,7 @@ export async function upsertSocialStrategy(
       jsonMode: true,
       maxTokens: 600,
       promptId: "social-strategy.v1",
-      system: `You are a social media strategist. Define 3-5 content pillars -- recurring themes this business posts about -- grounded in what they actually do. Each pillar: a short name and one sentence on what it covers and why it matters to their audience. Return ONLY {"pillars":[{"name","description"}]}.`,
+      system: `You are a social media strategist. Define 3-5 content pillars -- recurring themes this business posts about -- grounded in what they actually do. Pillars must be clearly distinct from each other: each covers a different sub-area, audience question or content format (e.g. education, proof/case studies, behind-the-scenes, industry news, community), and NONE may simply restate the business's core product or service -- that is the subject of every post, not a pillar. Each pillar: a short name and one sentence naming the specific kinds of posts under it and why they matter to their audience. Return ONLY {"pillars":[{"name","description"}]}.`,
       prompt: `Business: ${client.business_name}\nIndustry: ${client.industry ?? "unknown"}\nServices: ${services || "unknown"}\nAudience: ${audience || "unknown"}\nDifferentiators: ${differentiators || "n/a"}\nSummary: ${summary || "n/a"}\nPlatforms in plan: ${policy.social.contentTypes.join(", ")}.${evolveInstruction}${learnedBlock}${topicsBlock}`,
     });
     pillars = (res.pillars ?? []).filter((p) => p?.name).slice(0, 5);
@@ -162,12 +162,17 @@ export async function refreshSocialPlanProgress(
     .eq("id", project.id);
 }
 
-/** Read the client's active content pillars (for on-strategy content generation). */
-export async function getSocialPillars(supabase: any, clientId: string): Promise<string[]> {
+/** Read the client's active content pillars with their descriptions, in plan order. */
+export async function getSocialPillarDetails(supabase: any, clientId: string): Promise<Pillar[]> {
   const { data: project } = await supabase
     .from("client_projects").select("id").eq("client_account_id", clientId).eq("kind", "social").maybeSingle();
   if (!project) return [];
   const { data: ms } = await supabase
-    .from("project_milestones").select("name, sort_order").eq("project_id", project.id).order("sort_order", { ascending: true });
-  return (ms ?? []).map((m: any) => m.name);
+    .from("project_milestones").select("name, description, sort_order").eq("project_id", project.id).order("sort_order", { ascending: true });
+  return (ms ?? []).map((m: any) => ({ name: m.name, description: m.description ?? "" }));
+}
+
+/** Read the client's active content pillars (for on-strategy content generation). */
+export async function getSocialPillars(supabase: any, clientId: string): Promise<string[]> {
+  return (await getSocialPillarDetails(supabase, clientId)).map((p) => p.name);
 }

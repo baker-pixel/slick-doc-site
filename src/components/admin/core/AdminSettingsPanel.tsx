@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { getEdgeErrorMessage, friendlyEdgeMessage, describeError } from "@/lib/edge-error";
 import { Save, Plus, Trash2, RefreshCw, Settings2 } from "lucide-react";
 import {
   AlertDialog,
@@ -78,8 +78,8 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
       setEditedSettings(initialEdits);
     } catch (error: any) {
       toast({ 
-        title: "Error fetching settings", 
-        description: error.message, 
+        title: "Couldn't load settings", 
+        description: describeError(error), 
         variant: "destructive" 
       });
     } finally {
@@ -113,8 +113,8 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
       fetchSettings();
     } catch (error: any) {
       toast({ 
-        title: "Error updating setting", 
-        description: error.message, 
+        title: "Couldn't update setting", 
+        description: describeError(error), 
         variant: "destructive" 
       });
     }
@@ -153,8 +153,8 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
       fetchSettings();
     } catch (error: any) {
       toast({ 
-        title: "Error adding setting", 
-        description: error.message, 
+        title: "Couldn't add setting", 
+        description: describeError(error), 
         variant: "destructive" 
       });
     }
@@ -181,8 +181,8 @@ export function AdminSettingsPanel({ adminPassword }: AdminSettingsPanelProps) {
       fetchSettings();
     } catch (error: any) {
       toast({ 
-        title: "Error deleting setting", 
-        description: error.message, 
+        title: "Couldn't delete setting", 
+        description: describeError(error), 
         variant: "destructive" 
       });
     }

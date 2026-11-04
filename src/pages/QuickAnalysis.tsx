@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
@@ -133,7 +134,7 @@ const QuickAnalysis = () => {
       console.error("Analysis error:", error);
       toast({
         title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Failed to analyze website. Please try again.",
+        description: describeError(error),
         variant: "destructive",
       });
     } finally {

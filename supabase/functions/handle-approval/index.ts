@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { isServiceRequest } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callAI, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
+import { callAI, callAIJson, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { isUsableCaption } from "../_shared/captionGate.ts";
 
 const corsHeaders = {
@@ -21,7 +21,7 @@ serve(async (req) => {
   );
 
   try {
-    const { approval_id, action, feedback, password } = await req.json();
+    const { approval_id, action, feedback, image_feedback, password } = await req.json();
 
     if (!approval_id || !action) {
       return new Response(
@@ -330,12 +330,15 @@ serve(async (req) => {
     }
 
     // action === "changes_requested"
-    if (!feedback?.trim()) {
+    const textFeedback = typeof feedback === "string" ? feedback.trim() : "";
+    const imageFeedback = typeof image_feedback === "string" ? image_feedback.trim() : "";
+    if (!textFeedback && !imageFeedback) {
       return new Response(
         JSON.stringify({ error: "Feedback is required when requesting changes" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const combinedFeedback = [textFeedback, imageFeedback ? `Image: ${imageFeedback}` : ""].filter(Boolean).join("\n\n");
 
     // 1. Update approval
     await supabase
@@ -343,26 +346,75 @@ serve(async (req) => {
       .update({
         status: "changes_requested",
         publish_status: "changes_requested",
-        feedback,
+        feedback: combinedFeedback,
         reviewed_at: new Date().toISOString(),
       })
       .eq("id", approval_id);
 
-    // 2. Actually act on the feedback: rewrite this specific post with AI right
-    // now instead of just flagging it and hoping someone notices. Falls back to
-    // the old "flag it, needs a human" behavior if the rewrite fails, so a
-    // transient model error never silently eats the client's feedback.
     const generatedContentIdForChanges: string | null = approval.content_id || null;
     let revised = false;
+    let failed = false;
+    let newText: string | null = null;
 
-    if (generatedContentIdForChanges) {
+    // 2. Image feedback: clear the old image and queue a fresh one that follows
+    // the client's note. sync-fill-missing-images generates it immediately
+    // because the approval is back in the client's queue (see step 4).
+    if (imageFeedback) {
+      const { data: slots } = await supabase
+        .from("content_calendar")
+        .select("id, platform, metadata")
+        .eq("client_account_id", clientId)
+        .or(generatedContentIdForChanges
+          ? `content_id.eq.${generatedContentIdForChanges},metadata->>content_approval_id.eq.${approval_id}`
+          : `metadata->>content_approval_id.eq.${approval_id}`);
+      const mine = (slots || []).filter((c: any) => !approval.platform || !c.platform || c.platform === approval.platform);
+      for (const c of mine as any[]) {
+        const { image_url: _i, image_skip: _s, image_batch_id: _b, image_batch_status: _bs, ...rest } = (c.metadata || {}) as Record<string, unknown>;
+        await supabase.from("content_calendar").update({ metadata: { ...rest, image_feedback: imageFeedback } }).eq("id", c.id);
+      }
+      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-fill-missing-images`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, force: true }),
+      }).catch((e) => console.error("image regeneration kick failed:", e));
+    }
+
+    // 3. Text feedback: rewrite this specific post with AI right now, and learn
+    // any standing rules ("never use em dashes") so future drafts follow them
+    // too. A failed rewrite falls back to flagging it for a human, so a
+    // transient model error never silently eats the client's feedback.
+    if (textFeedback && generatedContentIdForChanges) {
       try {
         const [{ data: genRecord }, { data: client }] = await Promise.all([
           supabase.from("generated_content").select("metadata").eq("id", generatedContentIdForChanges).maybeSingle(),
           supabase.from("client_accounts").select("business_name, industry, context_profile").eq("id", clientId).maybeSingle(),
         ]);
 
+        // Standing rules first, so the rewrite below already obeys them.
+        let learnedRules: string[] = [];
+        try {
+          const out = await callAIJson<{ rules?: string[] }>({
+            prompt: `A client gave this feedback on a draft social post:\n"${textFeedback}"\n\nExtract ONLY instructions that should apply to ALL future posts (banned words or punctuation, mandated wording or facts). Exclude edits specific to this one post. Write each as a short directive starting with "Never" or "Always". Return JSON: {"rules": ["..."]} (empty array if none, max 5).`,
+            model: MODELS.default,
+            maxTokens: 300,
+            source: "handle-approval-rules",
+            clientId,
+          });
+          learnedRules = (out?.rules ?? []).filter((r) => typeof r === "string" && r.trim()).map((r) => r.trim()).slice(0, 5);
+        } catch (e) {
+          console.error("Standing-rule extraction failed (non-fatal):", e);
+        }
+
+        const cp = (client?.context_profile ?? {}) as Record<string, unknown>;
+        let neverSay = Array.isArray(cp.never_say) ? (cp.never_say as string[]) : [];
+        const fresh = learnedRules.filter((r) => !neverSay.some((e) => e.toLowerCase() === r.toLowerCase()));
+        if (fresh.length) {
+          neverSay = [...neverSay, ...fresh];
+          await supabase.from("client_accounts").update({ context_profile: { ...cp, never_say: neverSay } }).eq("id", clientId);
+        }
+
         const original = approval.full_content || approval.content_preview || "";
+        const vf = Array.isArray(cp.verified_facts) ? (cp.verified_facts as string[]) : [];
         const prompt = `You wrote this ${approval.content_type || "social"} post${approval.platform ? ` for ${approval.platform}` : ""} for ${client?.business_name || "the business"}${client?.industry ? ` (${client.industry} industry)` : ""}:
 
 """
@@ -370,32 +422,26 @@ ${original}
 """
 
 The client reviewed it and requested changes:
-"${feedback.trim()}"
+"${textFeedback}"
 
-${(() => {
-          const cp = (client?.context_profile ?? {}) as Record<string, unknown>;
-          const vf = Array.isArray(cp.verified_facts) ? (cp.verified_facts as string[]) : [];
-          const ns = Array.isArray(cp.never_say) ? (cp.never_say as string[]) : [];
-          return `${vf.length ? `Verified facts about the business (the only source for product claims): ${vf.join("; ")}.\n` : ""}${ns.length ? `Never say or imply: ${ns.join("; ")}.\n` : ""}`;
-        })()}Rewrite the post to directly address this feedback. Keep the same topic, platform conventions, and roughly the same length. Return ONLY the revised post content -- no preamble, no explanation, no quotes.${NO_FABRICATION_GUARDRAIL}`;
+${vf.length ? `Verified facts about the business (the only source for product claims): ${vf.join("; ")}.\n` : ""}${neverSay.length ? `Never say or imply (standing rules, always obey): ${neverSay.join("; ")}.\n` : ""}Rewrite the post to directly address this feedback. Keep the same topic, platform conventions, and roughly the same length. Return ONLY the revised post content -- no preamble, no explanation, no quotes.${NO_FABRICATION_GUARDRAIL}`;
 
-        const revisedContent = await callAI({
+        newText = (await callAI({
           prompt,
           model: MODELS.default,
           maxTokens: 600,
           source: "handle-approval-regenerate",
           clientId,
           promptId: "content-revision.v1",
-        });
+        })).trim();
 
         await supabase
           .from("generated_content")
           .update({
-            content: revisedContent.trim(),
-            status: "pending_admin_review",
+            content: newText,
             metadata: {
               ...((genRecord?.metadata as Record<string, unknown>) || {}),
-              last_revision_feedback: feedback.trim(),
+              last_revision_feedback: textFeedback,
               last_revised_at: new Date().toISOString(),
             },
             updated_at: new Date().toISOString(),
@@ -405,21 +451,54 @@ ${(() => {
         revised = true;
       } catch (err) {
         console.error("Auto-revision failed after changes_requested:", err);
+        failed = true;
 
         // Fall back to the old behavior: just flag it, a human has to fix it.
         await supabase
           .from("generated_content")
-          .update({ status: "changes_requested", rejection_reason: feedback, updated_at: new Date().toISOString() })
+          .update({ status: "changes_requested", rejection_reason: combinedFeedback, updated_at: new Date().toISOString() })
           .eq("id", generatedContentIdForChanges);
 
         await supabase.from("automation_alerts").insert({
           alert_type: "content_revision_failed",
           title: `Auto-revision failed: ${approval.title}`,
-          message: `Client requested changes but the automatic rewrite failed -- needs a manual fix. Feedback: ${feedback}`,
+          message: `Client requested changes but the automatic rewrite failed -- needs a manual fix. Feedback: ${combinedFeedback}`,
           severity: "error",
           source: "handle-approval",
           source_id: approval_id,
         });
+      }
+    }
+
+    // 4. Put the revised version straight back in the client's queue so they
+    // can check their changes before the post date, with no admin resend step.
+    // Skipped when the rewrite failed (a human still has to fix the text).
+    if (!failed) {
+      await supabase
+        .from("content_approvals")
+        .update({
+          status: "pending",
+          publish_status: "pending",
+          feedback: null,
+          reviewed_at: null,
+          submitted_at: new Date().toISOString(),
+          ...(newText ? { full_content: newText, content_preview: newText.substring(0, 300) } : {}),
+        })
+        .eq("id", approval_id);
+
+      if (generatedContentIdForChanges) {
+        if (newText) {
+          // Keep the unpublished calendar draft in step with what the client will see.
+          await supabase
+            .from("content_calendar")
+            .update({ content: newText })
+            .eq("content_id", generatedContentIdForChanges)
+            .eq("status", "draft");
+        }
+        await supabase
+          .from("generated_content")
+          .update({ status: "approved", updated_at: new Date().toISOString() })
+          .eq("id", generatedContentIdForChanges);
       }
     }
 
@@ -428,15 +507,15 @@ ${(() => {
       client_account_id: clientId,
       activity_type: "content_changes_requested",
       title: `Changes requested: ${approval.title}`,
-      description: revised
-        ? `${feedback} — revised draft is back in admin review.`
-        : feedback,
+      description: failed
+        ? `${combinedFeedback} — automatic rewrite failed, needs a manual fix.`
+        : `${combinedFeedback} — revised version is back with the client for review.`,
       icon: "edit-3",
-      metadata: { approval_id, content_type: approval.content_type, revised },
+      metadata: { approval_id, content_type: approval.content_type, revised, image_regenerating: !!imageFeedback },
     });
 
     return new Response(
-      JSON.stringify({ success: true, action: "changes_requested", revised }),
+      JSON.stringify({ success: true, action: "changes_requested", revised, returned_to_client: !failed }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

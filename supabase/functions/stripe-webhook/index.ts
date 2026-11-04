@@ -293,8 +293,9 @@ async function activatePaidSignup(supabase: Supabase, acct: any) {
 
   const tier = acct.tier;
   const steps: Array<[string, Record<string, unknown>]> = [
+    // Projects are not generated here: bootstrap_client_projects creates the
+    // three engine projects when onboarding completes.
     ["seed-tier-workflow", { client_id: acct.id, tier }],
-    ["generate-client-projects", { clientAccountId: acct.id, returnOnly: false }],
   ];
   for (const [fn, body] of steps) {
     const { error: e } = await supabase.functions.invoke(fn, { body });

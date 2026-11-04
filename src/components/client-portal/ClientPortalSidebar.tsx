@@ -21,6 +21,7 @@ import {
   Search,
   Radar,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import {
   Sidebar,
   SidebarContent,
@@ -202,15 +203,16 @@ export function ClientPortalSidebar({
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4 pb-6 group-data-[collapsible=icon]:px-3 group-data-[collapsible=icon]:pb-4 group-data-[collapsible=icon]:pt-4">
-        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10">
-            <Sparkles className="h-4 w-4" />
+        <div className="flex flex-col gap-2 group-data-[collapsible=icon]:items-center">
+          <div className="group-data-[collapsible=icon]:hidden">
+            <BrandLogo variant="horizontal" className="h-8" />
           </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="font-bold text-sm truncate max-w-[140px]">
-              {businessName || "Client Portal"}
-            </span>
+          <div className="hidden group-data-[collapsible=icon]:block">
+            <BrandLogo variant="icon" className="h-5" />
           </div>
+          <span className="text-xs font-semibold text-muted-foreground truncate max-w-[180px] group-data-[collapsible=icon]:hidden">
+            {businessName || "Client Portal"}
+          </span>
         </div>
       </SidebarHeader>
 

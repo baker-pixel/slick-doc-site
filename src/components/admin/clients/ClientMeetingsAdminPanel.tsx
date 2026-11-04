@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/edge-error";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,8 +123,8 @@ const ClientMeetingsAdminPanel = ({ clientId }: ClientMeetingsAdminPanelProps) =
       setMeetings(data || []);
     } catch (error: any) {
       toast({
-        title: "Error fetching meetings",
-        description: error.message,
+        title: "Couldn't load meetings",
+        description: describeError(error),
         variant: "destructive"
       });
     } finally {
@@ -162,8 +163,8 @@ const ClientMeetingsAdminPanel = ({ clientId }: ClientMeetingsAdminPanelProps) =
       fetchMeetings();
     } catch (error: any) {
       toast({
-        title: "Error updating meeting",
-        description: error.message,
+        title: "Couldn't update meeting",
+        description: describeError(error),
         variant: "destructive"
       });
     }
@@ -212,8 +213,8 @@ const ClientMeetingsAdminPanel = ({ clientId }: ClientMeetingsAdminPanelProps) =
       fetchMeetings();
     } catch (error: any) {
       toast({
-        title: "Error creating meeting",
-        description: error.message,
+        title: "Couldn't create meeting",
+        description: describeError(error),
         variant: "destructive"
       });
     } finally {

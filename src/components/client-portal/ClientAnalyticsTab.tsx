@@ -282,7 +282,7 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName }: Cl
       toast({ title: "Report Downloaded", description: "Your performance report has been saved." });
     } catch (error) {
       console.error("Error generating PDF:", error);
-      toast({ title: "Error", description: "Failed to generate report.", variant: "destructive" });
+      toast({ title: "Couldn't generate report", description: "Please try again in a moment.", variant: "destructive" });
     }
   };
 

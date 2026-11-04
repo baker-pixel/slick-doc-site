@@ -129,6 +129,7 @@ export function ClientDeliverablesTab({ clientAccountId }: ClientDeliverablesTab
 
   const { data: deliverables, isLoading } = useQuery({
     queryKey: ["client-deliverables", clientAccountId],
+    refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deliverables")
