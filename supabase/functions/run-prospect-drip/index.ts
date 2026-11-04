@@ -10,6 +10,7 @@ import { refreshProspectProject } from "../_shared/prospectProject.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
 import { nurtureStartAt, readyForNurture, stepDelayDays } from "../_shared/dripSchedule.ts";
+import { snapToSendWindow } from "../_shared/sendWindow.ts";
 import { existingClientDisposition } from "../_shared/campaignBoundary.ts";
 import {
   type Audience,
@@ -356,8 +357,8 @@ serve(async (req) => {
     }
     const steps = (sequence.emails as SequenceStep[] | null) ?? [];
 
-    // 1. Move approved pending prospects to nurture: discovery leads after the
-    // 48h review hold, campaign (CSV) leads immediately -- see dripSchedule.ts.
+    // 1. Move approved pending prospects (auto-approved by the enrichment pass,
+    // or by hand, or a CSV campaign) to nurture. No hold -- see dripSchedule.ts.
     const { data: approvedPending } = await supabase
       .from("prospects")
       .select("id, approved_at, campaign_id")
@@ -630,6 +631,9 @@ serve(async (req) => {
           const earliest = new Date(previousSendAt.getTime() + delayDays * 24 * 60 * 60 * 1000);
           if (sendAt < earliest) sendAt = earliest;
         }
+        // Cold email goes out on weekdays in the working day, not whenever the
+        // arithmetic lands (approval is automatic, so step 1 is "now").
+        sendAt = snapToSendWindow(sendAt, `${prospect.id}:${stepNumber}`);
         missing.push({ stepNumber, scheduledFor: sendAt });
         previousSendAt = sendAt;
       }

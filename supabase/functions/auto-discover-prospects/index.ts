@@ -131,11 +131,19 @@ serve(async (req) => {
       // The manual single-client trigger is an explicit "do it now" --
       // skip the daily sweep's queue-floor and cooldown throttles.
       if (!onlyClientId) {
+        // Only leads that could actually be approved count toward the ceiling.
+        // Leads Apollo found no verified email for ("no_decision_maker",
+        // "no_email") sit in "discovered" with an empty email; they can never
+        // be auto-approved, so counting them would stall discovery for good
+        // (they made up over half of the backlog). They stay visible in the
+        // admin queue for a manual email.
         const { count: queueCount } = await supabase
           .from("prospects")
           .select("id", { count: "exact", head: true })
           .eq("client_id", client.id)
-          .eq("status", "discovered");
+          .eq("status", "discovered")
+          .not("email", "is", null)
+          .neq("email", "");
         if ((queueCount ?? 0) >= REVIEW_QUEUE_CEILING) {
           results[client.id] = `skipped: ${queueCount} leads awaiting review (ceiling ${REVIEW_QUEUE_CEILING})`;
           if (!onlyClientId) {
