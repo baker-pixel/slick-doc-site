@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const PFM_API = "https://api.postforme.dev";
+import { deletePfmAccounts, listPfmAccountsForClient } from "../_shared/pfmCleanup.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -55,38 +55,39 @@ serve(async (req) => {
       }
     }
 
-    // If pfmAccountId not provided, look it up from our DB
-    let accountId = pfmAccountId;
-    if (!accountId) {
-      const { data: row } = await supabase
-        .from("client_postforme_accounts")
-        .select("postforme_account_id")
-        .eq("client_id", clientId)
-        .eq("platform", platform)
-        .maybeSingle();
-      accountId = row?.postforme_account_id ?? null;
-    }
+    // Disconnect removes EVERY PfM account for this client+platform (our DB
+    // deletes all of them below too). Previously only one id was revoked, and
+    // with several pages connected (the common LinkedIn/Facebook case) none
+    // was -- .maybeSingle() errors on multiple rows -- leaving stale PfM
+    // accounts that broke the next OAuth connect. So collect ids from our DB
+    // AND from PfM itself (catches orphans our DB never knew about).
+    const idsToDelete = new Set<string>();
+    if (pfmAccountId) idsToDelete.add(pfmAccountId);
+    const { data: rows } = await supabase
+      .from("client_postforme_accounts")
+      .select("postforme_account_id")
+      .eq("client_id", clientId)
+      .eq("platform", platform);
+    for (const r of rows ?? []) if (r.postforme_account_id) idsToDelete.add(r.postforme_account_id);
 
-    // Revoke on PfM side — best effort (don't fail if PfM rejects). Tracked
-    // and returned to the caller: if this fails, the underlying LinkedIn (or
-    // other provider) authorization is likely still live, so the account can
-    // reappear on the next sync even though it's gone from our own DB --
-    // that "auto-reconnects on its own" is a real client-reported confusion,
-    // not a bug in the resync itself, so surface it honestly instead of
-    // reporting a clean "Disconnected" every time.
+    // Revoke on PfM side. remoteRevoked is false if anything failed (including
+    // being unable to list PfM accounts), null only if nothing needed revoking
+    // or no API key is set. The UI warns on false instead of a clean
+    // "Disconnected" -- silent drift is what caused the original incident.
     let remoteRevoked: boolean | null = null;
-    if (accountId && pfmApiKey) {
-      const pfmRes = await fetch(`${PFM_API}/v1/social-accounts/${accountId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${pfmApiKey}` },
-      });
-      if (!pfmRes.ok) {
-        const text = await pfmRes.text();
-        console.warn(`PfM DELETE /v1/social-accounts/${accountId} returned ${pfmRes.status}: ${text}`);
+    if (pfmApiKey) {
+      let listFailed = false;
+      try {
+        for (const a of await listPfmAccountsForClient(pfmApiKey, clientId, platform)) idsToDelete.add(a.id);
+      } catch (err) {
+        console.warn("PfM list for disconnect failed:", err);
+        listFailed = true;
+      }
+      if (idsToDelete.size > 0) {
+        const result = await deletePfmAccounts(pfmApiKey, [...idsToDelete]);
+        remoteRevoked = result.failed === 0 && !listFailed;
+      } else if (listFailed) {
         remoteRevoked = false;
-      } else {
-        console.log(`PfM account ${accountId} revoked`);
-        remoteRevoked = true;
       }
     }
 
