@@ -5,6 +5,7 @@ import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
 import { isBudgetCapped, trimToBudget, windowBudget } from "../_shared/socialBudget.ts";
+import { allocateCounts, remainingSlots, windowQuota } from "../_shared/channelPlan.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,6 +83,75 @@ function buildWeeklyPlan(tier: string | null | undefined, connectedPlatforms: Se
     plan.push(c.slot);
   }
   return plan;
+}
+
+const PLATFORM_LABEL: Record<string, string> = {
+  facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn", twitter: "Twitter",
+};
+
+// ─── Channel-plan scheduling ────────────────────────────────────────────────
+// For a client with client_channel_plan rows: the tier quota for the window is
+// split across the chosen channels (per publication -- one calendar row is one
+// post on one channel) and each channel's slots are spread evenly across the
+// window. The split is snapshotted on the cycle the first time it is used, so
+// later edits to the plan apply from the next cycle. Unconnected channels are
+// skipped, never redistributed: their slots simply are not created until the
+// account reconnects. Unlike the legacy path this is a hard budget for every
+// tier, and re-runs only top up each channel's shortfall. Channels alternate
+// days (see placeSlots): no two channels post on the same day while the window
+// has room.
+async function planRowsForClient(
+  supabase: any,
+  client: { id: string },
+  tier: string,
+  weights: Record<string, number>,
+  cycle: { id: string; period_start: string; period_end: string; channel_plan: any } | undefined,
+  connected: Set<string>,
+  todayStart: Date,
+): Promise<any[]> {
+  const rangeStart = cycle ? new Date(cycle.period_start) : todayStart;
+  const rangeEnd = cycle ? new Date(cycle.period_end) : new Date(todayStart.getTime() + 28 * 24 * 60 * 60 * 1000);
+
+  let counts: Record<string, number> | undefined = cycle?.channel_plan?.counts;
+  if (!counts) {
+    const quota = windowQuota(tierPolicy(tier).social.postsPerMonth, rangeStart, rangeEnd);
+    counts = allocateCounts(weights, quota);
+    if (cycle) {
+      await supabase.from("client_cycles")
+        .update({ channel_plan: { quota, counts, weights, snapshotted_at: new Date().toISOString() } })
+        .eq("id", cycle.id)
+        .is("channel_plan", null);
+    }
+  }
+
+  const { data: existing } = await supabase
+    .from("content_calendar")
+    .select("platform, scheduled_for")
+    .eq("client_account_id", client.id)
+    .gte("scheduled_for", rangeStart.toISOString())
+    .lt("scheduled_for", rangeEnd.toISOString());
+  // One pass across all channels so they take turns on different days (see
+  // remainingSlots/placeSlots). Failed rows count toward each channel's quota.
+  const slots = remainingSlots({
+    counts,
+    connected,
+    existing: (existing || []).map((s: any) => ({ platform: s.platform, day: dateKey(new Date(s.scheduled_for)) })),
+    rangeStart,
+    rangeEnd,
+    todayStart,
+  });
+  const rows: any[] = slots.map((slot) => ({
+    client_account_id: client.id,
+    title: `${PLATFORM_LABEL[slot.platform] ?? slot.platform} Post — ${dateLabel(slot.at)}`,
+    content: `[Auto-generated placeholder — content will be created by AI]`,
+    content_type: "social_post",
+    platform: slot.platform,
+    scheduled_for: slot.at.toISOString(),
+    status: "draft",
+    client_approved: false,
+    ...(cycle ? { cycle_id: cycle.id } : {}),
+  }));
+  return rows;
 }
 
 // Return the Monday of the week containing `from`
@@ -196,14 +266,28 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const { data: activeCycles } = await supabase
       .from("client_cycles")
-      .select("id, client_account_id, period_start, period_end")
+      .select("id, client_account_id, period_start, period_end, channel_plan")
       .in("client_account_id", clientIds)
       .in("status", ["planning", "active"])
       .gt("period_end", nowIso)
       .order("period_end", { ascending: false });
-    const cycleByClient = new Map<string, { id: string; period_start: string; period_end: string }>();
+    const cycleByClient = new Map<string, { id: string; period_start: string; period_end: string; channel_plan: any }>();
     for (const c of activeCycles || []) {
       if (!cycleByClient.has(c.client_account_id)) cycleByClient.set(c.client_account_id, c);
+    }
+
+    // Channel plans: clients with active rows are scheduled from their chosen
+    // channel split (see planRowsForClient); everyone else keeps the legacy
+    // weekly table below.
+    const { data: planRows } = await supabase
+      .from("client_channel_plan")
+      .select("client_account_id, platform, weight")
+      .in("client_account_id", clientIds)
+      .eq("active", true);
+    const planWeightsByClient = new Map<string, Record<string, number>>();
+    for (const r of planRows || []) {
+      if (!planWeightsByClient.has(r.client_account_id)) planWeightsByClient.set(r.client_account_id, {});
+      planWeightsByClient.get(r.client_account_id)![r.platform] = r.weight;
     }
 
     const allRows: any[] = [];
@@ -211,6 +295,18 @@ serve(async (req) => {
 
     for (const client of clients) {
       const tier = (client.tier || "foundation").toLowerCase();
+
+      const channelWeights = planWeightsByClient.get(client.id);
+      if (channelWeights && Object.keys(channelWeights).length > 0) {
+        const planned = await planRowsForClient(
+          supabase, client, tier, channelWeights, cycleByClient.get(client.id),
+          connectedByClient.get(client.id) ?? new Set(), todayStart,
+        );
+        summary.push({ client: client.business_name, tier, created: planned.length });
+        allRows.push(...planned);
+        continue;
+      }
+
       const plan: WeeklySlot[] = buildWeeklyPlan(tier, connectedByClient.get(client.id) ?? new Set());
       const clientRows: any[] = [];
 

@@ -159,6 +159,9 @@ verify_jwt = true
 [functions.auto-schedule-content]
 verify_jwt = true
 
+[functions.save-channel-plan]
+verify_jwt = true
+
 [functions.handle-approval]
 verify_jwt = false
 
