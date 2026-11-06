@@ -247,6 +247,11 @@ export default function ClientContentApprovalTab({ clientAccountId, onTabChange,
     const when = (i: ReviewItem) => (i.scheduledFor ? new Date(i.scheduledFor).getTime() : Number.MAX_SAFE_INTEGER);
     out.review.sort((a, b) => when(a) - when(b));
     out.upcoming.sort((a, b) => when(a) - when(b));
+    // History lists: newest post date first. These used to keep the fetch order
+    // (submitted_at), so posts appeared out of date order. Undated rows sink.
+    const whenDesc = (i: ReviewItem) => (i.scheduledFor ? new Date(i.scheduledFor).getTime() : 0);
+    out.live.sort((a, b) => whenDesc(b) - whenDesc(a));
+    out.attention.sort((a, b) => whenDesc(b) - whenDesc(a));
     return out;
   }, [visible]);
 
