@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+import { deletePfmAccounts, listPfmAccountsForClient } from "../_shared/pfmCleanup.ts";
+
 const PFM_API = "https://api.postforme.dev";
 
 // PfM's platform enum uses "x" for Twitter/X; our app uses "twitter" internally.
@@ -91,6 +93,28 @@ serve(async (req) => {
 
     if (clientErr || !client) {
       return json({ error: "Client not found" }, 404);
+    }
+
+    // Self-heal: delete PfM accounts for this client+platform that our DB
+    // doesn't know about (left behind by an earlier disconnect/failed sync).
+    // Stale ones make the new OAuth connect fail. Accounts we track are left
+    // alone, so adding a second page doesn't drop the first. Never blocks connect.
+    try {
+      const { data: tracked } = await supabase
+        .from("client_postforme_accounts")
+        .select("postforme_account_id")
+        .eq("client_id", clientId)
+        .eq("platform", platform);
+      const trackedIds = new Set((tracked ?? []).map((r) => r.postforme_account_id));
+      const orphans = (await listPfmAccountsForClient(pfmApiKey, clientId, platform))
+        .map((a) => a.id)
+        .filter((id) => !trackedIds.has(id));
+      if (orphans.length > 0) {
+        console.log(`Removing ${orphans.length} orphaned PfM ${platform} account(s) for client ${clientId}`);
+        await deletePfmAccounts(pfmApiKey, orphans);
+      }
+    } catch (err) {
+      console.warn("Orphan cleanup before connect failed (continuing):", err);
     }
 
     const pfmPlatform = TO_PFM_PLATFORM[platform] ?? platform;
