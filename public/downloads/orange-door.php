@@ -1,12 +1,15 @@
 <?php
 /**
  * Plugin Name: Orange Door SEO
- * Description: Connects your WordPress site to Orange Door for automated SEO auditing and fixes.
- * Version: 1.2.0
+ * Description: Connects your WordPress site to Orange Door for automated SEO auditing and fixes, and shows your website visitor numbers in your Orange Door dashboard.
+ * Version: 1.3.0
  * Author: Orange Door
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
+
+define( 'OD_PLUGIN_VERSION', '1.3.0' );
+define( 'OD_BACKEND_BASE', 'https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1' );
 
 // ─────────────────────────────────────────────
 // 1. CONNECT — generate token + ping OD backend
@@ -37,6 +40,24 @@ function od_maybe_connect() {
     od_attempt_connect();
 }
 
+// Uploading a newer zip over an active plugin keeps it active, so the
+// activation hook never fires and od_maybe_connect() sees 'connected' and does
+// nothing -- the dashboard would keep showing the old version and the site
+// would never receive its tracking key. So on the first wp-admin load after the
+// code changes, check in once more. Only for a logged-in admin (admin_init also
+// fires for front-end admin-ajax calls), only for a site that was connected
+// before, and never for one removed on purpose.
+add_action( 'admin_init', 'od_maybe_resync_after_upgrade' );
+
+function od_maybe_resync_after_upgrade() {
+    if ( get_option( 'od_plugin_version' ) === OD_PLUGIN_VERSION ) return;
+    if ( ! current_user_can( 'manage_options' ) ) return;
+    if ( ! get_option( 'od_secret_token' ) ) return;                 // never connected; the normal connect path handles it
+    if ( get_option( 'od_connect_status' ) === 'disconnected' ) return;
+    if ( time() - (int) get_option( 'od_connect_last_attempt', 0 ) < 60 ) return;
+    od_attempt_connect();                                            // records the new version itself on success
+}
+
 function od_attempt_connect() {
     update_option( 'od_connect_last_attempt', time() );
 
@@ -46,15 +67,16 @@ function od_attempt_connect() {
         update_option( 'od_secret_token', $token );
     }
 
-    $backend_url = 'https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1/connect-site';
+    $backend_url = OD_BACKEND_BASE . '/connect-site';
 
     $response = wp_remote_post( $backend_url, [
         'body'    => json_encode([
             'site_url'       => get_site_url(),
             'token'          => $token,
             'wp_version'     => get_bloginfo( 'version' ),
-            'plugin_version' => '1.2.0',
+            'plugin_version' => OD_PLUGIN_VERSION,
             'plugins'        => od_get_active_seo_plugins(),
+            'timezone'       => wp_timezone_string(),
         ]),
         'headers' => [ 'Content-Type' => 'application/json' ],
         'timeout' => 10,
@@ -69,6 +91,14 @@ function od_attempt_connect() {
     } else {
         update_option( 'od_connect_status', 'connected' );
         update_option( 'od_connect_error', '' );
+        // The backend answers with this site's public tracking key (used by the
+        // visitor-count script in the page footer). Older backends send none.
+        $reply = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( is_array( $reply ) && ! empty( $reply['tracking_key'] ) && preg_match( '/^[a-f0-9]{32}$/', $reply['tracking_key'] ) ) {
+            update_option( 'od_tracking_key', $reply['tracking_key'] );
+            update_option( 'od_tracking_enabled', empty( $reply['tracking_enabled'] ) ? '0' : '1' );
+        }
+        update_option( 'od_plugin_version', OD_PLUGIN_VERSION );
     }
 
     add_rewrite_rule( '^llms\.txt$', 'index.php?od_llms_txt=1', 'top' );
@@ -176,7 +206,7 @@ function od_disconnect( WP_REST_Request $request ) {
     $result['deactivated'] = ! is_plugin_active( $basename );
 
     // Drop our connection state and the /llms.txt rewrite rule.
-    foreach ( [ 'od_secret_token', 'od_connect_status', 'od_connect_error', 'od_connect_last_attempt', 'od_llms_rewrite_version' ] as $opt ) {
+    foreach ( [ 'od_secret_token', 'od_connect_status', 'od_connect_error', 'od_connect_last_attempt', 'od_llms_rewrite_version', 'od_tracking_key', 'od_tracking_enabled', 'od_plugin_version' ] as $opt ) {
         delete_option( $opt );
     }
     delete_option( 'rewrite_rules' );
@@ -198,10 +228,11 @@ function od_ping() {
     return rest_ensure_response([
         'status'         => 'ok',
         'site_url'       => get_site_url(),
-        'plugin_version' => '1.2.0',
+        'plugin_version' => OD_PLUGIN_VERSION,
         'wp_version'     => get_bloginfo( 'version' ),
         'yoast_active'   => defined( 'WPSEO_VERSION' ),
         'rankmath_active'=> defined( 'RANK_MATH_VERSION' ),
+        'tracking'       => od_tracking_state(),
     ]);
 }
 
@@ -593,6 +624,74 @@ add_action( 'template_redirect', function() {
 
 
 // ─────────────────────────────────────────────
+// 6c. VISITOR TRACKING — small footer script, no cookies
+// ─────────────────────────────────────────────
+// Counts pageviews for the Orange Door dashboard. It prints one inline script
+// via wp_footer (nothing is written into theme files or content; deactivate
+// the plugin and it is gone). The script sends the page path (query string
+// removed), the referring site, any utm_ tags and a device class to Orange
+// Door. There are no cookies and no IP address is stored; a visitor is only
+// recognised within a single day. It stays silent for logged-in editors and
+// admins, non-production environments, previews, and visitors who send Do Not
+// Track or Global Privacy Control. Site owners can turn it off entirely with:
+//     add_filter( 'od_tracking_enabled', '__return_false' );
+
+// Why tracking is (not) active -- shown on the settings page and in /ping so a
+// missing footer script is diagnosable instead of silent.
+function od_tracking_state() {
+    $key = get_option( 'od_tracking_key' );
+    if ( get_option( 'od_connect_status' ) !== 'connected' ) return [ 'active' => false, 'reason' => 'not_connected' ];
+    if ( ! $key || ! preg_match( '/^[a-f0-9]{32}$/', $key ) ) return [ 'active' => false, 'reason' => 'no_key' ];
+    if ( get_option( 'od_tracking_enabled', '1' ) === '0' )   return [ 'active' => false, 'reason' => 'disabled_in_dashboard' ];
+    if ( ! apply_filters( 'od_tracking_enabled', true ) )     return [ 'active' => false, 'reason' => 'disabled_by_filter' ];
+    if ( function_exists( 'wp_get_environment_type' ) && wp_get_environment_type() !== 'production' ) {
+        return [ 'active' => false, 'reason' => 'non_production_environment' ];
+    }
+    return [ 'active' => true, 'reason' => 'ok' ];
+}
+
+add_action( 'wp_footer', 'od_output_tracking_script', 99 );
+
+function od_output_tracking_script() {
+    if ( is_admin() || is_feed() || is_robots() || is_trackback() || is_preview() || is_customize_preview() ) return;
+    // Don't count the people who run the site.
+    if ( is_user_logged_in() && current_user_can( 'edit_posts' ) ) return;
+    $state = od_tracking_state();
+    if ( empty( $state['active'] ) ) return;
+
+    $flags    = JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+    $endpoint = wp_json_encode( OD_BACKEND_BASE . '/track-pageview', $flags );
+    $key      = wp_json_encode( get_option( 'od_tracking_key' ), $flags );
+
+    $js = <<<JS
+(function(){try{
+var n=navigator,w=window,d=document;
+if(n.doNotTrack==="1"||w.doNotTrack==="1"||n.msDoNotTrack==="1"||n.globalPrivacyControl===true||n.webdriver)return;
+var E=$endpoint,K=$key,last="",first=true;
+function dev(){var x=w.innerWidth||screen.width;return x<768?"mobile":x<1024?"tablet":"desktop"}
+function utm(){var q=new URLSearchParams(location.search);return{s:q.get("utm_source"),m:q.get("utm_medium"),c:q.get("utm_campaign")}}
+function send(){
+var p=location.pathname;if(p===last)return;last=p;
+var b=JSON.stringify({k:K,p:p,r:first?(d.referrer||""):"",u:utm(),d:dev()});first=false;
+try{if(!(n.sendBeacon&&n.sendBeacon(E,b)))throw 0}catch(e){try{fetch(E,{method:"POST",body:b,keepalive:true,mode:"no-cors",credentials:"omit"})}catch(_){}}
+}
+function go(){send();
+var h=w.history;if(h&&h.pushState){["pushState","replaceState"].forEach(function(m){var o=h[m];h[m]=function(){var r=o.apply(this,arguments);setTimeout(send,0);return r}});}
+w.addEventListener("popstate",function(){setTimeout(send,0)});}
+if(d.prerendering){d.addEventListener("prerenderingchange",go,{once:true})}else{go()}
+}catch(e){}})();
+JS;
+
+    $attrs = [ 'id' => 'od-visit-counter', 'data-cfasync' => 'false', 'data-no-optimize' => '1', 'data-no-defer' => '1', 'data-no-minify' => '1' ];
+    if ( function_exists( 'wp_print_inline_script_tag' ) ) {
+        wp_print_inline_script_tag( $js, $attrs );   // also adds a CSP nonce when the site uses one
+    } else {
+        echo '<script id="od-visit-counter" data-cfasync="false" data-no-optimize="1">' . $js . "</script>\n";
+    }
+}
+
+
+// ─────────────────────────────────────────────
 // 7. VERIFY ENDPOINT — confirm fix saved correctly
 // ─────────────────────────────────────────────
 
@@ -693,6 +792,21 @@ function od_admin_page() {
             <tr>
                 <th>Yoast SEO</th>
                 <td><?php echo defined('WPSEO_VERSION') ? '&#10003; Active' : '&#10007; Not installed'; ?></td>
+            </tr>
+            <tr>
+                <th>Visitor counting</th>
+                <td><?php
+                    $ts = od_tracking_state();
+                    $labels = [
+                        'ok'                         => '&#10003; Active. Counts pageviews for your Orange Door dashboard (no cookies, no IP addresses stored).',
+                        'not_connected'              => 'Off until the site is connected.',
+                        'no_key'                     => 'Waiting for your Orange Door connection to send its key. Click Re-sync Connection below.',
+                        'disabled_in_dashboard'      => 'Turned off.',
+                        'disabled_by_filter'         => 'Turned off by your site&#39;s code (od_tracking_enabled filter).',
+                        'non_production_environment' => 'Off on this staging or development site.',
+                    ];
+                    echo isset( $labels[ $ts['reason'] ] ) ? $labels[ $ts['reason'] ] : esc_html( $ts['reason'] );
+                ?></td>
             </tr>
             <tr>
                 <th>Scan endpoint</th>

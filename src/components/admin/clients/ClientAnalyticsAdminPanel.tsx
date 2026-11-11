@@ -14,11 +14,12 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { PluginUpdateNotice } from "@/components/client-portal/PluginUpdateNotice";
+import { pluginNeedsUpdate } from "@/lib/pluginVersion";
 
 interface ClientAccount {
   id: string;
   business_name: string;
-  ga4_property_id?: string | null;
 }
 
 interface ClientAnalytics {
@@ -68,7 +69,7 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
     queryFn: async () => {
       const { data, error } = await supabase
         .from('client_accounts')
-        .select('id, business_name, ga4_property_id')
+        .select('id, business_name')
         .order('business_name');
 
       if (error) throw error;
@@ -77,47 +78,22 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
   });
 
   const selectedClient = clientId ? clients?.find((c) => c.id === clientId) : undefined;
-  const [ga4Input, setGa4Input] = useState('');
-  const [savingGa4, setSavingGa4] = useState(false);
-  const [syncingGa4, setSyncingGa4] = useState(false);
   const [syncingEngagement, setSyncingEngagement] = useState(false);
 
-  useEffect(() => {
-    setGa4Input(selectedClient?.ga4_property_id || '');
-  }, [selectedClient?.ga4_property_id]);
-
-  const saveGa4PropertyId = async () => {
-    if (!clientId) return;
-    setSavingGa4(true);
-    const { error } = await supabase
-      .from('client_accounts')
-      .update({ ga4_property_id: ga4Input.trim() || null })
-      .eq('id', clientId);
-    setSavingGa4(false);
-    if (error) {
-      toast.error("Failed to save GA4 property ID");
-      return;
-    }
-    toast.success("GA4 property ID saved");
-    queryClient.invalidateQueries({ queryKey: ['client-accounts-list'] });
-  };
-
-  const syncGa4Now = async () => {
-    if (!clientId) return;
-    setSyncingGa4(true);
-    const res = await supabase.functions.invoke("sync-ga4-analytics", {
-      body: { client_id: clientId, password: adminPassword },
-    });
-    const outcome = res.data?.results?.[clientId];
-    if (!res.error && !res.data?.error && !outcome?.startsWith("error")) {
-      toast.success("Traffic synced from GA4", { description: outcome ?? "Done" });
-      queryClient.invalidateQueries({ queryKey: ['admin-client-analytics'] });
-    } else {
-      const msg = await getEdgeErrorMessage(res.error, res.data) ?? outcome;
-      toast.error("GA4 sync failed", { description: msg ? friendlyEdgeMessage(msg) : "Something went wrong" });
-    }
-    setSyncingGa4(false);
-  };
+  // Website visits come from the client's WordPress plugin (see snapshot_weekly_traffic).
+  const { data: trafficSite } = useQuery({
+    queryKey: ['admin-traffic-site', clientId],
+    enabled: !!clientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('connected_sites')
+        .select('id, status, plugin_version, tracking_enabled')
+        .eq('client_id', clientId as string)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; status: string; plugin_version: string | null; tracking_enabled: boolean } | null;
+    },
+  });
 
   // Pulls real leads/opens/clicks for the selected client+period from
   // prospects (created_at/opened_at/clicked_at) instead of relying on
@@ -427,28 +403,20 @@ export function ClientAnalyticsAdminPanel({ clientId }: { clientId?: string } = 
 
       {clientId && (
         <Card>
-          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-end gap-3">
-            <div className="flex-1 space-y-2">
-              <Label>GA4 Property ID (website traffic source)</Label>
-              <Input
-                value={ga4Input}
-                onChange={(e) => setGa4Input(e.target.value)}
-                placeholder="properties/123456789"
-              />
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-medium">Website visits: {selectedClient?.business_name ?? "this client"}</p>
+            {!trafficSite || trafficSite.status === 'disconnected' || trafficSite.status === 'pending' ? (
               <p className="text-xs text-muted-foreground">
-                Grant this project's GA4 service account "Viewer" access on the client's GA4 property, then paste the property ID here. Website Visits sync automatically every Monday.
+                No WordPress plugin connected, so there is no automatic visit count for this client. Connect their site under SEO, or enter visits by hand below.
               </p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={saveGa4PropertyId} disabled={savingGa4 || ga4Input.trim() === (selectedClient?.ga4_property_id || '')}>
-                {savingGa4 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Save
-              </Button>
-              <Button onClick={syncGa4Now} disabled={syncingGa4 || !selectedClient?.ga4_property_id}>
-                {syncingGa4 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                Sync Now
-              </Button>
-            </div>
+            ) : pluginNeedsUpdate(trafficSite.plugin_version) ? (
+              <PluginUpdateNotice audience="admin" currentVersion={trafficSite.plugin_version} />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Counted by the client's WordPress plugin (v{trafficSite.plugin_version}){trafficSite.tracking_enabled ? '' : ', currently switched off'}.
+                The weekly total is saved to this table every Monday at 05:00 UTC.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

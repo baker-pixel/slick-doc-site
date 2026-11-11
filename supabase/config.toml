@@ -259,3 +259,9 @@ verify_jwt = false
 
 [functions.steward-proposals]
 verify_jwt = false
+
+# Public beacon from the WordPress plugin's footer script. Visitors' browsers
+# carry no Supabase JWT, so the gateway must not require one; the function
+# authenticates by tracking key + Origin and always answers 204.
+[functions.track-pageview]
+verify_jwt = false

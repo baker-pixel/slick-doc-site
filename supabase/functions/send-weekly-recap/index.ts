@@ -8,10 +8,12 @@ import { generatedLeadsOnly } from "../_shared/campaignBoundary.ts";
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 // Weekly cron (see migration 20260917170000): Monday 8am UTC, three hours
-// after sync-ga4-analytics. Two jobs in one pass over active clients:
+// after snapshot_weekly_traffic() (migration 20261105100000, which writes
+// website_visits from the WordPress plugin's visitor data). Two jobs in one
+// pass over active clients:
 //
 // 1. Persist real leads_generated + email_opens into the SAME
-//    client_analytics period row sync-ga4-analytics just wrote (same
+//    client_analytics period row snapshot_weekly_traffic() just wrote (same
 //    trailing-7-day window, so both metrics land together) -- this runs
 //    for every active client regardless of the email toggle, because the
 //    Home tab's stat cards read this table directly and shouldn't go stale
@@ -21,7 +23,7 @@ const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 //    preference row at all defaults to opted-in).
 //
 // A request naming a single `client_id` is an admin manually resending one
-// client's recap, same shape as sync-ga4-analytics' manual-trigger mode.
+// client's recap.
 
 interface ClientRow {
   id: string;
@@ -74,7 +76,7 @@ Deno.serve(async (req) => {
 
     const portalUrl = "https://client.orangedoormarketing.com";
 
-    // Same trailing-7-day window as sync-ga4-analytics (yesterday back 6
+    // Same trailing-7-day window as snapshot_weekly_traffic() (yesterday back 6
     // days), so this upsert lands on the exact same period row.
     const periodEnd = new Date();
     periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);

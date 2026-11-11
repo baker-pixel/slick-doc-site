@@ -180,7 +180,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
   };
 
   // Pauses/resumes all automated agent activity for this client (SEO
-  // re-audits, GA4 sync, prospect drip, WP scans, scheduled content
+  // re-audits, weekly traffic snapshot, prospect drip, WP scans, scheduled content
   // generation + publishing) — every engine sweep filters on
   // client_accounts.status = 'active', so flipping this is a real stop,
   // not cosmetic.
