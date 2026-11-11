@@ -4,6 +4,7 @@ import { CalendarRange, Link2, PenTool } from "lucide-react";
 import { ClientIntegrationsTab } from "./ClientIntegrationsTab";
 import { SocialPostComposer } from "./social/SocialPostComposer";
 import { PostingPlanCard } from "./social/PostingPlanCard";
+import { SocialReconnectBanner } from "./social/SocialReconnectBanner";
 import { BrandVoiceButton } from "./BrandVoiceButton";
 
 interface SocialMediaTabProps {
@@ -30,6 +31,12 @@ export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTab
         </div>
         {onOpenBrandVoice && <BrandVoiceButton onClick={onOpenBrandVoice} label="Posts don't sound right? Edit brand voice" />}
       </div>
+
+      {/* The Connected Accounts tab already shows "Needs reconnection" on the card itself, so the
+          banner is for the other sub-tabs, where nothing else would tell the client. */}
+      {subTab !== "accounts" && (
+        <SocialReconnectBanner clientAccountId={clientAccountId} refreshToken={subTab} onReconnect={() => setSubTab("accounts")} />
+      )}
 
       <Tabs value={subTab} onValueChange={setSubTab}>
         <TabsList className="grid w-full grid-cols-3 max-w-lg">
