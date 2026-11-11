@@ -16,12 +16,20 @@ export interface Pageview {
 
 const KEY_RE = /^[a-f0-9]{32}$/;
 
-// deno-lint-ignore no-control-regex
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+// Drop C0 control characters and DEL. A character filter rather than a regex, so no
+// no-control-regex suppression is needed for either ESLint or deno lint.
+function stripControlChars(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const c = ch.charCodeAt(0);
+    if (c > 0x1f && c !== 0x7f) out += ch;
+  }
+  return out;
+}
 
 function clean(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
-  const s = v.replace(CONTROL_CHARS, "").trim().slice(0, max);
+  const s = stripControlChars(v).trim().slice(0, max);
   return s || null;
 }
 
