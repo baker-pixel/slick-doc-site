@@ -81,6 +81,12 @@ const serializeLinkedInOrganizations = (organizations: LinkedInOrganization[]): 
 interface ClientIntegrationsTabProps {
   clientAccountId: string;
   onTabChange?: (tab: string) => void;
+  /**
+   * Called when connecting an account has just completed the onboarding "connect" step. The
+   * parent uses it to offer the Posting Plan before moving on; without it the client goes
+   * straight to the next onboarding step (approvals).
+   */
+  onOnboardingConnected?: () => void;
 }
 
 interface OAuthToken {
@@ -199,7 +205,8 @@ function TokenStatus({ expiresAt }: { expiresAt: string | null }) {
   );
 }
 
-export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIntegrationsTabProps) {
+export function ClientIntegrationsTab({ clientAccountId, onTabChange, onOnboardingConnected }: ClientIntegrationsTabProps) {
+  const afterOnboardingConnect = () => (onOnboardingConnected ? onOnboardingConnected() : onTabChange?.("approvals"));
   const [tokens, setTokens] = useState<OAuthToken[]>([]);
   const [pfmAccounts, setPfmAccounts] = useState<PfmAccount[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -272,7 +279,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
         .then((completed) => {
           // Onboarding step done -- take them straight to the next one
           // (Approve Your First Content Draft) instead of leaving them here.
-          if (completed) onTabChange?.("approvals");
+          if (completed) afterOnboardingConnect();
         })
         .catch((e) => console.error("Failed to complete OAuth workflow step:", e));
     }
@@ -398,7 +405,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
             .then((completed) => {
               // Onboarding step done -- take them straight to the next one
               // (Approve Your First Content Draft) instead of leaving them here.
-              if (completed) onTabChange?.("approvals");
+              if (completed) afterOnboardingConnect();
             })
             .catch((e) => console.error("Failed to complete OAuth workflow step:", e));
         }
@@ -495,7 +502,7 @@ export function ClientIntegrationsTab({ clientAccountId, onTabChange }: ClientIn
       // completeWorkflowStep only fires on a still-pending step.
       completeWorkflowStep(clientAccountId, "client_oauth")
         .then((completed) => {
-          if (completed) onTabChange?.("approvals");
+          if (completed) afterOnboardingConnect();
         })
         .catch((e) => console.error("Failed to complete OAuth workflow step:", e));
     } catch (err) {

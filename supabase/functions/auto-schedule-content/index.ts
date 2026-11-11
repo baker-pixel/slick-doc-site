@@ -5,7 +5,7 @@ import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { filterEngagedClients } from "../_shared/engagedClients.ts";
 import { hasBusinessContext } from "../_shared/businessContext.ts";
 import { isBudgetCapped, trimToBudget, windowBudget } from "../_shared/socialBudget.ts";
-import { allocateCounts, remainingSlots, windowQuota } from "../_shared/channelPlan.ts";
+import { allocateCounts, earliestNewSlot, remainingSlots, windowQuota } from "../_shared/channelPlan.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -139,6 +139,7 @@ async function planRowsForClient(
     rangeStart,
     rangeEnd,
     todayStart,
+    notBefore: earliestNewSlot(),
   });
   const rows: any[] = slots.map((slot) => ({
     client_account_id: client.id,

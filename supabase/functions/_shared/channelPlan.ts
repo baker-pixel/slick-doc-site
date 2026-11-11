@@ -166,6 +166,13 @@ export function remainingSlots(opts: {
   rangeStart: Date;
   rangeEnd: Date;
   todayStart: Date;
+  /**
+   * Earliest moment a new slot may be due. Slots are placeholders: the copy is
+   * written by the daily fill run and then needs the client's approval, so a
+   * slot due in a few hours (or already in the past today) can never go out.
+   * Callers pass now + MIN_LEAD_HOURS; omitted, only "not before today" applies.
+   */
+  notBefore?: Date;
 }): PlacedSlot[] {
   const have: Record<string, number> = {};
   const takenDays: Record<string, Set<string>> = {};
@@ -179,8 +186,55 @@ export function remainingSlots(opts: {
     const short = count - (have[platform] ?? 0);
     if (short > 0) remaining[platform] = short;
   }
-  const windowStart = new Date(Math.max(opts.rangeStart.getTime(), opts.todayStart.getTime()));
+  const windowStart = new Date(
+    Math.max(opts.rangeStart.getTime(), opts.todayStart.getTime(), opts.notBefore?.getTime() ?? 0),
+  );
   return placeSlots({ remaining, windowStart, windowEnd: opts.rangeEnd, takenDays });
+}
+
+/** A new slot must be due at least this long from now (see remainingSlots.notBefore). */
+export const MIN_LEAD_HOURS = 24;
+
+export function earliestNewSlot(now: Date = new Date()): Date {
+  return new Date(now.getTime() + MIN_LEAD_HOURS * 60 * 60 * 1000);
+}
+
+/**
+ * How many posts of each channel's share could NOT be placed: wanted minus
+ * what the window already holds minus what placeSlots found room for. Only
+ * channels with a positive shortfall are returned. Pass only the channels
+ * that are meant to be scheduled (connected ones) in `counts`.
+ */
+export function slotShortfall(opts: {
+  counts: Record<string, number>;
+  existing: { platform: string; day: string }[];
+  placed: PlacedSlot[];
+}): Record<string, number> {
+  const have: Record<string, number> = {};
+  for (const e of opts.existing) have[e.platform] = (have[e.platform] ?? 0) + 1;
+  const put: Record<string, number> = {};
+  for (const s of opts.placed) put[s.platform] = (put[s.platform] ?? 0) + 1;
+  const out: Record<string, number> = {};
+  for (const [platform, count] of Object.entries(opts.counts)) {
+    const missing = count - (have[platform] ?? 0) - (put[platform] ?? 0);
+    if (missing > 0) out[platform] = missing;
+  }
+  return out;
+}
+
+/**
+ * When the weekly scheduling cron (auto-schedule-content, Mondays 06:00 UTC)
+ * next runs. A saved plan only becomes calendar slots at that run, or when a
+ * new cycle starts, so the portal tells the client this date.
+ */
+export const SCHEDULER_WEEKDAY_UTC = 1;
+export const SCHEDULER_HOUR_UTC = 6;
+
+export function nextSchedulerRun(now: Date = new Date()): Date {
+  const run = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), SCHEDULER_HOUR_UTC));
+  run.setUTCDate(run.getUTCDate() + ((SCHEDULER_WEEKDAY_UTC - run.getUTCDay() + 7) % 7));
+  if (run.getTime() <= now.getTime()) run.setUTCDate(run.getUTCDate() + 7);
+  return run;
 }
 
 export const PLAN_PLATFORMS = ["facebook", "instagram", "linkedin", "twitter"] as const;

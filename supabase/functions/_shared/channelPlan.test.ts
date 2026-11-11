@@ -1,5 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.168.0/testing/asserts.ts";
-import { allocateCounts, placeSlots, platformHour, remainingSlots, validateChannelPlan, windowQuota } from "./channelPlan.ts";
+import {
+  allocateCounts, earliestNewSlot, MIN_LEAD_HOURS, nextSchedulerRun, placeSlots, platformHour, remainingSlots, slotShortfall,
+  validateChannelPlan, windowQuota,
+} from "./channelPlan.ts";
 
 const d = (s: string) => new Date(s);
 const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0);
@@ -182,4 +185,38 @@ Deno.test("remainingSlots: never schedules before today", () => {
   });
   assertEquals(out.length > 0, true);
   for (const s of out) assertEquals(s.at >= today, true);
+});
+
+Deno.test("remainingSlots: notBefore keeps every new slot at least that far from now (no slot earlier today)", () => {
+  // Tue 10 Nov 13:51 UTC: Instagram's 12:00 slot today has already passed.
+  const now = d("2026-11-10T13:51:00Z");
+  const start = d("2026-10-14T11:56:00Z");
+  const end = d("2026-11-13T11:56:00Z");
+  const args = {
+    counts: { instagram: 7 }, connected: new Set(["instagram"]),
+    existing: [{ platform: "instagram", day: "2026-10-16" }, { platform: "instagram", day: "2026-10-23" },
+      { platform: "instagram", day: "2026-10-30" }, { platform: "instagram", day: "2026-11-06" },
+      { platform: "instagram", day: "2026-11-13" }],
+    rangeStart: start, rangeEnd: end, todayStart: d("2026-11-10T00:00:00Z"),
+  };
+  const without = remainingSlots(args);
+  assertEquals(without.some((s) => s.at.getTime() < now.getTime()), true, "old behaviour could place a slot already past");
+  const out = remainingSlots({ ...args, notBefore: earliestNewSlot(now) });
+  for (const s of out) assertEquals(s.at.getTime() >= now.getTime() + MIN_LEAD_HOURS * 3600_000, true);
+});
+
+Deno.test("slotShortfall: counts what the window could not hold, only for channels that fall short", () => {
+  const placed = [{ platform: "twitter", at: d("2026-11-11T14:00:00Z") }, { platform: "twitter", at: d("2026-11-12T14:00:00Z") }];
+  const existing = [{ platform: "twitter", day: "2026-10-15" }, { platform: "facebook", day: "2026-11-02" }, { platform: "facebook", day: "2026-11-04" }];
+  assertEquals(slotShortfall({ counts: { twitter: 6, facebook: 2 }, existing, placed }), { twitter: 3 });
+  assertEquals(slotShortfall({ counts: { twitter: 3, facebook: 2 }, existing, placed }), {});
+  assertEquals(slotShortfall({ counts: {}, existing: [], placed: [] }), {});
+});
+
+Deno.test("nextSchedulerRun: the next Monday 06:00 UTC, strictly after now", () => {
+  assertEquals(nextSchedulerRun(d("2026-11-10T13:51:00Z")).toISOString(), "2026-11-16T06:00:00.000Z"); // Tuesday
+  assertEquals(nextSchedulerRun(d("2026-11-16T05:59:00Z")).toISOString(), "2026-11-16T06:00:00.000Z"); // Monday, before the run
+  assertEquals(nextSchedulerRun(d("2026-11-16T06:00:00Z")).toISOString(), "2026-11-23T06:00:00.000Z"); // exactly at the run
+  assertEquals(nextSchedulerRun(d("2026-11-22T23:00:00Z")).toISOString(), "2026-11-23T06:00:00.000Z"); // Sunday
+  assertEquals(nextSchedulerRun(d("2026-12-31T10:00:00Z")).toISOString(), "2027-01-04T06:00:00.000Z"); // year end
 });
