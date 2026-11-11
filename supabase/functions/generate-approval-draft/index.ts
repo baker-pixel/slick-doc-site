@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
+import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote } from "../_shared/frontLoaded.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -81,13 +82,27 @@ serve(async (req) => {
     // checked) is worse than a short delay. Throwing here returns non-2xx so
     // process-agent-jobs retries and, if it keeps failing, dead-letters with
     // an alert an admin can act on.
-    const postContent = (await callAI({
+    const generate = async (retryNote = ""): Promise<string> => (await callAI({
       source: "generate-approval-draft",
       system:
-        `You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional, engaging, and 150–250 words. Include 2–3 relevant hashtags at the end. Return ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
-      prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}`,
-      maxTokens: 400,
+        `You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional and engaging.\n\n${frontLoadedRequirements("linkedin")}\n\nReturn ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
+      prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}${retryNote}`,
+      maxTokens: 500,
     })).trim();
+    let postContent = await generate();
+    // Front-loaded format: the opening paragraph must be the whole message. One rewrite with the
+    // exact problems named; a second miss is kept, since failing here dead-letters the client's
+    // first impression and the draft is still reviewed before anything is published.
+    const formatCheck = checkFrontLoaded(postContent, "linkedin");
+    if (!formatCheck.ok) {
+      console.warn(`Front-loaded check failed for ${client_id}: ${formatCheck.problems.join("; ")}`);
+      try {
+        const retry = await generate(frontLoadedRetryNote(formatCheck.problems));
+        if (checkFrontLoaded(retry, "linkedin").problems.length < formatCheck.problems.length) postContent = retry;
+      } catch (e) {
+        console.warn("Front-loaded retry failed, keeping first draft:", e instanceof Error ? e.message : e);
+      }
+    }
     if (postContent.length < 80) {
       throw new Error(`AI returned an unusably short draft (${postContent.length} chars) for client ${client_id}`);
     }
