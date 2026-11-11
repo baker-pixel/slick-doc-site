@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { Target, Save, Loader2 } from "lucide-react";
 import { TagEditor } from "./CompanyContextCard";
 import { CollapsibleCard } from "./CollapsibleCard";
+import { icpForSave, normalizeKeywords, MAX_KEYWORDS, type KeywordSource } from "@/lib/icpKeywords";
 
 interface ClientICP {
   industries: string[];
@@ -20,6 +21,9 @@ interface ClientICP {
   buyer_persona?: string;
   disqualifiers?: string[];
   summary: string;
+  /** Company-type tags lead discovery searches with. AI-derived unless a person set them. */
+  search_keywords?: string[];
+  search_keywords_source?: KeywordSource;
 }
 
 const EMPTY_ICP: ClientICP = {
@@ -38,6 +42,8 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
   const [hasChanges, setHasChanges] = useState(false);
   const [icp, setIcp] = useState<ClientICP>(EMPTY_ICP);
   const [hasStoredIcp, setHasStoredIcp] = useState(false);
+  // True once the person has changed the keyword list themselves (vs. only other fields).
+  const [keywordsEdited, setKeywordsEdited] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -62,18 +68,33 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
     setHasChanges(true);
   };
 
+  const setKeywords = (list: string[]) => {
+    const cleaned = normalizeKeywords(list);
+    if (cleaned.length < list.length) {
+      toast({
+        title: "Some keywords were skipped",
+        description: `Keywords need 3-60 characters, can't repeat, and are limited to ${MAX_KEYWORDS}.`,
+      });
+    }
+    setIcp((prev) => ({ ...prev, search_keywords: cleaned }));
+    setKeywordsEdited(true);
+    setHasChanges(true);
+  };
+
   const save = async () => {
     setSaving(true);
     try {
-      // Cached discovery keywords are derived from this ICP; drop them so the
-      // next discovery run re-derives them from what was just edited.
-      const { search_keywords: _cached, ...editable } = icp as ClientICP & { search_keywords?: string[] };
+      // Keywords typed in here are kept (flagged manual). Keywords the AI derived are dropped on any
+      // edit, since they came from the ICP that just changed, and re-derived on the next discovery run.
+      const payload = icpForSave(icp, keywordsEdited);
       const { error } = await (supabase.rpc as any)("client_update_icp", {
         p_client_account_id: clientAccountId,
-        p_icp: editable,
+        p_icp: payload,
       });
       if (error) throw error;
       toast({ title: "Ideal customer profile saved", description: "Future lead discovery and fit scoring will use this." });
+      setIcp({ ...EMPTY_ICP, ...payload });
+      setKeywordsEdited(false);
       setHasChanges(false);
       setHasStoredIcp(true);
     } catch (err) {
@@ -168,6 +189,33 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
           onChange={(v) => update("disqualifiers", v)}
           placeholder="Traits that make a lead a bad fit..."
         />
+
+        {/* Keywords drive the online company search. Local (maps) discovery searches by place, not keyword. */}
+        {!icp.local && (
+          <div className="space-y-1.5">
+            <TagEditor
+              label="Search keywords"
+              values={icp.search_keywords || []}
+              onChange={setKeywords}
+              placeholder="Add a type of company, e.g. executive coaching firms..."
+            />
+            <p className="text-xs text-muted-foreground">
+              {(icp.search_keywords?.length ?? 0) === 0
+                ? "None yet. They're created automatically the next time lead discovery runs, or add your own."
+                : icp.search_keywords_source === "manual" && !keywordsEdited
+                  ? "Set by you, so they stay as they are when you edit the rest of this profile."
+                  : keywordsEdited
+                    ? "Your keywords are used as soon as you save."
+                    : "Suggested automatically. Editing this profile re-creates them, unless you set your own."}
+              {" "}Use concrete company types of 2-4 words (up to {MAX_KEYWORDS}). Avoid broad words like "software" or "solutions".
+            </p>
+            {icp.search_keywords_source === "manual" && !keywordsEdited && (
+              <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setKeywords([])}>
+                Reset to automatic suggestions
+              </Button>
+            )}
+          </div>
+        )}
 
         {hasChanges && (
           <div className="flex justify-end pt-2">
