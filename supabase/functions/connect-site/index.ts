@@ -19,6 +19,19 @@ interface ConnectBody {
   wp_version?: string;
   plugin_version?: string;
   plugins?: string[];
+  timezone?: string; // IANA name from wp_timezone_string(), e.g. "America/Chicago"
+}
+
+// A timezone is only stored if the runtime recognizes it; the daily rollup
+// buckets by it, and an unknown name would silently fall back to UTC.
+function validTimezone(tz: unknown): string | null {
+  if (typeof tz !== "string" || !tz || tz.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
 }
 
 serve(async (req) => {
@@ -35,6 +48,7 @@ serve(async (req) => {
 
     const body = (await req.json()) as ConnectBody;
     const { site_url, token, wp_version, plugin_version, plugins = [] } = body;
+    const timezone = validTimezone(body.timezone);
 
     if (!site_url || !token) return json({ error: "site_url and token required" }, 400);
 
@@ -92,20 +106,36 @@ serve(async (req) => {
       updated_at:      new Date().toISOString(),
     };
     if (clientId) fields.client_id = clientId;
+    if (timezone) fields.timezone = timezone;
 
+    // The tracking key is public (it ends up in every page's HTML) and only
+    // lets a caller record pageviews for this one site, so handing it to
+    // whoever just passed the token checks above is safe. The plugin stores it
+    // and its footer script sends it with each pageview.
     let siteId: string;
+    let trackingKey: string;
+    let trackingEnabled: boolean;
     if (existing) {
-      const { error } = await supabase.from("connected_sites").update(fields).eq("id", existing.id);
-      if (error) throw new Error("Failed to register site: " + error.message);
-      siteId = existing.id;
+      const { data: row, error } = await supabase
+        .from("connected_sites")
+        .update(fields)
+        .eq("id", existing.id)
+        .select("id, tracking_key, tracking_enabled")
+        .single();
+      if (error || !row) throw new Error("Failed to register site: " + (error?.message ?? "unknown"));
+      siteId = row.id;
+      trackingKey = row.tracking_key;
+      trackingEnabled = row.tracking_enabled;
     } else {
       const { data: site, error } = await supabase
         .from("connected_sites")
         .upsert(fields, { onConflict: "site_url" })
-        .select("id")
+        .select("id, tracking_key, tracking_enabled")
         .single();
       if (error || !site) throw new Error("Failed to register site: " + (error?.message ?? "unknown"));
       siteId = site.id;
+      trackingKey = site.tracking_key;
+      trackingEnabled = site.tracking_enabled;
     }
 
     // Keep client_credentials in step with the live plugin token and URL --
@@ -122,7 +152,13 @@ serve(async (req) => {
     // Fire-and-forget first scan; ClientSeoTab's auto-scan is the backstop.
     supabase.functions.invoke("scan-wordpress-site", { body: { site_id: siteId } }).catch(() => {});
 
-    return json({ status: "connected", site_id: siteId, linked_to_client: !!clientId });
+    return json({
+      status: "connected",
+      site_id: siteId,
+      linked_to_client: !!clientId,
+      tracking_key: trackingKey,
+      tracking_enabled: trackingEnabled,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("connect-site error:", msg);

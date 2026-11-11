@@ -896,7 +896,6 @@ export type Database = {
           current_period_end: string | null
           email: string
           first_name: string | null
-          ga4_property_id: string | null
           google_place_id: string | null
           google_review_url: string | null
           icp: Json | null
@@ -935,7 +934,6 @@ export type Database = {
           current_period_end?: string | null
           email: string
           first_name?: string | null
-          ga4_property_id?: string | null
           google_place_id?: string | null
           google_review_url?: string | null
           icp?: Json | null
@@ -974,7 +972,6 @@ export type Database = {
           current_period_end?: string | null
           email?: string
           first_name?: string | null
-          ga4_property_id?: string | null
           google_place_id?: string | null
           google_review_url?: string | null
           icp?: Json | null
@@ -2319,7 +2316,10 @@ export type Database = {
           rankmath_active: boolean
           site_url: string
           status: string
+          timezone: string | null
           token: string
+          tracking_enabled: boolean
+          tracking_key: string
           updated_at: string
           wp_version: string | null
           yoast_active: boolean
@@ -2333,7 +2333,10 @@ export type Database = {
           rankmath_active?: boolean
           site_url: string
           status?: string
+          timezone?: string | null
           token: string
+          tracking_enabled?: boolean
+          tracking_key?: string
           updated_at?: string
           wp_version?: string | null
           yoast_active?: boolean
@@ -2347,7 +2350,10 @@ export type Database = {
           rankmath_active?: boolean
           site_url?: string
           status?: string
+          timezone?: string | null
           token?: string
+          tracking_enabled?: boolean
+          tracking_key?: string
           updated_at?: string
           wp_version?: string | null
           yoast_active?: boolean
@@ -4781,6 +4787,97 @@ export type Database = {
             columns: ["client_account_id"]
             isOneToOne: false
             referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_events: {
+        Row: {
+          device: string | null
+          event: string
+          id: number
+          occurred_at: string
+          path: string
+          referrer_host: string | null
+          site_id: string
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          visitor_hash: string
+        }
+        Insert: {
+          device?: string | null
+          event?: string
+          id?: never
+          occurred_at?: string
+          path: string
+          referrer_host?: string | null
+          site_id: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_hash: string
+        }
+        Update: {
+          device?: string | null
+          event?: string
+          id?: never
+          occurred_at?: string
+          path?: string
+          referrer_host?: string | null
+          site_id?: string
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_events_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "connected_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_traffic_daily: {
+        Row: {
+          day: string
+          devices: Json
+          pageviews: number
+          site_id: string
+          top_pages: Json
+          top_referrers: Json
+          updated_at: string
+          visits: number
+        }
+        Insert: {
+          day: string
+          devices?: Json
+          pageviews?: number
+          site_id: string
+          top_pages?: Json
+          top_referrers?: Json
+          updated_at?: string
+          visits?: number
+        }
+        Update: {
+          day?: string
+          devices?: Json
+          pageviews?: number
+          site_id?: string
+          top_pages?: Json
+          top_referrers?: Json
+          updated_at?: string
+          visits?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_traffic_daily_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "connected_sites"
             referencedColumns: ["id"]
           },
         ]

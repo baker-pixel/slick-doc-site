@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { PluginUpdateNotice } from "@/components/client-portal/PluginUpdateNotice";
+import { pluginNeedsUpdate } from "@/lib/pluginVersion";
 import {
   CheckCircle2, XCircle, Loader2, Plug, Download, RefreshCw,
   AlertTriangle, Clock, ExternalLink,
@@ -283,6 +285,9 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
             </div>
           ) : (
             <>
+              {site.status !== "pending" && pluginNeedsUpdate(site.plugin_version) && (
+                <PluginUpdateNotice audience="admin" currentVersion={site.plugin_version} />
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                 <div>
                   <p className="text-xs text-muted-foreground">Site</p>

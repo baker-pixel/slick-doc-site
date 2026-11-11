@@ -20,6 +20,8 @@ import {
   Plug, Sparkles, Lock, MessageSquare,
 } from "lucide-react";
 import { ConnectSitePanel } from "@/components/admin/content/ConnectSitePanel";
+import { PluginUpdateNotice } from "@/components/client-portal/PluginUpdateNotice";
+import { pluginNeedsUpdate } from "@/lib/pluginVersion";
 import { SeoScoreCard } from "@/components/admin/shared/SeoScoreCard";
 
 interface Props {
@@ -679,6 +681,11 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             onSiteConnected={() => loadWpData()}
           />
         ) : (
+          <>
+          {/* Sites on an older plugin keep working, but can't report visitors; ask the owner to install the new one. */}
+          {(wpSite.status === "connected" || wpSite.status === "unreachable") && pluginNeedsUpdate(wpSite.plugin_version) && (
+            <PluginUpdateNotice currentVersion={wpSite.plugin_version} />
+          )}
           <Card>
             <CardContent className="pt-5 pb-4">
               <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -790,6 +797,7 @@ export function ClientSeoTab({ clientAccountId }: Props) {
               </div>
             </CardContent>
           </Card>
+          </>
         )}
 
         {/* ── WordPress Scan Score (plugin data) ───────────── */}

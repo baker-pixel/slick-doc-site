@@ -427,7 +427,7 @@ export default function ClientPortal() {
       case "calendar":
         return <ClientCalendarTab clientAccountId={portalUser.client_account_id} clientTier={clientAccount?.tier} />;
       case "analytics":
-        return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} />;
+        return <ClientAnalyticsTab clientAccountId={portalUser.client_account_id} businessName={clientAccount?.business_name} onOpenTab={handleTabChange} />;
       case "seo":
         return <ClientSeoTab clientAccountId={portalUser.client_account_id} />;
       case "invoices":
