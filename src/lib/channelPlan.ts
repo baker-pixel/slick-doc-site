@@ -3,7 +3,10 @@
 // preview a client sees is exactly what gets scheduled.
 export {
   allocateCounts,
+  earliestNewSlot,
+  nextSchedulerRun,
   remainingSlots,
+  slotShortfall,
   validateChannelPlan,
   windowQuota,
   PLAN_PLATFORMS,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { CalendarDays, Info, Minus, Plus } from "lucide-react";
+import { AlertTriangle, CalendarDays, Info, Minus, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { useChannelPlan } from "@/hooks/use-channel-plan";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
-import { allocateCounts, remainingSlots, validateChannelPlan, windowQuota } from "@/lib/channelPlan";
+import { allocateCounts, earliestNewSlot, nextSchedulerRun, remainingSlots, slotShortfall, validateChannelPlan, windowQuota } from "@/lib/channelPlan";
 import { cn } from "@/lib/utils";
 
 interface ChannelMeta {
@@ -32,6 +32,12 @@ const CHANNELS: ChannelMeta[] = [
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Scheduling runs on UTC dates, so the day is named in UTC: "Mon, Nov 16".
+function fmtUtcDay(d: Date): string {
+  return `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
 
 type Mode = "even" | "custom";
 
@@ -43,6 +49,9 @@ function mondayOf(d: Date): number {
 
 interface PostingPlanCardProps {
   clientAccountId: string;
+  /** Shown inside client onboarding: explains the step and offers a way on to the next one. */
+  onboarding?: boolean;
+  onContinue?: () => void;
 }
 
 /**
@@ -50,7 +59,7 @@ interface PostingPlanCardProps {
  * between them, with a calendar preview of exactly what will be scheduled. Saved through
  * save-channel-plan, which re-validates everything; the scheduler then follows the plan.
  */
-export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
+export function PostingPlanCard({ clientAccountId, onboarding = false, onContinue }: PostingPlanCardProps) {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useChannelPlan(clientAccountId);
 
@@ -59,6 +68,7 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
   const [custom, setCustom] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [initialised, setInitialised] = useState(false);
+  const [savedOnce, setSavedOnce] = useState(false);
 
   // Seed the form once from what is saved (or sensible defaults for a first plan).
   useEffect(() => {
@@ -118,6 +128,9 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
     const windowCounts = allocateCounts(weights, windowQuota(quota, start, end));
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
+    // Slots are created by the scheduler's next run, not at the click, and never closer than a
+    // day to that moment -- so that is what the preview has to show. A next cycle is scheduled
+    // from its first day, so it needs no such floor.
     const slots = remainingSlots({
       counts: windowCounts,
       connected: new Set(activeKeys),
@@ -125,7 +138,9 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
       rangeStart: start,
       rangeEnd: end,
       todayStart,
+      notBefore: data.target.kind === "next" ? undefined : earliestNewSlot(nextSchedulerRun()),
     });
+    const shortfall = slotShortfall({ counts: windowCounts, existing: data.existing, placed: slots });
     const byDay = new Map<string, string[]>();
     for (const s of slots) {
       const key = s.at.toISOString().slice(0, 10);
@@ -140,7 +155,7 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
         return { d, inWindow, platforms: byDay.get(d.toISOString().slice(0, 10)) ?? [] };
       }),
     );
-    return { weeks, total: slots.length, windowCounts };
+    return { weeks, total: slots.length, windowCounts, shortfall };
   }, [data, mode, custom, quota, activeKeys]);
 
   const setCount = (key: string, value: number) => setCustom((c) => ({ ...c, [key]: Math.max(0, value) }));
@@ -170,12 +185,8 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
         const msg = await getEdgeErrorMessage(fnError, res);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Please try again.");
       }
-      toast({
-        title: "Posting plan saved",
-        description: res?.applies === "current_cycle"
-          ? "Posts still to be scheduled this cycle will follow your new plan."
-          : "Your new split starts with your next cycle.",
-      });
+      setSavedOnce(true);
+      toast({ title: "Posting plan saved", description: whenItStarts(res?.applies) });
       await queryClient.invalidateQueries({ queryKey: ["channel-plan", clientAccountId] });
       await queryClient.invalidateQueries({ queryKey: ["client-cycles", clientAccountId] });
     } catch (e) {
@@ -188,6 +199,19 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
       setSaving(false);
     }
   };
+
+  // Saving only stores the plan. Calendar slots are created by the scheduler's next run (weekly,
+  // or when a cycle starts), then written and sent for approval -- say so rather than imply it is instant.
+  const nextRun = nextSchedulerRun();
+  const cycleEnd = data?.cycle ? new Date(data.cycle.period_end) : null;
+  function whenItStarts(applies: "current_cycle" | "next_cycle" | undefined): string {
+    if (applies === "next_cycle" || (cycleEnd && nextRun.getTime() >= cycleEnd.getTime())) {
+      return cycleEnd
+        ? `Your plan starts with your next cycle (${fmtUtcDay(cycleEnd)}). Posts already scheduled this cycle stay as they are.`
+        : "Your new split starts with your next cycle.";
+    }
+    return `Your calendar won't change right away. The posts this adds are scheduled at our next scheduling run (${fmtUtcDay(nextRun)}), then written and sent to you for approval.`;
+  }
 
   if (isLoading || (data && !initialised)) {
     return <Skeleton className="h-96 w-full" />;
@@ -206,20 +230,44 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
     data.target.kind === "next"
       ? `Changes you save here start with your next cycle (${format(data.target.start, "MMM d")}). Posts already scheduled this cycle stay as they are.`
       : data.target.kind === "current"
-        ? "This is your first plan, so it starts right away: posts still to be scheduled this cycle will follow it."
+        ? `This is your first plan. Saving doesn't change your calendar straight away: the posts it adds are scheduled at our next scheduling run (${fmtUtcDay(nextRun)}), then written and sent to you for approval.`
         : "Showing the next 4 weeks.";
   const previewTitle =
     data.target.kind === "next" ? "Your next cycle" : data.target.kind === "current" ? "Rest of this cycle" : "Next 4 weeks";
+  const shortfallRows = preview
+    ? CHANNELS.filter((c) => (preview.shortfall[c.key] ?? 0) > 0).map((c) => ({ label: c.label, n: preview.shortfall[c.key] }))
+    : [];
+  // Channels the saved plan still lists but that are no longer connected: their posts are skipped, not moved.
+  const droppedChannels = CHANNELS.filter((c) => data.saved.some((r) => r.active && r.platform === c.key) && !connected.has(c.key));
   const diff = quota - allocated;
   const progress = quota > 0 ? Math.min(100, Math.round((allocated / quota) * 100)) : 0;
   const noChannelsConnected = data.connected.length === 0;
 
   return (
     <div className="space-y-6">
+      {onboarding && (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 text-sm">
+          <p className="font-medium">Last setup choice: how should your {quota} posts a month be split?</p>
+          <p className="mt-1 text-muted-foreground">
+            Pick the channels and numbers below and save. You can skip this and change it any time; if you skip, we use our standard weekly schedule.
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <p>{targetNote}</p>
       </div>
+
+      {droppedChannels.length > 0 && (
+        <div className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>
+            {droppedChannels.map((c) => c.label).join(", ")} {droppedChannels.length === 1 ? "is" : "are"} in your saved plan but not connected,
+            so no posts are scheduled there. Reconnect in the Connected Accounts tab, or save the plan without {droppedChannels.length === 1 ? "it" : "them"}.
+          </p>
+        </div>
+      )}
 
       {noChannelsConnected && (
         <Card>
@@ -331,6 +379,11 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
           <Button type="button" className="w-full" size="lg" disabled={!check.ok || saving || noChannelsConnected} onClick={handleSave}>
             {saving ? "Saving…" : "Save posting plan"}
           </Button>
+          {onboarding && onContinue && (
+            <Button type="button" variant={savedOnce ? "default" : "outline"} className="w-full" size="lg" onClick={onContinue}>
+              {savedOnce ? "Continue to approvals" : "Skip for now and continue"}
+            </Button>
+          )}
         </div>
 
         <Card className="self-start">
@@ -396,6 +449,16 @@ export function PostingPlanCard({ clientAccountId }: PostingPlanCardProps) {
                     <p className="pt-2 text-xs text-muted-foreground">
                       Posts already scheduled aren't shown here. Only the ones still to be added are.
                     </p>
+                  )}
+                  {shortfallRows.length > 0 && (
+                    <div className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <p>
+                        Not every post fits in this window:{" "}
+                        {shortfallRows.map((r) => `${r.n} ${r.label} ${r.n === 1 ? "post" : "posts"}`).join(", ")} can't be scheduled
+                        (no free days left, or too close to today to be written and approved in time).
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>

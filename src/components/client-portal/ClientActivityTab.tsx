@@ -93,7 +93,7 @@ interface TaskItem {
 const STEP_DESCRIPTIONS: Record<string, string> = {
   client_form: "Please confirm your business details so we can tailor your marketing plan",
   client_upload: "Upload your logo and brand assets so we can create on-brand content",
-  client_oauth: "Connect your social media accounts so we can post on your behalf",
+  client_oauth: "Connect your social media accounts so we can post on your behalf, then choose how your posts are split across them",
   client_calendar: "Book your kickoff call to align on strategy and goals",
   client_approval: "Review and approve your first piece of content",
   brand_extraction: "We're pulling your logo, colours and fonts from your website — this usually takes a minute or two",

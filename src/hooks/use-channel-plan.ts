@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { tierPolicy } from "@/lib/channelPlan";
+import { nextSchedulerRun, tierPolicy } from "@/lib/channelPlan";
 
 export interface SavedChannelRow {
   platform: string;
@@ -67,6 +67,12 @@ export function useChannelPlan(clientAccountId: string | undefined) {
       todayStart.setHours(0, 0, 0, 0);
       let target: PlanTarget;
       if (cycle && cycle.channel_plan) {
+        const start = new Date(cycle.period_end);
+        target = { kind: "next", start, end: new Date(start.getTime() + 30 * DAY_MS) };
+      } else if (cycle && nextSchedulerRun().getTime() >= new Date(cycle.period_end).getTime()) {
+        // A first plan only becomes slots when the scheduler next runs (weekly, or when a cycle
+        // starts). If that is after this cycle ends, nothing more is added to this cycle and the
+        // plan really starts with the next one, so preview that instead of slots that won't exist.
         const start = new Date(cycle.period_end);
         target = { kind: "next", start, end: new Date(start.getTime() + 30 * DAY_MS) };
       } else if (cycle) {

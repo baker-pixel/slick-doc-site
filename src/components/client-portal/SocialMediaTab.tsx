@@ -15,6 +15,9 @@ interface SocialMediaTabProps {
 
 export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTabChange, onOpenBrandVoice }: SocialMediaTabProps) {
   const [subTab, setSubTab] = useState<string>(initialTab);
+  // Set when connecting an account just finished the onboarding "connect" step: the Posting Plan
+  // is offered next, with a way on to the approvals step, instead of jumping straight past it.
+  const [inOnboardingPlan, setInOnboardingPlan] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -49,11 +52,18 @@ export function SocialMediaTab({ clientAccountId, initialTab = "accounts", onTab
         </TabsContent>
 
         <TabsContent value="accounts" className="mt-6">
-          <ClientIntegrationsTab clientAccountId={clientAccountId} onTabChange={onTabChange} />
+          <ClientIntegrationsTab
+            clientAccountId={clientAccountId}
+            onTabChange={onTabChange}
+            onOnboardingConnected={() => {
+              setInOnboardingPlan(true);
+              setSubTab("plan");
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="plan" className="mt-6">
-          <PostingPlanCard clientAccountId={clientAccountId} />
+          <PostingPlanCard clientAccountId={clientAccountId} onboarding={inOnboardingPlan} onContinue={() => onTabChange?.("approvals")} />
         </TabsContent>
       </Tabs>
     </div>
