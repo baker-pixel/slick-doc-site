@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { flagNeedsReauth, isReconnectError } from "./pfmReauth.ts";
 
 export interface PfmPostResult {
   id: string;
@@ -57,6 +58,22 @@ export async function applyPfmResult(
       metadata: { ...meta, pfm_result_id: result.id, error: errorMsg, publish_failed_at: new Date().toISOString() },
     })
     .eq("id", item.id);
+
+  // The platform says the connection itself is the problem (expired token, revoked or missing
+  // permissions). Flag the account so the portal asks the client to reconnect, instead of it
+  // reading "connected" while every post fails. Best-effort: it must never stop the result
+  // from being recorded, and it runs on every delivery because flagging is idempotent.
+  if (item.client_account_id && isReconnectError(errorMsg)) {
+    try {
+      await flagNeedsReauth(supabase, {
+        clientId: item.client_account_id,
+        platform: item.platform,
+        pfmAccountId: result.social_account_id,
+      });
+    } catch (e) {
+      console.error(`Could not flag ${item.platform} account for reconnect (${source}):`, e instanceof Error ? e.message : e);
+    }
+  }
 
   // PfM can deliver the same failed result several times (retries, duplicate
   // deliveries), and each delivery used to write its own alert -- one failing

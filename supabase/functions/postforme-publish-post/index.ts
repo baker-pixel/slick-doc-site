@@ -9,6 +9,7 @@ import { logActivity } from "../_shared/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
 import { notifyClientBlocked } from "../_shared/clientAlerts.ts";
+import { flagNeedsReauth, isReconnectError } from "../_shared/pfmReauth.ts";
 
 function platformLabel(platform: string): string {
   return platform.charAt(0).toUpperCase() + platform.slice(1);
@@ -338,17 +339,13 @@ serve(async (req) => {
       // surfaces as a failed scheduled post, never as something the client
       // sees on the integration itself. Flag the account row and tell the
       // client to reconnect, same as a fully disconnected one.
-      if (final && (pfmRes.status === 401 || pfmRes.status === 403 || accountNotOwned)) {
-        await supabase
-          .from("client_postforme_accounts")
-          .update({ status: "needs_reauth" })
-          .eq("client_id", item.client_account_id)
-          .eq("postforme_account_id", pfmAccount.postforme_account_id);
-
-        await notifyClientBlocked(supabase, item.client_account_id, {
-          notificationType: "integration_needs_reauth",
-          title: `Your ${platformLabel(item.platform)} connection needs to be reconnected`,
-          description: `We tried to publish to ${platformLabel(item.platform)} but the connection was rejected. Disconnect and reconnect it in your portal's Social & Accounts tab, making sure to grant all requested permissions this time, to get your content posting again.`,
+      // A platform message that names the connection as the problem ("Account needs to be
+      // reconnected", expired token, missing permissions) counts too, whatever the status code.
+      if (final && (pfmRes.status === 401 || pfmRes.status === 403 || accountNotOwned || isReconnectError(`${friendlyErr} ${pfmDetail}`))) {
+        await flagNeedsReauth(supabase, {
+          clientId: item.client_account_id,
+          platform: item.platform,
+          pfmAccountId: pfmAccount.postforme_account_id,
         });
       }
 
