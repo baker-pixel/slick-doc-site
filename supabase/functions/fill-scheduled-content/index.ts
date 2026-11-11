@@ -15,6 +15,7 @@ import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/
 import { extractTopic } from "../_shared/topicExtract.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
+import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform } from "../_shared/frontLoaded.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -578,26 +579,49 @@ async function generateContent(
   };
   const maxTokens = PLATFORM_MAX_TOKENS[slot.platform] ?? 1200;
 
-  let content = (await callAI({
-    source: "fill-scheduled-content",
-    promptId: `scheduled-content.${slot.content_type}.v1`,
-    clientId: client.id,
-    system,
-    prompt: user,
-    maxTokens,
-    temperature: 0.75,
-    // MODELS.default (gpt-oss-120b) intermittently still burns the whole
-    // token budget on hidden reasoning even after max_tokens growth --
-    // 24 final failures ("AI returned empty response") over the last 2
-    // weeks. fallbackModels was already supported by callAI but no caller
-    // ever set it, so a stuck primary model just retried itself. MODELS.fast
-    // (gpt-oss-20b) is smaller and less prone to the same runaway reasoning.
-    fallbackModels: [MODELS.fast],
-  })).trim();
-  if (!content) throw new Error("No content returned from AI");
-  // Strip invisible chars / non-breaking hyphens and repair a garbled brand name
-  // before anything is stored, QA'd, approved or published.
-  content = cleanGeneratedText(content, client.business_name);
+  const draft = async (prompt: string): Promise<string> => {
+    const text = (await callAI({
+      source: "fill-scheduled-content",
+      promptId: `scheduled-content.${slot.content_type}.v1`,
+      clientId: client.id,
+      system,
+      prompt,
+      maxTokens,
+      temperature: 0.75,
+      // MODELS.default (gpt-oss-120b) intermittently still burns the whole
+      // token budget on hidden reasoning even after max_tokens growth --
+      // 24 final failures ("AI returned empty response") over the last 2
+      // weeks. fallbackModels was already supported by callAI but no caller
+      // ever set it, so a stuck primary model just retried itself. MODELS.fast
+      // (gpt-oss-20b) is smaller and less prone to the same runaway reasoning.
+      fallbackModels: [MODELS.fast],
+    })).trim();
+    if (!text) throw new Error("No content returned from AI");
+    // Strip invisible chars / non-breaking hyphens and repair a garbled brand name
+    // before anything is stored, QA'd, approved or published.
+    return cleanGeneratedText(text, client.business_name);
+  };
+
+  let content = await draft(user);
+
+  // Front-loaded format: the opening paragraph must be the whole message. The prompt asks for
+  // it, but models drift, so check it and allow ONE rewrite with the exact problems named. A
+  // second miss is kept rather than failing the slot (a failed slot is retried next run and
+  // costs tokens each time); the length safety net below still bounds it.
+  if (slot.content_type === "social_post" && isFrontLoadedPlatform(slot.platform)) {
+    const first = checkFrontLoaded(content, slot.platform);
+    if (!first.ok) {
+      console.warn(`Front-loaded check failed for ${slot.platform} (${client.id}): ${first.problems.join("; ")}`);
+      try {
+        const retry = await draft(user + frontLoadedRetryNote(first.problems));
+        const second = checkFrontLoaded(retry, slot.platform);
+        if (second.ok || second.problems.length < first.problems.length) content = retry;
+        if (!second.ok) console.warn(`Front-loaded retry still off for ${slot.platform} (${client.id}): ${second.problems.join("; ")}`);
+      } catch (e) {
+        console.warn("Front-loaded retry failed, keeping first draft:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
   const originalLength = content.length;
 
   // Hard-enforce character limits — safety net after generation
@@ -791,10 +815,10 @@ ${angleOf([
   "A client win (anonymized)",
 ])}
 
-Requirements:
-- 150–250 words
-- Hook in the first line (no "I" opener)
-- 3–5 targeted hashtags at the end
+${frontLoadedRequirements("linkedin")}
+
+Style:
+- Open with the problem, not "I"
 - Authoritative but human${avoidRepeat}`,
         };
       }
@@ -814,10 +838,11 @@ ${angleOf([
   "Ask a question that drives comments",
 ])}
 
-Requirements:
-- 100–200 words
+${frontLoadedRequirements("facebook")}
+
+Style:
 - Warm, friendly, community-focused tone
-- End with an engaging question or CTA
+- The call to action may be a question, but it must still be answered by the post itself
 - Feel human, not corporate${avoidRepeat}`,
         };
       }
@@ -835,10 +860,10 @@ ${angleOf([
   `A ${month} themed visual moment`,
 ])}
 
-Requirements:
-- 80–150 words of caption
-- Hook in the first line (before the "more" cut)
-- 8–12 relevant hashtags after a line break
+${frontLoadedRequirements("instagram")}
+
+Style:
+- The opening paragraph is what shows before the "more" cut, so it must be complete on its own
 - Conversational, visual, aspirational${avoidRepeat}`,
         };
       }
