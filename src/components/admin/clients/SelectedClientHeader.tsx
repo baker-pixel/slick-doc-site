@@ -1,7 +1,8 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Building2, Mail, Briefcase } from "lucide-react";
+import { ArrowLeft, Building2, Mail, Briefcase, Eye } from "lucide-react";
+import { viewAsClientPath } from "@/lib/viewAsClient";
 import { cn } from "@/lib/utils";
 import { TierBadge } from "../core/TierBadge";
 
@@ -88,6 +89,18 @@ export function SelectedClientHeader({ client, onChangeClient }: SelectedClientH
             </div>
           </div>
         </div>
+
+        {/* Read-only copy of this client's portal, under your own admin session. */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 shrink-0"
+          onClick={() => window.open(viewAsClientPath(client.id), "_blank")}
+          title="Open this client's portal in a new tab, read-only"
+        >
+          <Eye className="w-4 h-4" />
+          <span className="hidden sm:inline">View portal</span>
+        </Button>
       </div>
     </div>
   );

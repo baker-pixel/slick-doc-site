@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 const Admin = lazy(() => import("@/pages/Admin"));
+const ViewAsClient = lazy(() => import("@/pages/ViewAsClient"));
 
 function PageLoader() {
   return (
@@ -28,6 +29,7 @@ export function AdminApp() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/admin" element={<Admin />} />
+              <Route path="/view-as/:clientId" element={<ViewAsClient />} />
               <Route path="/" element={<Navigate to="/admin" replace />} />
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>

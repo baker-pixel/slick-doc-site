@@ -4,7 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Loader2, Sparkles } from "lucide-react";
+import { Eye, Loader2, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { setViewAsActive } from "@/lib/viewAsClient";
 import { toast } from "@/hooks/use-toast";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { ClientPortalSidebar, type PortalTab, type BadgeCounts, type ClientTier } from "@/components/client-portal/ClientPortalSidebar";
@@ -93,7 +95,13 @@ const tabDescriptions: Record<PortalTab, string> = {
   seo: "Track your site's SEO health and apply AI-generated fixes",
 };
 
-export default function ClientPortal() {
+/**
+ * `viewAsClientId` puts the portal in admin "view as client" mode: it shows that
+ * client's data under the admin's own session, skips the client sign-in lookup,
+ * and (via lib/viewAsClient) refuses every write. Never set for a real client.
+ */
+export default function ClientPortal({ viewAsClientId }: { viewAsClientId?: string } = {}) {
+  const viewAs = !!viewAsClientId;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const intentionalSignOutRef = useRef(false);
@@ -108,7 +116,7 @@ export default function ClientPortal() {
   const [showTour, setShowTour] = useState(false);
   
   // Portal preferences hook
-  const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(user?.id);
+  const { preferences, updatePreferences, loading: preferencesLoading } = usePortalPreferences(viewAs ? portalUser?.user_id || undefined : user?.id);
   // Stripe sends people back to /portal?tab=invoices&checkout=success|cancelled.
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<PortalTab>(
@@ -174,7 +182,7 @@ export default function ClientPortal() {
           .eq("id", portalUser!.client_account_id)
           .maybeSingle();
 
-        if (account && account.onboarded_at === null) {
+        if (!viewAs && account && account.onboarded_at === null) {
           await supabase
             .from("client_accounts")
             .update({ onboarded_at: new Date().toISOString() })
@@ -203,6 +211,7 @@ export default function ClientPortal() {
   }, [shouldRedirect, navigate]);
 
   useEffect(() => {
+    if (viewAs) return;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
         navigate("/portal/auth");
@@ -240,6 +249,7 @@ export default function ClientPortal() {
   // (laptop sleep, long idle), verify the session is still valid. Without this,
   // actions fail silently against a dead session until the next full reload.
   useEffect(() => {
+    if (viewAs) return;
     let lastCheck = 0;
     const onFocus = async () => {
       const now = Date.now();
@@ -257,6 +267,72 @@ export default function ClientPortal() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
+
+  const loadBadgeCounts = async (clientAccountId: string) => {
+    const [notifCount, messagesCount, approvalsCount] = await Promise.all([
+      supabase
+        .from("client_notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("client_account_id", clientAccountId)
+        .eq("is_read", false),
+      supabase
+        .from("client_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("client_account_id", clientAccountId)
+        .eq("is_read", false),
+      supabase
+        .from("content_approvals")
+        .select("*", { count: "exact", head: true })
+        .eq("client_account_id", clientAccountId)
+        .eq("status", "pending"),
+    ]);
+
+    setBadgeCounts({
+      notifications: notifCount.count || 0,
+      messages: messagesCount.count || 0,
+      approvals: approvalsCount.count || 0,
+    });
+  };
+
+  // Admin "view as client": load the client's account and first portal user
+  // (for their name and per-user data) instead of looking up the signed-in user.
+  useEffect(() => {
+    if (!viewAsClientId) return;
+    setViewAsActive(true); // before any tab mounts, so nothing can write
+    let cancelled = false;
+    (async () => {
+      try {
+        const [accountRes, puRes] = await Promise.all([
+          supabase.from("client_accounts").select("id, business_name, email, tier").eq("id", viewAsClientId).maybeSingle(),
+          supabase.from("client_portal_users").select("*").eq("client_account_id", viewAsClientId)
+            .order("created_at", { ascending: true }).limit(1).maybeSingle(),
+        ]);
+        if (cancelled) return;
+        if (accountRes.error || !accountRes.data) {
+          toast({ title: "Client not found", description: "That client couldn't be loaded.", variant: "destructive" });
+          return;
+        }
+        setClientAccount(accountRes.data);
+        setPortalUser(puRes.data ?? {
+          id: "view-as",
+          user_id: "00000000-0000-0000-0000-000000000000", // no portal user yet: matches nothing
+          client_account_id: accountRes.data.id,
+          first_name: null,
+          last_name: null,
+        });
+        await loadBadgeCounts(accountRes.data.id);
+      } catch (error) {
+        console.error("View-as load failed:", error);
+        toast({ title: "Couldn't load this client", description: "Check your connection and try again.", variant: "destructive" });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      setViewAsActive(false);
+    };
+  }, [viewAsClientId]);
 
   const fetchPortalUser = async (userId: string) => {
     try {
@@ -292,32 +368,7 @@ export default function ClientPortal() {
         setClientAccount(accountData);
       }
 
-      // Fetch badge counts for sidebar
-      const [notifCount, messagesCount, approvalsCount] = await Promise.all([
-        supabase
-          .from("client_notifications")
-          .select("*", { count: "exact", head: true })
-          .eq("client_account_id", portalUserData.client_account_id)
-          .eq("is_read", false),
-        supabase
-          .from("client_messages")
-          .select("*", { count: "exact", head: true })
-          .eq("client_account_id", portalUserData.client_account_id)
-          .eq("is_read", false),
-        supabase
-          .from("content_approvals")
-          .select("*", { count: "exact", head: true })
-          .eq("client_account_id", portalUserData.client_account_id)
-          .eq("status", "pending"),
-      ]);
-
-      const counts = {
-        notifications: notifCount.count || 0,
-        messages: messagesCount.count || 0,
-        approvals: approvalsCount.count || 0,
-      };
-      
-      setBadgeCounts(counts);
+      await loadBadgeCounts(portalUserData.client_account_id);
       
       // Check if this is the user's first visit
       const welcomeKey = `portal_welcome_seen_${portalUserData.user_id}`;
@@ -352,6 +403,8 @@ export default function ClientPortal() {
     await supabase.auth.signOut();
     // onAuthStateChange SIGNED_OUT fires → setShouldRedirect(true) → navigate("/portal/auth")
   };
+
+  const exitViewAs = () => navigate("/admin");
 
   const clientName = portalUser 
     ? `${portalUser.first_name || ''} ${portalUser.last_name || ''}`.trim() || undefined
@@ -489,12 +542,22 @@ export default function ClientPortal() {
     );
   }
 
-  if (!user || !portalUser) {
+  if (!portalUser || (!user && !viewAs)) {
     return null; // Redirect is handled by useEffect
   }
 
   return (
     <>
+      {viewAs && (
+        <div className="sticky top-0 z-50 flex items-center gap-3 border-b border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm text-amber-900 dark:text-amber-100 backdrop-blur">
+          <Eye className="h-4 w-4 shrink-0" />
+          <span className="flex-1 min-w-0 truncate">
+            Viewing <strong>{clientAccount?.business_name ?? "client"}</strong> as admin. Read-only: nothing you click here changes their account.
+          </span>
+          <Button size="sm" variant="outline" onClick={exitViewAs} className="h-7 shrink-0">Exit</Button>
+        </div>
+      )}
+
       {/* Interactive Onboarding Tour (shown automatically on first visit) */}
       <OnboardingTour
         active={showTour}
@@ -510,7 +573,8 @@ export default function ClientPortal() {
           onTabChange={handleTabChange}
           clientName={clientName}
           businessName={clientAccount?.business_name}
-          onSignOut={handleSignOut}
+          onSignOut={viewAs ? exitViewAs : handleSignOut}
+          signOutLabel={viewAs ? "Exit client view" : undefined}
           badgeCounts={badgeCounts}
           hiddenTabs={preferences.hidden_tabs}
           clientTier={(clientAccount?.tier?.toLowerCase() as ClientTier) || "foundation"}
