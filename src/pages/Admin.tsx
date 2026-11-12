@@ -29,6 +29,7 @@ import { AdminAnalyticsSection } from "@/components/admin/core/AdminAnalyticsSec
 import { AdminOnboarding } from "@/components/admin/core/AdminOnboarding";
 import { EmailAdminPanel } from "@/components/admin/email/EmailAdminPanel";
 import { GapAnalysisDetailModal } from "@/components/admin/sales/GapAnalysisDetailModal";
+import { LeadsInbox } from "@/components/admin/sales/LeadsInbox";
 import { ClientManagementPanel } from "@/components/admin/clients/ClientManagementPanel";
 import { SOPManagementPanel } from "@/components/admin/workflow/SOPManagementPanel";
 import { AutomationJobsPanel } from "@/components/admin/workflow/AutomationJobsPanel";
@@ -1276,35 +1277,71 @@ const AdminInner = () => {
     </Card>
   );
 
+  // "inbox" = one merged list of people (default); "tables" = the four raw
+  // per-source tables, kept for bulk delete / export / status edits.
+  const [leadsView, setLeadsView] = useState<"inbox" | "tables">("inbox");
+
   const renderLeadsSection = () => (
-    <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as AdminSection)} className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="contacts" className="flex items-center gap-2">
-          <Users className="h-4 w-4" />
-          Contacts
-          <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>
-        </TabsTrigger>
-        <TabsTrigger value="gap-analysis" className="flex items-center gap-2">
-          <FileText className="h-4 w-4" />
-          Gap Analyses
-          <Badge variant="secondary" className="ml-1 text-xs">{gapAnalyses.length}</Badge>
-        </TabsTrigger>
-        <TabsTrigger value="quick-scans" className="flex items-center gap-2">
-          <Zap className="h-4 w-4" />
-          Quick Scans
-          <Badge variant="secondary" className="ml-1 text-xs">{quickScanLeads.length}</Badge>
-        </TabsTrigger>
-        <TabsTrigger value="pdf-leads" className="flex items-center gap-2">
-          <FileDown className="h-4 w-4" />
-          PDF Leads
-          <Badge variant="secondary" className="ml-1 text-xs">{pdfLeads.length}</Badge>
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="contacts">{renderContactsTable()}</TabsContent>
-      <TabsContent value="gap-analysis">{renderGapAnalysisTable()}</TabsContent>
-      <TabsContent value="quick-scans">{renderQuickScanLeadsTable()}</TabsContent>
-      <TabsContent value="pdf-leads">{renderPdfLeadsTable()}</TabsContent>
-    </Tabs>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">Leads</h2>
+          <p className="text-sm text-muted-foreground">
+            Everyone who has raised their hand on the marketing site: quick scans, full gap analyses, the contact form and PDF downloads. One row per person.
+          </p>
+        </div>
+        <Tabs value={leadsView} onValueChange={(v) => setLeadsView(v as "inbox" | "tables")}>
+          <TabsList>
+            <TabsTrigger value="inbox">All leads</TabsTrigger>
+            <TabsTrigger value="tables" title="The four raw tables, with bulk delete and export">By source</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {leadsView === "inbox" ? (
+        <LeadsInbox
+          contacts={contacts}
+          gapAnalyses={gapAnalyses}
+          pdfLeads={pdfLeads}
+          quickScanLeads={quickScanLeads}
+          invitedEmails={invitedEmails}
+          invitingEmail={invitingEmail}
+          onInvite={handleInviteToPortal}
+          onOpenGap={(gap) => { setSelectedGapAnalysis(gap); setIsDetailModalOpen(true); }}
+          onRefresh={() => fetchData(storedPassword)}
+          isLoading={isLoading}
+        />
+      ) : (
+        <Tabs value={activeSection} onValueChange={(v) => setActiveSection(v as AdminSection)} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="contacts" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Contacts
+              <Badge variant="secondary" className="ml-1 text-xs">{contacts.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="gap-analysis" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Gap Analyses
+              <Badge variant="secondary" className="ml-1 text-xs">{gapAnalyses.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="quick-scans" className="flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              Quick Scans
+              <Badge variant="secondary" className="ml-1 text-xs">{quickScanLeads.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="pdf-leads" className="flex items-center gap-2">
+              <FileDown className="h-4 w-4" />
+              PDF Leads
+              <Badge variant="secondary" className="ml-1 text-xs">{pdfLeads.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="contacts">{renderContactsTable()}</TabsContent>
+          <TabsContent value="gap-analysis">{renderGapAnalysisTable()}</TabsContent>
+          <TabsContent value="quick-scans">{renderQuickScanLeadsTable()}</TabsContent>
+          <TabsContent value="pdf-leads">{renderPdfLeadsTable()}</TabsContent>
+        </Tabs>
+      )}
+    </div>
   );
 
   // "Inbound Leads", "Pipeline", and "Prospect Engine" used to be three

@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { LEADS_LAST_SEEN_KEY } from "@/components/admin/sales/leadsModel";
 
 export type AdminSection =
   | "home"
@@ -261,8 +262,41 @@ function useUnacknowledgedAlertCount(): number {
   return count;
 }
 
+/** New lead submissions (any source) since the admin last opened the Leads page. */
+function useNewLeadCount(): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      let since = 0;
+      try { since = Number(localStorage.getItem(LEADS_LAST_SEEN_KEY) || 0); } catch { /* no marker: fall back to a week */ }
+      const sinceIso = new Date(since || Date.now() - 7 * 86_400_000).toISOString();
+      const head = { count: "exact" as const, head: true };
+      const results = await Promise.all([
+        supabase.from("prospects").select("id", head).eq("source", "inbound").gt("created_at", sinceIso),
+        supabase.from("gap_analysis_submissions").select("id", head).gt("created_at", sinceIso),
+        supabase.from("contact_submissions").select("id", head).gt("created_at", sinceIso),
+        supabase.from("pdf_leads").select("id", head).gt("created_at", sinceIso),
+      ]);
+      if (!cancelled) setCount(results.reduce((n, r) => n + (r.count ?? 0), 0));
+    };
+    load();
+    const timer = setInterval(load, 60_000);
+    window.addEventListener("admin-leads-seen", load);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      window.removeEventListener("admin-leads-seen", load);
+    };
+  }, []);
+
+  return count;
+}
+
 export function AdminSidebar({ activeSection, onSectionChange, onLogout }: AdminSidebarProps) {
   const alertCount = useUnacknowledgedAlertCount();
+  const newLeadCount = useNewLeadCount();
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -297,7 +331,7 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
         <NavGroup label="Clients" items={clientItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
         <NavGroup label="Monitoring" items={monitoringItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ alerts: alertCount }} />
-        <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
+        <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ contacts: newLeadCount }} />
         <NavGroup label="Admin" items={adminItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
       </SidebarContent>
 
