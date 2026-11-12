@@ -1292,7 +1292,6 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
             const isCompleting = completingStep === step.id;
             const completionDate = step.actual_completion || (step.status === "completed" && step.completed_at ? step.completed_at.split("T")[0] : null);
             const formattedDone = completionDate ? formatDatePlain(completionDate) : null;
-            const formattedDue = formatDatePlain(step.estimated_completion);
             const isClientStep = step.task_type.startsWith("client_");
             const cta = CTA_CONFIG[step.task_type];
 
@@ -1390,8 +1389,6 @@ export function ClientActivityTab({ clientAccountId, clientEmail, firstName, bus
                 <div className="text-right flex-shrink-0 pt-0.5">
                   {state === "completed" && formattedDone ? (
                     <span className="text-xs text-emerald-600 font-medium">Completed {formattedDone}</span>
-                  ) : state !== "locked" && formattedDue ? (
-                    <span className="text-xs text-muted-foreground">Expected by {formattedDue}</span>
                   ) : null}
                 </div>
               </div>
