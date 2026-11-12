@@ -57,6 +57,7 @@ export function ActionPlanSection({ actions }: ActionPlanSectionProps) {
               return (
                 <motion.div
                   key={i}
+                  data-pdf-keep
                   {...rowReveal}
                   transition={{ delay: printMode ? 0 : i * 0.05 }}
                   className="flex gap-4 items-center px-6 py-4 border-b border-[rgba(0,0,0,0.06)] last:border-b-0"

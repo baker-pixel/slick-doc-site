@@ -29,7 +29,7 @@ export function StrengthsGapsSection({ strengths, gaps }: StrengthsGapsSectionPr
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Strengths */}
-            <div className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-6">
+            <div data-pdf-keep className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-6">
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2 h-2 rounded-full bg-[#1D9E75] shrink-0" />
                 <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-[#0F6E56]">
@@ -51,7 +51,7 @@ export function StrengthsGapsSection({ strengths, gaps }: StrengthsGapsSectionPr
             </div>
 
             {/* Gaps */}
-            <div className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-6">
+            <div data-pdf-keep className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-6">
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2 h-2 rounded-full bg-[#E24B4A] shrink-0" />
                 <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-[#A32D2D]">
