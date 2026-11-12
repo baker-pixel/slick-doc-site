@@ -5,7 +5,7 @@ import { refundInvoice, stripeRequest, tierForPriceId, verifyStripeSignature } f
 import { decideClaim, isDuplicateSubscription } from "../_shared/stripeDedupe.ts";
 import { logAlert } from "../_shared/alerts.ts";
 import { applyBillingDecision } from "../_shared/billingGate.ts";
-import { sendPaymentFailedEmail, sendServicesPausedEmail } from "../_shared/billingEmail.ts";
+import { sendPaymentConfirmationEmail, sendPaymentFailedEmail, sendServicesPausedEmail } from "../_shared/billingEmail.ts";
 import { isCycleInvoice, periodFromInvoice } from "../_shared/cycle.ts";
 import { runInBackground } from "../_shared/background.ts";
 
@@ -290,6 +290,10 @@ async function activatePaidSignup(supabase: Supabase, acct: any) {
     .maybeSingle();
   if (error) throw error;
   if (!flipped) return; // another delivery already activated it
+
+  // Confirmation of the purchase (best-effort; the portal invite below is sent separately).
+  await sendPaymentConfirmationEmail(acct.email, acct.first_name, acct.business_name, acct.tier).catch((e) =>
+    console.error("payment confirmation email failed:", e));
 
   const tier = acct.tier;
   const steps: Array<[string, Record<string, unknown>]> = [
