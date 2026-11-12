@@ -25,8 +25,8 @@ const differentiators = [
   },
   {
     icon: TrendingUp,
-    title: "Proven Results",
-    description: "185% average growth for our clients. $8.2M in revenue generated. Real numbers, not vanity metrics.",
+    title: "Measurable Results",
+    description: "We track the numbers that matter to your business - leads, calls and customers - not vanity metrics.",
   },
   {
     icon: Shield,
