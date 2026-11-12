@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { pricingData, type TierId } from "@/lib/pricingData";
+import { PaymentThankYou } from "@/components/signup/PaymentThankYou";
 
 const TIER_OPTIONS: { id: TierId; label: string }[] = [
   { id: "foundation", label: "Foundation" },
@@ -119,6 +120,9 @@ export default function Signup() {
             <BackButton />
           </div>
 
+          {checkoutReturn === "success" && resultStatus !== "existing_account" ? (
+            <PaymentThankYou />
+          ) : (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -278,6 +282,7 @@ export default function Signup() {
               </CardContent>
             </Card>
           </motion.div>
+          )}
         </div>
       </main>
 
