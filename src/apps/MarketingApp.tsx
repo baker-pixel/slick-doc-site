@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
@@ -30,7 +30,6 @@ const ARPresentation = lazy(() => import("@/pages/ARPresentation"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const LegacyReportRedirect = lazy(() => import("@/pages/LegacyReportRedirect"));
 const EmailPreferences = lazy(() => import("@/pages/EmailPreferences"));
-const Portfolio = lazy(() => import("@/pages/Portfolio"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 
 function PageLoader() {
@@ -54,7 +53,7 @@ function AnimatedRoutes() {
           <Route path="/gap-analysis" element={<PageTransition><GapAnalysis /></PageTransition>} />
           <Route path="/quick-analysis" element={<PageTransition><QuickAnalysis /></PageTransition>} />
           <Route path="/about" element={<PageTransition><AboutUs /></PageTransition>} />
-          <Route path="/portfolio" element={<PageTransition><Portfolio /></PageTransition>} />
+          <Route path="/portfolio" element={<Navigate to="/" replace />} />
           <Route path="/schedule" element={<PageTransition><ScheduleCall /></PageTransition>} />
           <Route path="/system" element={<PageTransition><System /></PageTransition>} />
           <Route path="/pricing" element={<PageTransition><Pricing /></PageTransition>} />

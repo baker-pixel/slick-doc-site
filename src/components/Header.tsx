@@ -8,7 +8,6 @@ import { getClientPortalOrigin } from "@/lib/getPortalUrl";
 
 const navLinks = [
   { href: "/about", label: "About", isRoute: true },
-  { href: "/portfolio", label: "Portfolio", isRoute: true },
   { href: "/system", label: "The SYSTEM", isRoute: true },
   { href: "/pricing", label: "Pricing", isRoute: true },
   { href: "/schedule", label: "Schedule Call", isRoute: true },

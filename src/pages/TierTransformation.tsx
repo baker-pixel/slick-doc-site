@@ -59,12 +59,6 @@ const features = [
   },
 ];
 
-const results = [
-  { metric: "100%+", label: "Average increase in revenue" },
-  { metric: "5x", label: "Return on investment" },
-  { metric: "80%", label: "Reduction in customer acquisition cost" },
-];
-
 const transformationSteps = [
   { phase: "Discovery", description: "Deep dive into your business, competitors, and market opportunities." },
   { phase: "Strategy", description: "Custom roadmap designed around your specific goals and challenges." },
@@ -261,41 +255,6 @@ export default function TierTransformation() {
                     <h3 className="text-xl font-semibold text-foreground mb-2">{step.phase}</h3>
                     <p className="text-muted-foreground">{step.description}</p>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Expected Results */}
-        <section className="py-20 bg-muted/30">
-          <div className="container-wide mx-auto px-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="text-center mb-12"
-            >
-              <h2 className="text-3xl sm:text-4xl font-display font-semibold text-foreground mb-4">
-                Expected Results
-              </h2>
-              <p className="text-muted-foreground">
-                What our Transformation clients typically achieve within the first year.
-              </p>
-            </motion.div>
-
-            <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-              {results.map((result, index) => (
-                <motion.div
-                  key={result.label}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.15 }}
-                  className="text-center"
-                >
-                  <div className="text-5xl font-bold text-primary mb-2">{result.metric}</div>
-                  <p className="text-muted-foreground">{result.label}</p>
                 </motion.div>
               ))}
             </div>
