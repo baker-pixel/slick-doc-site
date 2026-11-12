@@ -72,6 +72,8 @@ interface ClientPortalSidebarProps {
   clientName?: string;
   businessName?: string;
   onSignOut: () => void;
+  /** Overrides the sign-out button label (admin "view as client" shows "Exit client view"). */
+  signOutLabel?: string;
   badgeCounts?: BadgeCounts;
   hiddenTabs?: string[];
   clientTier?: ClientTier;
@@ -169,6 +171,7 @@ export function ClientPortalSidebar({
   clientName,
   businessName,
   onSignOut,
+  signOutLabel = "Sign out",
   badgeCounts,
   hiddenTabs = [],
   // Keep props for call-site compat — no longer used for sidebar filtering
@@ -257,8 +260,8 @@ export function ClientPortalSidebar({
               size="icon"
               onClick={onSignOut}
               className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:rounded-xl"
-              aria-label="Sign out"
-              title="Sign out"
+              aria-label={signOutLabel}
+              title={signOutLabel}
             >
               <LogOut className="h-4 w-4" />
             </Button>
