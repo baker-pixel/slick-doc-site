@@ -358,11 +358,19 @@ async function handleEvent(supabase: Supabase, event: any) {
 serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
-  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-  if (!secret) return errorResponse("STRIPE_WEBHOOK_SECRET not configured", 500);
+  // Sandbox and live Stripe each sign with their own endpoint secret. Accept
+  // either while both modes are in use (STRIPE_WEBHOOK_SECRET = original,
+  // STRIPE_WEBHOOK_SECRET_LIVE = live endpoint); drop the old one to retire sandbox.
+  const secrets = [Deno.env.get("STRIPE_WEBHOOK_SECRET"), Deno.env.get("STRIPE_WEBHOOK_SECRET_LIVE")]
+    .filter((s): s is string => !!s);
+  if (secrets.length === 0) return errorResponse("STRIPE_WEBHOOK_SECRET not configured", 500);
 
   const raw = await req.text();
-  const valid = await verifyStripeSignature(raw, req.headers.get("stripe-signature"), secret);
+  const sig = req.headers.get("stripe-signature");
+  let valid = false;
+  for (const s of secrets) {
+    if (await verifyStripeSignature(raw, sig, s)) { valid = true; break; }
+  }
   if (!valid) return errorResponse("Invalid signature", 400);
 
   const event = JSON.parse(raw);
