@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { portalOrigin } from "../_shared/stripeCheckout.ts";
+import { isMissingCustomerError, portalOrigin } from "../_shared/stripeCheckout.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
 
 // Returns a Stripe Customer Portal URL: update cards, switch plan, cancel,
@@ -27,13 +27,24 @@ serve(async (req) => {
     if (error) throw error;
     if (!acct?.stripe_customer_id) return errorResponse("No billing profile yet. Subscribe first.", 400);
 
-    const session = await stripeRequest<{ url: string }>("POST", "/billing_portal/sessions", {
-      customer: acct.stripe_customer_id,
-      // Sandbox portal config (cards, invoices, cancel at period end, plan
-      // switch). Override with STRIPE_PORTAL_CONFIG for live mode.
-      configuration: Deno.env.get("STRIPE_PORTAL_CONFIG") ?? "bpc_1UPh3cHaqELPL5HRfZY84lQs",
-      return_url: `${portalOrigin(origin)}/portal?tab=invoices`,
-    });
+    let session: { url: string };
+    try {
+      session = await stripeRequest<{ url: string }>("POST", "/billing_portal/sessions", {
+        customer: acct.stripe_customer_id,
+        // Sandbox portal config (cards, invoices, cancel at period end, plan
+        // switch). Override with STRIPE_PORTAL_CONFIG for live mode.
+        configuration: Deno.env.get("STRIPE_PORTAL_CONFIG") ?? "bpc_1UPh3cHaqELPL5HRfZY84lQs",
+        return_url: `${portalOrigin(origin)}/portal?tab=invoices`,
+      });
+    } catch (e) {
+      if (!isMissingCustomerError(e)) throw e;
+      // The stored customer belongs to the other Stripe mode (sandbox vs live).
+      console.warn(`stripe-billing-portal: customer ${acct.stripe_customer_id} not found for ${client_account_id}`);
+      return errorResponse(
+        "Your billing profile is being moved to our live payment system. Please contact support to update billing.",
+        400,
+      );
+    }
     return jsonResponse({ url: session.url });
   } catch (err) {
     console.error("stripe-billing-portal failed:", err);

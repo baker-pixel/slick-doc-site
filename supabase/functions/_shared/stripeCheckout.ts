@@ -35,8 +35,25 @@ export interface CheckoutAccount {
   subscription_status?: string | null;
 }
 
+/** True for Stripe's "no such customer" error (e.g. an ID from the other mode, sandbox vs live). */
+export function isMissingCustomerError(e: unknown): boolean {
+  return /No such customer/i.test(String((e as Error)?.message ?? e));
+}
+
 export async function ensureStripeCustomer(supabase: SupabaseClient, acct: CheckoutAccount): Promise<string> {
-  if (acct.stripe_customer_id) return acct.stripe_customer_id;
+  if (acct.stripe_customer_id) {
+    // A stored ID can belong to the other Stripe mode (sandbox vs live) or a
+    // deleted customer. Callers only get here for accounts with no active
+    // subscription, so recreating the customer is safe; otherwise checkout
+    // would fail with "No such customer" forever.
+    try {
+      const existing = await stripeRequest<{ id: string; deleted?: boolean }>("GET", `/customers/${acct.stripe_customer_id}`);
+      if (!existing.deleted) return acct.stripe_customer_id;
+    } catch (e) {
+      if (!isMissingCustomerError(e)) throw e;
+    }
+    console.warn(`stripe: customer ${acct.stripe_customer_id} not found for ${acct.id}; creating a new one`);
+  }
 
   const name = [acct.first_name, acct.last_name].filter(Boolean).join(" ") || undefined;
   const customer = await stripeRequest<{ id: string }>(
