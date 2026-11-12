@@ -59,12 +59,6 @@ const features = [
   },
 ];
 
-const results = [
-  { metric: "50%", label: "Average increase in qualified leads" },
-  { metric: "3x", label: "ROI on marketing spend" },
-  { metric: "60%", label: "Faster sales cycle" },
-];
-
 export default function TierGrowth() {
   const [currentImage, setCurrentImage] = useState(0);
 
@@ -208,41 +202,6 @@ export default function TierGrowth() {
                       <p className="text-sm text-muted-foreground">{feature.description}</p>
                     </CardContent>
                   </Card>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Expected Results */}
-        <section className="py-20">
-          <div className="container-wide mx-auto px-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="text-center mb-12"
-            >
-              <h2 className="text-3xl sm:text-4xl font-display font-semibold text-foreground mb-4">
-                Expected Results
-              </h2>
-              <p className="text-muted-foreground">
-                What our Growth clients typically achieve within the first 6 months.
-              </p>
-            </motion.div>
-
-            <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-              {results.map((result, index) => (
-                <motion.div
-                  key={result.label}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.15 }}
-                  className="text-center"
-                >
-                  <div className="text-5xl font-bold text-primary mb-2">{result.metric}</div>
-                  <p className="text-muted-foreground">{result.label}</p>
                 </motion.div>
               ))}
             </div>
