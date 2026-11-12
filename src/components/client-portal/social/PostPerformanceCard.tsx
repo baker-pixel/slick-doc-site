@@ -38,6 +38,9 @@ const PLATFORM_LABEL: Record<string, string> = {
   tiktok: "TikTok",
 };
 
+const hasNoData = (m: PostMetricsRow) =>
+  [m.views, m.reach, m.likes, m.comments, m.shares, m.clicks, m.engagements].every((v) => v === null);
+
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "—" : n.toLocaleString());
 const sumOf = (vals: Array<number | null | undefined>) => vals.reduce<number>((a, v) => a + (v ?? 0), 0);
 
@@ -81,7 +84,8 @@ export function PostPerformanceCard({ clientAccountId }: Props) {
   });
 
   const totals = useMemo(() => {
-    const rows = data ? [...data.metrics.values()] : [];
+    // Rows we asked about but the platform returned nothing for don't count as "measured".
+    const rows = data ? [...data.metrics.values()].filter((r) => !hasNoData(r)) : [];
     return {
       views: sumOf(rows.map((r) => r.views)),
       reach: sumOf(rows.map((r) => r.reach)),
@@ -187,6 +191,12 @@ export function PostPerformanceCard({ clientAccountId }: Props) {
                         {p.published_at && format(new Date(p.published_at), "d MMM yyyy")}
                       </div>
                     </td>
+                    {m && hasNoData(m) ? (
+                      <td colSpan={7} className="px-2 py-2 text-right text-xs italic text-muted-foreground">
+                        Stats unavailable for this post
+                      </td>
+                    ) : (
+                      <>
                     <td className="px-2 py-2 text-right tabular-nums">{m ? fmt(m.views) : "…"}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{m ? fmt(m.reach) : "…"}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{m ? fmt(m.likes) : "…"}</td>
@@ -194,6 +204,8 @@ export function PostPerformanceCard({ clientAccountId }: Props) {
                     <td className="px-2 py-2 text-right tabular-nums">{m ? fmt(m.shares) : "…"}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{m ? fmt(m.clicks) : "…"}</td>
                     <td className="py-2 pl-2 text-right font-medium tabular-nums">{m ? fmt(m.engagements) : "…"}</td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
@@ -201,7 +213,7 @@ export function PostPerformanceCard({ clientAccountId }: Props) {
           </table>
         </div>
         <p className="text-xs text-muted-foreground">
-          “…” means we haven't collected numbers for that post yet; “—” means the platform doesn't report that figure (for example, Facebook reports reach but not views, and LinkedIn and X report views but not reach). Compare posts within one platform, not across platforms.
+          “…” means we haven't collected numbers for that post yet; “—” means the platform doesn't report that figure; “Stats unavailable” means the platform didn't return any numbers for that post (for example, Facebook reports reach but not views, and LinkedIn and X report views but not reach). Compare posts within one platform, not across platforms.
         </p>
       </CardContent>
     </Card>
