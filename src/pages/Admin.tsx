@@ -1287,7 +1287,7 @@ const AdminInner = () => {
         <div>
           <h2 className="text-lg font-semibold">Leads</h2>
           <p className="text-sm text-muted-foreground">
-            Everyone who has raised their hand on the marketing site: quick scans, full gap analyses, the contact form and PDF downloads. One row per person.
+            Everyone who has raised their hand on the marketing site: quick scans, full gap analyses, the contact form and PDF downloads. One row per person. Anyone who has become a client is not shown here.
           </p>
         </div>
         <Tabs value={leadsView} onValueChange={(v) => setLeadsView(v as "inbox" | "tables")}>

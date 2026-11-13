@@ -114,7 +114,8 @@ function When({ iso }: { iso: string }) {
 export function LeadsInbox({
   contacts, gapAnalyses, pdfLeads, quickScanLeads, invitedEmails, invitingEmail, onInvite, onOpenGap, onRefresh, isLoading,
 }: LeadsInboxProps) {
-  const [clientEmails, setClientEmails] = useState<Set<string>>(new Set());
+  // null until the client list has loaded, so converted people never flash into the list first.
+  const [clientEmails, setClientEmails] = useState<Set<string> | null>(null);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<"all" | Source>("all");
   const [stageFilter, setStageFilter] = useState<"all" | Stage>("all");
@@ -139,12 +140,17 @@ export function LeadsInbox({
   // People who already have a client account are not leads to chase.
   useEffect(() => {
     supabase.from("client_accounts").select("email").then(({ data }) => {
-      if (data) setClientEmails(new Set(data.map((c: any) => String(c.email || "").toLowerCase())));
+      setClientEmails(new Set((data ?? []).map((c: any) => String(c.email || "").toLowerCase())));
     });
   }, []);
 
+  // Converted leads (already a client) are not shown: this page is for people
+  // still to win, and they are handled in Clients.
   const leads = useMemo(
-    () => buildLeads({ contacts, gapAnalyses, pdfLeads, quickScanLeads }, { invitedEmails, clientEmails }),
+    () => clientEmails === null
+      ? []
+      : buildLeads({ contacts, gapAnalyses, pdfLeads, quickScanLeads }, { invitedEmails, clientEmails })
+          .filter((l) => l.stage !== "Client"),
     [contacts, gapAnalyses, pdfLeads, quickScanLeads, invitedEmails, clientEmails],
   );
 
@@ -223,7 +229,7 @@ export function LeadsInbox({
               <SelectTrigger className="w-[150px]"><SelectValue placeholder="Stage" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All stages</SelectItem>
-                {(Object.keys(STAGE_TONE) as Stage[]).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                {(Object.keys(STAGE_TONE) as Stage[]).filter((s) => s !== "Client").map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={interestFilter} onValueChange={(v) => setInterestFilter(v as any)}>
@@ -254,8 +260,10 @@ export function LeadsInbox({
 
           {visible.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              {leads.length === 0
-                ? "No leads yet. People appear here when they run a quick scan, fill in the gap analysis, send the contact form or download a PDF."
+              {clientEmails === null
+                ? "Loading leads…"
+                : leads.length === 0
+                ? "No open leads. People appear here when they run a quick scan, fill in the gap analysis, send the contact form or download a PDF. Anyone who becomes a client is removed from this list."
                 : "No leads match these filters."}
             </div>
           ) : (
