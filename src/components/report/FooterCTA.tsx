@@ -11,7 +11,7 @@ export function FooterCTA() {
   return (
     <section className="bg-[#F7F8FA] px-10 py-12 md:px-14">
       <motion.div {...reveal} className="max-w-3xl">
-        <div className="bg-[#F0F1F3] border border-[rgba(0,0,0,0.08)] rounded-xl px-8 py-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div data-pdf-keep className="bg-[#F0F1F3] border border-[rgba(0,0,0,0.08)] rounded-xl px-8 py-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <h2
               style={{ fontFamily: "'DM Serif Display', serif" }}

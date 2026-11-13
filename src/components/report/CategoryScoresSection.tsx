@@ -65,6 +65,7 @@ export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
                     key={cat.label}
                     {...cardReveal}
                     transition={{ delay: printMode ? 0 : i * 0.07 }}
+                    data-pdf-keep
                     className="bg-[#F0F1F4] border border-dashed border-[rgba(0,0,0,0.12)] rounded-xl p-5"
                   >
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-4 bg-[#E2E4E9] text-[#8A8F9C]">
@@ -82,6 +83,7 @@ export function CategoryScoresSection({ scores }: CategoryScoresSectionProps) {
                   key={cat.label}
                   {...cardReveal}
                   transition={{ delay: printMode ? 0 : i * 0.07 }}
+                  data-pdf-keep
                   className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl p-5"
                 >
                   {/* Icon circle */}

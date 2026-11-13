@@ -92,7 +92,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <base href="${origin}/">
 ${FONT_LINKS}
 <style>${css}</style>
-<style>@page { size: A4; margin: 0; } body { margin: 0; }</style>
+<style>
+@page { size: A4; margin: 0; }
+body { margin: 0; }
+/* The report is one long flowing page; without this the browser slices rows and
+   cards in half at page boundaries. Components mark what must stay whole. */
+[data-pdf-keep] { break-inside: avoid; page-break-inside: avoid; }
+h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+</style>
 </head>
 <body>${bodyHtml}</body>
 </html>`;
