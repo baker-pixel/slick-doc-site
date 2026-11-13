@@ -1,10 +1,13 @@
 // Front-loaded social copy: the first paragraph is the WHOLE message (problem ->
 // solution -> call to action), so a reader who stops there has everything. Optional
-// detail follows under an "In depth" label. Why: it works for every kind of reader,
+// detail follows as a second paragraph. Why: it works for every kind of reader,
 // the key facts sit in the first 20-30% for AI crawlers, and it costs fewer tokens.
 //
-// A post stays plain text -- summary, optional "In depth" block, then hashtags -- so
-// storage, approvals and publishing need no changes.
+// A post stays plain text -- summary, optional detail paragraph, then hashtags -- so
+// storage, approvals and publishing need no changes. Posts are NOT published with a
+// visible "In depth" heading (it read as a stray label); the parser still recognises
+// one so older drafts and models that add it anyway are handled, and
+// stripInDepthLabel() removes it before anything is stored.
 
 export const IN_DEPTH_LABEL = "In depth";
 
@@ -33,7 +36,7 @@ export function isFrontLoadedPlatform(p: string): p is FrontLoadedPlatform {
 
 export interface ParsedPost {
   summary: string;
-  /** Text under the "In depth" label, or "" when the post has none. */
+  /** The detail paragraphs after the summary (under an "In depth" label if one is present), or "". */
   detail: string;
   /** Trailing hashtag lines, kept out of the word counts. */
   hashtags: string;
@@ -42,6 +45,16 @@ export interface ParsedPost {
 
 const LABEL_LINE = /^[ \t]*(?:\*\*|#+\s*)?in[- ]depth(?:\s+view)?\s*:?\s*(?:\*\*)?[ \t]*$/im;
 const HASHTAG_LINE = /^(?:\s*#[\p{L}\p{N}_]+)+\s*$/u;
+
+/** Remove an "In depth" label line, keeping the paragraph break, and trim trailing spaces on each line. */
+export function stripInDepthLabel(text: string): string {
+  const globalLabel = new RegExp(LABEL_LINE.source, "gim");
+  return text
+    .replace(globalLabel, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 export function wordCount(s: string): number {
   return s.trim() ? s.trim().split(/\s+/).length : 0;
@@ -97,7 +110,7 @@ export function checkFrontLoaded(text: string, platform: FrontLoadedPlatform): F
   if (TEASER.test(p.summary) || DANGLING_END.test(p.summary)) {
     problems.push("the opening reads like a teaser; it must be complete on its own, with the call to action in it");
   }
-  if (p.detail && !p.hasLabel) problems.push(`the detail must start under a line that says exactly "${IN_DEPTH_LABEL}"`);
+  if (p.hasLabel) problems.push(`do not write a heading or label such as "${IN_DEPTH_LABEL}"; put any detail in a second paragraph with no heading`);
   const total = sWords + wordCount(p.detail);
   if (total > r.totalMax) problems.push(`the whole post is ${total} words; keep it to ${r.totalMax} or fewer, hashtags excluded`);
 
@@ -111,7 +124,7 @@ export function frontLoadedRequirements(platform: FrontLoadedPlatform): string {
     "FORMAT (strict):",
     `- Paragraph 1 is the ENTIRE message, ${r.summaryMin}-${r.summaryMax} words, one paragraph: the problem the reader has, how this business solves it, and a clear call to action. A reader who stops here must have everything they need.`,
     "- Paragraph 1 must NOT be a teaser or clickbait: no cliffhangers, no \"here's why\", no \"read on\", no question left unanswered.",
-    `- After it you may add detail (examples, steps, proof) ONLY if it adds real value. Put it under a line that says exactly "${IN_DEPTH_LABEL}", then the detail. Skip the section entirely if there is nothing worth adding.`,
+    `- After it you may add detail (examples, steps, proof) ONLY if it adds real value, as ONE short second paragraph with no heading or label of any kind (never write "${IN_DEPTH_LABEL}"). Skip it entirely if there is nothing worth adding.`,
     `- The whole post is at most ${r.totalMax} words, hashtags excluded.`,
     `- Finish with ${r.hashtags}, on their own line.`,
     "- Plain text only: no markdown, no bold, no headings.",
