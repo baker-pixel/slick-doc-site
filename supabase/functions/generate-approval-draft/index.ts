@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 import { callAI, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote } from "../_shared/frontLoaded.ts";
+import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, stripInDepthLabel } from "../_shared/frontLoaded.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -103,6 +103,7 @@ serve(async (req) => {
         console.warn("Front-loaded retry failed, keeping first draft:", e instanceof Error ? e.message : e);
       }
     }
+    postContent = stripInDepthLabel(postContent);
     if (postContent.length < 80) {
       throw new Error(`AI returned an unusably short draft (${postContent.length} chars) for client ${client_id}`);
     }

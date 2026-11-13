@@ -15,7 +15,7 @@ import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/
 import { extractTopic } from "../_shared/topicExtract.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
-import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform } from "../_shared/frontLoaded.ts";
+import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform, stripInDepthLabel } from "../_shared/frontLoaded.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -622,6 +622,7 @@ async function generateContent(
       }
     }
   }
+  if (slot.content_type === "social_post" && isFrontLoadedPlatform(slot.platform)) content = stripInDepthLabel(content);
   const originalLength = content.length;
 
   // Hard-enforce character limits — safety net after generation

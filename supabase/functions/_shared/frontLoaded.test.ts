@@ -1,23 +1,21 @@
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.190.0/testing/asserts.ts";
 import {
   checkFrontLoaded, FRONT_LOADED_RULES, frontLoadedRequirements, frontLoadedRetryNote, IN_DEPTH_LABEL,
-  isFrontLoadedPlatform, parseFrontLoaded, wordCount,
+  isFrontLoadedPlatform, parseFrontLoaded, stripInDepthLabel, wordCount,
 } from "./frontLoaded.ts";
 
 const words = (n: number, w = "word") => Array(n).fill(w).join(" ");
 
 const GOOD = `Most small teams lose hours every week chasing invoices by hand. Resonant sends and reconciles them for you, so cash arrives sooner and nobody has to nag. Book a 15-minute demo this week.
 
-In depth
 Resonant connects to your accounting tool, matches each payment to its invoice and flags the ones that are late. Teams see fewer overdue invoices within the first month.
 
 #invoicing #smallbusiness`;
 
 Deno.test("parseFrontLoaded: splits summary, detail and hashtags", () => {
   const p = parseFrontLoaded(GOOD);
-  assertEquals(p.hasLabel, true);
+  assertEquals(p.hasLabel, false);
   assertStringIncludes(p.summary, "Book a 15-minute demo");
-  assertEquals(p.summary.includes("In depth"), false);
   assertStringIncludes(p.detail, "matches each payment");
   assertEquals(p.hashtags, "#invoicing #smallbusiness");
 });
@@ -73,11 +71,23 @@ Deno.test("checkFrontLoaded: teasers and dangling endings fail", () => {
   }
 });
 
-Deno.test("checkFrontLoaded: a multi-paragraph opening is rejected", () => {
-  // unlabelled second paragraph counts as detail without the label
+Deno.test("checkFrontLoaded: a second paragraph is detail and needs no label", () => {
   const r = checkFrontLoaded(`${words(24)}. Call us today.\n\nExtra detail without a label.`, "linkedin");
+  assertEquals(r.ok, true);
+});
+
+Deno.test("checkFrontLoaded: a visible 'In depth' label is flagged", () => {
+  const r = checkFrontLoaded(`${words(24)}. Call us today.\n\nIn depth\nExtra detail.`, "linkedin");
   assertEquals(r.ok, false);
   assertStringIncludes(r.problems.join(" "), IN_DEPTH_LABEL);
+});
+
+Deno.test("stripInDepthLabel: removes the label line, keeps the paragraph break and hashtags", () => {
+  const raw = "Summary sentence here.  \n\nIn depth  \nThe detail.\n\n#a #b";
+  assertEquals(stripInDepthLabel(raw), "Summary sentence here.\n\nThe detail.\n\n#a #b");
+  assertEquals(stripInDepthLabel("**In depth:**\nDetail"), "Detail");
+  const clean = "Just a summary.\n\n#a";
+  assertEquals(stripInDepthLabel(clean), clean);
 });
 
 Deno.test("checkFrontLoaded: the whole post is capped, hashtags excluded", () => {
@@ -97,7 +107,7 @@ Deno.test("checkFrontLoaded: the old 150-250 word LinkedIn shape is now a failur
 Deno.test("frontLoadedRequirements: states this platform's numbers and the label", () => {
   const req = frontLoadedRequirements("linkedin");
   assertStringIncludes(req, "20-60 words");
-  assertStringIncludes(req, `"${IN_DEPTH_LABEL}"`);
+  assertStringIncludes(req, "no heading");
   assertStringIncludes(req, "160 words");
   assertEquals(req.includes("150–250"), false);
   assertStringIncludes(frontLoadedRequirements("instagram"), "8-12 relevant hashtags");
