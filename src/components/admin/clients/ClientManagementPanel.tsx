@@ -23,7 +23,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, FileText, TrendingUp, Mail, Loader2, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban, Play } from "lucide-react";
+import { Plus, FileText, TrendingUp, Mail, Loader2, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban, Play, Eye } from "lucide-react";
+import { viewAsClientPath } from "@/lib/viewAsClient";
 import { format } from "date-fns";
 import { TierBadge } from "../core/TierBadge";
 import { callAdminApi } from "@/lib/admin-api";
@@ -851,6 +852,17 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
+                            {/* Read-only copy of this client's portal, in a new tab, under your own admin session. */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => window.open(viewAsClientPath(client.id), "_blank")}
+                              title="Open this client's portal in a new tab (read-only)"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View portal
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
