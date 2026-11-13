@@ -223,6 +223,10 @@ const AdminInner = () => {
   const [pdfLeads, setPdfLeads] = useState<PdfLead[]>([]);
   const [quickScanLeads, setQuickScanLeads] = useState<QuickScanLead[]>([]);
   const [selectedGapAnalysis, setSelectedGapAnalysis] = useState<GapAnalysisData | null>(null);
+  // Leads page: "inbox" = one merged list of people (default); "tables" = the four
+  // raw per-source tables, kept for bulk delete / export / status edits. Declared
+  // here, not inside renderLeadsSection: hooks must run on every render.
+  const [leadsView, setLeadsView] = useState<"inbox" | "tables">("inbox");
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<AdminSection>("home");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -1276,10 +1280,6 @@ const AdminInner = () => {
       </CardContent>
     </Card>
   );
-
-  // "inbox" = one merged list of people (default); "tables" = the four raw
-  // per-source tables, kept for bulk delete / export / status edits.
-  const [leadsView, setLeadsView] = useState<"inbox" | "tables">("inbox");
 
   const renderLeadsSection = () => (
     <div className="space-y-4">
