@@ -857,8 +857,11 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                               size="sm"
                               variant="outline"
                               className="gap-1.5"
+                              disabled={!hasPortalAccess}
                               onClick={() => window.open(viewAsClientPath(client.id), "_blank")}
-                              title="Open this client's portal in a new tab (read-only)"
+                              title={hasPortalAccess
+                                ? "Open this client's portal in a new tab (read-only)"
+                                : "No portal to view yet: this client hasn't accepted their portal invitation"}
                             >
                               <Eye className="h-4 w-4" />
                               View portal
