@@ -43,6 +43,8 @@ export interface Lead {
   latestScore: number | null;
   interest: Interest;
   stage: Stage;
+  /** Ours or a test inbox (see INTERNAL_EMAIL_DOMAINS): hidden from the inbox by default. */
+  internal: boolean;
   /** gap_analysis_submissions.id of their newest full analysis, for the invite link-back. */
   gapId: string | null;
 }
@@ -87,7 +89,9 @@ function quickScanTouch(p: any): Touch {
     source: "quick_scan",
     at: p.created_at,
     label: host ? `Ran a quick scan of ${host}` : "Ran a quick scan",
-    detail: p.report_sent_at ? "report emailed to them" : "report not emailed yet",
+    // Only state what we know: scans before Oct 2026 have no timestamp even though
+    // their report email was sent, so a missing value must not read as "not sent".
+    detail: p.report_sent_at ? "report emailed to them" : undefined,
     score: score(p.gap_score),
     reportToken: clean(p.report_token),
     raw: p,
@@ -141,6 +145,18 @@ export interface LeadContext {
   /** Lowercased emails that already have a client account. */
   clientEmails: Set<string>;
   now?: number;
+}
+
+/**
+ * Email domains that are ours or are test inboxes, never real prospects. Their
+ * scans are real rows (people testing the funnel), so they are hidden from the
+ * inbox by default, not deleted. Extend this list as needed.
+ */
+export const INTERNAL_EMAIL_DOMAINS = ["navtech.io", "resend.dev", "example.com", "example.org", "example.net"];
+
+export function isInternalEmail(email: string): boolean {
+  const domain = email.trim().toLowerCase().split("@")[1] ?? "";
+  return INTERNAL_EMAIL_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
 }
 
 export function buildLeads(input: LeadInputs, ctx: LeadContext): Lead[] {
@@ -228,6 +244,7 @@ export function buildLeads(input: LeadInputs, ctx: LeadContext): Lead[] {
       latestScore: scores.length ? scores[0] : null,
       interest,
       stage,
+      internal: isInternalEmail(key),
       gapId: touches.find((t) => t.source === "gap_analysis")?.id ?? null,
     });
   }

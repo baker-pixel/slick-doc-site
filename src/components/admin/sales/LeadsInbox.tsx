@@ -123,6 +123,7 @@ export function LeadsInbox({
   const [sort, setSort] = useState<"recent" | "score">("recent");
   const [page, setPage] = useState(1);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [showInternal, setShowInternal] = useState(false);
 
   // What was new when the admin last looked. The baseline is captured once per
   // page load (so switching tabs doesn't make the markers disappear), then the
@@ -146,12 +147,19 @@ export function LeadsInbox({
 
   // Converted leads (already a client) are not shown: this page is for people
   // still to win, and they are handled in Clients.
-  const leads = useMemo(
+  const openLeads = useMemo(
     () => clientEmails === null
       ? []
       : buildLeads({ contacts, gapAnalyses, pdfLeads, quickScanLeads }, { invitedEmails, clientEmails })
           .filter((l) => l.stage !== "Client"),
     [contacts, gapAnalyses, pdfLeads, quickScanLeads, invitedEmails, clientEmails],
+  );
+  // Our own and test inboxes (e.g. the team's test scans) are real rows but not
+  // leads: hidden unless asked for, and counted so nothing disappears silently.
+  const internalCount = useMemo(() => openLeads.filter((l) => l.internal).length, [openLeads]);
+  const leads = useMemo(
+    () => (showInternal ? openLeads : openLeads.filter((l) => !l.internal)),
+    [openLeads, showInternal],
   );
 
   const stats = useMemo(() => {
@@ -203,6 +211,17 @@ export function LeadsInbox({
         <SummaryTile label="Needs follow-up" value={stats.followUp} hint={STAGE_HELP["Follow up"]} tone="text-amber-600 dark:text-amber-400"
           onClick={() => { setStageFilter("Follow up"); setInterestFilter("all"); }} />
       </div>
+
+      {internalCount > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {showInternal
+            ? `Showing ${internalCount} internal/test ${internalCount === 1 ? "lead" : "leads"} (our own and test inboxes). `
+            : `${internalCount} internal/test ${internalCount === 1 ? "lead is" : "leads are"} hidden (our own and test inboxes). `}
+          <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => setShowInternal((v) => !v)}>
+            {showInternal ? "Hide them" : "Show them"}
+          </button>
+        </p>
+      )}
 
       {stats.newSinceVisit > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-orange-300/60 bg-orange-50 px-4 py-2.5 text-sm text-orange-900 dark:border-orange-500/30 dark:bg-orange-950/30 dark:text-orange-200">
@@ -373,8 +392,11 @@ function LeadSheet({ lead, onClose, invitingEmail, onInvite, onOpenGap }: {
     setEmails(null);
     if (!lead) return;
     let cancelled = false;
+    // ilike treats % and _ as wildcards, and _ is common in emails (jo_smith@...), which
+    // would pull in other people's emails: escape them so only this exact address matches.
+    const exact = lead.email.replace(/[\\%_]/g, (c) => `\\${c}`);
     supabase.from("email_logs").select("id, subject, status, sent_at")
-      .ilike("recipient_email", lead.email).order("sent_at", { ascending: false }).limit(8)
+      .ilike("recipient_email", exact).order("sent_at", { ascending: false }).limit(8)
       .then(({ data }) => { if (!cancelled) setEmails((data as SentEmail[]) ?? []); });
     return () => { cancelled = true; };
   }, [lead?.email]);
