@@ -4,6 +4,7 @@
 
 import { callAIJson, MODELS } from "./ai.ts";
 import { hasBusinessContext, isPlaceholderIndustry } from "./businessContext.ts";
+import { mergeKeywords } from "./discoveryRotation.ts";
 
 export interface ClientICP {
   industries: string[];
@@ -170,6 +171,50 @@ Return ONLY JSON: {"keywords":["..."]}`,
     return keywords;
   } catch (e) {
     console.error(`Search keyword suggestion failed for client ${client.id}:`, e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+/**
+ * Used when every cached keyword has been searched dry (a run found 0 new
+ * leads). Asks for different buyer segments, appends them to the cached list and
+ * returns only the NEW ones. Returns [] on failure so discovery just ends the run.
+ */
+export async function expandSearchKeywords(
+  supabase: any,
+  client: { id: string; business_name: string; context_profile?: Record<string, unknown> | null },
+  icp: ClientICP,
+  tried: string[],
+): Promise<string[]> {
+  try {
+    const res = await callAIJson<{ keywords?: unknown }>({
+      source: "icp-search-keywords-expand",
+      clientId: client.id,
+      model: MODELS.fast,
+      jsonMode: true,
+      maxTokens: 160,
+      promptId: "icp-search-keywords-expand.v1",
+      prompt: `We search a B2B company database for the companies that would BUY from "${client.business_name}", and the searches below are exhausted (all results already in our pipeline).
+Sells: ${typeof client.context_profile?.business_summary === "string" ? client.context_profile.business_summary : "n/a"}
+Ideal customer: ${icp.summary}
+Buyer's industries: ${icp.industries.join(", ")}
+Bad fits: ${(icp.disqualifiers || []).join("; ") || "none"}
+ALREADY SEARCHED (do not repeat or lightly reword): ${tried.join("; ")}
+Give 4-6 DIFFERENT buyer segments: adjacent company types that would plausibly buy, each a concrete TYPE OF COMPANY in 2-4 words. Same rules as before: no outcome words ("solutions", "optimization"), no staffing/recruiting/job-board unless that is the ideal customer, no bare generic labels.
+Return ONLY JSON: {"keywords":["..."]}`,
+    });
+    const candidates = (Array.isArray(res.keywords) ? res.keywords : [])
+      .filter((k): k is string => typeof k === "string")
+      .map((k) => k.trim())
+      .filter((k) => k.length >= 3 && k.length <= 60);
+    const merged = mergeKeywords(tried, candidates);
+    const added = merged.filter((k) => !tried.some((t) => t.toLowerCase() === k.toLowerCase()));
+    if (added.length > 0) {
+      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: merged } }).eq("id", client.id);
+    }
+    return added;
+  } catch (e) {
+    console.error(`Search keyword expansion failed for client ${client.id}:`, e instanceof Error ? e.message : e);
     return [];
   }
 }

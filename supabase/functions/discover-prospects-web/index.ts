@@ -2,7 +2,8 @@ import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMai
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { ensureClientICP, ensureSearchKeywords } from "../_shared/icp.ts";
+import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/icp.ts";
+import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/discoveryRotation.ts";
 import { filterProspectCandidates } from "../_shared/prospectFilter.ts";
 import { resolveDiscoveryCampaign } from "../_shared/campaignScope.ts";
 import { tierPolicy } from "../_shared/tierPolicy.ts";
@@ -269,24 +270,76 @@ Respond with ONLY a JSON array, no prose:
       droppedNonProspects += dropped.length;
       return kept.slice(0, maxResults);
     };
+    // What this run did, saved with the usage row so a zero-yield run can be explained.
+    const strategy: { plans_tried: string[]; expanded_keywords: string[]; widened_geography: string | null; apollo_calls: number } =
+      { plans_tried: [], expanded_keywords: [], widened_geography: null, apollo_calls: 0 };
+    let searchedGeography = geography;
     if (apolloKey) {
       try {
         // The ICP's industries are broad labels; derive specific buyer keywords
         // so a niche client doesn't get every "technology" company on earth.
         const keywords = await ensureSearchKeywords(supabase, client, icp);
-        const tags = keywords.length > 0 ? keywords : icp.industries;
-        // Page 1 is the same top-ranked set every cycle, so by cycle 2 it is all
-        // already-known companies. Walk deeper pages until enough are new.
+        const baseTags = keywords.length > 0 ? keywords : icp.industries;
         const { data: known } = await supabase.from("prospects").select("website_url").eq("client_id", body.client_id);
         const knownNorm = new Set((known ?? []).map((p: { website_url: string }) => normalizeUrl(p.website_url || "")));
         for (const d of await recentlyJudgedDomains(supabase, body.client_id)) knownNorm.add(d);
+
+        // The same keyword set every day returns the same top-ranked companies, so
+        // after a few cycles all of them are known. Instead: lead with a different
+        // keyword each run (rotation), walk deeper pages, and if a whole pass finds
+        // nothing, expand the keywords and then widen the geography. The number of
+        // Apollo calls is capped so a dry client can't run up the bill.
+        const MAX_APOLLO_CALLS = 12;
+        const MAX_PAGES = 5;
+        const { count: priorRuns } = await supabase.from("client_usage").select("id", { count: "exact", head: true })
+          .eq("client_id", body.client_id).eq("source_fn", "discover-prospects-web");
+
         const pool: FoundCompany[] = [];
+        const counted = new Set<string>();
         let freshCount = 0;
-        for (let page = 1; page <= 5 && freshCount < maxResults; page++) {
-          const batch = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geography, maxResults, body.focus, page));
-          if (batch.length === 0) break;
-          pool.push(...batch);
-          freshCount += batch.filter((c) => { const n = normalizeUrl(c.website_url); return n && !knownNorm.has(n); }).length;
+        const runPlan = async (tags: string[], geo: string) => {
+          strategy.plans_tried.push(tags.join(" + "));
+          for (let page = 1; page <= MAX_PAGES && freshCount < maxResults && strategy.apollo_calls < MAX_APOLLO_CALLS; page++) {
+            strategy.apollo_calls++;
+            let batch: FoundCompany[];
+            try {
+              batch = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geo, maxResults, body.focus, page));
+            } catch (e) {
+              if (pool.length === 0) throw e;
+              return; // keep what earlier pages found
+            }
+            if (batch.length === 0) return;
+            pool.push(...batch);
+            for (const c of batch) {
+              const n = normalizeUrl(c.website_url);
+              if (n && !knownNorm.has(n) && !counted.has(n)) { counted.add(n); freshCount++; }
+            }
+          }
+        };
+        const runAll = async (plans: string[][], geo: string) => {
+          for (const tags of plans) {
+            if (freshCount >= maxResults || strategy.apollo_calls >= MAX_APOLLO_CALLS) return;
+            await runPlan(tags, geo);
+          }
+        };
+
+        const plans = rotatePlans(buildSearchPlans(baseTags), priorRuns ?? 0);
+        await runAll(plans, geography);
+
+        if (freshCount === 0) {
+          // 1. Every known keyword is searched dry: ask for adjacent buyer segments.
+          const added = await expandSearchKeywords(supabase, client, icp, baseTags);
+          strategy.expanded_keywords = added;
+          if (added.length > 0) await runAll(buildSearchPlans(added), geography);
+        }
+        if (freshCount === 0) {
+          // 2. Still nothing: one step broader geography (city -> state/country).
+          const wider = widenGeography(geography);
+          if (wider) {
+            strategy.widened_geography = wider;
+            searchedGeography = wider;
+            await runAll(rotatePlans(buildSearchPlans(baseTags), priorRuns ?? 0), wider);
+          }
         }
         companies = pool;
         via = "apollo";
@@ -307,7 +360,7 @@ Respond with ONLY a JSON array, no prose:
       event_type: "prospect_research",
       units: 0,
       source_fn: "discover-prospects-web",
-      metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, dropped_non_prospects: droppedNonProspects, inserted: 0 },
+      metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography: searchedGeography, found: companies.length, dropped_non_prospects: droppedNonProspects, inserted: 0, strategy },
     });
 
     if (companies.length === 0) {
@@ -356,7 +409,7 @@ Respond with ONLY a JSON array, no prose:
         event_type: "prospect_research",
         units: inserted.length,
         source_fn: "discover-prospects-web",
-        metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography, found: companies.length, dropped_non_prospects: droppedNonProspects, inserted: inserted.length },
+        metadata: { kind: via === "apollo" ? "apollo_discovery" : "web_search_discovery", focus: body.focus || null, geography: searchedGeography, found: companies.length, dropped_non_prospects: droppedNonProspects, inserted: inserted.length, strategy },
       });
 
       await logActivity(supabase, body.client_id, {
