@@ -374,60 +374,79 @@ serve(async (req: Request) => {
             p.website_url.startsWith("http") ? p.website_url : `https://${p.website_url}`,
           ).hostname.replace(/^www\./, "");
 
-          // 1. Find a decision-maker at this domain (0 credits -- search
-          // itself never returns contact info, see docs.apollo.io/reference/people-api-search).
-          const searchRes = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
-            method: "POST",
-            headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              q_organization_domains_list: [domain],
-              person_seniorities: ["owner", "founder", "c_suite", "partner", "vp", "head", "director"],
-              per_page: 1,
-              page: 1,
-            }),
-          });
+          // 1. Find decision-makers at this domain (0 credits -- search itself
+          // never returns contact info, see docs.apollo.io/reference/people-api-search).
+          // Small companies often have no owner/director on file, which made 72% of
+          // lookups a dead end, so widen the seniority list before giving up. The
+          // search is free; only the match in step 2 spends a credit.
+          const searchPeople = async (seniorities: string[]) => {
+            const res = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
+              method: "POST",
+              headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                q_organization_domains_list: [domain],
+                person_seniorities: seniorities,
+                per_page: 3,
+                page: 1,
+              }),
+            });
+            if (!res.ok) return { status: res.status, people: [] as { id?: string }[] };
+            const data = await res.json();
+            return { status: 200, people: ((data?.people ?? []) as { id?: string }[]).filter((x) => x?.id) };
+          };
 
-          if (!searchRes.ok) {
-            if (searchRes.status === 429) {
+          let found = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director"]);
+          if (found.status === 200 && found.people.length === 0) {
+            found = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director", "manager", "senior"]);
+          }
+          if (found.status !== 200) {
+            if (found.status === 429) {
               console.warn("Apollo rate limit hit — stopping enrichment for this run");
               break;
             }
-            console.warn(`Apollo people search failed for ${domain}: ${searchRes.status}`);
+            console.warn(`Apollo people search failed for ${domain}: ${found.status}`);
             continue;
           }
-
-          const searchData = await searchRes.json();
-          const person = (searchData?.people ?? [])[0];
-          if (!person?.id) {
-            // No decision-maker on file for this domain at all -- a guess
-            // would just be inventing an address, so leave it for manual entry.
+          if (found.people.length === 0) {
+            // Nobody on file for this domain at all -- a guess would just be
+            // inventing an address, so leave it for manual entry.
             await markLookup(p, "no_decision_maker");
             await new Promise((r) => setTimeout(r, 300));
             continue;
           }
 
-          // 2. Reveal that person's real work email + Apollo's own
-          // verification status (their default match response, no
-          // reveal_personal_emails needed -- that flag is for *personal*
-          // inboxes, a work email is already included).
-          const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
-            method: "POST",
-            headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-            body: JSON.stringify({ id: person.id }),
-          });
-
-          if (!matchRes.ok) {
-            console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
-            continue;
+          // 2. Reveal a real work email + Apollo's own verification status (default
+          // match response; reveal_personal_emails is for personal inboxes). Try up
+          // to 3 people (each match costs a credit) and keep the first that Apollo
+          // verifies -- the first person often has no email on file while the next does.
+          let verifiedEmail: string | null = null;
+          let sawEmail = false;
+          let matchFailed = false;
+          for (const person of found.people.slice(0, 3)) {
+            const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
+              method: "POST",
+              headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+              body: JSON.stringify({ id: person.id }),
+            });
+            if (!matchRes.ok) {
+              console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
+              matchFailed = true;
+              break;
+            }
+            const matched = (await matchRes.json())?.person;
+            if (matched?.email) sawEmail = true;
+            if (matched?.email && matched.email_status === "verified") {
+              verifiedEmail = matched.email;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 300));
           }
+          if (matchFailed) continue;
 
-          const matchData = await matchRes.json();
-          const matched = matchData?.person;
-
-          if (matched?.email && matched.email_status === "verified") {
+          if (verifiedEmail) {
             await supabase
               .from("prospects")
-              .update({ email: matched.email })
+              .update({ email: verifiedEmail })
               .eq("id", p.id);
             emailsEnriched++;
 
@@ -437,11 +456,11 @@ serve(async (req: Request) => {
                 event_type: "prospect_research",
                 units: 1,
                 source_fn: "backfill-prospect-context",
-                metadata: { kind: "apollo_email_lookup", domain, email_status: matched.email_status },
+                metadata: { kind: "apollo_email_lookup", domain, email_status: "verified" },
               });
             }
           } else {
-            await markLookup(p, matched?.email ? "unverified" : "no_email");
+            await markLookup(p, sawEmail ? "unverified" : "no_email");
           }
 
           await new Promise((r) => setTimeout(r, 600));
