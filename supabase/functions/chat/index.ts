@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/http.ts";
 
 const SYSTEM_PROMPT = `You are the Orange Door AI Assistant - a friendly, knowledgeable digital marketing expert for small businesses in East Tennessee.
+Never use em dashes or en dashes in your replies; use commas, periods, or a plain hyphen instead.
 
 Your role:
 - Answer questions about digital marketing, SEO, paid ads, lead generation, and business growth
