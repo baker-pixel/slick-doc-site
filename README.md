@@ -1,73 +1,104 @@
-# Welcome to your Lovable Project
+# Orange Door Marketing
 
-## Project info
+Marketing site, client portal and admin panel for Orange Door Marketing, plus the
+agentic back end that runs SEO, prospecting, social and reporting for each client.
 
-**URL**: https://lovable.dev/projects/386f9bdd-c196-42d7-9ef4-0c3f0e56d568
+## Stack
 
-## How can I edit this code?
+| Layer | Tech |
+| --- | --- |
+| Frontend | React 18, Vite, TypeScript, Tailwind, shadcn/ui |
+| Backend | Supabase (Postgres, Auth, Storage, Edge Functions on Deno, pg_cron) |
+| Hosting | Vercel (static app plus `api/` functions for PDF and brand rendering) |
+| AI | OpenAI (primary) with Groq gpt-oss fallback, via `supabase/functions/_shared/ai.ts` |
+| Email | Resend (webhook for replies), optional per-client SMTP |
+| Social publishing | Post for Me, plus direct Facebook, LinkedIn and X OAuth |
+| Billing | Stripe |
+| WordPress | `wp-plugin/orangedoor.php`, connects client sites for scans, fixes and first-party traffic |
 
-There are several ways of editing your application.
+## Repository layout
 
-**Use Lovable**
+```
+src/
+  apps/          Three entry apps: MarketingApp, ClientApp (portal), AdminApp
+  pages/         Route-level pages
+  components/    UI (admin/, client-portal/, ui/ for shadcn)
+  lib/           Shared helpers and API wrappers
+  integrations/  Generated Supabase client and types
+api/             Vercel functions (report PDF render, brand asset render)
+supabase/
+  functions/     Edge functions; _shared/ holds common logic and its unit tests
+  migrations/    SQL migrations, applied in filename order
+scripts/         Build and smoke-test scripts
+wp-plugin/       WordPress plugin source
+public/          Static assets; public/downloads/ is the built plugin zip served to users
+```
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/386f9bdd-c196-42d7-9ef4-0c3f0e56d568) and start prompting.
+`public/downloads/orange-door.php` and the zip must match `wp-plugin/orangedoor.php`.
+A unit test (`_shared/pluginVersion.test.ts`) fails if they drift. After changing the
+plugin, recopy it and rebuild the zip.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Local development
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Requirements: Node 20+, npm, and the Supabase CLI. Deno 2 is needed for edge function tests.
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm ci
+cp .env.example .env     # fill in the Supabase URL and publishable key
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Scripts:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npx tsc --noEmit` | Type check |
+| `npm run check:email-links` | Verifies links used in email templates |
+| `npm run smoke:quick-analysis` | Smoke test for the quick analysis flow |
 
-**Use GitHub Codespaces**
+Edge function tests and type checks (same as CI):
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```sh
+cd supabase/functions
+deno check _shared/*.ts
+deno test --no-check --no-lock --allow-env --allow-read _shared
+```
 
-## What technologies are used for this project?
+## Configuration
 
-This project is built with:
+Frontend variables live in `.env` (see `.env.example`). Never put server secrets there.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Edge function secrets are set with the Supabase CLI:
 
-## How can I deploy this project?
+```sh
+supabase secrets set OPENAI_API_KEY=... RESEND_API_KEY=...
+```
 
-Simply open [Lovable](https://lovable.dev/projects/386f9bdd-c196-42d7-9ef4-0c3f0e56d568) and click on Share -> Publish.
+Main secrets: `OPENAI_API_KEY`, `GROQ_API_KEY`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`,
+`ADMIN_PASSWORD`, `POSTFORME_API_KEY`, `PFM_WEBHOOK_SECRET`, `APOLLO_API_KEY`,
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FACEBOOK_APP_ID/SECRET`,
+`LINKEDIN_CLIENT_ID/SECRET`, `TWITTER_CLIENT_ID/SECRET`, `APP_URL`,
+`CLIENT_PORTAL_URL`, `BRAND_RENDER_SECRET`. Search `Deno.env.get(` under
+`supabase/functions` for the full list. `SUPABASE_SERVICE_ROLE_KEY` only ever exists
+in the edge function environment.
 
-## Can I connect a custom domain to my Lovable project?
+`BRAND_RENDER_SECRET` must also be set as a Vercel env var with the same value.
 
-Yes, you can!
+## Deploying
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- **Frontend and `api/`:** pushed to `main` deploys on Vercel. `vercel-build` bundles the report renderer first.
+- **Migrations:** `supabase db push`, or apply through the Supabase MCP or dashboard.
+- **Edge functions:** `supabase functions deploy <name> ...`. Do not pass `--no-verify-jwt`;
+  `supabase/config.toml` sets JWT verification per function. A change to anything under
+  `_shared/` needs every function that imports it to be redeployed.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Conventions
+
+- All AI calls go through `_shared/ai.ts` (`callAI`, `callAIJson`, `callAIWithTools`). It handles
+  retries, model fallback, run logging and strips em and en dashes from every output.
+- Tier limits and feature gating live in `_shared/tierPolicy.ts`.
+- Client-facing copy must not invent claims; use `NO_FABRICATION_GUARDRAIL` for prompts built from client data.
+- CI (`.github/workflows/ci.yml`) runs tsc, eslint, build, deno check and the shared unit tests.
