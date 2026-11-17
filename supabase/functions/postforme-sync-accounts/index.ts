@@ -1,3 +1,4 @@
+import { completeSocialStepIfConnected } from "../_shared/socialStep.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -221,8 +222,16 @@ serve(async (req) => {
       }
     }
 
+    // One connected account is enough to move onboarding on; don't rely on the
+    // client's browser to report it.
+    let socialStepCompleted = false;
+    if (clientId) {
+      try { socialStepCompleted = await completeSocialStepIfConnected(supabase, clientId); }
+      catch (e) { console.error("completeSocialStepIfConnected failed:", e instanceof Error ? e.message : e); }
+    }
+
     console.log(`Synced ${upsertRows.length} PfM accounts for client=${clientId}`);
-    return json({ synced: upsertRows.length, pruned, accounts: upsertRows });
+    return json({ synced: upsertRows.length, pruned, accounts: upsertRows, social_step_completed: socialStepCompleted });
   } catch (err: unknown) {
     console.error("postforme-sync-accounts error:", err);
     return json({ error: err instanceof Error ? err.message : "Unknown error" }, 500);

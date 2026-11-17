@@ -3,6 +3,7 @@ import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_sha
 import { serviceClient } from "../_shared/supabase.ts";
 import { logAlert, functionErrorAlert } from "../_shared/alerts.ts";
 import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
+import { completeSocialStepIfConnected } from "../_shared/socialStep.ts";
 
 // How long an agent task may sit in "running" before we assume the edge
 // function died mid-job (crash/timeout) and reap it.
@@ -174,13 +175,26 @@ serve(async (req) => {
     // it's a no-op for a workflow that's already consistent.
     const { data: activeWorkflows, error: wfErr } = await supabase
       .from("client_workflows")
-      .select("id")
+      .select("id, client_id")
       .neq("status", "completed");
 
     if (wfErr) throw wfErr;
 
     for (const wf of activeWorkflows ?? []) {
       try {
+        // A connected social account must advance "Connect Social Accounts" even if
+        // the client's browser never reported it (see _shared/socialStep.ts).
+        if (wf.client_id && await completeSocialStepIfConnected(supabase, wf.client_id)) {
+          summary.reconciled_steps++;
+          await logAlert(supabase, {
+            source: "check-stalled-workflows",
+            alertType: "social_step_reconciled",
+            severity: "info",
+            title: "Connect Social Accounts completed by sweep",
+            message: `A social account was connected but the onboarding step never completed; the sweep completed it for workflow ${wf.id}.`,
+            sourceId: wf.id,
+          });
+        }
         const result = await unlockReadySteps(supabase, wf.id);
         if (result.unlocked > 0) {
           summary.reconciled_workflows++;
