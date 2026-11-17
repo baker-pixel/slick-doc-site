@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
+import { loadRecentImageLedger, planCreativeImage, type ImageLedgerEntry } from "../_shared/creativeImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
 import { getClientBrandKit } from "../_shared/brandKit.ts";
 import { checkPipelineAuth } from "../_shared/auth.ts";
@@ -163,6 +163,12 @@ serve(async (req) => {
       ]),
     );
 
+    // Per-client memory of recent image styles/concepts so consecutive images
+    // rotate look and subject instead of repeating one.
+    const ledgerByClient: Record<string, ImageLedgerEntry[]> = Object.fromEntries(
+      await Promise.all(clientIds.map(async (id) => [id, await loadRecentImageLedger(supabase, id)] as const)),
+    );
+
     let filled = 0;
     const failures: { id: string; error: string }[] = [];
 
@@ -172,7 +178,9 @@ serve(async (req) => {
 
       try {
         const imageFeedback = (slot.metadata?.image_feedback as string | undefined)?.trim();
-        const basePrompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+        const ledger = (ledgerByClient[slot.client_account_id] ??= []);
+        const plan = await planCreativeImage(client, { content: slot.content || "", title: slot.title, platform: slot.platform }, ledger);
+        const basePrompt = plan.prompt;
         const prompt = imageFeedback
           ? `${basePrompt}\nThe client rejected the previous image and asked for this change, which must be followed: "${imageFeedback}"`
           : basePrompt;
@@ -181,9 +189,10 @@ serve(async (req) => {
         const { image_feedback: _used, ...keptMeta } = ((slot as any).metadata || {}) as Record<string, unknown>;
         await supabase
           .from("content_calendar")
-          .update({ metadata: { ...keptMeta, image_url: imageUrl } })
+          .update({ metadata: { ...keptMeta, image_url: imageUrl, image_style: plan.styleId, ...(plan.concept ? { image_concept: plan.concept } : {}) } })
           .eq("id", slot.id);
 
+        ledger.unshift({ style: plan.styleId, concept: plan.concept });
         filled++;
         console.log(`Filled image for slot ${slot.id} (${slot.platform})`);
       } catch (e) {

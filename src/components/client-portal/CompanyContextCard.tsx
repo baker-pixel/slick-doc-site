@@ -40,7 +40,12 @@ interface CompanyContext {
 }
 
 const IMAGE_STYLE_OPTIONS = [
+  { id: "phone_snapshot", label: "Phone snapshots" },
   { id: "human_moment", label: "Candid human moments" },
+  { id: "hands_at_work", label: "Hands at work" },
+  { id: "environmental_portrait", label: "Environmental portraits" },
+  { id: "documentary_wide", label: "Documentary wide shots" },
+  { id: "overhead_desk", label: "Lived-in desk shots" },
   { id: "visual_metaphor", label: "Conceptual metaphor" },
   { id: "editorial_illustration", label: "Editorial illustration" },
   { id: "paper_collage", label: "Paper collage" },

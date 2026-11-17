@@ -92,7 +92,7 @@ function isAbstractOffering(client: ImagePromptClient): boolean {
 // which is generic and uninformative on every platform, not just one client.
 const ABSTRACT_SUBJECTS = [
   `the product or report as a clean screen/document mockup, with any on-screen text rendered as soft blurred shapes and color blocks -- never legible words, letters, or numbers. Let the layout itself (chart shapes, data blocks, color-coded sections, a dashboard's structure) visually suggest what their specific offering shows or measures.`,
-  `a premium conceptual 3D/isometric render of the service in action, built from objects and icons drawn from what they specifically do -- no screens, no legible text`,
+  `a grounded conceptual render of the service in action, built from objects and icons drawn from what they specifically do -- no screens, no legible text`,
   `a still-life composed ONLY of real objects, tools, or materials literally tied to their specific work -- considered composition, no screens, no legible text`,
   `an abstract macro/close-up shot of a texture, material, or object drawn from their specific work -- no screens, no legible text`,
   `a wide architectural or environmental shot of the kind of space this specific work happens in, empty of people and screens, evoking their work through setting alone`,
@@ -170,7 +170,7 @@ export function buildSocialImagePrompt(client: ImagePromptClient, post: ImagePro
 
   if (differentiator) details.push(`Subtly reflect what sets them apart: ${differentiator}.`);
   if (audience) details.push(`Made to appeal to ${audience} (aimed at them, not necessarily depicting them).`);
-  details.push(`Mood: ${mood}. Modern, premium, uncluttered.`);
+  details.push(`Mood: ${mood}. Natural and authentic, not glossy or polished.`);
 
   constraints.push(
     `Composition: clean negative space suitable for a text overlay.`,

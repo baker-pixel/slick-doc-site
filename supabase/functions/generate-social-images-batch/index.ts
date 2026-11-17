@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
+import { loadRecentImageLedger, planCreativeImage, type ImageLedgerEntry } from "../_shared/creativeImagePrompt.ts";
 import { buildGptImageRequestBody } from "../_shared/gptImage.ts";
 
 const corsHeaders = {
@@ -91,6 +91,12 @@ serve(async (req) => {
 
     const jsonlLines: string[] = [];
     const includedSlotIds: string[] = [];
+    // Recent image styles/concepts per client, so this batch (and the ones
+    // before it) rotate look and subject instead of repeating one.
+    const ledgerByClient: Record<string, ImageLedgerEntry[]> = Object.fromEntries(
+      await Promise.all(clientIds.map(async (id) => [id, await loadRecentImageLedger(supabase, id as string)] as const)),
+    );
+    const planBySlot: Record<string, { styleId: string; concept: string | null }> = {};
 
     for (const slot of slots) {
       if (!shouldGenerateImage(slot.platform, slot.id)) {
@@ -106,7 +112,11 @@ serve(async (req) => {
       const client = clientMap[slot.client_account_id];
       if (!client) continue;
 
-      const prompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+      const ledger = (ledgerByClient[slot.client_account_id] ??= []);
+      const plan = await planCreativeImage(client, { content: slot.content || "", title: slot.title, platform: slot.platform }, ledger);
+      const prompt = plan.prompt;
+      ledger.unshift({ style: plan.styleId, concept: plan.concept });
+      planBySlot[slot.id] = { styleId: plan.styleId, concept: plan.concept };
 
       jsonlLines.push(JSON.stringify({
         custom_id: slot.id,
@@ -180,6 +190,8 @@ serve(async (req) => {
           metadata: {
             ...((slot as any).metadata || {}),
             image_batch_id: batch.id,
+            ...(planBySlot[slot.id] ? { image_style: planBySlot[slot.id].styleId } : {}),
+            ...(planBySlot[slot.id]?.concept ? { image_concept: planBySlot[slot.id].concept } : {}),
           },
         })
         .eq("id", slot.id);
