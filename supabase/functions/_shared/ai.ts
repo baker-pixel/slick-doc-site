@@ -152,6 +152,27 @@ function logRun(entry: RunLogEntry): void {
     });
 }
 
+/**
+ * Deterministic no-em-dash rule for every AI-written string (social, email
+ * outreach, reports, JSON field values). Prompts alone are not reliable, so
+ * callAI / callAIWithTools run all model output through this. Safe on JSON
+ * (dashes are never structural) and HTML. A dash right after a tag (the
+ * "<p>— Name</p>" sign-off) becomes "-", which outreachPrompt still treats
+ * as a sign-off marker.
+ */
+export function stripDashes(text: string): string {
+  if (!text || !/[\u2014\u2013\u2015]|&mdash;|&ndash;|&#821[15];|&#x201[45];/i.test(text)) return text;
+  return text
+    .replace(/&mdash;|&#8212;|&#x2014;/gi, "\u2014")
+    .replace(/&ndash;|&#8211;|&#x2013;/gi, "\u2013")
+    .replace(/(\d)[ \t]*\u2013[ \t]*(?=\d)/g, "$1-") // 10–20 -> 10-20
+    .replace(/[ \t]*[\u2014\u2013\u2015][ \t]*(?=[.,;:!?)\]])/g, "") // dash before punctuation
+    .replace(/(["'(\[])[ \t]*[\u2014\u2013\u2015][ \t]*/g, "$1") // dash opening a string/bracket
+    .replace(/(^|\n)[ \t]*[\u2014\u2013\u2015][ \t]*/g, "$1") // dash opening a line
+    .replace(/([^\s>])[ \t]*[\u2014\u2013\u2015][ \t]*(?=\S)/g, "$1, ") // mid-sentence
+    .replace(/[\u2014\u2013\u2015]/g, "-"); // anything left, e.g. a sign-off after a tag
+}
+
 export class AIError extends Error {
   status: number | null;
   retryable: boolean;
@@ -433,7 +454,7 @@ export async function callAI(opts: AICallOptions): Promise<string> {
           promptTokens: usage?.prompt_tokens,
           completionTokens: usage?.completion_tokens,
         });
-        return text;
+        return stripDashes(text);
       } catch (e) {
         lastError = e;
         const retryable = e instanceof AIError ? e.retryable : true;
@@ -641,6 +662,7 @@ export async function callAIWithTools(opts: ToolCallOptions): Promise<ToolTurn> 
           source: opts.source, clientId: opts.clientId, promptId: opts.promptId, model, status: "ok", attemptCount: attempts,
           fallbackUsed: mi > 0, latencyMs: Date.now() - started, promptTokens: turn.usage?.prompt_tokens, completionTokens: turn.usage?.completion_tokens,
         });
+        if (turn.content) turn.content = stripDashes(turn.content);
         return turn;
       } catch (e) {
         lastError = e;
