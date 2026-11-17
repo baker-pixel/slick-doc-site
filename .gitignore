@@ -4,6 +4,7 @@
 .env.production
 
 # Internal tooling
+.code-review-graph/
 .agents/
 .claude/
 .windsurf/
@@ -39,3 +40,7 @@ dist-ssr
 *.sw?
 .vercel
 api/_reportRenderer.generated.mjs
+
+# Build / test output
+coverage
+*.tsbuildinfo

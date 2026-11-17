@@ -70,8 +70,8 @@ serve(async (req) => {
     }
 
     // Prefer explicit portalOrigin; fall back to env var; fall back to request origin
-    // Only trust an origin on our own domain (or localhost for dev) -- a request from the old
-    // Lovable preview host would otherwise bake slick-doc-site.lovable.app into the invite email.
+    // Only trust an origin on our own domain (or localhost for dev) -- a request from a
+    // preview or legacy host would otherwise bake that hostname into the invite email.
     const DEFAULT_PORTAL = "https://client.orangedoormarketing.com";
     const trusted = (o?: string | null) => {
       if (!o) return null;
