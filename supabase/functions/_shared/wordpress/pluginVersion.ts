@@ -1,5 +1,5 @@
 // The newest Orange Door WordPress plugin version we ship. Three places must
-// agree (pluginVersion.test.ts fails if they drift):
+// agree:
 //   * wp-plugin/orangedoor.php   -> "Version:" header and OD_PLUGIN_VERSION
 //   * this file                  -> LATEST_PLUGIN_VERSION
 //   * src/lib/pluginVersion.ts   -> LATEST_PLUGIN_VERSION (the portal's copy)

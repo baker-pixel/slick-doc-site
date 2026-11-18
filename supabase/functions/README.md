@@ -20,13 +20,6 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 | `steward/` | Goal-driven per-client steward agents (gate, loop, proposals, run, SEO actions) and their tools |
 | `mcp/` | MCP server and token auth |
 
-Unit tests sit next to the code they cover (`*.test.ts`). Run them with:
-
-```sh
-cd supabase/functions
-deno test --no-check --no-lock --allow-env --allow-read _shared
-```
-
 ## Index
 
 **Auth and access**
