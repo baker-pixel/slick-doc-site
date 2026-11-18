@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-import { deletePfmAccounts, listPfmAccountsForClient } from "../_shared/pfmCleanup.ts";
+import { deletePfmAccounts, listPfmAccountsForClient } from "../_shared/social/pfmCleanup.ts";
 
 const PFM_API = "https://api.postforme.dev";
 

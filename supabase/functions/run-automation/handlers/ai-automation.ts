@@ -1,12 +1,12 @@
 import type { ClientData } from "../types.ts";
 import { createDeliverable, formatDate } from "../shared.ts";
-import { callAI, extractJson } from "../../_shared/ai.ts";
-import { getClientBrandKit, brandKitToPromptBlock } from "../../_shared/brandKit.ts";
+import { callAI, extractJson } from "../../_shared/ai/ai.ts";
+import { getClientBrandKit, brandKitToPromptBlock } from "../../_shared/client/brandKit.ts";
 import {
   getRecentContentFeedback, feedbackToPromptBlock,
   getRecentApprovedContent, approvedContentToPromptBlock,
-} from "../../_shared/contentFeedback.ts";
-import { critiqueContentBatch, qaNeedsAttention, type QaVerdict } from "../../_shared/contentQa.ts";
+} from "../../_shared/social/contentFeedback.ts";
+import { critiqueContentBatch, qaNeedsAttention, type QaVerdict } from "../../_shared/social/contentQa.ts";
 
 const BRAND_VOICE_JOB_TYPES = new Set(["content_generation", "email_sequence"]);
 

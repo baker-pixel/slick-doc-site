@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getClientIp } from "../_shared/rateLimit.ts";
+import { getClientIp } from "../_shared/core/rateLimit.ts";
 import {
   isBotUserAgent,
   localDay,
@@ -9,7 +9,7 @@ import {
   referrerHost,
   visitorHash,
   WindowCounter,
-} from "../_shared/trafficIngest.ts";
+} from "../_shared/wordpress/trafficIngest.ts";
 
 // Public beacon endpoint for the WordPress plugin's footer script (v1.3.0+).
 // No JWT: it's called from strangers' browsers. It is gated by the site's

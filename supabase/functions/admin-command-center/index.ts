@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 import {
   buildAttention, CRON_INFO, cronHealth, describeSchedule, headline, JOBS, nextRun, plainResult, titleCase, type JobDef,
-} from "../_shared/commandCenter.ts";
+} from "../_shared/client/commandCenter.ts";
 
 // Admin Command Center backend.
 //   { action: "overview" }                         -> everything the page shows

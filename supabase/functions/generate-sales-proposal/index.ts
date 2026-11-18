@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 interface RequestBody {
   businessName: string;

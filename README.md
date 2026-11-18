@@ -10,7 +10,7 @@ agentic back end that runs SEO, prospecting, social and reporting for each clien
 | Frontend | React 18, Vite, TypeScript, Tailwind, shadcn/ui |
 | Backend | Supabase (Postgres, Auth, Storage, Edge Functions on Deno, pg_cron) |
 | Hosting | Vercel (static app plus `api/` functions for PDF and brand rendering) |
-| AI | OpenAI (primary) with Groq gpt-oss fallback, via `supabase/functions/_shared/ai.ts` |
+| AI | OpenAI (primary) with Groq gpt-oss fallback, via `supabase/functions/_shared/ai/ai.ts` |
 | Email | Resend (webhook for replies), optional per-client SMTP |
 | Social publishing | Post for Me, plus direct Facebook, LinkedIn and X OAuth |
 | Billing | Stripe |
@@ -35,7 +35,7 @@ public/          Static assets; public/downloads/ is the built plugin zip served
 ```
 
 `public/downloads/orange-door.php` and the zip must match `wp-plugin/orangedoor.php`.
-A unit test (`_shared/pluginVersion.test.ts`) fails if they drift. After changing the
+A unit test (`_shared/wordpress/pluginVersion.test.ts`) fails if they drift. After changing the
 plugin, recopy it and rebuild the zip.
 
 ## Local development
@@ -97,8 +97,8 @@ in the edge function environment.
 
 ## Conventions
 
-- All AI calls go through `_shared/ai.ts` (`callAI`, `callAIJson`, `callAIWithTools`). It handles
+- All AI calls go through `_shared/ai/ai.ts` (`callAI`, `callAIJson`, `callAIWithTools`). It handles
   retries, model fallback, run logging and strips em and en dashes from every output.
-- Tier limits and feature gating live in `_shared/tierPolicy.ts`.
+- Tier limits and feature gating live in `_shared/billing/tierPolicy.ts`.
 - Client-facing copy must not invent claims; use `NO_FABRICATION_GUARDRAIL` for prompts built from client data.
 - CI (`.github/workflows/ci.yml`) runs tsc, eslint, build, deno check and the shared unit tests.

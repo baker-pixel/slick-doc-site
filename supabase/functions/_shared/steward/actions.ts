@@ -2,8 +2,8 @@
 // What a steward may DO, as opposed to read. Every action is either truly
 // executable by code here, or explicitly advisory (a person carries it out and
 // approval just records the decision). Nothing in this file pretends to act.
-import type { InputSchema } from "../toolSchema.ts";
-import type { Engine } from "../clientContext.ts";
+import type { InputSchema } from "../core/toolSchema.ts";
+import type { Engine } from "../client/clientContext.ts";
 
 export interface ExecEnv { supabase: any; clientId: string; proposalId: string }
 

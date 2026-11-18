@@ -1,6 +1,6 @@
 import type { ClientData } from "../types.ts";
 import { createDeliverable, formatDate } from "../shared.ts";
-import { callAIJson } from "../../_shared/ai.ts";
+import { callAIJson } from "../../_shared/ai/ai.ts";
 
 export async function runKeywordGapAnalysis(supabase: any, client: ClientData) {
   const { data: competitors } = await supabase

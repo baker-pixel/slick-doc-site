@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/brandKit.ts";
-import { callAIJson } from "../_shared/ai.ts";
-import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
-import { fetchHtml, parseOnPage } from "../_shared/seoSignals.ts";
-import { filenameHint } from "../_shared/wpSite.ts";
+import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/client/brandKit.ts";
+import { callAIJson } from "../_shared/ai/ai.ts";
+import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { unlockReadySteps } from "../_shared/client/workflowUnlock.ts";
+import { fetchHtml, parseOnPage } from "../_shared/seo/seoSignals.ts";
+import { filenameHint } from "../_shared/wordpress/wpSite.ts";
 
 // wp_fix_queue's field names -> the canonical seo-audit finding types that
 // cover the same underlying WordPress field. Where the canonical engine

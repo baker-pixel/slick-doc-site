@@ -1,4 +1,4 @@
-import { callAI, extractJson } from "../_shared/ai.ts";
+import { callAI, extractJson } from "../_shared/ai/ai.ts";
 
 // Helper to create a deliverable
 export async function createDeliverable(

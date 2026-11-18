@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 // Real data aggregation, not an AI call: pulls this client's earliest vs.
 // most recent SEO audit score and turns it into a before/after comparison.

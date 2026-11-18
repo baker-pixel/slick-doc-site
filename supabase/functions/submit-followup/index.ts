@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { handleOptions, jsonResponse } from "../_shared/http.ts";
-import { fullOverallScore, scoreFollowUp, validateAnswers } from "../_shared/followUp.ts";
-import { recommendTier } from "../_shared/systemTier.ts";
+import { handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { fullOverallScore, scoreFollowUp, validateAnswers } from "../_shared/outreach/followUp.ts";
+import { recommendTier } from "../_shared/billing/systemTier.ts";
 
 // Second step of the free scan. The visitor's own report token (a random UUID only they hold,
 // from the scan result / emailed link) authorises saving their answers. Answers are fixed

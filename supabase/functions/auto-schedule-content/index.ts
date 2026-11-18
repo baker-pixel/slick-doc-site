@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { filterEngagedClients } from "../_shared/engagedClients.ts";
-import { hasBusinessContext } from "../_shared/businessContext.ts";
-import { isBudgetCapped, trimToBudget, windowBudget } from "../_shared/socialBudget.ts";
-import { allocateCounts, earliestNewSlot, remainingSlots, windowQuota } from "../_shared/channelPlan.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { filterEngagedClients } from "../_shared/client/engagedClients.ts";
+import { hasBusinessContext } from "../_shared/client/businessContext.ts";
+import { isBudgetCapped, trimToBudget, windowBudget } from "../_shared/social/socialBudget.ts";
+import { allocateCounts, earliestNewSlot, remainingSlots, windowQuota } from "../_shared/social/channelPlan.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

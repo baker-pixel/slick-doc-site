@@ -2,7 +2,7 @@
 import { assert, assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
 import { runSteward, slotKey, startOfUtcDay } from "./run.ts";
 import type { ModelTurn } from "./loop.ts";
-import { fakeDb, seq } from "../testDb.ts";
+import { fakeDb, seq } from "../core/testDb.ts";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const clientRow = { id: C, status: "active", paused_for_billing: false, business_name: "Acme", industry: "roofing", tier: "growth" };

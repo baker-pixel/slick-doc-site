@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { generateVisibilityPrompts, probeOpenAI, probeClaude } from "../_shared/aiVisibilityProbe.ts";
-import { logAlert } from "../_shared/alerts.ts";
-import { dueForRegen } from "../_shared/billingPeriod.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { generateVisibilityPrompts, probeOpenAI, probeClaude } from "../_shared/seo/aiVisibilityProbe.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
+import { dueForRegen } from "../_shared/billing/billingPeriod.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
 
 // Cron now runs daily (see migration 20260921120000) instead of firing every
 // client on the calendar 1st. Each client is only actually probed once

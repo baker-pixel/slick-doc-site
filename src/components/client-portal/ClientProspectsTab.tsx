@@ -65,7 +65,7 @@ interface SequenceStep {
 }
 
 // Mirrors the step briefs run-prospect-drip actually writes into each
-// prospect's email (COLD_BRIEFS in _shared/outreachPrompt.ts) -- client-facing
+// prospect's email (COLD_BRIEFS in _shared/outreach/outreachPrompt.ts) -- client-facing
 // summaries of the same four goals, not the raw AI prompt.
 const SEQUENCE_STEP_LABELS: Record<number, { title: string; description: string }> = {
   1: { title: "Introduction", description: "A short, plain note on who you are and what you do, based on your Verified Facts." },

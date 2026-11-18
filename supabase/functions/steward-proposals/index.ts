@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 import { decideProposal } from "../_shared/steward/proposals.ts";
 
 // Admin-only: list steward proposals and approve or reject them. Approving an

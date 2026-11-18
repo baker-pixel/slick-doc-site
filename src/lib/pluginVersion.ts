@@ -1,5 +1,5 @@
-// Portal copy of supabase/functions/_shared/pluginVersion.ts. Keep the three in
-// sync with the plugin header; supabase/functions/_shared/pluginVersion.test.ts
+// Portal copy of supabase/functions/_shared/wordpress/pluginVersion.ts. Keep the three in
+// sync with the plugin header; supabase/functions/_shared/wordpress/pluginVersion.test.ts
 // fails when they drift.
 export const LATEST_PLUGIN_VERSION = "1.3.0";
 export const PLUGIN_DOWNLOAD_URL = "/downloads/orange-door.zip";

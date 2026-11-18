@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { syncClientAccountFromSubmission } from "../_shared/onboardingContext.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { syncClientAccountFromSubmission } from "../_shared/client/onboardingContext.ts";
 
 // Called right after a gap-analysis submit. Ties the submission to an
 // existing client_accounts row (context_profile + intake_completed_at) via

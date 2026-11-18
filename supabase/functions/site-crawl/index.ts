@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkAdminAuth, checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { enqueueAuditForCrawl, enqueueProfileForCrawl, queueCrawl } from "../_shared/crawler/queue.ts";
-import { buildCrawlStatus, buildProfileDetail } from "../_shared/crawler/status.ts";
+import { handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkAdminAuth, checkClientOrAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { enqueueAuditForCrawl, enqueueProfileForCrawl, queueCrawl } from "../_shared/seo/crawler/queue.ts";
+import { buildCrawlStatus, buildProfileDetail } from "../_shared/seo/crawler/status.ts";
 
 // Start, watch and cancel a full-site crawl. Starting only queues the job: the worker
 // (process-site-crawl) does the work in the background, and `status` is what the

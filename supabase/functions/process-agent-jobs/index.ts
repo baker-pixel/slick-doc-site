@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { logAlert, functionErrorAlert } from "../_shared/alerts.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { logAlert, functionErrorAlert } from "../_shared/client/alerts.ts";
 
 // Worker for the agent_jobs durable queue (Phase 4). Replaces advance-workflow's
 // fire-and-forget `fetch(...).catch(log)` dispatch: a dropped/failed call used

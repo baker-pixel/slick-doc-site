@@ -4,8 +4,8 @@
 // token and time limits, argument validation, duplicate suppression, and what
 // happens to each action (via deps.submit, which applies the autonomy gate).
 // All I/O arrives through deps, so the loop is tested with a scripted model.
-import type { ToolCall, ToolChatMessage } from "../ai.ts";
-import { type InputSchema, validateArgs } from "../toolSchema.ts";
+import type { ToolCall, ToolChatMessage } from "../ai/ai.ts";
+import { type InputSchema, validateArgs } from "../core/toolSchema.ts";
 import type { ActionDef } from "./actions.ts";
 
 export interface ReadTool {

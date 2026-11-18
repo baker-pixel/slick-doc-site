@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { refineClientContext } from "../_shared/contextRefine.ts";
-import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/socialStrategy.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { refreshProspectProject } from "../_shared/prospectProject.ts";
-import { filterEngagedClients } from "../_shared/engagedClients.ts";
-import { dueForRegen } from "../_shared/billingPeriod.ts";
+import { refineClientContext } from "../_shared/client/contextRefine.ts";
+import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
+import { filterEngagedClients } from "../_shared/client/engagedClients.ts";
+import { dueForRegen } from "../_shared/billing/billingPeriod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

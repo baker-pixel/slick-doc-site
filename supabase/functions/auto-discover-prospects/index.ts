@@ -1,11 +1,11 @@
-import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
+import { clientIdsWithMailbox } from "../_shared/outreach/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { logAlert } from "../_shared/alerts.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
 
 // Daily cron: keeps every client's prospect pipeline topped up without any
 // admin or client action. For each active client on a prospecting-enabled

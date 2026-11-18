@@ -1,17 +1,17 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { logAlert } from "../_shared/alerts.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { hasBusinessContext } from "../_shared/businessContext.ts";
-import { refineClientContext } from "../_shared/contextRefine.ts";
-import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
-import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
-import { ensureClientICP, nextDiscoveryFocus, previousDiscoveryFocuses } from "../_shared/icp.ts";
-import { recordOutcome } from "../_shared/outcomes.ts";
-import { sendFirstCycleReadyEmail } from "../_shared/cycleEmail.ts";
-import { collectRecentTopics } from "../_shared/topicLedger.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { hasBusinessContext } from "../_shared/client/businessContext.ts";
+import { refineClientContext } from "../_shared/client/contextRefine.ts";
+import { upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
+import { clientIdsWithMailbox } from "../_shared/outreach/outreachMailbox.ts";
+import { ensureClientICP, nextDiscoveryFocus, previousDiscoveryFocuses } from "../_shared/outreach/icp.ts";
+import { recordOutcome } from "../_shared/client/outcomes.ts";
+import { sendFirstCycleReadyEmail } from "../_shared/client/cycleEmail.ts";
+import { collectRecentTopics } from "../_shared/social/topicLedger.ts";
 import {
   closeCycle,
   isRetryableSkip,
@@ -24,7 +24,7 @@ import {
   openCycle,
   planIssues,
   sweepWindow,
-} from "../_shared/cycle.ts";
+} from "../_shared/client/cycle.ts";
 
 // Cycle rollover. A cycle is one paid billing period. When an invoice is paid
 // (stripe-webhook) or the daily sweep notices a paid period with no cycle:

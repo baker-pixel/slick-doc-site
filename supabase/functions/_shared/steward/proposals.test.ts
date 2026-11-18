@@ -2,7 +2,7 @@
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.190.0/testing/asserts.ts";
 import { decideProposal, runProposal, submitAction } from "./proposals.ts";
 import { findAction } from "./actions.ts";
-import { fakeDb, seq } from "../testDb.ts";
+import { fakeDb, seq } from "../core/testDb.ts";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";

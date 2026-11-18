@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
-import { generateGptImage, persistGeneratedImage } from "../_shared/gptImage.ts";
-import { getClientBrandKit } from "../_shared/brandKit.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import type { OverlayBrand } from "../_shared/imageOverlay.ts";
+import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
+import { buildCreativeImagePrompt } from "../_shared/social/creativeImagePrompt.ts";
+import { generateGptImage, persistGeneratedImage } from "../_shared/ai/gptImage.ts";
+import { getClientBrandKit } from "../_shared/client/brandKit.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import type { OverlayBrand } from "../_shared/social/imageOverlay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

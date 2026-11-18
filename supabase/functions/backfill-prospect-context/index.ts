@@ -1,12 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { checkInternalSecret, isServiceRequest } from "../_shared/auth.ts";
+import { checkInternalSecret, isServiceRequest } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/icp.ts";
-import { getConversionWins } from "../_shared/outcomes.ts";
-import { gateVerdict, isDroppable, minFitFor, normalizeUrl } from "../_shared/prospectGate.ts";
-import { AUTO_APPROVED_BY, selectForAutoApproval, type AutoApproveCandidate } from "../_shared/autoApprove.ts";
-import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { ensureClientICP, scoreProspectFit, type ClientICP } from "../_shared/outreach/icp.ts";
+import { getConversionWins } from "../_shared/client/outcomes.ts";
+import { gateVerdict, isDroppable, minFitFor, normalizeUrl } from "../_shared/outreach/prospectGate.ts";
+import { AUTO_APPROVED_BY, selectForAutoApproval, type AutoApproveCandidate } from "../_shared/outreach/autoApprove.ts";
+import { clientIdsWithMailbox } from "../_shared/outreach/outreachMailbox.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -475,7 +475,7 @@ serve(async (req: Request) => {
     // Promote leads that are scored, enriched and emailed straight into the
     // outreach funnel (status "pending", which run-prospect-drip moves to
     // nurture and drafts at its next hourly run). Replaces the manual review
-    // queue; the rules and their reasons live in _shared/autoApprove.ts. Runs
+    // queue; the rules and their reasons live in _shared/outreach/autoApprove.ts. Runs
     // last so a lead scored or emailed earlier in this same pass is approved
     // in the same pass. A failure here must not fail enrichment.
     let autoApproved = 0;

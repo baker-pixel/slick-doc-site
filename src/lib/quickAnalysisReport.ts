@@ -48,8 +48,8 @@ export const LOCKED_SYSTEM_CATEGORIES: { label: string; reason: string }[] = [
   { label: "Transaction Activation", reason: "Answer a few quick questions to unlock this. Response time and close rate aren't visible from a website scan." },
 ];
 
-// One shared rule (see supabase/functions/_shared/systemTier.ts) so the scan, the email and the stored lead agree.
-export { recommendTier as getTier, tierLabel as getTierLabel, tierColor as getTierColor } from "../../supabase/functions/_shared/systemTier";
+// One shared rule (see supabase/functions/_shared/billing/systemTier.ts) so the scan, the email and the stored lead agree.
+export { recommendTier as getTier, tierLabel as getTierLabel, tierColor as getTierColor } from "../../supabase/functions/_shared/billing/systemTier";
 
 export const buildStrengths = (r: AnalysisResult): string[] =>
   (r.detectedStrengths?.length ? r.detectedStrengths : r.seo.findings).slice(0, 4);

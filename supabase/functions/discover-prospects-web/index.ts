@@ -1,18 +1,18 @@
-import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMailbox.ts";
+import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreach/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/icp.ts";
-import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/discoveryRotation.ts";
-import { filterProspectCandidates } from "../_shared/prospectFilter.ts";
-import { resolveDiscoveryCampaign } from "../_shared/campaignScope.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { logActivity } from "../_shared/activityLog.ts";
-import { refreshProspectProject } from "../_shared/prospectProject.ts";
-import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
-import { insertNewProspects } from "../_shared/prospectInsert.ts";
-import { runInBackground } from "../_shared/background.ts";
-import { SEEN_MEMORY_DAYS } from "../_shared/prospectGate.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/outreach/icp.ts";
+import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/outreach/discoveryRotation.ts";
+import { filterProspectCandidates } from "../_shared/outreach/prospectFilter.ts";
+import { resolveDiscoveryCampaign } from "../_shared/outreach/campaignScope.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
+import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
+import { insertNewProspects } from "../_shared/outreach/prospectInsert.ts";
+import { runInBackground } from "../_shared/core/background.ts";
+import { SEEN_MEMORY_DAYS } from "../_shared/outreach/prospectGate.ts";
 
 // See discover-prospects.ts for why this only applies to client callers.
 const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;

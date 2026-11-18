@@ -1,8 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
-import { logActivity } from "../_shared/activityLog.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 

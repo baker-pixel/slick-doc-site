@@ -9,4 +9,4 @@ export {
   type FollowUpAnswers,
   type FollowUpQuestion,
   type FollowUpScores,
-} from "../../supabase/functions/_shared/followUp";
+} from "../../supabase/functions/_shared/outreach/followUp";

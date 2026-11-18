@@ -16,7 +16,7 @@ export interface InsightProspect {
 // pauses a client once this many leads wait for review.
 export const DISCOVERY_HOUR_UTC = 9;
 export const REVIEW_QUEUE_CEILING = 40;
-// supabase/functions/_shared/tierPolicy.ts (prospect.*). Keep in sync.
+// supabase/functions/_shared/billing/tierPolicy.ts (prospect.*). Keep in sync.
 export const PROSPECT_TIER_POLICY: Record<string, { enabled: boolean; discoveryBatch: number; dailySendCap: number }> = {
   foundation: { enabled: false, discoveryBatch: 0, dailySendCap: 0 },
   growth: { enabled: true, discoveryBatch: 10, dailySendCap: 40 },

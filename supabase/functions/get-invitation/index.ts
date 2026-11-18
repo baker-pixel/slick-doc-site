@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
 
 // Public lookup of ONE open invitation by its secret token, for the accept-
 // invite screen (the visitor has no session yet). Replaces a public RLS

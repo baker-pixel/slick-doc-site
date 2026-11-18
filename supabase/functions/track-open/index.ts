@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { markProspectEngagement } from "../_shared/prospectEngagement.ts";
+import { markProspectEngagement } from "../_shared/outreach/prospectEngagement.ts";
 
 // 1x1 transparent GIF
 const TRACKING_PIXEL = new Uint8Array([

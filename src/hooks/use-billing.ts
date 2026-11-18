@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { toast } from "@/hooks/use-toast";
 
-// Keep in sync with GRACE_DAYS in supabase/functions/_shared/billingGate.ts.
+// Keep in sync with GRACE_DAYS in supabase/functions/_shared/billing/billingGate.ts.
 export const BILLING_GRACE_DAYS = 2;
 
 export interface BillingState {

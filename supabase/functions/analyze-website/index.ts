@@ -1,14 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
-import { parseOnPage } from "../_shared/seoSignals.ts";
-import { auditWebsiteDetailed, AUDIT_FAILURE_MESSAGES } from "../_shared/websiteAudit.ts";
-import { checkScanRateLimit } from "../_shared/scanRateLimit.ts";
-import { isPublicHttpUrl } from "../_shared/urlSafety.ts";
-import { recommendTier } from "../_shared/systemTier.ts";
-import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/systemSignals.ts";
-import { SCAN_SCORE_VERSION, scoreConversion, scoreSearchAndTechnical } from "../_shared/scanScore.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAIJson, AIError, NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
+import { parseOnPage } from "../_shared/seo/seoSignals.ts";
+import { auditWebsiteDetailed, AUDIT_FAILURE_MESSAGES } from "../_shared/seo/websiteAudit.ts";
+import { checkScanRateLimit } from "../_shared/core/scanRateLimit.ts";
+import { isPublicHttpUrl } from "../_shared/core/urlSafety.ts";
+import { recommendTier } from "../_shared/billing/systemTier.ts";
+import { scoreEngagementRetention, scoreMetricsImprovement } from "../_shared/client/systemSignals.ts";
+import { SCAN_SCORE_VERSION, scoreConversion, scoreSearchAndTechnical } from "../_shared/seo/scanScore.ts";
 
 
 function measuredSummary(m: ReturnType<typeof scoreSearchAndTechnical>, c: ReturnType<typeof scoreConversion>): string {

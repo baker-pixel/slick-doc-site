@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { applyPfmResult, type PfmPostResult } from "../_shared/pfmResult.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { applyPfmResult, type PfmPostResult } from "../_shared/social/pfmResult.ts";
 
 // publish-post marks a row "published" the moment Post for Me accepts it, but
 // the platform (Facebook, LinkedIn...) can still reject it afterwards -- e.g. a

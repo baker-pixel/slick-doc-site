@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { ENGINES, type Engine } from "../_shared/clientContext.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { ENGINES, type Engine } from "../_shared/client/clientContext.ts";
 import { runSteward, type Trigger } from "../_shared/steward/run.ts";
 
 // Wakes one steward (one client x one engine) for a single bounded run.

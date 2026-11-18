@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

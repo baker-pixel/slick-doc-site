@@ -1,4 +1,4 @@
-import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMailbox.ts";
+import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreach/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -8,16 +8,16 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { logActivity } from "../_shared/activityLog.ts";
-import { refreshProspectProject } from "../_shared/prospectProject.ts";
-import { ensureClientICP, previousDiscoveryQueries, suggestDiscoveryQueries } from "../_shared/icp.ts";
-import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
-import { insertNewProspects } from "../_shared/prospectInsert.ts";
-import { resolveDiscoveryCampaign } from "../_shared/campaignScope.ts";
-import { logAlert } from "../_shared/alerts.ts";
-import { runInBackground } from "../_shared/background.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
+import { ensureClientICP, previousDiscoveryQueries, suggestDiscoveryQueries } from "../_shared/outreach/icp.ts";
+import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
+import { insertNewProspects } from "../_shared/outreach/prospectInsert.ts";
+import { resolveDiscoveryCampaign } from "../_shared/outreach/campaignScope.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
+import { runInBackground } from "../_shared/core/background.ts";
 
 // Client-portal callers can self-serve discovery ("Find leads now"), but
 // with no per-click cost control that's an open tap on billed Maps/OpenAI

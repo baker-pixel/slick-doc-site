@@ -5,7 +5,7 @@ import {
   normalizeSiteUrl,
   pluginAcceptsToken,
   siteUrlVariants,
-} from "../_shared/wpSite.ts";
+} from "../_shared/wordpress/wpSite.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

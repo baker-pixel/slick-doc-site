@@ -41,7 +41,7 @@ jobs:
 
       - name: Type check shared modules (blocking)
         working-directory: supabase/functions
-        run: deno check _shared/*.ts
+        run: deno check $(find _shared -name "*.ts" | sort)
 
       # Unit tests for shared edge-function logic (billing, drip schedule,
       # approvals, steward gates, alert dedupe...) and the frontend error

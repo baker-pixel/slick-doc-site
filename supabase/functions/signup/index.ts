@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { checkRateLimit, getClientIp } from "../_shared/rateLimit.ts";
-import { createCheckoutSession } from "../_shared/stripeCheckout.ts";
-import type { PlanTier } from "../_shared/stripe.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { checkRateLimit, getClientIp } from "../_shared/core/rateLimit.ts";
+import { createCheckoutSession } from "../_shared/billing/stripeCheckout.ts";
+import type { PlanTier } from "../_shared/billing/stripe.ts";
 
 // Public, unauthenticated self-serve signup. Creates a *pending* client
 // account -- it does not seed the onboarding workflow, generate projects,
