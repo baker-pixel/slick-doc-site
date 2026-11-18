@@ -3,7 +3,7 @@
 // the gate decides whether it is only recorded, waits for a person, or runs.
 // Whoever runs it first must win an atomic claim on the row, so an approval
 // click and an auto-run can never both execute the same action.
-import { validateArgs } from "../toolSchema.ts";
+import { validateArgs } from "../core/toolSchema.ts";
 import { type ActionDef, findAction } from "./actions.ts";
 import { type Autonomy, dispositionFor } from "./gate.ts";
 

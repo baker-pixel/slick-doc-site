@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { corsHeaders, jsonResponse } from "../_shared/http.ts";
-import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreachMailbox.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { logActivity } from "../_shared/activityLog.ts";
-import { refreshProspectProject } from "../_shared/prospectProject.ts";
-import { recentDiscoveryRun } from "../_shared/discoveryCooldown.ts";
-import { validateCampaignInput } from "../_shared/campaignInput.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { corsHeaders, jsonResponse } from "../_shared/core/http.ts";
+import { clientIdsWithMailbox, NO_MAILBOX_MESSAGE } from "../_shared/outreach/outreachMailbox.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
+import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
+import { validateCampaignInput } from "../_shared/outreach/campaignInput.ts";
 import {
   assignWebsites,
   buildLeads,
@@ -20,7 +20,7 @@ import {
   MAX_IMPORT_BYTES,
   MAX_IMPORT_ROWS,
   parseCsv,
-} from "../_shared/leadImport.ts";
+} from "../_shared/outreach/leadImport.ts";
 
 // Campaigns: a named batch of prospects with a topic, from an uploaded CSV
 // (kind csv_list) or from AI lead discovery (kind discovery).

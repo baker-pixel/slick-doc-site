@@ -69,7 +69,7 @@ function normalizePlatform(platform: string | null): PreviewPlatform {
   return "other";
 }
 
-// Mirrors shouldGenerateImage in supabase/functions/_shared/socialImagePrompt.ts:
+// Mirrors shouldGenerateImage in supabase/functions/_shared/social/socialImagePrompt.ts:
 // Instagram always gets an image, the other social platforms every other post
 // (decided by the calendar row's id). Keep the two in step.
 function imageExpected(calendarId: string, platform: string | null): boolean {

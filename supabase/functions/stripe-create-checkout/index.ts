@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { createCheckoutSession, VALID_TIERS } from "../_shared/stripeCheckout.ts";
-import type { PlanTier } from "../_shared/stripe.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { createCheckoutSession, VALID_TIERS } from "../_shared/billing/stripeCheckout.ts";
+import type { PlanTier } from "../_shared/billing/stripe.ts";
 
 // Starts a Stripe Checkout for an existing account (portal "Subscribe" button,
 // or an admin sending a link). New signups get their session from `signup`.

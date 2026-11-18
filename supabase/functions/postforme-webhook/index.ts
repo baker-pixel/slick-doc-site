@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { applyPfmResult, type PfmPostResult } from "../_shared/pfmResult.ts";
+import { applyPfmResult, type PfmPostResult } from "../_shared/social/pfmResult.ts";
 
 // Receives Post for Me webhook events. Register in the PfM dashboard:
 //   URL:    https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1/postforme-webhook

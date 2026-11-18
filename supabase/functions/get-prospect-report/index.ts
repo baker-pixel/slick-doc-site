@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, handleOptions, jsonResponse } from "../_shared/http.ts";
+import { corsHeaders, handleOptions, jsonResponse } from "../_shared/core/http.ts";
 
 // Public lookup for the online Quick Analysis report (/quick-report/:token).
 // Returns only what the report page renders -- never the prospect's email,

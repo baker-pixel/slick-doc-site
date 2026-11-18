@@ -7,4 +7,4 @@ export {
   GAP_SCORE_VERSION,
   type SystemScore,
   type SystemScorecard,
-} from "../../supabase/functions/_shared/gapScore";
+} from "../../supabase/functions/_shared/seo/gapScore";

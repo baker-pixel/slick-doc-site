@@ -10,7 +10,7 @@ agentic back end that runs SEO, prospecting, social and reporting for each clien
 | Frontend | React 18, Vite, TypeScript, Tailwind, shadcn/ui |
 | Backend | Supabase (Postgres, Auth, Storage, Edge Functions on Deno, pg_cron) |
 | Hosting | Vercel (static app plus `api/` functions for PDF and brand rendering) |
-| AI | OpenAI (primary) with Groq gpt-oss fallback, via `supabase/functions/_shared/ai.ts` |
+| AI | OpenAI (primary) with Groq gpt-oss fallback, via `supabase/functions/_shared/ai/ai.ts` |
 | Email | Resend (webhook for replies), optional per-client SMTP |
 | Social publishing | Post for Me, plus direct Facebook, LinkedIn and X OAuth |
 | Billing | Stripe |
@@ -21,13 +21,14 @@ agentic back end that runs SEO, prospecting, social and reporting for each clien
 ```
 src/
   apps/          Three entry apps: MarketingApp, ClientApp (portal), AdminApp
-  pages/         Route-level pages
+  pages/         Route-level pages, grouped by app: marketing/, portal/, admin/
   components/    UI (admin/, client-portal/, ui/ for shadcn)
   lib/           Shared helpers and API wrappers
   integrations/  Generated Supabase client and types
 api/             Vercel functions (report PDF render, brand asset render)
 supabase/
-  functions/     Edge functions; _shared/ holds common logic and its unit tests
+  functions/     Edge functions (index in functions/README.md); _shared/ holds common logic
+                 grouped by domain (billing, outreach, social, seo, ...)
   migrations/    SQL migrations, applied in filename order
 scripts/         Build and smoke-test scripts
 wp-plugin/       WordPress plugin source
@@ -35,12 +36,12 @@ public/          Static assets; public/downloads/ is the built plugin zip served
 ```
 
 `public/downloads/orange-door.php` and the zip must match `wp-plugin/orangedoor.php`.
-A unit test (`_shared/pluginVersion.test.ts`) fails if they drift. After changing the
-plugin, recopy it and rebuild the zip.
+Nothing checks that they match automatically, so after changing the plugin, recopy it and
+rebuild the zip.
 
 ## Local development
 
-Requirements: Node 20+, npm, and the Supabase CLI. Deno 2 is needed for edge function tests.
+Requirements: Node 20+, npm, and the Supabase CLI. Deno 2 is needed to type check edge functions.
 
 ```sh
 npm ci
@@ -59,12 +60,11 @@ Scripts:
 | `npm run check:email-links` | Verifies links used in email templates |
 | `npm run smoke:quick-analysis` | Smoke test for the quick analysis flow |
 
-Edge function tests and type checks (same as CI):
+Edge function type check (same as CI):
 
 ```sh
 cd supabase/functions
-deno check _shared/*.ts
-deno test --no-check --no-lock --allow-env --allow-read _shared
+deno check $(find _shared -name "*.ts" | sort)
 ```
 
 ## Configuration
@@ -97,8 +97,8 @@ in the edge function environment.
 
 ## Conventions
 
-- All AI calls go through `_shared/ai.ts` (`callAI`, `callAIJson`, `callAIWithTools`). It handles
+- All AI calls go through `_shared/ai/ai.ts` (`callAI`, `callAIJson`, `callAIWithTools`). It handles
   retries, model fallback, run logging and strips em and en dashes from every output.
-- Tier limits and feature gating live in `_shared/tierPolicy.ts`.
+- Tier limits and feature gating live in `_shared/billing/tierPolicy.ts`.
 - Client-facing copy must not invent claims; use `NO_FABRICATION_GUARDRAIL` for prompts built from client data.
-- CI (`.github/workflows/ci.yml`) runs tsc, eslint, build, deno check and the shared unit tests.
+- CI (`.github/workflows/ci.yml`) runs tsc, eslint, build and deno check.

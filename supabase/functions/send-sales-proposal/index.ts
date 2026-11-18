@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
-import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 

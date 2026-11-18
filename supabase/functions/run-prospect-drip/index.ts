@@ -1,17 +1,17 @@
-import { clientIdsWithMailbox } from "../_shared/outreachMailbox.ts";
+import { clientIdsWithMailbox } from "../_shared/outreach/outreachMailbox.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson } from "../_shared/ai.ts";
-import { recordOutcome } from "../_shared/outcomes.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { logActivity } from "../_shared/activityLog.ts";
-import { refreshProspectProject } from "../_shared/prospectProject.ts";
-import { logAlert } from "../_shared/alerts.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { nurtureStartAt, readyForNurture, stepDelayDays } from "../_shared/dripSchedule.ts";
-import { snapToSendWindow } from "../_shared/sendWindow.ts";
-import { existingClientDisposition } from "../_shared/campaignBoundary.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAIJson } from "../_shared/ai/ai.ts";
+import { recordOutcome } from "../_shared/client/outcomes.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { nurtureStartAt, readyForNurture, stepDelayDays } from "../_shared/outreach/dripSchedule.ts";
+import { snapToSendWindow } from "../_shared/outreach/sendWindow.ts";
+import { existingClientDisposition } from "../_shared/outreach/campaignBoundary.ts";
 import {
   type Audience,
   campaignBlock,
@@ -21,7 +21,7 @@ import {
   senderFactsBlock,
   stepBrief,
   toneInstruction,
-} from "../_shared/outreachPrompt.ts";
+} from "../_shared/outreach/outreachPrompt.ts";
 // logActivity for "email sent" moved to process-email-queue -- that's where
 // the actual send now happens (this function only enrolls/schedules).
 

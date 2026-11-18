@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
-import { functionErrorAlert } from "../_shared/alerts.ts";
+import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { unlockReadySteps } from "../_shared/client/workflowUnlock.ts";
+import { functionErrorAlert } from "../_shared/client/alerts.ts";
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 

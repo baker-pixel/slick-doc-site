@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { jsonResponse, errorResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { refundInvoice, stripeRequest, tierForPriceId, verifyStripeSignature } from "../_shared/stripe.ts";
-import { decideClaim, isDuplicateSubscription } from "../_shared/stripeDedupe.ts";
-import { logAlert } from "../_shared/alerts.ts";
-import { applyBillingDecision } from "../_shared/billingGate.ts";
-import { sendPaymentConfirmationEmail, sendPaymentFailedEmail, sendServicesPausedEmail } from "../_shared/billingEmail.ts";
-import { isCycleInvoice, periodFromInvoice } from "../_shared/cycle.ts";
-import { runInBackground } from "../_shared/background.ts";
+import { jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { refundInvoice, stripeRequest, tierForPriceId, verifyStripeSignature } from "../_shared/billing/stripe.ts";
+import { decideClaim, isDuplicateSubscription } from "../_shared/billing/stripeDedupe.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
+import { applyBillingDecision } from "../_shared/billing/billingGate.ts";
+import { sendPaymentConfirmationEmail, sendPaymentFailedEmail, sendServicesPausedEmail } from "../_shared/billing/billingEmail.ts";
+import { isCycleInvoice, periodFromInvoice } from "../_shared/client/cycle.ts";
+import { runInBackground } from "../_shared/core/background.ts";
 
 // Stripe -> our DB. Verified by signature (verify_jwt = false in config.toml).
 // Every event id is recorded in stripe_events first, so Stripe's retries are

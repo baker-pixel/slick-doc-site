@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { logActivity } from "../_shared/activityLog.ts";
-import { sendViaClientEmail } from "../_shared/clientEmailSend.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { decideProspectGate, repairPreferencesLinks } from "../_shared/outreachEmail.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { sendViaClientEmail } from "../_shared/client/clientEmailSend.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { decideProspectGate, repairPreferencesLinks } from "../_shared/outreach/outreachEmail.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 

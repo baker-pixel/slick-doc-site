@@ -6,8 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
-const Admin = lazy(() => import("@/pages/Admin"));
-const ViewAsClient = lazy(() => import("@/pages/ViewAsClient"));
+const Admin = lazy(() => import("@/pages/admin/Admin"));
+const ViewAsClient = lazy(() => import("@/pages/admin/ViewAsClient"));
 
 function PageLoader() {
   return (

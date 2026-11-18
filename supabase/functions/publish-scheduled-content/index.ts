@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
-import { logActivity } from "../_shared/activityLog.ts";
-import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { logAlert } from "../_shared/alerts.ts";
-import { extractEdgeBody } from "../_shared/edgeError.ts";
-import { reconcileApprovedContent } from "../_shared/approvalReconcile.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { refreshSocialPlanProgress } from "../_shared/social/socialStrategy.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { logAlert } from "../_shared/client/alerts.ts";
+import { extractEdgeBody } from "../_shared/core/edgeError.ts";
+import { reconcileApprovedContent } from "../_shared/social/approvalReconcile.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

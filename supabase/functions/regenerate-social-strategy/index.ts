@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { hasBusinessContext } from "../_shared/businessContext.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { hasBusinessContext } from "../_shared/client/businessContext.ts";
 
 const COOLDOWN_HOURS = 24;
 

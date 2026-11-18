@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAI, extractJson, AIError } from "../_shared/ai.ts";
-import { checkAdminAuth, checkInternalSecret } from "../_shared/auth.ts";
-import { auditWebsite } from "../_shared/websiteAudit.ts";
-import { calculateSystemScorecard } from "../_shared/gapScore.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAI, extractJson, AIError } from "../_shared/ai/ai.ts";
+import { checkAdminAuth, checkInternalSecret } from "../_shared/core/auth.ts";
+import { auditWebsite } from "../_shared/seo/websiteAudit.ts";
+import { calculateSystemScorecard } from "../_shared/seo/gapScore.ts";
 
 // deno-lint-ignore no-explicit-any
 async function ensureReadinessScore(

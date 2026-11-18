@@ -2,8 +2,8 @@
 // One wake of one steward, end to end: decide whether it may run (enabled,
 // budget, no overlapping run, slot not already taken), load the client brain,
 // run the loop, and leave a complete record in steward_runs.
-import { callAIWithTools, MODELS } from "../ai.ts";
-import { type Engine, contextToPrompt, getClientContext } from "../clientContext.ts";
+import { callAIWithTools, MODELS } from "../ai/ai.ts";
+import { type Engine, contextToPrompt, getClientContext } from "../client/clientContext.ts";
 import type { Autonomy } from "./gate.ts";
 import { runStewardLoop, type StewardDeps, type StewardLimits, type StewardResult } from "./loop.ts";
 import { submitAction } from "./proposals.ts";

@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { isMissingCustomerError, portalOrigin } from "../_shared/stripeCheckout.ts";
-import { stripeRequest } from "../_shared/stripe.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { isMissingCustomerError, portalOrigin } from "../_shared/billing/stripeCheckout.ts";
+import { stripeRequest } from "../_shared/billing/stripe.ts";
 
 // Returns a Stripe Customer Portal URL: update cards, switch plan, cancel,
 // download invoices.

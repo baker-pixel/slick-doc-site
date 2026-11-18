@@ -1,16 +1,16 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { cleanGeneratedText } from "../_shared/textSanitize.ts";
-import { stripInDepthLabel } from "../_shared/frontLoaded.ts";
+import { cleanGeneratedText } from "../_shared/core/textSanitize.ts";
+import { stripInDepthLabel } from "../_shared/seo/frontLoaded.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
-import { getClientBrandKit } from "../_shared/brandKit.ts";
-import { logActivity } from "../_shared/activityLog.ts";
-import { refreshSocialPlanProgress } from "../_shared/socialStrategy.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { notifyClientBlocked } from "../_shared/clientAlerts.ts";
-import { flagNeedsReauth, isReconnectError } from "../_shared/pfmReauth.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
+import { buildCreativeImagePrompt } from "../_shared/social/creativeImagePrompt.ts";
+import { getClientBrandKit } from "../_shared/client/brandKit.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { refreshSocialPlanProgress } from "../_shared/social/socialStrategy.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { notifyClientBlocked } from "../_shared/client/clientAlerts.ts";
+import { flagNeedsReauth, isReconnectError } from "../_shared/social/pfmReauth.ts";
 
 function platformLabel(platform: string): string {
   return platform.charAt(0).toUpperCase() + platform.slice(1);

@@ -1,8 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { generatedLeadsOnly } from "../_shared/campaignBoundary.ts";
-import { LATEST_PLUGIN_VERSION, pluginSupportsTracking } from "../_shared/pluginVersion.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { generatedLeadsOnly } from "../_shared/outreach/campaignBoundary.ts";
+import { LATEST_PLUGIN_VERSION, pluginSupportsTracking } from "../_shared/wordpress/pluginVersion.ts";
 
 // Live view for the client portal Analytics tab. client_analytics only holds
 // weekly snapshots, so between Mondays the portal would be up to a week stale.

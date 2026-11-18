@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
+import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
 
 // Links the signed-in user to a client portal from an open invitation. This
 // used to be done from the browser with direct inserts into

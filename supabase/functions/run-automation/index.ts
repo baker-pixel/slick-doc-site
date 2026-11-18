@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
-import { queueCrawl } from "../_shared/crawler/queue.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { unlockReadySteps } from "../_shared/client/workflowUnlock.ts";
+import { queueCrawl } from "../_shared/seo/crawler/queue.ts";
 import type { AutomationRequest } from "./types.ts";
 import { normalizeJobType } from "./jobTypeAliases.ts";
 
@@ -33,9 +33,9 @@ import { setupSalesEnablement } from "./handlers/setup-sales-enablement.ts";
 import { scheduleStrategyCall } from "./handlers/schedule-strategy-call.ts";
 import { optimizeCrmPipeline } from "./handlers/optimize-crm-pipeline.ts";
 import { createFullAnalyticsSuite } from "./handlers/create-full-analytics-suite.ts";
-import { upsertSocialStrategy } from "../_shared/socialStrategy.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { notifyClientBlocked } from "../_shared/clientAlerts.ts";
+import { upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { notifyClientBlocked } from "../_shared/client/clientAlerts.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

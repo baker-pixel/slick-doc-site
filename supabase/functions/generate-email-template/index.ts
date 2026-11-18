@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson, AIError } from "../_shared/ai.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAIJson, AIError } from "../_shared/ai/ai.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 interface GenerateRequest {
   templateType: string;

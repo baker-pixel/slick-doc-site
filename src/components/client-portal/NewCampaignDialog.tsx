@@ -12,7 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { AlertTriangle, FileSpreadsheet, Loader2, Upload } from "lucide-react";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
-// Field keys match the server's ColumnMapping (supabase/functions/_shared/leadImport.ts).
+// Field keys match the server's ColumnMapping (supabase/functions/_shared/outreach/leadImport.ts).
 const FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: "email", label: "Email", required: true },
   { key: "first_name", label: "First name" },

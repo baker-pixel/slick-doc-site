@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAI as sharedCallAI, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { toDbContentType } from "../_shared/contentTypeMap.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAI as sharedCallAI, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { toDbContentType } from "../_shared/social/contentTypeMap.ts";
 import { generateMonthlyReport } from "../run-automation/handlers/ai-automation.ts";
 import type { ClientData as AutomationClientData } from "../run-automation/types.ts";
 

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { emailLogo } from "../_shared/brandEmail.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { emailLogo } from "../_shared/client/brandEmail.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 

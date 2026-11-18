@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
-import { isPublicSiteUrl, normalizeSiteUrl, siteUrlVariants } from "../_shared/wpSite.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
+import { isPublicSiteUrl, normalizeSiteUrl, siteUrlVariants } from "../_shared/wordpress/wpSite.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

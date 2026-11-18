@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkAdminAuth } from "../_shared/auth.ts";
-import { generateToken, hashToken, TOKEN_PREFIX, VALID_SCOPES } from "../_shared/mcpAuth.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
+import { generateToken, hashToken, TOKEN_PREFIX, VALID_SCOPES } from "../_shared/mcp/mcpAuth.ts";
 
 // Admin-only management of MCP access tokens: create (plaintext returned once),
 // list (never returns the token), revoke. Requires a real admin session, not

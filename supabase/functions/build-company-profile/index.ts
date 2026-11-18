@@ -1,17 +1,17 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { functionErrorAlert } from "../_shared/alerts.ts";
-import { callAIWithTools, MODELS } from "../_shared/ai.ts";
-import { loadProfileRows } from "../_shared/crawler/supabaseStore.ts";
-import { buildCorpus, contentHash } from "../_shared/profile/corpus.ts";
-import { runProfileAgent, type AgentDeps } from "../_shared/profile/agent.ts";
-import { planWrite, hasSuggestions } from "../_shared/profile/merge.ts";
+import { handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { functionErrorAlert } from "../_shared/client/alerts.ts";
+import { callAIWithTools, MODELS } from "../_shared/ai/ai.ts";
+import { loadProfileRows } from "../_shared/seo/crawler/supabaseStore.ts";
+import { buildCorpus, contentHash } from "../_shared/client/profile/corpus.ts";
+import { runProfileAgent, type AgentDeps } from "../_shared/client/profile/agent.ts";
+import { planWrite, hasSuggestions } from "../_shared/client/profile/merge.ts";
 
 // Builds the company profile from the stored crawl: what the business does, for whom, where, and the facts the
 // website states. A tool-using agent reads the pages; every claim must carry a quote that is really on the page
-// it cites (see _shared/profile/evidence.ts). Empty fields in the client's record are filled; anything a person
+// it cites (see _shared/client/profile/evidence.ts). Empty fields in the client's record are filled; anything a person
 // already wrote is left alone and new findings become suggestions. Runs from the job queue after each crawl.
 const DEADLINE_MS = 110_000;
 const REBUILD_AFTER_DAYS = 30;

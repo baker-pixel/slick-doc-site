@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { logAlert, functionErrorAlert } from "../_shared/alerts.ts";
-import { unlockReadySteps } from "../_shared/workflowUnlock.ts";
-import { completeSocialStepIfConnected } from "../_shared/socialStep.ts";
+import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { logAlert, functionErrorAlert } from "../_shared/client/alerts.ts";
+import { unlockReadySteps } from "../_shared/client/workflowUnlock.ts";
+import { completeSocialStepIfConnected } from "../_shared/social/socialStep.ts";
 
 // How long an agent task may sit in "running" before we assume the edge
 // function died mid-job (crash/timeout) and reap it.
@@ -183,7 +183,7 @@ serve(async (req) => {
     for (const wf of activeWorkflows ?? []) {
       try {
         // A connected social account must advance "Connect Social Accounts" even if
-        // the client's browser never reported it (see _shared/socialStep.ts).
+        // the client's browser never reported it (see _shared/social/socialStep.ts).
         if (wf.client_id && await completeSocialStepIfConnected(supabase, wf.client_id)) {
           summary.reconciled_steps++;
           await logAlert(supabase, {

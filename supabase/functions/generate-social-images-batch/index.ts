@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/creativeImagePrompt.ts";
-import { buildGptImageRequestBody } from "../_shared/gptImage.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
+import { buildCreativeImagePrompt } from "../_shared/social/creativeImagePrompt.ts";
+import { buildGptImageRequestBody } from "../_shared/ai/gptImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

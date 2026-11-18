@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { authenticateMcp } from "../_shared/mcpAuth.ts";
-import { handleMessage, RPC, type McpDeps, type RpcResponse } from "../_shared/mcpServer.ts";
-import { callTool, TOOLS } from "../_shared/stewardTools.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { authenticateMcp } from "../_shared/mcp/mcpAuth.ts";
+import { handleMessage, RPC, type McpDeps, type RpcResponse } from "../_shared/mcp/mcpServer.ts";
+import { callTool, TOOLS } from "../_shared/steward/stewardTools.ts";
 
 // MCP endpoint for Orange Door. Lets Claude and other MCP-capable AI clients
 // read a client's context and goals and record memory, using a bearer token an

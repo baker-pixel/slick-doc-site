@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { errorResponse, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { applyBillingDecision, isBillingEnforced } from "../_shared/billingGate.ts";
-import { sendServicesPausedEmail } from "../_shared/billingEmail.ts";
+import { errorResponse, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { applyBillingDecision, isBillingEnforced } from "../_shared/billing/billingGate.ts";
+import { sendServicesPausedEmail } from "../_shared/billing/billingEmail.ts";
 
 // Hourly sweep. Webhooks handle the instant transitions (payment succeeded,
 // subscription canceled); this catches the time-based ones: past_due accounts

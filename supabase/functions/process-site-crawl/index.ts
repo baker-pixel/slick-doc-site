@@ -1,14 +1,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { corsHeaders, handleOptions, jsonResponse } from "../_shared/http.ts";
-import { serviceClient } from "../_shared/supabase.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
-import { logAlert, functionErrorAlert } from "../_shared/alerts.ts";
-import { crawlStep } from "../_shared/crawler/engine.ts";
-import { SupabaseCrawlStore } from "../_shared/crawler/supabaseStore.ts";
-import { fetchTextSafe, safeFetch } from "../_shared/crawler/fetcher.ts";
-import { makeRenderer } from "../_shared/crawler/render.ts";
-import { enqueueAuditForCrawl, enqueueProfileForCrawl } from "../_shared/crawler/queue.ts";
-import type { CrawlRow } from "../_shared/crawler/types.ts";
+import { corsHeaders, handleOptions, jsonResponse } from "../_shared/core/http.ts";
+import { serviceClient } from "../_shared/core/supabase.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
+import { logAlert, functionErrorAlert } from "../_shared/client/alerts.ts";
+import { crawlStep } from "../_shared/seo/crawler/engine.ts";
+import { SupabaseCrawlStore } from "../_shared/seo/crawler/supabaseStore.ts";
+import { fetchTextSafe, safeFetch } from "../_shared/seo/crawler/fetcher.ts";
+import { makeRenderer } from "../_shared/seo/crawler/render.ts";
+import { enqueueAuditForCrawl, enqueueProfileForCrawl } from "../_shared/seo/crawler/queue.ts";
+import type { CrawlRow } from "../_shared/seo/crawler/types.ts";
 
 // The crawl worker. pg_cron calls this every minute (only while a crawl is queued or
 // running). Each call claims ONE crawl via a lease, crawls for up to STEP_MS, then hands

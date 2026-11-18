@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
-import { recommendTier, tierLabel } from "../_shared/systemTier.ts";
-import { emailLogo } from "../_shared/brandEmail.ts";
+import { recommendTier, tierLabel } from "../_shared/billing/systemTier.ts";
+import { emailLogo } from "../_shared/client/brandEmail.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,7 +46,7 @@ interface ProspectData {
 // --- Same status/priority mapping ReportConfig.ts uses for the web report and the
 // server-rendered PDF, duplicated here since Deno edge functions can't import the
 // site's TSX/React source. Keep in sync with src/components/report/ReportConfig.ts
-// and src/pages/QuickAnalysis.tsx (buildCategoryScores/computeOverallScore) --
+// and src/pages/marketing/QuickAnalysis.tsx (buildCategoryScores/computeOverallScore) --
 // this must produce the same numbers for the same scan. ---
 
 function scoreToStatus(score: number): "Strong" | "Moderate" | "Weak" | "Critical" {

@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { filterEngagedClients } from "../_shared/engagedClients.ts";
-import { queueCrawl } from "../_shared/crawler/queue.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { filterEngagedClients } from "../_shared/client/engagedClients.ts";
+import { queueCrawl } from "../_shared/seo/crawler/queue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

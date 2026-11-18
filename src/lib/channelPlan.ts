@@ -12,5 +12,5 @@ export {
   PLAN_PLATFORMS,
   type PlacedSlot,
   type PlanInput,
-} from "../../supabase/functions/_shared/channelPlan";
-export { tierPolicy } from "../../supabase/functions/_shared/tierPolicy";
+} from "../../supabase/functions/_shared/social/channelPlan";
+export { tierPolicy } from "../../supabase/functions/_shared/billing/tierPolicy";

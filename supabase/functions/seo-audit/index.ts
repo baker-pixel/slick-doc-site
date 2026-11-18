@@ -1,21 +1,21 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkAdminAuth, isServiceRequest } from "../_shared/auth.ts";
-import { callAI } from "../_shared/ai.ts";
-import { discoverPages, gatherPageSignals, getPageSpeed, type PageSignals } from "../_shared/seoSignals.ts";
-import { buildAuditInput, type AuditInput } from "../_shared/crawler/auditInput.ts";
-import { loadAuditRows } from "../_shared/crawler/supabaseStore.ts";
-import { gatherSiteHealth, runSiteChecks } from "../_shared/crawlHealth.ts";
-import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, stockOpener, tooSimilar, type CopyKind } from "../_shared/seoCopy.ts";
-import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seoRubric.ts";
-import { runChecks, mk, type Finding } from "../_shared/seoChecks.ts";
-import { upsertSeoProject } from "../_shared/seoProject.ts";
-import { buildOrganizationJsonLd, buildFaqJsonLd } from "../_shared/schemaMarkup.ts";
-import { buildLlmsTxt } from "../_shared/llmsTxt.ts";
-import { auditWebsite } from "../_shared/websiteAudit.ts";
-import { tierPolicy } from "../_shared/tierPolicy.ts";
-import { logActivity } from "../_shared/activityLog.ts";
-import { recordOutcome } from "../_shared/outcomes.ts";
+import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
+import { callAI } from "../_shared/ai/ai.ts";
+import { discoverPages, gatherPageSignals, getPageSpeed, type PageSignals } from "../_shared/seo/seoSignals.ts";
+import { buildAuditInput, type AuditInput } from "../_shared/seo/crawler/auditInput.ts";
+import { loadAuditRows } from "../_shared/seo/crawler/supabaseStore.ts";
+import { gatherSiteHealth, runSiteChecks } from "../_shared/seo/crawlHealth.ts";
+import { LIMITS, buildCopyPrompt, buildCopySystem, checkDraft, cleanDraft, fitToLength, stockOpener, tooSimilar, type CopyKind } from "../_shared/seo/seoCopy.ts";
+import { CHECKS, RUBRIC_VERSION, computeScores, type CheckDef, type SeoCategory, type Severity } from "../_shared/seo/seoRubric.ts";
+import { runChecks, mk, type Finding } from "../_shared/seo/seoChecks.ts";
+import { upsertSeoProject } from "../_shared/seo/seoProject.ts";
+import { buildOrganizationJsonLd, buildFaqJsonLd } from "../_shared/seo/schemaMarkup.ts";
+import { buildLlmsTxt } from "../_shared/seo/llmsTxt.ts";
+import { auditWebsite } from "../_shared/seo/websiteAudit.ts";
+import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { logActivity } from "../_shared/core/activityLog.ts";
+import { recordOutcome } from "../_shared/client/outcomes.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

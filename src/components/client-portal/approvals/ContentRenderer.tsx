@@ -203,7 +203,7 @@ export function ContentRenderer({ content, contentType }: { content: string | nu
 }
 
 // Email content view
-// Mirrors supabase/functions/_shared/captionGate.ts: empty/placeholder posts can't be approved.
+// Mirrors supabase/functions/_shared/social/captionGate.ts: empty/placeholder posts can't be approved.
 export function hasCaption(a: { full_content: string | null; content_preview: string | null }): boolean {
   const ok = (t: string | null) => {
     const v = (t ?? "").trim();

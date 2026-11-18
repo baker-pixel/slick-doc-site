@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { isServiceRequest } from "../_shared/auth.ts";
+import { isServiceRequest } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAIJson } from "../_shared/ai.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAIJson } from "../_shared/ai/ai.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {

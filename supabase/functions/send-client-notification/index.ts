@@ -1,6 +1,6 @@
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { checkClientOrAdminAuth } from "../_shared/auth.ts";
+import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 

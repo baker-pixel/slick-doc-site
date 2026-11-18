@@ -7,4 +7,4 @@ export {
   normalizeKeywords,
   MAX_KEYWORDS,
   type KeywordSource,
-} from "../../supabase/functions/_shared/icpKeywords";
+} from "../../supabase/functions/_shared/outreach/icpKeywords";

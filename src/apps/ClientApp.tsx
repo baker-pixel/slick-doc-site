@@ -6,8 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
-const ClientPortal = lazy(() => import("@/pages/ClientPortal"));
-const ClientPortalAuth = lazy(() => import("@/pages/ClientPortalAuth"));
+const ClientPortal = lazy(() => import("@/pages/portal/ClientPortal"));
+const ClientPortalAuth = lazy(() => import("@/pages/portal/ClientPortalAuth"));
 
 function PageLoader() {
   return (

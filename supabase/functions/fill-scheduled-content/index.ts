@@ -1,21 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { cleanGeneratedText } from "../_shared/textSanitize.ts";
-import { checkPipelineAuth } from "../_shared/auth.ts";
+import { cleanGeneratedText } from "../_shared/core/textSanitize.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/http.ts";
-import { callAI, MODELS } from "../_shared/ai.ts";
-import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/contentFeedback.ts";
-import { critiqueContent, qaNeedsAttention, findUnsupportedClaims } from "../_shared/contentQa.ts";
-import { getSocialPillarDetails } from "../_shared/socialStrategy.ts";
-import { filterEngagedClients } from "../_shared/engagedClients.ts";
-import { toDbContentType } from "../_shared/contentTypeMap.ts";
-import { isUsableCaption } from "../_shared/captionGate.ts";
-import { hasBusinessContext } from "../_shared/businessContext.ts";
-import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/topicLedger.ts";
-import { extractTopic } from "../_shared/topicExtract.ts";
-import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai.ts";
-import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/brandKit.ts";
-import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform, stripInDepthLabel } from "../_shared/frontLoaded.ts";
+import { corsHeaders } from "../_shared/core/http.ts";
+import { callAI, MODELS } from "../_shared/ai/ai.ts";
+import { feedbackToPromptBlock, type ContentFeedbackItem, approvedContentToPromptBlock, type ApprovedContentItem } from "../_shared/social/contentFeedback.ts";
+import { critiqueContent, qaNeedsAttention, findUnsupportedClaims } from "../_shared/social/contentQa.ts";
+import { getSocialPillarDetails } from "../_shared/social/socialStrategy.ts";
+import { filterEngagedClients } from "../_shared/client/engagedClients.ts";
+import { toDbContentType } from "../_shared/social/contentTypeMap.ts";
+import { isUsableCaption } from "../_shared/social/captionGate.ts";
+import { hasBusinessContext } from "../_shared/client/businessContext.ts";
+import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/social/topicLedger.ts";
+import { extractTopic } from "../_shared/social/topicExtract.ts";
+import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
+import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/client/brandKit.ts";
+import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform, stripInDepthLabel } from "../_shared/seo/frontLoaded.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -164,7 +164,7 @@ serve(async (req) => {
 
     // Feedback loop: batch-fetch recent hard-rejection reasons across all
     // clients in this run so drafts stop repeating issues admin/client
-    // already flagged. Same table/shape as _shared/contentFeedback.ts's
+    // already flagged. Same table/shape as _shared/social/contentFeedback.ts's
     // per-client helper, queried in bulk here since we already have all
     // clientIds. "changes_requested" is deliberately excluded -- that
     // feedback goes into auto-revising the flagged post itself (see

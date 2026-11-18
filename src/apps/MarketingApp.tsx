@@ -11,26 +11,26 @@ import { ChatWidget } from "@/components/ChatWidget";
 import { VoiceNavigation } from "@/components/VoiceNavigation";
 import { Loader2 } from "lucide-react";
 
-const Index = lazy(() => import("@/pages/Index"));
-const GapAnalysis = lazy(() => import("@/pages/GapAnalysis"));
-const QuickAnalysis = lazy(() => import("@/pages/QuickAnalysis"));
-const AboutUs = lazy(() => import("@/pages/AboutUs"));
-const ScheduleCall = lazy(() => import("@/pages/ScheduleCall"));
-const System = lazy(() => import("@/pages/System"));
-const Report = lazy(() => import("@/pages/Report"));
-const QuickReport = lazy(() => import("@/pages/QuickReport"));
-const Pricing = lazy(() => import("@/pages/Pricing"));
-const Signup = lazy(() => import("@/pages/Signup"));
-const TierFoundation = lazy(() => import("@/pages/TierFoundation"));
-const TierGrowth = lazy(() => import("@/pages/TierGrowth"));
-const TierTransformation = lazy(() => import("@/pages/TierTransformation"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
-const ARBusinessCard = lazy(() => import("@/pages/ARBusinessCard"));
-const ARPresentation = lazy(() => import("@/pages/ARPresentation"));
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const LegacyReportRedirect = lazy(() => import("@/pages/LegacyReportRedirect"));
-const EmailPreferences = lazy(() => import("@/pages/EmailPreferences"));
-const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
+const Index = lazy(() => import("@/pages/marketing/Index"));
+const GapAnalysis = lazy(() => import("@/pages/marketing/GapAnalysis"));
+const QuickAnalysis = lazy(() => import("@/pages/marketing/QuickAnalysis"));
+const AboutUs = lazy(() => import("@/pages/marketing/AboutUs"));
+const ScheduleCall = lazy(() => import("@/pages/marketing/ScheduleCall"));
+const System = lazy(() => import("@/pages/marketing/System"));
+const Report = lazy(() => import("@/pages/marketing/Report"));
+const QuickReport = lazy(() => import("@/pages/marketing/QuickReport"));
+const Pricing = lazy(() => import("@/pages/marketing/Pricing"));
+const Signup = lazy(() => import("@/pages/marketing/Signup"));
+const TierFoundation = lazy(() => import("@/pages/marketing/TierFoundation"));
+const TierGrowth = lazy(() => import("@/pages/marketing/TierGrowth"));
+const TierTransformation = lazy(() => import("@/pages/marketing/TierTransformation"));
+const NotFound = lazy(() => import("@/pages/marketing/NotFound"));
+const ARBusinessCard = lazy(() => import("@/pages/marketing/ARBusinessCard"));
+const ARPresentation = lazy(() => import("@/pages/marketing/ARPresentation"));
+const Dashboard = lazy(() => import("@/pages/marketing/Dashboard"));
+const LegacyReportRedirect = lazy(() => import("@/pages/marketing/LegacyReportRedirect"));
+const EmailPreferences = lazy(() => import("@/pages/marketing/EmailPreferences"));
+const PrivacyPolicy = lazy(() => import("@/pages/marketing/PrivacyPolicy"));
 
 function PageLoader() {
   return (
