@@ -167,7 +167,7 @@ export function stripDashes(text: string): string {
     .replace(/&ndash;|&#8211;|&#x2013;/gi, "\u2013")
     .replace(/(\d)[ \t]*\u2013[ \t]*(?=\d)/g, "$1-") // 10–20 -> 10-20
     .replace(/[ \t]*[\u2014\u2013\u2015][ \t]*(?=[.,;:!?)\]])/g, "") // dash before punctuation
-    .replace(/(["'(\[])[ \t]*[\u2014\u2013\u2015][ \t]*/g, "$1") // dash opening a string/bracket
+    .replace(/(["'([])[ \t]*[\u2014\u2013\u2015][ \t]*/g, "$1") // dash opening a string/bracket
     .replace(/(^|\n)[ \t]*[\u2014\u2013\u2015][ \t]*/g, "$1") // dash opening a line
     .replace(/([^\s>])[ \t]*[\u2014\u2013\u2015][ \t]*(?=\S)/g, "$1, ") // mid-sentence
     .replace(/[\u2014\u2013\u2015]/g, "-"); // anything left, e.g. a sign-off after a tag
