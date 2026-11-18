@@ -4,7 +4,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
-const ClientPortal = lazy(() => import("@/pages/ClientPortal"));
+const ClientPortal = lazy(() => import("@/pages/portal/ClientPortal"));
 
 // Admin-only: shows a client's portal read-only under the admin's own Supabase
 // session. Access is decided by the database (the session must carry the admin

@@ -46,7 +46,7 @@ interface ProspectData {
 // --- Same status/priority mapping ReportConfig.ts uses for the web report and the
 // server-rendered PDF, duplicated here since Deno edge functions can't import the
 // site's TSX/React source. Keep in sync with src/components/report/ReportConfig.ts
-// and src/pages/QuickAnalysis.tsx (buildCategoryScores/computeOverallScore) --
+// and src/pages/marketing/QuickAnalysis.tsx (buildCategoryScores/computeOverallScore) --
 // this must produce the same numbers for the same scan. ---
 
 function scoreToStatus(score: number): "Strong" | "Moderate" | "Weak" | "Critical" {
