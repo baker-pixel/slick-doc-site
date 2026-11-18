@@ -21,13 +21,14 @@ agentic back end that runs SEO, prospecting, social and reporting for each clien
 ```
 src/
   apps/          Three entry apps: MarketingApp, ClientApp (portal), AdminApp
-  pages/         Route-level pages
+  pages/         Route-level pages, grouped by app: marketing/, portal/, admin/
   components/    UI (admin/, client-portal/, ui/ for shadcn)
   lib/           Shared helpers and API wrappers
   integrations/  Generated Supabase client and types
 api/             Vercel functions (report PDF render, brand asset render)
 supabase/
-  functions/     Edge functions; _shared/ holds common logic and its unit tests
+  functions/     Edge functions (index in functions/README.md); _shared/ holds common logic
+                 grouped by domain (billing, outreach, social, seo, ...) plus its unit tests
   migrations/    SQL migrations, applied in filename order
 scripts/         Build and smoke-test scripts
 wp-plugin/       WordPress plugin source
