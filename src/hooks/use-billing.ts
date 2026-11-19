@@ -16,6 +16,7 @@ export interface BillingState {
   payment_failed_at: string | null;
   paused_for_billing: boolean;
   stripe_customer_id: string | null;
+  billing_bypass: boolean;
 }
 
 export function hasLiveSubscription(b: BillingState | null | undefined): boolean {
@@ -38,7 +39,7 @@ export function useBilling(clientAccountId: string | undefined, poll = false) {
       const { data, error } = await supabase
         .from("client_accounts")
         .select(
-          "tier, status, subscription_status, current_period_end, cancel_at_period_end, payment_failed_at, paused_for_billing, stripe_customer_id",
+          "tier, status, subscription_status, current_period_end, cancel_at_period_end, payment_failed_at, paused_for_billing, stripe_customer_id, billing_bypass",
         )
         .eq("id", clientAccountId!)
         .single();
