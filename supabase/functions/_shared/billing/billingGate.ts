@@ -1,6 +1,7 @@
 // Billing -> service gating. Every engine already filters on
 // client_accounts.status = 'active', so billing drives that column instead of
 // each engine re-checking Stripe state:
+//   - admin billing_bypass                 -> entitled
 //   - paid / trialing                      -> entitled
 //   - past_due within the grace window     -> entitled (Stripe is still retrying)
 //   - anything else (none, unpaid, canceled, past_due beyond grace) -> not entitled
@@ -16,11 +17,13 @@ export interface BillingAccount {
   subscription_status: string;
   payment_failed_at: string | null;
   paused_for_billing: boolean;
+  billing_bypass?: boolean;
 }
 
 export type BillingDecision = "pause" | "resume" | "none";
 
 export function isEntitled(a: BillingAccount, now: Date = new Date()): boolean {
+  if (a.billing_bypass) return true; // admin-granted free access
   if (a.subscription_status === "active" || a.subscription_status === "trialing") return true;
   if (a.subscription_status === "past_due") {
     // The webhook always stamps payment_failed_at on entering past_due; a
@@ -58,7 +61,7 @@ export async function applyBillingDecision(
 ): Promise<BillingDecision> {
   const { data: acct, error } = await supabase
     .from("client_accounts")
-    .select("status, subscription_status, payment_failed_at, paused_for_billing")
+    .select("status, subscription_status, payment_failed_at, paused_for_billing, billing_bypass")
     .eq("id", clientId)
     .maybeSingle();
   if (error) throw error;
