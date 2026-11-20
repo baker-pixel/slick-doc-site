@@ -3,7 +3,7 @@ import { ArrowRight, Clock, CreditCard, Loader2, PauseCircle, Rocket, ShieldAler
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { graceDeadline, useBilling, useBillingActions } from "@/hooks/use-billing";
+import { graceDeadline, isComped, useBilling, useBillingActions } from "@/hooks/use-billing";
 
 interface BillingBannerProps {
   clientAccountId: string;
@@ -72,7 +72,7 @@ export function BillingBanner({ clientAccountId, onOpenBilling }: BillingBannerP
   if (!billing) return null;
   // Pending signups haven't been activated yet and cancelled accounts are intentional.
   if (billing.status === "pending" || billing.status === "cancelled") return null;
-  if (billing.billing_bypass) return null; // complimentary access
+  if (isComped(billing)) return null; // complimentary access
 
   const paused = billing.status === "paused" && billing.paused_for_billing;
   const pastDue = billing.subscription_status === "past_due";

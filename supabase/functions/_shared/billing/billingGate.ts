@@ -18,12 +18,22 @@ export interface BillingAccount {
   payment_failed_at: string | null;
   paused_for_billing: boolean;
   billing_bypass?: boolean;
+  billing_bypass_until?: string | null;
 }
 
 export type BillingDecision = "pause" | "resume" | "none";
 
+/** Admin-granted free access that has not expired (no end date = open-ended). */
+export function bypassActive(
+  a: { billing_bypass?: boolean | null; billing_bypass_until?: string | Date | null },
+  now: Date = new Date(),
+): boolean {
+  if (!a.billing_bypass) return false;
+  return !a.billing_bypass_until || new Date(a.billing_bypass_until).getTime() > now.getTime();
+}
+
 export function isEntitled(a: BillingAccount, now: Date = new Date()): boolean {
-  if (a.billing_bypass) return true; // admin-granted free access
+  if (bypassActive(a, now)) return true; // admin-granted free access
   if (a.subscription_status === "active" || a.subscription_status === "trialing") return true;
   if (a.subscription_status === "past_due") {
     // The webhook always stamps payment_failed_at on entering past_due; a
@@ -61,7 +71,7 @@ export async function applyBillingDecision(
 ): Promise<BillingDecision> {
   const { data: acct, error } = await supabase
     .from("client_accounts")
-    .select("status, subscription_status, payment_failed_at, paused_for_billing, billing_bypass")
+    .select("status, subscription_status, payment_failed_at, paused_for_billing, billing_bypass, billing_bypass_until")
     .eq("id", clientId)
     .maybeSingle();
   if (error) throw error;

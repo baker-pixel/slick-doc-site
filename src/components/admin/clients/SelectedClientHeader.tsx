@@ -5,6 +5,7 @@ import { ArrowLeft, Building2, Mail, Briefcase, Eye } from "lucide-react";
 import { viewAsClientPath } from "@/lib/viewAsClient";
 import { cn } from "@/lib/utils";
 import { TierBadge } from "../core/TierBadge";
+import { ComplimentaryAccessDialog } from "./ComplimentaryAccessDialog";
 
 interface ClientAccount {
   id: string;
@@ -15,14 +16,20 @@ interface ClientAccount {
   tier: string;
   status: string;
   industry: string | null;
+  paused_for_billing?: boolean | null;
+  billing_bypass?: boolean | null;
+  billing_bypass_reason?: string | null;
+  billing_bypass_until?: string | null;
 }
 
 interface SelectedClientHeaderProps {
   client: ClientAccount;
   onChangeClient: () => void;
+  adminPassword?: string;
+  onChanged?: () => void;
 }
 
-export function SelectedClientHeader({ client, onChangeClient }: SelectedClientHeaderProps) {
+export function SelectedClientHeader({ client, onChangeClient, adminPassword, onChanged }: SelectedClientHeaderProps) {
   // Tier badge now handled by TierBadge component
 
   const getStatusColor = (status: string) => {
@@ -89,6 +96,10 @@ export function SelectedClientHeader({ client, onChangeClient }: SelectedClientH
             </div>
           </div>
         </div>
+
+        {adminPassword && (
+          <ComplimentaryAccessDialog client={client} adminPassword={adminPassword} onChanged={onChanged} />
+        )}
 
         {/* Read-only copy of this client's portal, under your own admin session. */}
         <Button

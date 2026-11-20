@@ -910,6 +910,8 @@ export type Database = {
           outreach_settings: Json
           paused_for_billing: boolean
           billing_bypass: boolean
+          billing_bypass_until: string | null
+          billing_bypass_at: string | null
           billing_bypass_reason: string | null
           payment_failed_at: string | null
           plan_tier: string | null
@@ -950,6 +952,8 @@ export type Database = {
           outreach_settings?: Json
           paused_for_billing?: boolean
           billing_bypass?: boolean
+          billing_bypass_until?: string | null
+          billing_bypass_at?: string | null
           billing_bypass_reason?: string | null
           payment_failed_at?: string | null
           plan_tier?: string | null
@@ -990,6 +994,8 @@ export type Database = {
           outreach_settings?: Json
           paused_for_billing?: boolean
           billing_bypass?: boolean
+          billing_bypass_until?: string | null
+          billing_bypass_at?: string | null
           billing_bypass_reason?: string | null
           payment_failed_at?: string | null
           plan_tier?: string | null

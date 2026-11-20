@@ -17,6 +17,13 @@ export interface BillingState {
   paused_for_billing: boolean;
   stripe_customer_id: string | null;
   billing_bypass: boolean;
+  billing_bypass_until: string | null;
+}
+
+/** Admin-granted free access that has not expired. */
+export function isComped(b: BillingState | null | undefined): boolean {
+  if (!b?.billing_bypass) return false;
+  return !b.billing_bypass_until || new Date(b.billing_bypass_until).getTime() > Date.now();
 }
 
 export function hasLiveSubscription(b: BillingState | null | undefined): boolean {
@@ -39,7 +46,7 @@ export function useBilling(clientAccountId: string | undefined, poll = false) {
       const { data, error } = await supabase
         .from("client_accounts")
         .select(
-          "tier, status, subscription_status, current_period_end, cancel_at_period_end, payment_failed_at, paused_for_billing, stripe_customer_id, billing_bypass",
+          "tier, status, subscription_status, current_period_end, cancel_at_period_end, payment_failed_at, paused_for_billing, stripe_customer_id, billing_bypass, billing_bypass_until",
         )
         .eq("id", clientAccountId!)
         .single();

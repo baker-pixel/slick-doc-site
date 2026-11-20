@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { pricingData, type TierId } from "@/lib/pricingData";
-import { graceDeadline, hasLiveSubscription, useBilling, useBillingActions } from "@/hooks/use-billing";
+import { graceDeadline, hasLiveSubscription, isComped, useBilling, useBillingActions } from "@/hooks/use-billing";
 
 const TIER_LABELS: Record<string, string> = {
   foundation: "SYSTEM Foundation",
@@ -51,7 +51,7 @@ export function BillingCard({ clientAccountId, justCheckedOut }: BillingCardProp
   const live = hasLiveSubscription(billing);
   const price = pricingData[billing.tier as TierId]?.price;
   const deadline = billing.subscription_status === "past_due" ? graceDeadline(billing) : null;
-  const comped = billing.billing_bypass && !live;
+  const comped = isComped(billing) && !live;
   const confirming = justCheckedOut && !live && !comped;
 
   return (
