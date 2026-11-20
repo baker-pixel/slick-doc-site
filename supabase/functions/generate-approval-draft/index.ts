@@ -4,7 +4,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/core/http.ts";
 import { callAI, NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock } from "../_shared/client/brandKit.ts";
-import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, stripInDepthLabel } from "../_shared/seo/frontLoaded.ts";
+import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform, stripInDepthLabel, type FrontLoadedPlatform } from "../_shared/seo/frontLoaded.ts";
+
+const PLATFORM_LABEL: Record<FrontLoadedPlatform, string> = { linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram" };
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -29,19 +31,47 @@ serve(async (req) => {
     const { client_id, workflow_id, step_id } = await req.json();
     if (!client_id) return json({ error: "client_id required" }, 400);
 
-    // Skip if a pending approval already exists for this client.
-    // "pending" is the one canonical awaiting-client status across the
-    // pipeline — the client UI only renders Approve buttons for it and
-    // send-approval-reminders only nudges on it.
-    const { data: existing } = await supabase
+    // The introductory post is only drafted for platforms the client has actually
+    // connected (client_postforme_accounts.status = connected, the same source
+    // auto-schedule-content uses). It used to be hardcoded to LinkedIn, so a
+    // Facebook-only client (Hey Girl Hey) got a LinkedIn draft that could never publish.
+    const { data: connectedRows } = await supabase
+      .from("client_postforme_accounts")
+      .select("platform")
+      .eq("client_id", client_id)
+      .eq("status", "connected");
+    const connected = [...new Set((connectedRows ?? []).map((r: { platform: string }) => r.platform))]
+      .filter(isFrontLoadedPlatform);
+
+    if (connected.length === 0) {
+      console.log(`No connected social platform for client ${client_id}, skipping introductory draft`);
+      await supabase.from("automation_alerts").insert({
+        alert_type: "info",
+        severity: "info",
+        title: "Introductory post skipped: no connected platform",
+        message: "No Facebook, Instagram or LinkedIn account is connected, so no introductory post was drafted. Connect an account and re-run generate-approval-draft.",
+        source: "generate-approval-draft",
+        source_id: client_id,
+        metadata: { client_id, workflow_id, step_id },
+      }).then(undefined, () => {});
+      return json({ success: true, skipped: true, reason: "no_connected_platform" });
+    }
+
+    // Skip platforms that already have a pending approval ("pending" is the one
+    // canonical awaiting-client status across the pipeline -- the client UI only
+    // renders Approve buttons for it and send-approval-reminders only nudges on it).
+    const { data: existingRows } = await supabase
       .from("content_approvals")
-      .select("id")
+      .select("platform")
       .eq("client_account_id", client_id)
       .eq("status", "pending")
-      .maybeSingle();
-
-    if (existing) {
-      console.log(`Approval draft already exists for client ${client_id}, skipping`);
+      // Only an existing INTRODUCTORY draft counts. Regular scheduled posts are
+      // also "pending" and must not make the intro get skipped.
+      .like("title", "Introductory%");
+    const alreadyPending = new Set((existingRows ?? []).map((r: { platform: string | null }) => r.platform));
+    const platforms = connected.filter((p) => !alreadyPending.has(p));
+    if (platforms.length === 0) {
+      console.log(`Approval drafts already exist for client ${client_id}, skipping`);
       return json({ success: true, skipped: true });
     }
 
@@ -76,55 +106,57 @@ serve(async (req) => {
       .filter(Boolean)
       .join("\n");
 
-    // No canned fallback copy: this is the client's FIRST impression and
-    // approving it queues it for publishing, so a generic "Excited to share
-    // what we've been building at X!" post (which asserts things we never
-    // checked) is worse than a short delay. Throwing here returns non-2xx so
-    // process-agent-jobs retries and, if it keeps failing, dead-letters with
-    // an alert an admin can act on.
-    const generate = async (retryNote = ""): Promise<string> => (await callAI({
-      source: "generate-approval-draft",
-      system:
-        `You are an expert marketing copywriter. Write a single LinkedIn post for the business described. The post should be professional and engaging.\n\n${frontLoadedRequirements("linkedin")}\n\nReturn ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
-      prompt: `Write a compelling LinkedIn post introducing this business to potential customers.\n\n${businessContext}${retryNote}`,
-      maxTokens: 500,
-    })).trim();
-    let postContent = await generate();
-    // Front-loaded format: the opening paragraph must be the whole message. One rewrite with the
-    // exact problems named; a second miss is kept, since failing here dead-letters the client's
-    // first impression and the draft is still reviewed before anything is published.
-    const formatCheck = checkFrontLoaded(postContent, "linkedin");
-    if (!formatCheck.ok) {
-      console.warn(`Front-loaded check failed for ${client_id}: ${formatCheck.problems.join("; ")}`);
-      try {
-        const retry = await generate(frontLoadedRetryNote(formatCheck.problems));
-        if (checkFrontLoaded(retry, "linkedin").problems.length < formatCheck.problems.length) postContent = retry;
-      } catch (e) {
-        console.warn("Front-loaded retry failed, keeping first draft:", e instanceof Error ? e.message : e);
+    for (const platform of platforms) {
+      // No canned fallback copy: this is the client's FIRST impression and
+      // approving it queues it for publishing, so a generic "Excited to share
+      // what we've been building at X!" post (which asserts things we never
+      // checked) is worse than a short delay. Throwing here returns non-2xx so
+      // process-agent-jobs retries and, if it keeps failing, dead-letters with
+      // an alert an admin can act on.
+      const generate = async (platform: FrontLoadedPlatform, retryNote = ""): Promise<string> => (await callAI({
+        source: "generate-approval-draft",
+        system:
+          `You are an expert marketing copywriter. Write a single ${PLATFORM_LABEL[platform]} post for the business described. The post should be professional and engaging.\n\n${frontLoadedRequirements(platform)}\n\nReturn ONLY the post text — no commentary, no subject line, no title.${NO_FABRICATION_GUARDRAIL}`,
+        prompt: `Write a compelling ${PLATFORM_LABEL[platform]} post introducing this business to potential customers.\n\n${businessContext}${retryNote}`,
+        maxTokens: 500,
+      })).trim();
+      let postContent = await generate(platform);
+      // Front-loaded format: the opening paragraph must be the whole message. One rewrite with the
+      // exact problems named; a second miss is kept, since failing here dead-letters the client's
+      // first impression and the draft is still reviewed before anything is published.
+      const formatCheck = checkFrontLoaded(postContent, platform);
+      if (!formatCheck.ok) {
+        console.warn(`Front-loaded check failed for ${client_id}: ${formatCheck.problems.join("; ")}`);
+        try {
+          const retry = await generate(platform, frontLoadedRetryNote(formatCheck.problems));
+          if (checkFrontLoaded(retry, platform).problems.length < formatCheck.problems.length) postContent = retry;
+        } catch (e) {
+          console.warn("Front-loaded retry failed, keeping first draft:", e instanceof Error ? e.message : e);
+        }
       }
-    }
-    postContent = stripInDepthLabel(postContent);
-    if (postContent.length < 80) {
-      throw new Error(`AI returned an unusably short draft (${postContent.length} chars) for client ${client_id}`);
-    }
-    const postPreview = postContent.split("\n")[0].substring(0, 200);
+      postContent = stripInDepthLabel(postContent);
+      if (postContent.length < 80) {
+        throw new Error(`AI returned an unusably short draft (${postContent.length} chars) for client ${client_id} (${platform})`);
+      }
+      const postPreview = postContent.split("\n")[0].substring(0, 200);
 
-    // Insert into content_approvals for client to review
-    const { error: insertErr } = await supabase.from("content_approvals").insert({
-      client_account_id: client_id,
-      title: `Introductory LinkedIn Post — ${client.business_name}`,
-      content_type: "linkedin_post",
-      platform: "linkedin",
-      content_preview: postPreview,
-      full_content: postContent,
-      status: "pending",
-      submitted_at: new Date().toISOString(),
-      publish_status: "draft",
-    });
+      // Insert into content_approvals for client to review
+      const { error: insertErr } = await supabase.from("content_approvals").insert({
+        client_account_id: client_id,
+        title: `Introductory ${PLATFORM_LABEL[platform]} Post — ${client.business_name}`,
+        content_type: `${platform}_post`,
+        platform,
+        content_preview: postPreview,
+        full_content: postContent,
+        status: "pending",
+        submitted_at: new Date().toISOString(),
+        publish_status: "draft",
+      });
 
-    if (insertErr) {
-      console.error("Failed to insert content_approvals:", insertErr.message);
-      return json({ error: insertErr.message }, 500);
+      if (insertErr) {
+        console.error("Failed to insert content_approvals:", insertErr.message);
+        return json({ error: insertErr.message }, 500);
+      }
     }
 
     // Log to automation_alerts so admin can see this was generated
@@ -132,13 +164,13 @@ serve(async (req) => {
       alert_type: "info",
       severity: "info",
       title: "First content draft generated",
-      message: `Auto-generated LinkedIn post draft for ${client.business_name} is awaiting client approval.`,
+      message: `Auto-generated introductory draft(s) for ${client.business_name} (${platforms.map((p) => PLATFORM_LABEL[p]).join(", ")}) awaiting client approval.`,
       source: "generate-approval-draft",
       source_id: client_id,
-      metadata: { client_id, workflow_id, step_id },
+      metadata: { client_id, workflow_id, step_id, platforms },
     }).then(undefined, () => {});
 
-    return json({ success: true });
+    return json({ success: true, platforms });
   } catch (err: any) {
     console.error("generate-approval-draft error:", err);
     return json({ error: err?.message || "Internal error" }, 500);
