@@ -39,7 +39,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `prospect-campaign`, `prospect-icp`, `run-prospect-drip`, `send-prospect-report`, `process-email-queue`,
 `queue-sequence-emails`, `detect-inactive-leads`, `resend-webhook`, `track-click`, `track-open`,
 `unsubscribe`, `generate-lead-insights`, `generate-personalized-content`, `generate-email-template`,
-`generate-sales-proposal`, `send-sales-proposal`, `generate-review-response`, `send-test-email`,
+`generate-review-response`, `send-test-email`,
 `test-client-smtp`
 
 **Social and content**

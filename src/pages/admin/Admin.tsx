@@ -66,7 +66,6 @@ import CaseStudyBuilderPanel from "@/components/admin/content/CaseStudyBuilderPa
 import ClientHealthDashboard from "@/components/admin/clients/ClientHealthDashboard";
 import QualityAssurancePanel from "@/components/admin/misc/QualityAssurancePanel";
 import BeforeAfterShowcasePanel from "@/components/admin/content/BeforeAfterShowcasePanel";
-import SalesProposalPanel from "@/components/admin/sales/SalesProposalPanel";
 import SocialMediaPostsPanel from "@/components/admin/content/SocialMediaPostsPanel";
 import FeatureGuidePanel from "@/components/admin/core/FeatureGuidePanel";
 import ClientProgressTracker from "@/components/admin/clients/ClientProgressTracker";
@@ -1378,31 +1377,25 @@ const AdminInner = () => {
     </div>
   );
 
-  // Case Studies, Sales Proposals, and Before/After Showcase share one nav
-  // destination -- same "activeSection IS the tab state" composition
-  // pattern as the Leads hub above.
-  const salesHubMode: "proposals" | "case-studies" | "before-after" =
-    activeSection === "case-studies" ? "case-studies" :
-    activeSection === "before-after" ? "before-after" :
-    "proposals";
+  // Case Studies and Before/After Showcase share one nav destination -- same
+  // "activeSection IS the tab state" composition pattern as the Leads hub above.
+  const salesHubMode: "case-studies" | "before-after" =
+    activeSection === "before-after" ? "before-after" : "case-studies";
 
   const renderSalesHub = () => (
     <div className="space-y-4">
       <Tabs
         value={salesHubMode}
         onValueChange={(v) => {
-          if (v === "proposals") setActiveSection("sales-proposals");
-          else if (v === "case-studies") setActiveSection("case-studies");
+          if (v === "case-studies") setActiveSection("case-studies");
           else if (v === "before-after") setActiveSection("before-after");
         }}
       >
         <TabsList>
-          <TabsTrigger value="proposals">Proposals</TabsTrigger>
           <TabsTrigger value="case-studies">Case Studies</TabsTrigger>
           <TabsTrigger value="before-after">Before / After</TabsTrigger>
         </TabsList>
       </Tabs>
-      {salesHubMode === "proposals" && <SalesProposalPanel />}
       {salesHubMode === "case-studies" && <CaseStudyBuilderPanel />}
       {salesHubMode === "before-after" && <BeforeAfterShowcasePanel />}
     </div>
@@ -1497,7 +1490,6 @@ const AdminInner = () => {
         return renderLeadsHub();
       case "case-studies":
       case "before-after":
-      case "sales-proposals":
         return renderSalesHub();
       case "client-health":
         return <ClientHealthDashboard />;
@@ -1529,7 +1521,6 @@ const AdminInner = () => {
       "pdf-leads": "Leads",
       emails: "Client Outreach",
       "social-posts": "Social Media Posts",
-      "sales-proposals": "AI Sales Proposals",
       automation: "Automation",
       sops: "SOPs",
       onboarding: "Client Onboarding",
@@ -1577,7 +1568,7 @@ const AdminInner = () => {
     "clients", "team-directory", "integrations",
     "quick-actions", "activity-feed",
     "prospect-engine",
-    "lead-scoring", "sales-proposals", "automation",
+    "lead-scoring", "automation",
     "automation-center", "client-health",
     "onboarding", "social-posts", "seo-dashboard",
     "review-engine", "case-studies", "before-after",

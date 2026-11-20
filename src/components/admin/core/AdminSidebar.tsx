@@ -55,7 +55,6 @@ export type AdminSection =
   | "gap-analysis"
   | "emails"
   | "social-posts"
-  | "sales-proposals"
   | "seo-dashboard"
   | "automation"
   | "sops"
@@ -140,8 +139,8 @@ const monitoringItems: NavItem[] = [
 // GROWTH: OrangeDoor's own top-of-funnel -- people who submitted the marketing
 // site's form/quick-scan or downloaded a PDF. Not to be confused with
 // "Prospecting" above, which is a client's own cold-outreach candidates.
-// (Sales hub -- proposals / case studies / before-after -- is hidden: unused.
-// Its routes still work; re-add { id: "sales-proposals", ... } to restore.)
+// (Sales hub -- case studies / before-after -- is hidden: unused.
+// Its routes still work.)
 const growthItems: NavItem[] = [
   { id: "contacts", label: "Our leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "pipeline", "lead-scoring"] },
 ];
