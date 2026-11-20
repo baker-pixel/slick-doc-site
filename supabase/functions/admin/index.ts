@@ -507,7 +507,6 @@ Deno.serve(async (req) => {
           ["prospects", "client_id"],
           ["connected_sites", "client_id"],
           ["agent_runs", "client_id"],
-          ["ad_campaigns", "client_account_id"],
           ["workflow_steps", "client_id"],
         ];
         for (const [tbl, col] of nonCascading) {

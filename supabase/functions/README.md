@@ -48,7 +48,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `regenerate-social-strategy`, `save-channel-plan`, `reconcile-postforme-posts`, `postforme-connect-account`,
 `postforme-disconnect-account`, `postforme-publish-post`, `postforme-set-primary-account`,
 `postforme-sync-accounts`, `postforme-webhook`, `facebook-oauth-callback`, `instagram-oauth-callback`,
-`linkedin-oauth-callback`, `twitter-oauth-callback`, `generate-ads`, `generate-case-study`,
+`linkedin-oauth-callback`, `twitter-oauth-callback`, `generate-case-study`,
 `generate-approval-draft`, `handle-approval`, `send-approval-reminders`, `run-ai-batch`
 
 **Client lifecycle and workflow**

@@ -111,9 +111,6 @@ verify_jwt = false
 [functions.auto-run-client-tasks]
 verify_jwt = false
 
-[functions.generate-ads]
-verify_jwt = false
-
 [functions.run-ai-batch]
 verify_jwt = true
 
