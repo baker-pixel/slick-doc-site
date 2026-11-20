@@ -52,7 +52,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 
 **Client lifecycle and workflow**
 `advance-workflow`, `auto-run-client-tasks`, `check-stalled-workflows`, `seed-tier-workflow`,
-`start-client-cycle`, `generate-client-projects`, `client-context-refresh`, `sync-intake-context`,
+`start-client-cycle`, `client-context-refresh`, `sync-intake-context`,
 `parse-sop`, `send-client-invite`, `send-client-notification`, `send-booking-confirmation`,
 `send-weekly-recap`, `run-automation`, `process-agent-jobs`, `check-alerts`, `steward-proposals`,
 `steward-run`
