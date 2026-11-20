@@ -22,7 +22,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 ## Index
 
 **Auth and access**
-`accept-invitation`, `get-invitation`, `signup`, `admin`, `oauth-config`
+`accept-invitation`, `get-invitation`, `signup`, `admin`
 
 **Gap analysis and reports**
 `analyze-website`, `generate-analysis`, `send-gap-report`, `send-resume-link`, `submit-followup`,
@@ -47,8 +47,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `sync-fill-missing-images`, `fill-scheduled-content`, `auto-schedule-content`, `publish-scheduled-content`,
 `regenerate-social-strategy`, `save-channel-plan`, `reconcile-postforme-posts`, `postforme-connect-account`,
 `postforme-disconnect-account`, `postforme-publish-post`, `postforme-set-primary-account`,
-`postforme-sync-accounts`, `postforme-webhook`, `facebook-oauth-callback`, `instagram-oauth-callback`,
-`linkedin-oauth-callback`, `twitter-oauth-callback`, `generate-case-study`,
+`postforme-sync-accounts`, `postforme-webhook`, `generate-case-study`,
 `generate-approval-draft`, `handle-approval`, `send-approval-reminders`, `run-ai-batch`
 
 **Client lifecycle and workflow**

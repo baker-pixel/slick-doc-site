@@ -1043,54 +1043,6 @@ export type Database = {
           },
         ]
       }
-      client_integrations: {
-        Row: {
-          client_account_id: string
-          created_at: string
-          external_id: string | null
-          id: string
-          integration_config_id: string
-          is_active: boolean | null
-          settings: Json | null
-          updated_at: string
-        }
-        Insert: {
-          client_account_id: string
-          created_at?: string
-          external_id?: string | null
-          id?: string
-          integration_config_id: string
-          is_active?: boolean | null
-          settings?: Json | null
-          updated_at?: string
-        }
-        Update: {
-          client_account_id?: string
-          created_at?: string
-          external_id?: string | null
-          id?: string
-          integration_config_id?: string
-          is_active?: boolean | null
-          settings?: Json | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_integrations_client_account_id_fkey"
-            columns: ["client_account_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_integrations_integration_config_id_fkey"
-            columns: ["integration_config_id"]
-            isOneToOne: false
-            referencedRelation: "integration_configs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       client_invitations: {
         Row: {
           accepted_at: string | null
@@ -1516,56 +1468,6 @@ export type Database = {
             foreignKeyName: "client_onboarding_client_account_id_fkey"
             columns: ["client_account_id"]
             isOneToOne: true
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      client_platform_credentials: {
-        Row: {
-          additional_info: Json | null
-          client_account_id: string
-          created_at: string
-          id: string
-          login_url: string | null
-          notes: string | null
-          password: string | null
-          platform_name: string
-          platform_type: string
-          updated_at: string
-          username: string | null
-        }
-        Insert: {
-          additional_info?: Json | null
-          client_account_id: string
-          created_at?: string
-          id?: string
-          login_url?: string | null
-          notes?: string | null
-          password?: string | null
-          platform_name: string
-          platform_type: string
-          updated_at?: string
-          username?: string | null
-        }
-        Update: {
-          additional_info?: Json | null
-          client_account_id?: string
-          created_at?: string
-          id?: string
-          login_url?: string | null
-          notes?: string | null
-          password?: string | null
-          platform_name?: string
-          platform_type?: string
-          updated_at?: string
-          username?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_platform_credentials_client_account_id_fkey"
-            columns: ["client_account_id"]
-            isOneToOne: false
             referencedRelation: "client_accounts"
             referencedColumns: ["id"]
           },
@@ -3441,66 +3343,6 @@ export type Database = {
           },
         ]
       }
-      outreach_campaigns: {
-        Row: {
-          channel: string
-          client_id: string
-          contact_count: number
-          created_at: string
-          id: string
-          last_contact_at: string | null
-          metadata: Json | null
-          next_contact_at: string | null
-          prospect_id: string
-          started_at: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          channel: string
-          client_id: string
-          contact_count?: number
-          created_at?: string
-          id?: string
-          last_contact_at?: string | null
-          metadata?: Json | null
-          next_contact_at?: string | null
-          prospect_id: string
-          started_at?: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          channel?: string
-          client_id?: string
-          contact_count?: number
-          created_at?: string
-          id?: string
-          last_contact_at?: string | null
-          metadata?: Json | null
-          next_contact_at?: string | null
-          prospect_id?: string
-          started_at?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "outreach_campaigns_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "outreach_campaigns_prospect_id_fkey"
-            columns: ["prospect_id"]
-            isOneToOne: false
-            referencedRelation: "prospects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       page_speed_results: {
         Row: {
           client_account_id: string
@@ -4137,50 +3979,6 @@ export type Database = {
           },
         ]
       }
-      qa_checkpoints: {
-        Row: {
-          checked_at: string | null
-          checked_by: string | null
-          checkpoint_name: string
-          checkpoint_type: string
-          created_at: string
-          id: string
-          is_passed: boolean | null
-          notes: string | null
-          task_id: string
-        }
-        Insert: {
-          checked_at?: string | null
-          checked_by?: string | null
-          checkpoint_name: string
-          checkpoint_type?: string
-          created_at?: string
-          id?: string
-          is_passed?: boolean | null
-          notes?: string | null
-          task_id: string
-        }
-        Update: {
-          checked_at?: string | null
-          checked_by?: string | null
-          checkpoint_name?: string
-          checkpoint_type?: string
-          created_at?: string
-          id?: string
-          is_passed?: boolean | null
-          notes?: string | null
-          task_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "qa_checkpoints_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "client_tasks"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       qa_reports: {
         Row: {
           accessibility_issues: Json | null
@@ -4406,142 +4204,6 @@ export type Database = {
           },
         ]
       }
-      seo_page_analysis: {
-        Row: {
-          ai_rewrites: Json | null
-          analyzed_at: string
-          backlink_potential: number | null
-          broken_links: Json | null
-          client_account_id: string
-          created_at: string
-          external_links: number | null
-          h1_tags: Json | null
-          id: string
-          image_count: number | null
-          images_missing_alt: number | null
-          internal_links: number | null
-          keyword_score: number | null
-          keywords_found: Json | null
-          load_time_ms: number | null
-          meta_description: string | null
-          meta_title: string | null
-          mobile_friendly: boolean | null
-          overall_score: number | null
-          page_title: string | null
-          readability_issues: Json | null
-          readability_score: number | null
-          suggestions: Json | null
-          technical_issues: Json | null
-          technical_score: number | null
-          updated_at: string
-          url: string
-          word_count: number | null
-        }
-        Insert: {
-          ai_rewrites?: Json | null
-          analyzed_at?: string
-          backlink_potential?: number | null
-          broken_links?: Json | null
-          client_account_id: string
-          created_at?: string
-          external_links?: number | null
-          h1_tags?: Json | null
-          id?: string
-          image_count?: number | null
-          images_missing_alt?: number | null
-          internal_links?: number | null
-          keyword_score?: number | null
-          keywords_found?: Json | null
-          load_time_ms?: number | null
-          meta_description?: string | null
-          meta_title?: string | null
-          mobile_friendly?: boolean | null
-          overall_score?: number | null
-          page_title?: string | null
-          readability_issues?: Json | null
-          readability_score?: number | null
-          suggestions?: Json | null
-          technical_issues?: Json | null
-          technical_score?: number | null
-          updated_at?: string
-          url: string
-          word_count?: number | null
-        }
-        Update: {
-          ai_rewrites?: Json | null
-          analyzed_at?: string
-          backlink_potential?: number | null
-          broken_links?: Json | null
-          client_account_id?: string
-          created_at?: string
-          external_links?: number | null
-          h1_tags?: Json | null
-          id?: string
-          image_count?: number | null
-          images_missing_alt?: number | null
-          internal_links?: number | null
-          keyword_score?: number | null
-          keywords_found?: Json | null
-          load_time_ms?: number | null
-          meta_description?: string | null
-          meta_title?: string | null
-          mobile_friendly?: boolean | null
-          overall_score?: number | null
-          page_title?: string | null
-          readability_issues?: Json | null
-          readability_score?: number | null
-          suggestions?: Json | null
-          technical_issues?: Json | null
-          technical_score?: number | null
-          updated_at?: string
-          url?: string
-          word_count?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "seo_page_analysis_client_account_id_fkey"
-            columns: ["client_account_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      seo_suggestions: {
-        Row: {
-          client_account_id: string
-          created_at: string
-          id: string
-          period: string | null
-          status: string | null
-          suggestions: Json
-        }
-        Insert: {
-          client_account_id: string
-          created_at?: string
-          id?: string
-          period?: string | null
-          status?: string | null
-          suggestions?: Json
-        }
-        Update: {
-          client_account_id?: string
-          created_at?: string
-          id?: string
-          period?: string | null
-          status?: string | null
-          suggestions?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "seo_suggestions_client_account_id_fkey"
-            columns: ["client_account_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       site_events: {
         Row: {
           device: string | null
@@ -4755,65 +4417,6 @@ export type Database = {
         }
         Relationships: []
       }
-      social_media_posts: {
-        Row: {
-          ai_generated: boolean | null
-          client_account_id: string
-          content: string
-          created_at: string
-          hashtags: string[] | null
-          id: string
-          media_urls: string[] | null
-          platform: string
-          published_at: string | null
-          scheduled_at: string | null
-          status: string
-          tone: string | null
-          topic: string | null
-          updated_at: string
-        }
-        Insert: {
-          ai_generated?: boolean | null
-          client_account_id: string
-          content: string
-          created_at?: string
-          hashtags?: string[] | null
-          id?: string
-          media_urls?: string[] | null
-          platform?: string
-          published_at?: string | null
-          scheduled_at?: string | null
-          status?: string
-          tone?: string | null
-          topic?: string | null
-          updated_at?: string
-        }
-        Update: {
-          ai_generated?: boolean | null
-          client_account_id?: string
-          content?: string
-          created_at?: string
-          hashtags?: string[] | null
-          id?: string
-          media_urls?: string[] | null
-          platform?: string
-          published_at?: string | null
-          scheduled_at?: string | null
-          status?: string
-          tone?: string | null
-          topic?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "social_media_posts_client_account_id_fkey"
-            columns: ["client_account_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       sop_documents: {
         Row: {
           action_items: Json | null
@@ -4873,47 +4476,6 @@ export type Database = {
           type?: string
         }
         Relationships: []
-      }
-      task_notifications: {
-        Row: {
-          client_task_id: string | null
-          created_at: string | null
-          id: string
-          is_read: boolean | null
-          message: string | null
-          notification_type: string
-          read_at: string | null
-          title: string
-        }
-        Insert: {
-          client_task_id?: string | null
-          created_at?: string | null
-          id?: string
-          is_read?: boolean | null
-          message?: string | null
-          notification_type: string
-          read_at?: string | null
-          title: string
-        }
-        Update: {
-          client_task_id?: string | null
-          created_at?: string | null
-          id?: string
-          is_read?: boolean | null
-          message?: string | null
-          notification_type?: string
-          read_at?: string | null
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "task_notifications_client_task_id_fkey"
-            columns: ["client_task_id"]
-            isOneToOne: false
-            referencedRelation: "client_tasks"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       task_templates: {
         Row: {
@@ -5076,56 +4638,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      voice_memos: {
-        Row: {
-          audio_duration: number | null
-          audio_url: string
-          client_account_id: string
-          context: string | null
-          created_at: string
-          id: string
-          is_read: boolean | null
-          related_id: string | null
-          transcript: string | null
-          transcription_status: string | null
-          user_id: string
-        }
-        Insert: {
-          audio_duration?: number | null
-          audio_url: string
-          client_account_id: string
-          context?: string | null
-          created_at?: string
-          id?: string
-          is_read?: boolean | null
-          related_id?: string | null
-          transcript?: string | null
-          transcription_status?: string | null
-          user_id: string
-        }
-        Update: {
-          audio_duration?: number | null
-          audio_url?: string
-          client_account_id?: string
-          context?: string | null
-          created_at?: string
-          id?: string
-          is_read?: boolean | null
-          related_id?: string | null
-          transcript?: string | null
-          transcription_status?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "voice_memos_client_account_id_fkey"
-            columns: ["client_account_id"]
-            isOneToOne: false
-            referencedRelation: "client_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       workflow_steps: {
         Row: {
