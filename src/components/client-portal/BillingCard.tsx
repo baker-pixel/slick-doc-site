@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { pricingData, type TierId } from "@/lib/pricingData";
-import { graceDeadline, hasLiveSubscription, isComped, useBilling, useBillingActions } from "@/hooks/use-billing";
+import { graceDeadline, hasLiveSubscription, useBilling, useBillingActions } from "@/hooks/use-billing";
 
 const TIER_LABELS: Record<string, string> = {
   foundation: "SYSTEM Foundation",
@@ -51,8 +51,7 @@ export function BillingCard({ clientAccountId, justCheckedOut }: BillingCardProp
   const live = hasLiveSubscription(billing);
   const price = pricingData[billing.tier as TierId]?.price;
   const deadline = billing.subscription_status === "past_due" ? graceDeadline(billing) : null;
-  const comped = isComped(billing) && !live;
-  const confirming = justCheckedOut && !live && !comped;
+  const confirming = justCheckedOut && !live;
 
   return (
     <Card>
@@ -61,17 +60,11 @@ export function BillingCard({ clientAccountId, justCheckedOut }: BillingCardProp
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-semibold">{TIER_LABELS[billing.tier] ?? "Your plan"}</h3>
-              {comped
-                ? <Badge className="bg-green-100 text-green-800">Complimentary</Badge>
-                : statusBadge(billing.subscription_status, billing.paused_for_billing)}
+              {statusBadge(billing.subscription_status, billing.paused_for_billing)}
             </div>
             {confirming ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Confirming your payment...
-              </p>
-            ) : comped ? (
-              <p className="text-sm text-muted-foreground">
-                Your services are included at no charge.
               </p>
             ) : live ? (
               <p className="text-sm text-muted-foreground">
@@ -105,7 +98,7 @@ export function BillingCard({ clientAccountId, justCheckedOut }: BillingCardProp
                 Manage payment methods
               </Button>
             )}
-            {!live && !confirming && !comped && (
+            {!live && !confirming && (
               <Button onClick={() => subscribe()} disabled={busy !== null}>
                 {busy === "checkout" ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

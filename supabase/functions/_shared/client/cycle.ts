@@ -57,28 +57,6 @@ export function sweepWindow(
   return { start, end };
 }
 
-/**
- * Cycle window for a client with no live Stripe period (admin-granted free
- * access, billing_bypass). Same cycle machinery as paying clients, just a
- * rolling 30-day period instead of Stripe's: a still-running latest cycle is
- * returned unchanged (so a failed plan retries the SAME cycle, and openCycle
- * stays idempotent); otherwise the next period starts where the last one
- * ended, or now when there is none / it ended over a month ago.
- */
-export function complimentaryWindow(
-  latest: { period_start: string | Date; period_end: string | Date } | null,
-  now: Date = new Date(),
-): { start: Date; end: Date } {
-  if (latest) {
-    const end = new Date(latest.period_end);
-    if (end > now) return { start: new Date(latest.period_start), end };
-    if (now.getTime() - end.getTime() < MONTH_MS) {
-      return { start: end, end: new Date(end.getTime() + MONTH_MS) };
-    }
-  }
-  return { start: now, end: new Date(now.getTime() + MONTH_MS) };
-}
-
 // ─── Digest ──────────────────────────────────────────────────────────────────
 
 export interface ApprovalRow {

@@ -4,7 +4,6 @@ import { serviceClient } from "../_shared/core/supabase.ts";
 import { checkPipelineAuth } from "../_shared/core/auth.ts";
 import { logAlert } from "../_shared/client/alerts.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
-import { bypassActive } from "../_shared/billing/billingGate.ts";
 import { hasBusinessContext } from "../_shared/client/businessContext.ts";
 import { refineClientContext } from "../_shared/client/contextRefine.ts";
 import { upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
@@ -25,7 +24,6 @@ import {
   openCycle,
   planIssues,
   sweepWindow,
-  complimentaryWindow,
 } from "../_shared/client/cycle.ts";
 
 // Cycle rollover. A cycle is one paid billing period. When an invoice is paid
@@ -92,7 +90,7 @@ async function rolloverClient(
 ): Promise<Record<string, unknown>> {
   const { data: client, error } = await supabase
     .from("client_accounts")
-    .select("id, business_name, industry, tier, status, context_profile, icp, current_period_end, onboarded_at, created_at, billing_bypass, billing_bypass_until")
+    .select("id, business_name, industry, tier, status, context_profile, icp, current_period_end, onboarded_at, created_at")
     .eq("id", clientId)
     .maybeSingle();
   if (error) throw error;
@@ -109,9 +107,6 @@ async function rolloverClient(
       .eq("client_account_id", clientId).order("period_end", { ascending: false }).limit(1).maybeSingle();
     if (client.current_period_end && new Date(client.current_period_end) > new Date()) {
       win = sweepWindow(client.current_period_end, last?.period_end ?? null);
-    } else if (bypassActive(client)) {
-      // Not charged (admin-granted): same cycles, on a rolling 30-day period.
-      win = complimentaryWindow(last ?? null);
     } else {
       return { client_id: clientId, skipped: "no billing period on file" };
     }
@@ -370,30 +365,6 @@ async function sweep(supabase: Supabase): Promise<Record<string, unknown>> {
     .gt("current_period_end", new Date().toISOString());
 
   const due: string[] = [];
-
-  // Clients who are not charged (billing_bypass) run the same cycles on a
-  // rolling 30-day period. Paying clients are handled below; a bypassed client
-  // that also has a live Stripe period follows Stripe instead.
-  const { data: free } = await supabase
-    .from("client_accounts")
-    .select("id, current_period_end, billing_bypass, billing_bypass_until")
-    .eq("status", "active")
-    .eq("billing_bypass", true);
-  const nowMs = Date.now();
-  for (const c of free ?? []) {
-    if (c.current_period_end && new Date(c.current_period_end).getTime() > nowMs) continue;
-    if (!bypassActive(c)) continue; // comp expired
-    const { data: cycles } = await supabase.from("client_cycles").select("period_end, status, plan")
-      .eq("client_account_id", c.id).order("period_end", { ascending: false }).limit(1);
-    const latest = cycles?.[0];
-    if (latest && new Date(latest.period_end).getTime() > nowMs) {
-      // A running cycle: only retry one whose planning has not completed.
-      if (latest.status === "active" || latest.status === "closed") continue;
-      if (Number(latest.plan?.attempts ?? 0) >= MAX_ATTEMPTS) continue;
-      if (isRunInProgress(latest.plan)) continue;
-    }
-    due.push(c.id);
-  }
 
   for (const c of clients ?? []) {
     const { data: cycles } = await supabase.from("client_cycles").select("period_end, status, plan")

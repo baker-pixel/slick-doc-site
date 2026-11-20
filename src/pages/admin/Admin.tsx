@@ -1644,8 +1644,6 @@ const AdminInner = () => {
             <SelectedClientHeader 
               client={selectedClient} 
               onChangeClient={handleClearClient} 
-              adminPassword={storedPassword}
-              onChanged={() => fetchData(storedPassword)}
             />
           )}
           
