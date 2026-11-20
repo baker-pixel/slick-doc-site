@@ -1,6 +1,5 @@
 // Transactional billing emails (best-effort: a mail failure must never fail a
 // webhook, or Stripe retries the whole event).
-import { GRACE_DAYS } from "./billingGate.ts";
 import { emailLogo } from "../client/brandEmail.ts";
 import { tierLabel } from "./systemTier.ts";
 
@@ -35,7 +34,7 @@ export async function sendPaymentFailedEmail(to: string, firstName: string | nul
     to,
     "Action needed: your Orange Door payment didn't go through",
     `<p>Hi ${esc(firstName || "there")},</p>
-     <p>We couldn't process your latest payment. Please update your card within ${GRACE_DAYS} days so your services keep running.</p>
+     <p>We couldn't process your latest payment, so your services are paused. Update your card and they resume automatically as soon as the payment goes through.</p>
      <p><a href="${billingLink}">Update payment method</a></p>
      <p>- The Orange Door Team</p>`,
   );
