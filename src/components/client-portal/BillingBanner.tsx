@@ -72,7 +72,6 @@ export function BillingBanner({ clientAccountId, onOpenBilling }: BillingBannerP
   if (!billing) return null;
   // Pending signups haven't been activated yet and cancelled accounts are intentional.
   if (billing.status === "pending" || billing.status === "cancelled") return null;
-  if (billing.billing_bypass) return null; // complimentary access
 
   const paused = billing.status === "paused" && billing.paused_for_billing;
   const pastDue = billing.subscription_status === "past_due";

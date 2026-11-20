@@ -103,10 +103,13 @@ async function rolloverClient(
 
   let win = window;
   if (!win) {
-    if (!client.current_period_end) return { client_id: clientId, skipped: "no billing period on file" };
-    const { data: last } = await supabase.from("client_cycles").select("period_end")
+    const { data: last } = await supabase.from("client_cycles").select("period_start, period_end")
       .eq("client_account_id", clientId).order("period_end", { ascending: false }).limit(1).maybeSingle();
-    win = sweepWindow(client.current_period_end, last?.period_end ?? null);
+    if (client.current_period_end && new Date(client.current_period_end) > new Date()) {
+      win = sweepWindow(client.current_period_end, last?.period_end ?? null);
+    } else {
+      return { client_id: clientId, skipped: "no billing period on file" };
+    }
   }
 
   const { cycle, created } = await openCycle(supabase, clientId, win, opts.source, opts.invoiceId ?? null);
@@ -362,6 +365,7 @@ async function sweep(supabase: Supabase): Promise<Record<string, unknown>> {
     .gt("current_period_end", new Date().toISOString());
 
   const due: string[] = [];
+
   for (const c of clients ?? []) {
     const { data: cycles } = await supabase.from("client_cycles").select("period_end, status, plan")
       .eq("client_account_id", c.id).order("period_end", { ascending: false }).limit(1);
