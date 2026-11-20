@@ -29,7 +29,6 @@ import {
   Wand2,
   ShieldCheck,
   GitCompare,
-  FileSpreadsheet,
   Brain,
   List,
   ClipboardCheck,
@@ -498,25 +497,6 @@ const features: FeatureInfo[] = [
       "Create sales materials",
       "Document project impact",
       "Build client confidence"
-    ],
-    status: "active"
-  },
-  {
-    id: "sales-proposals",
-    name: "AI Sales Proposals",
-    icon: FileSpreadsheet,
-    category: "automation",
-    description: "Generate complete sales proposals with industry analysis, sample designs, ROI projections, timelines, and pricing breakdowns.",
-    capabilities: [
-      "AI proposal generation",
-      "Industry-specific analysis",
-      "ROI calculations",
-      "Custom pricing"
-    ],
-    useCases: [
-      "Close deals faster",
-      "Create professional proposals",
-      "Standardize sales process"
     ],
     status: "active"
   },

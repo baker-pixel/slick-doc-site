@@ -15,12 +15,6 @@ verify_jwt = false
 [functions.generate-case-study]
 verify_jwt = false
 
-[functions.generate-sales-proposal]
-verify_jwt = false
-
-[functions.send-sales-proposal]
-verify_jwt = false
-
 [functions.generate-before-after]
 verify_jwt = false
 
