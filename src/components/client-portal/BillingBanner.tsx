@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
-import { ArrowRight, Clock, CreditCard, Loader2, PauseCircle, Rocket, ShieldAlert } from "lucide-react";
-import { format } from "date-fns";
+import { ArrowRight, CreditCard, Loader2, PauseCircle, Rocket, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { graceDeadline, useBilling, useBillingActions } from "@/hooks/use-billing";
+import { useBilling, useBillingActions } from "@/hooks/use-billing";
 
 interface BillingBannerProps {
   clientAccountId: string;
@@ -41,33 +39,13 @@ const TONES: Record<Tone, { surface: string; accent: string; tile: string; chip:
   },
 };
 
-/** "1d 4h left" / "5h 12m left" / "under 1m left" until the grace window closes. */
-function timeLeft(deadline: Date, now: number): string {
-  const ms = deadline.getTime() - now;
-  if (ms <= 0) return "Grace period ended";
-  const mins = Math.floor(ms / 60000);
-  const d = Math.floor(mins / 1440);
-  const h = Math.floor((mins % 1440) / 60);
-  const m = mins % 60;
-  if (d > 0) return `${d}d ${h}h left`;
-  if (h > 0) return `${h}h ${m}m left`;
-  return m > 0 ? `${m}m left` : "under 1m left";
-}
-
 /**
  * Portal-wide notice when billing needs attention: services paused, payment
- * failed (still in grace), or no subscription yet.
+ * failed, or no subscription yet.
  */
 export function BillingBanner({ clientAccountId, onOpenBilling }: BillingBannerProps) {
   const { data: billing } = useBilling(clientAccountId);
   const { busy, subscribe, manageBilling } = useBillingActions(clientAccountId);
-  const [now, setNow] = useState(() => Date.now());
-
-  // Keep the countdown fresh without re-fetching.
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(t);
-  }, []);
 
   if (!billing) return null;
   // Pending signups haven't been activated yet and cancelled accounts are intentional.
@@ -77,8 +55,6 @@ export function BillingBanner({ clientAccountId, onOpenBilling }: BillingBannerP
   const pastDue = billing.subscription_status === "past_due";
   const needsSubscription = ["none", "incomplete", "canceled", "unpaid"].includes(billing.subscription_status);
   if (!paused && !pastDue && !needsSubscription) return null;
-
-  const deadline = pastDue ? graceDeadline(billing) : null;
 
   let tone: Tone;
   let Icon = ShieldAlert;
@@ -94,9 +70,7 @@ export function BillingBanner({ clientAccountId, onOpenBilling }: BillingBannerP
     tone = "warning";
     Icon = ShieldAlert;
     title = "Your last payment didn't go through";
-    message = deadline
-      ? `Update your card by ${format(deadline, "MMM d 'at' h:mm a")} to keep everything running without interruption.`
-      : "Update your card to keep everything running without interruption.";
+    message = "Update your card and your services resume automatically as soon as the payment goes through.";
   } else {
     tone = "info";
     Icon = Rocket;
@@ -127,12 +101,6 @@ export function BillingBanner({ clientAccountId, onOpenBilling }: BillingBannerP
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-base font-semibold leading-tight text-foreground">{title}</h3>
-            {deadline && (
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold", t.chip)}>
-                <Clock className="h-3 w-3" />
-                {timeLeft(deadline, now)}
-              </span>
-            )}
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">{message}</p>
         </div>

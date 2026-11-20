@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { pricingData, type TierId } from "@/lib/pricingData";
-import { graceDeadline, hasLiveSubscription, useBilling, useBillingActions } from "@/hooks/use-billing";
+import { hasLiveSubscription, useBilling, useBillingActions } from "@/hooks/use-billing";
 
 const TIER_LABELS: Record<string, string> = {
   foundation: "SYSTEM Foundation",
@@ -50,7 +50,6 @@ export function BillingCard({ clientAccountId, justCheckedOut }: BillingCardProp
 
   const live = hasLiveSubscription(billing);
   const price = pricingData[billing.tier as TierId]?.price;
-  const deadline = billing.subscription_status === "past_due" ? graceDeadline(billing) : null;
   const confirming = justCheckedOut && !live;
 
   return (
@@ -80,9 +79,9 @@ export function BillingCard({ clientAccountId, justCheckedOut }: BillingCardProp
                 Subscribe to activate your {TIER_LABELS[billing.tier] ?? "plan"} services.
               </p>
             )}
-            {deadline && (
+            {billing.subscription_status === "past_due" && (
               <p className="text-sm font-medium text-red-700">
-                Update your card by {format(deadline, "MMM d, h:mm a")} to avoid a pause in services.
+                Your last payment didn't go through. Update your card to restore your services.
               </p>
             )}
           </div>
