@@ -18,12 +18,11 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 | `wordpress/` | Plugin version, WordPress site helpers and fix application, first-party traffic ingest |
 | `client/` | Client context, cycles, onboarding, alerts, outcomes, command center, `profile/` company-profile agent |
 | `steward/` | Goal-driven per-client steward agents (gate, loop, proposals, run, SEO actions) and their tools |
-| `mcp/` | MCP server and token auth |
 
 ## Index
 
 **Auth and access**
-`accept-invitation`, `get-invitation`, `signup`, `admin`, `mcp`, `mcp-tokens`, `oauth-config`
+`accept-invitation`, `get-invitation`, `signup`, `admin`, `oauth-config`
 
 **Gap analysis and reports**
 `analyze-website`, `generate-analysis`, `send-gap-report`, `send-resume-link`, `submit-followup`,
