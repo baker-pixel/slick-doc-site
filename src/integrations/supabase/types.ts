@@ -4920,17 +4920,6 @@ export type Database = {
         Args: { p_client_account_id: string; p_settings: Json }
         Returns: undefined
       }
-      create_project_with_milestones: {
-        Args: {
-          p_client_account_id: string
-          p_description?: string
-          p_milestones?: Json
-          p_name: string
-          p_start_date?: string
-          p_target_end_date?: string
-        }
-        Returns: Json
-      }
       create_seo_audit_task: { Args: { p_client_id: string }; Returns: string }
       get_anon_key: { Args: never; Returns: string }
       get_optimal_send_hour: { Args: { p_timezone?: string }; Returns: number }
