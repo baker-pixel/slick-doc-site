@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/social/creativeImagePrompt.ts";
+import { buildCreativeImage } from "../_shared/social/creativeImagePrompt.ts";
 import { buildGptImageRequestBody } from "../_shared/ai/gptImage.ts";
 
 const corsHeaders = {
@@ -106,7 +106,20 @@ serve(async (req) => {
       const client = clientMap[slot.client_account_id];
       if (!client) continue;
 
-      const prompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+      // Reuse a concept saved by an earlier run (a failed batch submit leaves
+      // slots unstamped and they come back next run); save a new one so the
+      // next retry skips the LLM call.
+      const meta = ((slot as any).metadata || {}) as Record<string, unknown>;
+      const stored = typeof meta.image_concept === "string" && meta.image_concept
+        ? { concept: meta.image_concept as string, styleId: (meta.image_style_id as string | undefined) ?? null }
+        : undefined;
+      const built = await buildCreativeImage(client, { content: slot.content || "", title: slot.title, platform: slot.platform }, [], stored);
+      const prompt = built.prompt;
+      if (built.concept && built.concept !== meta.image_concept) {
+        const newMeta = { ...meta, image_concept: built.concept, image_style_id: built.styleId };
+        (slot as any).metadata = newMeta; // the batch-id stamp below spreads this
+        await supabase.from("content_calendar").update({ metadata: newMeta }).eq("id", slot.id);
+      }
 
       jsonlLines.push(JSON.stringify({
         custom_id: slot.id,

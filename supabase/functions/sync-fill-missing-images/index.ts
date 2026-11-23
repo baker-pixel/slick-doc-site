@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/social/creativeImagePrompt.ts";
+import { buildCreativeImage, type RecentImage } from "../_shared/social/creativeImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/ai/gptImage.ts";
 import { getClientBrandKit } from "../_shared/client/brandKit.ts";
 import { checkPipelineAuth } from "../_shared/core/auth.ts";
@@ -40,6 +40,10 @@ const URGENT_WINDOW_MS = 4 * 60 * 60 * 1000;
 // this needs enough headroom that a run doesn't go empty while a real
 // fallback candidate sits just past the query's limit.
 const CANDIDATE_POOL_SIZE = 50;
+// A slot whose image generation fails is retried every cycle. Stop after this
+// many failures so a persistent problem (no OpenAI credit, a rejected prompt)
+// doesn't loop forever; an admin-triggered run (client_id) ignores the cap.
+const MAX_IMAGE_ATTEMPTS = 3;
 
 function isFallbackEligible(slot: { metadata: unknown; scheduled_for: string | null }): boolean {
   const meta = (slot.metadata as Record<string, unknown>) || {};
@@ -116,6 +120,7 @@ serve(async (req) => {
       .is("metadata->>image_skip", null)
       .limit(clientId ? ADMIN_MAX_PER_RUN : CANDIDATE_POOL_SIZE);
     if (clientId) candidatesQuery = candidatesQuery.eq("client_account_id", clientId);
+    else candidatesQuery = candidatesQuery.or(`metadata->>image_attempts.is.null,metadata->>image_attempts.lt.${MAX_IMAGE_ATTEMPTS}`);
 
     const { data: candidates, error: fetchErr } = await candidatesQuery;
 
@@ -170,15 +175,32 @@ serve(async (req) => {
       const client = clientMap[slot.client_account_id];
       if (!client) continue;
 
+      let meta = ((slot as any).metadata || {}) as Record<string, unknown>;
       try {
-        const imageFeedback = (slot.metadata?.image_feedback as string | undefined)?.trim();
-        const basePrompt = await buildCreativeImagePrompt(client, { content: slot.content || "", title: slot.title, platform: slot.platform });
+        const imageFeedback = (meta.image_feedback as string | undefined)?.trim();
+        const stored = typeof meta.image_concept === "string" && meta.image_concept
+          ? { concept: meta.image_concept as string, styleId: (meta.image_style_id as string | undefined) ?? null }
+          : undefined;
+        // A retry reuses the saved concept. Feedback means the client rejected
+        // it, so write a new one that must differ from the old.
+        const recent: RecentImage[] = imageFeedback && stored ? [stored] : [];
+        const built = await buildCreativeImage(
+          client,
+          { content: slot.content || "", title: slot.title, platform: slot.platform },
+          recent,
+          imageFeedback ? undefined : stored,
+        );
+        // Save the concept before the paid image call so a failure doesn't lose it.
+        if (built.concept && built.concept !== meta.image_concept) {
+          meta = { ...meta, image_concept: built.concept, image_style_id: built.styleId };
+          await supabase.from("content_calendar").update({ metadata: meta }).eq("id", slot.id);
+        }
         const prompt = imageFeedback
-          ? `${basePrompt}\nThe client rejected the previous image and asked for this change, which must be followed: "${imageFeedback}"`
-          : basePrompt;
+          ? `${built.prompt}\nThe client rejected the previous image and asked for this change, which must be followed: "${imageFeedback}"`
+          : built.prompt;
         const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, brandMap[slot.client_account_id]);
 
-        const { image_feedback: _used, ...keptMeta } = ((slot as any).metadata || {}) as Record<string, unknown>;
+        const { image_feedback: _used, image_attempts: _a, ...keptMeta } = meta;
         await supabase
           .from("content_calendar")
           .update({ metadata: { ...keptMeta, image_url: imageUrl } })
@@ -190,6 +212,23 @@ serve(async (req) => {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`Failed to fill image for slot ${slot.id}:`, msg);
         failures.push({ id: slot.id, error: msg });
+        const attempts = (Number(meta.image_attempts) || 0) + 1;
+        await supabase
+          .from("content_calendar")
+          .update({ metadata: { ...meta, image_attempts: attempts, image_last_error: msg.slice(0, 200) } })
+          .eq("id", slot.id);
+        if (attempts === MAX_IMAGE_ATTEMPTS) {
+          try {
+            await supabase.from("automation_alerts").insert({
+              alert_type: "function_error",
+              severity: "error",
+              title: "Image generation gave up on a post",
+              message: `Slot ${slot.id} failed ${attempts} times: ${msg.slice(0, 200)}`,
+              source: "sync-fill-missing-images",
+              metadata: { slot_id: slot.id, client_account_id: slot.client_account_id },
+            });
+          } catch { /* best-effort */ }
+        }
       }
     }
 
