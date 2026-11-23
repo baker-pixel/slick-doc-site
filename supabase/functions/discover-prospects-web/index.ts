@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
 import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/outreach/icp.ts";
-import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/outreach/discoveryRotation.ts";
+import { buildSearchPlans, normalizeGeographyForApollo, rotatePlans, widenGeography } from "../_shared/outreach/discoveryRotation.ts";
 import { filterProspectCandidates } from "../_shared/outreach/prospectFilter.ts";
 import { resolveDiscoveryCampaign } from "../_shared/outreach/campaignScope.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
@@ -54,15 +54,6 @@ interface FoundCompany {
 const OPENAI_API = "https://api.openai.com/v1";
 const APOLLO_API = "https://api.apollo.io/api/v1";
 
-// Apollo's location matcher wants plain city/state/country terms ("texas",
-// "tokyo" -- verified against docs.apollo.io/reference/organization-search),
-// but the ICP's geography string is LLM-generated and can carry a trailing
-// qualifier like "Knoxville, TN metro" that isn't a term Apollo recognizes.
-// Strip the common ones rather than sending it through unmatched.
-function normalizeGeographyForApollo(geography: string): string {
-  return geography.replace(/\s*(metro area|metro|region)\s*$/i, "").trim();
-}
-
 // "10-200 employees" / "10 to 200" -> "10,200" (Apollo's range format).
 // Returns undefined for "any" or anything unparseable -- an omitted filter
 // searches all sizes, which is the safer default over guessing wrong.
@@ -94,7 +85,8 @@ async function apolloSearchCompanies(
     per_page: Math.min(maxResults * 2, 100),
     page,
   };
-  if (!/global/i.test(geography)) body.organization_locations = [normalizeGeographyForApollo(geography)];
+  const location = /global|worldwide/i.test(geography) ? "" : normalizeGeographyForApollo(geography);
+  if (location) body.organization_locations = [location];
   const employeeRange = parseEmployeeRange(icp.company_size);
   if (employeeRange) body.organization_num_employees_ranges = [employeeRange];
 
