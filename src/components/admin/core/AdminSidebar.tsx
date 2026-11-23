@@ -17,7 +17,6 @@ import {
   HelpCircle,
   Search,
   Bell,
-  RefreshCw,
   UserCog,
   Radar,
   Activity,
@@ -74,7 +73,6 @@ export type AdminSection =
   | "reports-review"
   | "alerts"
   | "ai-spend"
-  | "cycles"
   | "activity-feed"
   | "feature-guide"
   | "quick-actions"
@@ -130,7 +128,6 @@ const agentItems: NavItem[] = [
 
 // MONITORING: is it all running, and what happened.
 const monitoringItems: NavItem[] = [
-  { id: "cycles", label: "Work cycles", icon: RefreshCw },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "ai-spend", label: "AI spend", icon: DollarSign },
   { id: "activity-feed", label: "Activity log", icon: Activity },
