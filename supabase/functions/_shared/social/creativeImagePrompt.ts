@@ -369,20 +369,28 @@ function peopleConstraint(style: ImageStyle): string {
   );
 }
 
+/** A concept saved from an earlier attempt, reused so a retry skips the LLM call. */
+export interface FixedConcept {
+  concept: string;
+  styleId?: string | null;
+}
+
 export async function buildCreativeImage(
   client: ImagePromptClient,
   post: ImagePromptPost,
   recent: RecentImage[] = [],
+  fixed?: FixedConcept,
 ): Promise<CreativeImageResult> {
   const prefs = (client.context_profile ?? {}) as CreativeImagePrefs;
   const never = Array.isArray(prefs.image_never) ? prefs.image_never.filter(Boolean) : [];
-  const style = pickImageStyle(post, prefs, recent);
+  const fixedStyle = fixed?.styleId ? IMAGE_STYLES.find((s) => s.id === fixed.styleId) : undefined;
+  const style = fixedStyle ?? pickImageStyle(post, prefs, recent);
   const recentConcepts = recent
     .map((r) => r.concept)
     .filter((c): c is string => typeof c === "string" && c.length > 0)
     .slice(0, 6);
 
-  const concept = await writeConcept(client, post, style, prefs, never, recentConcepts);
+  const concept = fixed?.concept?.trim() || await writeConcept(client, post, style, prefs, never, recentConcepts);
   if (!concept) {
     const base = await buildSocialImagePrompt(client, post);
     const prompt = never.length ? `${base}\nNever show: ${never.join("; ")}.` : base;
