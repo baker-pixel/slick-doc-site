@@ -41,7 +41,6 @@ import { EmailTemplatesPanel } from "@/components/admin/email/EmailTemplatesPane
 import { CampaignSenderPanel } from "@/components/admin/email/CampaignSenderPanel";
 import { QuickActionsPanel } from "@/components/admin/core/QuickActionsPanel";
 import PipelineDashboard from "@/components/admin/sales/PipelineDashboard";
-import CycleOverviewPanel from "@/components/admin/workflow/CycleOverviewPanel";
 import AutomationAlertsPanel from "@/components/admin/workflow/AutomationAlertsPanel";
 import ClientDocumentsPanel from "@/components/admin/clients/ClientDocumentsPanel";
 import ClientMessagesAdminPanel from "@/components/admin/clients/ClientMessagesAdminPanel";
@@ -1405,8 +1404,6 @@ const AdminInner = () => {
         return <AutomationControlCenter adminPassword={storedPassword} />;
       case "pipeline":
         return renderLeadsHub();
-      case "cycles":
-        return <CycleOverviewPanel />;
       case "alerts":
         return <AutomationAlertsPanel />;
       case "ai-spend":
@@ -1535,7 +1532,6 @@ const AdminInner = () => {
       "automation-center": "Automation Control Center",
       "content-review": "Content Review",
       "reports-review": "Reports Review",
-      cycles: "Work Cycles",
       alerts: "Automation Alerts",
       "ai-spend": "AI Spend & Budget",
       "activity-feed": "Activity Feed",
@@ -1561,7 +1557,7 @@ const AdminInner = () => {
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
     "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
-    "emails", "templates", "sequences", "campaigns", "alerts", "cycles", "ai-spend",
+    "emails", "templates", "sequences", "campaigns", "alerts", "ai-spend",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "integrations",
     "quick-actions", "activity-feed",
