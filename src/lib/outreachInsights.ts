@@ -109,8 +109,8 @@ export function engineStatus(i: EngineStatusInput): EngineStatus {
   }
   const sinceDiscovery = i.lastDiscoveryAt ? now.getTime() - new Date(i.lastDiscoveryAt).getTime() : null;
   if (sinceDiscovery !== null && sinceDiscovery > 36 * HOUR) {
-    return { ...base, state: "running", headline: "Running, but the last searches found nothing new",
-      detail: "Your ideal customer profile may be narrow, so recent daily searches turned up no fresh leads. Broadening it (below) usually helps." };
+    return { ...base, state: "running", headline: "No new leads found recently",
+      detail: "The last successful lead search was a while ago. A narrow ideal customer profile is one common cause; broadening it (below) can help." };
   }
   if (i.pendingQueue === 0 && i.awaitingReview === 0 && i.lastDiscoveryAt === null) {
     return { ...base, state: "running", headline: "Running: waiting for the first search",

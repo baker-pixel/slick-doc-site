@@ -153,12 +153,6 @@ export function OutreachInsights({ clientAccountId, prospects, hasMailbox, onOpe
             sub={cap > 0 ? "Daily limit protects your inbox's reputation" : undefined}
           />
         </div>
-        {awaitingReview > 0 && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{awaitingReview}</span> new lead{awaitingReview === 1 ? " is" : "s are"} being reviewed
-            by the Orange Door team before any email is sent. Nobody is contacted until a lead is approved, then there is a 48-hour hold before the first email.
-          </p>
-        )}
       </Card>
 
       {/* Detail tabs */}
