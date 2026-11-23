@@ -4,6 +4,7 @@
 // approval just records the decision). Nothing in this file pretends to act.
 import type { InputSchema } from "../core/toolSchema.ts";
 import type { Engine } from "../client/clientContext.ts";
+import { buildFixPrediction } from "./outcomes.ts";
 
 export interface ExecEnv { supabase: any; clientId: string; proposalId: string }
 
@@ -15,6 +16,8 @@ export interface ActionDef {
   inputSchema: InputSchema;
   /** One line for the approval queue. */
   summarize(args: Record<string, any>): string;
+  /** Builds a testable prediction to store with the proposal (see outcomes.ts). Null means none can be made. */
+  predict?: (env: { supabase: any; clientId: string }, args: Record<string, any>) => Promise<unknown | null>;
   /** Absent means advisory. */
   execute?: (env: ExecEnv, args: Record<string, any>) => Promise<unknown>;
 }
@@ -57,6 +60,8 @@ export const SEO_ACTIONS: ActionDef[] = [
       expected_effect: { type: "string", maxLength: 300, description: "What should improve, using only numbers the audit supports" },
     } },
     summarize: (a) => `Fix: ${a.title} (${a.priority} priority)`,
+    // The prediction is built from the audit in the database, never from what the model claims.
+    predict: ({ supabase, clientId }, a) => buildFixPrediction(supabase, clientId, a.check_id),
   },
   {
     name: "request_content_support",

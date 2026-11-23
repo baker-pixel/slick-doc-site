@@ -25,11 +25,17 @@ export async function submitAction(supabase: any, i: SubmitInput): Promise<Submi
   const bad = validateArgs(i.action.inputSchema, i.args);
   if (bad) throw new Error(bad);
 
+  let prediction: unknown = null;
+  if (i.action.predict) {
+    try { prediction = await i.action.predict({ supabase, clientId: i.clientId }, i.args); }
+    catch (e) { console.warn("[steward] prediction failed, recording without one:", e instanceof Error ? e.message : e); }
+  }
   const disposition = dispositionFor(i.autonomy, i.action.sideEffect, !!i.action.execute);
   const { data: row, error } = await supabase.from("agent_proposals").insert({
     client_account_id: i.clientId, engine: i.action.engine, run_id: i.runId, goal_id: i.goalId ?? null,
     tool: i.action.name, args: i.args, summary: i.action.summarize(i.args), rationale: i.rationale.slice(0, 1000),
     side_effect: i.action.sideEffect, status: disposition === "record_only" ? "shadow" : "pending",
+    prediction,
   }).select("id").single();
   if (error || !row) throw new Error(error?.message ?? "could not record the proposal");
 

@@ -7,12 +7,13 @@ import { type Engine, contextToPrompt, getClientContext } from "../client/client
 import type { Autonomy } from "./gate.ts";
 import { runStewardLoop, type StewardDeps, type StewardLimits, type StewardResult } from "./loop.ts";
 import { submitAction } from "./proposals.ts";
+import { scoreDueProposals } from "./outcomes.ts";
 import { seoSteward } from "./seo.ts";
 
 /** Engines with a working steward. Others are refused, not silently ignored. */
 export const BUILT_ENGINES: readonly Engine[] = ["seo"];
 export const STALE_RUN_MS = 10 * 60_000;
-export const PROMPT_VERSION = "steward.v1";
+export const PROMPT_VERSION = "steward.v2";
 
 export type Trigger = "manual" | "heartbeat" | "event";
 export interface RunRequest { clientId: string; engine: Engine; trigger: Trigger }
@@ -85,6 +86,12 @@ export async function runSteward(
   };
 
   try {
+    // Close the loop first: score past recommendations so this wake sees their lessons.
+    let scored = 0;
+    if (engine === "seo") {
+      try { scored = await scoreDueProposals(supabase, clientId, now()); }
+      catch (e) { console.warn("[steward] scoring failed:", e instanceof Error ? e.message : e); }
+    }
     const ctx = await getClientContext(supabase, clientId, { engine });
     if (!ctx) { await finish({ status: "failed", error: "client context unavailable" }); return { ran: false, reason: "client context unavailable" }; }
 
@@ -114,7 +121,7 @@ export async function runSteward(
       status: result.status === "failed" ? "failed" : result.status === "stopped" ? "stopped" : "completed",
       summary: result.summary, error: result.stopReason && result.status === "failed" ? result.stopReason : null,
       step_count: result.steps, prompt_tokens: result.tokens.prompt, completion_tokens: result.tokens.completion,
-      state: { trace: result.trace, actions: result.actions, stopReason: result.stopReason ?? null, contextGaps: ctx.gaps },
+      state: { scoredBeforeRun: scored, trace: result.trace, actions: result.actions, stopReason: result.stopReason ?? null, contextGaps: ctx.gaps },
     });
     return { ran: true, runId: run.id, autonomy, status: result.status, summary: result.summary, actions: result.actions, steps: result.steps };
   } catch (e) {
