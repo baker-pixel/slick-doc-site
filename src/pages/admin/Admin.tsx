@@ -41,7 +41,6 @@ import { EmailTemplatesPanel } from "@/components/admin/email/EmailTemplatesPane
 import { CampaignSenderPanel } from "@/components/admin/email/CampaignSenderPanel";
 import { QuickActionsPanel } from "@/components/admin/core/QuickActionsPanel";
 import PipelineDashboard from "@/components/admin/sales/PipelineDashboard";
-import CycleOverviewPanel from "@/components/admin/workflow/CycleOverviewPanel";
 import AutomationAlertsPanel from "@/components/admin/workflow/AutomationAlertsPanel";
 import ClientDocumentsPanel from "@/components/admin/clients/ClientDocumentsPanel";
 import ClientMessagesAdminPanel from "@/components/admin/clients/ClientMessagesAdminPanel";
@@ -66,7 +65,6 @@ import CaseStudyBuilderPanel from "@/components/admin/content/CaseStudyBuilderPa
 import ClientHealthDashboard from "@/components/admin/clients/ClientHealthDashboard";
 import QualityAssurancePanel from "@/components/admin/misc/QualityAssurancePanel";
 import BeforeAfterShowcasePanel from "@/components/admin/content/BeforeAfterShowcasePanel";
-import SalesProposalPanel from "@/components/admin/sales/SalesProposalPanel";
 import SocialMediaPostsPanel from "@/components/admin/content/SocialMediaPostsPanel";
 import FeatureGuidePanel from "@/components/admin/core/FeatureGuidePanel";
 import ClientProgressTracker from "@/components/admin/clients/ClientProgressTracker";
@@ -75,9 +73,7 @@ import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelec
 import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientHeader";
 import { UnifiedClientView } from "@/components/admin/clients/UnifiedClientView";
 import { AdminHomeDashboard } from "@/components/admin/core/AdminHomeDashboard";
-import { CommandCenter } from "@/components/admin/core/CommandCenter";
 import { AiSpendPanel } from "@/components/admin/core/AiSpendPanel";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1378,31 +1374,25 @@ const AdminInner = () => {
     </div>
   );
 
-  // Case Studies, Sales Proposals, and Before/After Showcase share one nav
-  // destination -- same "activeSection IS the tab state" composition
-  // pattern as the Leads hub above.
-  const salesHubMode: "proposals" | "case-studies" | "before-after" =
-    activeSection === "case-studies" ? "case-studies" :
-    activeSection === "before-after" ? "before-after" :
-    "proposals";
+  // Case Studies and Before/After Showcase share one nav destination -- same
+  // "activeSection IS the tab state" composition pattern as the Leads hub above.
+  const salesHubMode: "case-studies" | "before-after" =
+    activeSection === "before-after" ? "before-after" : "case-studies";
 
   const renderSalesHub = () => (
     <div className="space-y-4">
       <Tabs
         value={salesHubMode}
         onValueChange={(v) => {
-          if (v === "proposals") setActiveSection("sales-proposals");
-          else if (v === "case-studies") setActiveSection("case-studies");
+          if (v === "case-studies") setActiveSection("case-studies");
           else if (v === "before-after") setActiveSection("before-after");
         }}
       >
         <TabsList>
-          <TabsTrigger value="proposals">Proposals</TabsTrigger>
           <TabsTrigger value="case-studies">Case Studies</TabsTrigger>
           <TabsTrigger value="before-after">Before / After</TabsTrigger>
         </TabsList>
       </Tabs>
-      {salesHubMode === "proposals" && <SalesProposalPanel />}
       {salesHubMode === "case-studies" && <CaseStudyBuilderPanel />}
       {salesHubMode === "before-after" && <BeforeAfterShowcasePanel />}
     </div>
@@ -1414,8 +1404,6 @@ const AdminInner = () => {
         return <AutomationControlCenter adminPassword={storedPassword} />;
       case "pipeline":
         return renderLeadsHub();
-      case "cycles":
-        return <CycleOverviewPanel />;
       case "alerts":
         return <AutomationAlertsPanel />;
       case "ai-spend":
@@ -1497,7 +1485,6 @@ const AdminInner = () => {
         return renderLeadsHub();
       case "case-studies":
       case "before-after":
-      case "sales-proposals":
         return renderSalesHub();
       case "client-health":
         return <ClientHealthDashboard />;
@@ -1514,7 +1501,7 @@ const AdminInner = () => {
 
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
-      home: "Command Center",
+      home: "Home",
       clients: "Client Management",
       "client-projects": "Client Projects",
       deliverables: "Deliverables",
@@ -1529,7 +1516,6 @@ const AdminInner = () => {
       "pdf-leads": "Leads",
       emails: "Client Outreach",
       "social-posts": "Social Media Posts",
-      "sales-proposals": "AI Sales Proposals",
       automation: "Automation",
       sops: "SOPs",
       onboarding: "Client Onboarding",
@@ -1546,7 +1532,6 @@ const AdminInner = () => {
       "automation-center": "Automation Control Center",
       "content-review": "Content Review",
       "reports-review": "Reports Review",
-      cycles: "Work Cycles",
       alerts: "Automation Alerts",
       "ai-spend": "AI Spend & Budget",
       "activity-feed": "Activity Feed",
@@ -1572,12 +1557,12 @@ const AdminInner = () => {
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
     "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
-    "emails", "templates", "sequences", "campaigns", "alerts", "cycles", "ai-spend",
+    "emails", "templates", "sequences", "campaigns", "alerts", "ai-spend",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "integrations",
     "quick-actions", "activity-feed",
     "prospect-engine",
-    "lead-scoring", "sales-proposals", "automation",
+    "lead-scoring", "automation",
     "automation-center", "client-health",
     "onboarding", "social-posts", "seo-dashboard",
     "review-engine", "case-studies", "before-after",
@@ -1651,23 +1636,11 @@ const AdminInner = () => {
             {/* Home becomes the dashboard overview or client work */}
             {activeSection === "home" ? (
               !selectedClient ? (
-                <div className="space-y-10">
-                  <CommandCenter
-                    adminPassword={storedPassword}
-                    onSelectClient={selectClientFromHome}
-                    onNavigateToSection={setActiveSection as (section: string) => void}
-                  />
-                  <Collapsible className="border-t pt-6">
-                    <CollapsibleTrigger className="text-lg font-semibold hover:underline">Business snapshot (onboarding, messages, meetings)</CollapsibleTrigger>
-                    <CollapsibleContent className="pt-4">
-                      <AdminHomeDashboard
-                        adminPassword={storedPassword}
-                        onSelectClient={selectClientFromHome}
-                        onNavigateToSection={setActiveSection as (section: string) => void}
-                      />
-                    </CollapsibleContent>
-                  </Collapsible>
-                </div>
+                <AdminHomeDashboard
+                  adminPassword={storedPassword}
+                  onSelectClient={selectClientFromHome}
+                  onNavigateToSection={setActiveSection as (section: string) => void}
+                />
               ) : (
                 <UnifiedClientView client={selectedClient} adminPassword={storedPassword} onNavigateToSection={setActiveSection as (section: string) => void} />
               )

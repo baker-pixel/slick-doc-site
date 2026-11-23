@@ -16,13 +16,13 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 | `social/` | Content and caption gates, social strategy and budget, image prompts, channel plan, Post for Me helpers, topic ledger |
 | `seo/` | Audit rubric and checks, crawl health, scan scoring, AI readiness, schema markup, `crawler/` engine |
 | `wordpress/` | Plugin version, WordPress site helpers and fix application, first-party traffic ingest |
-| `client/` | Client context, cycles, onboarding, alerts, outcomes, command center, `profile/` company-profile agent |
+| `client/` | Client context, cycles, onboarding, alerts, outcomes, `profile/` company-profile agent |
 | `steward/` | Goal-driven per-client steward agents (gate, loop, proposals, run, SEO actions) and their tools |
 
 ## Index
 
 **Auth and access**
-`accept-invitation`, `get-invitation`, `signup`, `admin`, `oauth-config`
+`accept-invitation`, `get-invitation`, `signup`, `admin`
 
 **Gap analysis and reports**
 `analyze-website`, `generate-analysis`, `send-gap-report`, `send-resume-link`, `submit-followup`,
@@ -39,7 +39,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `prospect-campaign`, `prospect-icp`, `run-prospect-drip`, `send-prospect-report`, `process-email-queue`,
 `queue-sequence-emails`, `detect-inactive-leads`, `resend-webhook`, `track-click`, `track-open`,
 `unsubscribe`, `generate-lead-insights`, `generate-personalized-content`, `generate-email-template`,
-`generate-sales-proposal`, `send-sales-proposal`, `generate-review-response`, `send-test-email`,
+`generate-review-response`, `send-test-email`,
 `test-client-smtp`
 
 **Social and content**
@@ -47,13 +47,12 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `sync-fill-missing-images`, `fill-scheduled-content`, `auto-schedule-content`, `publish-scheduled-content`,
 `regenerate-social-strategy`, `save-channel-plan`, `reconcile-postforme-posts`, `postforme-connect-account`,
 `postforme-disconnect-account`, `postforme-publish-post`, `postforme-set-primary-account`,
-`postforme-sync-accounts`, `postforme-webhook`, `facebook-oauth-callback`, `instagram-oauth-callback`,
-`linkedin-oauth-callback`, `twitter-oauth-callback`, `generate-ads`, `generate-case-study`,
+`postforme-sync-accounts`, `postforme-webhook`, `generate-case-study`,
 `generate-approval-draft`, `handle-approval`, `send-approval-reminders`, `run-ai-batch`
 
 **Client lifecycle and workflow**
 `advance-workflow`, `auto-run-client-tasks`, `check-stalled-workflows`, `seed-tier-workflow`,
-`start-client-cycle`, `generate-client-projects`, `client-context-refresh`, `sync-intake-context`,
+`start-client-cycle`, `client-context-refresh`, `sync-intake-context`,
 `parse-sop`, `send-client-invite`, `send-client-notification`, `send-booking-confirmation`,
 `send-weekly-recap`, `run-automation`, `process-agent-jobs`, `check-alerts`, `steward-proposals`,
 `steward-run`
@@ -62,4 +61,4 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `billing-enforce`, `stripe-billing-portal`, `stripe-create-checkout`, `stripe-webhook`
 
 **Admin and ops**
-`admin-ai-spend`, `admin-command-center`, `chat`, `test-api-key`
+`admin-ai-spend`, `chat`, `test-api-key`

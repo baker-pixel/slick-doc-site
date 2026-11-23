@@ -180,6 +180,16 @@ serve(async (req) => {
       return json({ synced: 0, accounts: [] });
     }
 
+    // Platforms this client already had connected, so a brand-new channel can
+    // be scheduled straight away instead of waiting for the Monday run.
+    const hadPlatforms = new Set<string>();
+    if (clientId) {
+      const { data: before } = await supabase
+        .from("client_postforme_accounts").select("platform")
+        .eq("client_id", clientId).eq("status", "connected");
+      for (const r of before ?? []) hadPlatforms.add(r.platform);
+    }
+
     const { error: upsertErr } = await supabase
       .from("client_postforme_accounts")
       .upsert(upsertRows, {
@@ -228,6 +238,24 @@ serve(async (req) => {
     if (clientId) {
       try { socialStepCompleted = await completeSocialStepIfConnected(supabase, clientId); }
       catch (e) { console.error("completeSocialStepIfConnected failed:", e instanceof Error ? e.message : e); }
+    }
+
+    // A newly connected channel: schedule its slots now (idempotent -- only
+    // tops up what's missing). Never fails the sync.
+    const newlyConnected = clientId
+      ? upsertRows.some((r) => r && r.status === "connected" && !hadPlatforms.has(r.platform))
+      : false;
+    if (newlyConnected && adminPassword) {
+      try {
+        const res = await fetch(`${supabaseUrl}/functions/v1/auto-schedule-content`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${supabaseServiceKey}` },
+          body: JSON.stringify({ client_id: clientId, password: adminPassword }),
+        });
+        console.log(`auto-schedule-content after new channel for client=${clientId}: ${res.status}`);
+      } catch (e) {
+        console.error("auto-schedule after connect failed:", e instanceof Error ? e.message : e);
+      }
     }
 
     console.log(`Synced ${upsertRows.length} PfM accounts for client=${clientId}`);

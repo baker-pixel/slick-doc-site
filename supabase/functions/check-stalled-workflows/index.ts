@@ -406,7 +406,9 @@ serve(async (req) => {
       const { error: enqueueErr } = await supabase.rpc("agent_jobs_enqueue", {
         msg: {
           target: "generate-approval-draft",
-          idempotencyKey: `approval-draft:${step.id}`,
+          // Hourly key: the original key is already in agent_job_dedupe once the first run
+          // succeeded, so re-using it made this re-enqueue a silent no-op forever.
+          idempotencyKey: `approval-draft:${step.id}:${new Date().toISOString().slice(0, 13)}`,
           body: { client_id: step.client_id, workflow_id: step.workflow_id, step_id: step.id },
         },
       });

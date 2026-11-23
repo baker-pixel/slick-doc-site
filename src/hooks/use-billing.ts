@@ -4,9 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 import { toast } from "@/hooks/use-toast";
 
-// Keep in sync with GRACE_DAYS in supabase/functions/_shared/billing/billingGate.ts.
-export const BILLING_GRACE_DAYS = 2;
-
 export interface BillingState {
   tier: string;
   status: string;
@@ -21,11 +18,6 @@ export interface BillingState {
 export function hasLiveSubscription(b: BillingState | null | undefined): boolean {
   return b?.subscription_status === "active" || b?.subscription_status === "trialing" ||
     b?.subscription_status === "past_due";
-}
-
-export function graceDeadline(b: BillingState): Date | null {
-  if (!b.payment_failed_at) return null;
-  return new Date(new Date(b.payment_failed_at).getTime() + BILLING_GRACE_DAYS * 86400000);
 }
 
 /** `poll` re-reads quickly after returning from Stripe, while the webhook lands. */

@@ -239,7 +239,6 @@ function startCycleFor(supabase: Supabase, clientId: string, inv: any) {
 async function onPaymentFailed(supabase: Supabase, inv: any) {
   const acct = await upsertInvoice(supabase, inv);
   if (!acct) return;
-  // The grace clock starts at the first failure; later retries don't reset it.
   if (!acct.payment_failed_at) {
     await supabase.from("client_accounts").update({
       payment_failed_at: new Date().toISOString(),
@@ -251,6 +250,7 @@ async function onPaymentFailed(supabase: Supabase, inv: any) {
   if ((inv.attempt_count ?? 1) <= 1) {
     await sendPaymentFailedEmail(acct.email, acct.first_name).catch((e) => console.error("failed-payment email:", e));
   }
+  await enforce(supabase, acct);
 }
 
 async function onCheckoutCompleted(supabase: Supabase, session: any) {
@@ -344,6 +344,7 @@ async function handleEvent(supabase: Supabase, event: any) {
       const acct = await upsertInvoice(supabase, obj);
       if (acct) {
         await supabase.from("client_accounts").update({ payment_failed_at: null }).eq("id", acct.id);
+        await enforce(supabase, acct);
         startCycleFor(supabase, acct.id, obj);
       }
       return;

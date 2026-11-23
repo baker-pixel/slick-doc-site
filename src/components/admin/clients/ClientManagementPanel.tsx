@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CycleOverviewPanel from "./CycleOverviewPanel";
 import { toast } from "sonner";
 import { Plus, FileText, TrendingUp, Mail, Loader2, Send, UserPlus, Copy, Trash2, Clock, CheckCircle2, RefreshCw, ShieldCheck, Ban, Play, Eye } from "lucide-react";
 import { viewAsClientPath } from "@/lib/viewAsClient";
@@ -685,6 +686,7 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
             <TabsTrigger value="clients">Clients ({managedClients.length})</TabsTrigger>
             <TabsTrigger value="pending-signups">Pending Signups ({pendingSignups.length})</TabsTrigger>
             <TabsTrigger value="invitations">Invitations ({invitations.filter(i => !i.accepted_at).length})</TabsTrigger>
+            <TabsTrigger value="cycles">Work cycles</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending-signups">
@@ -1055,6 +1057,10 @@ export function ClientManagementPanel({ adminPassword }: ClientManagementPanelPr
                 </TableBody>
               </Table>
             )}
+          </TabsContent>
+
+          <TabsContent value="cycles">
+            <CycleOverviewPanel />
           </TabsContent>
         </Tabs>
 

@@ -128,6 +128,8 @@ export async function createCheckoutSession(
     client_reference_id: acct.id,
     line_items: [{ price: priceIdForTier(tier), quantity: 1 }],
     allow_promotion_codes: true,
+    // A 100%-off promotion code makes the total $0: don't ask for a card then. Paid checkouts still collect one.
+    payment_method_collection: "if_required",
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: { client_account_id: acct.id, tier },

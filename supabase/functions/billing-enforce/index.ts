@@ -6,8 +6,8 @@ import { applyBillingDecision, isBillingEnforced } from "../_shared/billing/bill
 import { sendServicesPausedEmail } from "../_shared/billing/billingEmail.ts";
 
 // Hourly sweep. Webhooks handle the instant transitions (payment succeeded,
-// subscription canceled); this catches the time-based ones: past_due accounts
-// whose grace window just ended, and accounts that never subscribed.
+// subscription canceled, payment failed); this catches accounts that never
+// subscribed or whose status drifted.
 serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;

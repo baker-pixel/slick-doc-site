@@ -2,14 +2,12 @@
 // client_accounts.status = 'active', so billing drives that column instead of
 // each engine re-checking Stripe state:
 //   - paid / trialing                      -> entitled
-//   - past_due within the grace window     -> entitled (Stripe is still retrying)
-//   - anything else (none, unpaid, canceled, past_due beyond grace) -> not entitled
+//   - anything else (none, past_due, unpaid, canceled) -> not entitled
+//     past_due is NOT given a grace window: the moment Stripe reports a failed
+//     payment the account is paused, and it resumes when the payment succeeds.
 // Entitled + paused-for-billing -> resume. Not entitled + active -> pause.
 // A manual admin pause (paused_for_billing = false) is never auto-resumed.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-export const GRACE_DAYS = 2;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface BillingAccount {
   status: string;
@@ -22,12 +20,6 @@ export type BillingDecision = "pause" | "resume" | "none";
 
 export function isEntitled(a: BillingAccount, now: Date = new Date()): boolean {
   if (a.subscription_status === "active" || a.subscription_status === "trialing") return true;
-  if (a.subscription_status === "past_due") {
-    // The webhook always stamps payment_failed_at on entering past_due; a
-    // missing stamp means we can't prove the grace expired, so don't pause.
-    if (!a.payment_failed_at) return true;
-    return now.getTime() < new Date(a.payment_failed_at).getTime() + GRACE_DAYS * DAY_MS;
-  }
   return false;
 }
 

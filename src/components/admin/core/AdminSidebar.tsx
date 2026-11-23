@@ -17,7 +17,6 @@ import {
   HelpCircle,
   Search,
   Bell,
-  RefreshCw,
   UserCog,
   Radar,
   Activity,
@@ -55,7 +54,6 @@ export type AdminSection =
   | "gap-analysis"
   | "emails"
   | "social-posts"
-  | "sales-proposals"
   | "seo-dashboard"
   | "automation"
   | "sops"
@@ -75,7 +73,6 @@ export type AdminSection =
   | "reports-review"
   | "alerts"
   | "ai-spend"
-  | "cycles"
   | "activity-feed"
   | "feature-guide"
   | "quick-actions"
@@ -119,7 +116,7 @@ const clientItems: NavItem[] = [
 ];
 
 // AGENTS: the things the platform does for clients. Each one is a real panel
-// with its own data; the Command Center shows them all side by side.
+// with its own data; the Home page summarises them.
 const agentItems: NavItem[] = [
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "content-review", label: "Content approvals", icon: FileText, matchIds: ["approvals", "deliverables"] },
@@ -131,7 +128,6 @@ const agentItems: NavItem[] = [
 
 // MONITORING: is it all running, and what happened.
 const monitoringItems: NavItem[] = [
-  { id: "cycles", label: "Work cycles", icon: RefreshCw },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "ai-spend", label: "AI spend", icon: DollarSign },
   { id: "activity-feed", label: "Activity log", icon: Activity },
@@ -140,8 +136,8 @@ const monitoringItems: NavItem[] = [
 // GROWTH: OrangeDoor's own top-of-funnel -- people who submitted the marketing
 // site's form/quick-scan or downloaded a PDF. Not to be confused with
 // "Prospecting" above, which is a client's own cold-outreach candidates.
-// (Sales hub -- proposals / case studies / before-after -- is hidden: unused.
-// Its routes still work; re-add { id: "sales-proposals", ... } to restore.)
+// (Sales hub -- case studies / before-after -- is hidden: unused.
+// Its routes still work.)
 const growthItems: NavItem[] = [
   { id: "contacts", label: "Our leads", icon: Contact, matchIds: ["gap-analysis", "pdf-leads", "quick-scans", "pipeline", "lead-scoring"] },
 ];
@@ -319,10 +315,10 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
                 <SidebarMenuButton
                   isActive={activeSection === "home"}
                   onClick={() => onSectionChange("home")}
-                  tooltip="Command Center"
+                  tooltip="Home"
                 >
                   <LayoutDashboard className="h-4 w-4" />
-                  <span>Command Center</span>
+                  <span>Home</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

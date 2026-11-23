@@ -15,12 +15,6 @@ verify_jwt = false
 [functions.generate-case-study]
 verify_jwt = false
 
-[functions.generate-sales-proposal]
-verify_jwt = false
-
-[functions.send-sales-proposal]
-verify_jwt = false
-
 [functions.generate-before-after]
 verify_jwt = false
 
@@ -46,9 +40,6 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.admin]
-verify_jwt = false
-
-[functions.admin-command-center]
 verify_jwt = false
 
 [functions.admin-ai-spend]
@@ -117,9 +108,6 @@ verify_jwt = false
 [functions.auto-run-client-tasks]
 verify_jwt = false
 
-[functions.generate-ads]
-verify_jwt = false
-
 [functions.run-ai-batch]
 verify_jwt = true
 
@@ -134,9 +122,6 @@ verify_jwt = false
 
 [functions.detect-inactive-leads]
 verify_jwt = true
-
-[functions.generate-client-projects]
-verify_jwt = false
 
 [functions.check-stalled-workflows]
 verify_jwt = true
