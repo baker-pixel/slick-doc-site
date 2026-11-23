@@ -42,9 +42,6 @@ verify_jwt = true
 [functions.admin]
 verify_jwt = false
 
-[functions.admin-command-center]
-verify_jwt = false
-
 [functions.admin-ai-spend]
 verify_jwt = false
 

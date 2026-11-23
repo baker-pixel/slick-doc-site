@@ -74,9 +74,7 @@ import { AdminClientSelector } from "@/components/admin/clients/AdminClientSelec
 import { SelectedClientHeader } from "@/components/admin/clients/SelectedClientHeader";
 import { UnifiedClientView } from "@/components/admin/clients/UnifiedClientView";
 import { AdminHomeDashboard } from "@/components/admin/core/AdminHomeDashboard";
-import { CommandCenter } from "@/components/admin/core/CommandCenter";
 import { AiSpendPanel } from "@/components/admin/core/AiSpendPanel";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 interface SelectedClient {
@@ -1506,7 +1504,7 @@ const AdminInner = () => {
 
   const getSectionTitle = () => {
     const titles: Record<AdminSection, string> = {
-      home: "Command Center",
+      home: "Home",
       clients: "Client Management",
       "client-projects": "Client Projects",
       deliverables: "Deliverables",
@@ -1642,23 +1640,11 @@ const AdminInner = () => {
             {/* Home becomes the dashboard overview or client work */}
             {activeSection === "home" ? (
               !selectedClient ? (
-                <div className="space-y-10">
-                  <CommandCenter
-                    adminPassword={storedPassword}
-                    onSelectClient={selectClientFromHome}
-                    onNavigateToSection={setActiveSection as (section: string) => void}
-                  />
-                  <Collapsible className="border-t pt-6">
-                    <CollapsibleTrigger className="text-lg font-semibold hover:underline">Business snapshot (onboarding, messages, meetings)</CollapsibleTrigger>
-                    <CollapsibleContent className="pt-4">
-                      <AdminHomeDashboard
-                        adminPassword={storedPassword}
-                        onSelectClient={selectClientFromHome}
-                        onNavigateToSection={setActiveSection as (section: string) => void}
-                      />
-                    </CollapsibleContent>
-                  </Collapsible>
-                </div>
+                <AdminHomeDashboard
+                  adminPassword={storedPassword}
+                  onSelectClient={selectClientFromHome}
+                  onNavigateToSection={setActiveSection as (section: string) => void}
+                />
               ) : (
                 <UnifiedClientView client={selectedClient} adminPassword={storedPassword} onNavigateToSection={setActiveSection as (section: string) => void} />
               )
