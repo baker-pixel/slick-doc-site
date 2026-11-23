@@ -58,6 +58,8 @@ interface FoundCompany {
   city?: string;
   business_type?: string;
   why_fit?: string;
+  /** Which Apollo search surfaced this company, so replies/clicks can be traced back to a keyword. */
+  found_by?: { key: string; label: string };
 }
 
 const OPENAI_API = "https://api.openai.com/v1";
@@ -339,7 +341,7 @@ Respond with ONLY a JSON array, no prose:
         let freshCount = 0;
         const runPlan = async (tags: string[], geo: string) => {
           const label = tags.join(" + ");
-          const key = trackState ? await searchKey(tags, geo, employeeRange) : "";
+          const key = await searchKey(tags, geo, employeeRange);
           if (trackState && isResting(states.get(key))) {
             strategy.rested.push(label); // found nothing new twice in a row; resting, spend no credits
             return;
@@ -368,6 +370,7 @@ Respond with ONLY a JSON array, no prose:
             }
             pagesFetched++;
             if (batch.length === 0) break;
+            for (const c of batch) c.found_by = { key, label: label.slice(0, 300) };
             pool.push(...batch);
             found += batch.length;
             for (const c of batch) {
@@ -464,7 +467,7 @@ Respond with ONLY a JSON array, no prose:
         source: "outbound",
         status: "discovered",
         business_type: c.business_type || null,
-        research_snapshot: { via, why_fit: c.why_fit || null, focus: body.focus || null, geography },
+        research_snapshot: { via, why_fit: c.why_fit || null, focus: body.focus || null, geography, ...(c.found_by ? { found_by: c.found_by } : {}) },
         ...(campaign.campaignId ? { campaign_id: campaign.campaignId } : {}),
       }));
 
