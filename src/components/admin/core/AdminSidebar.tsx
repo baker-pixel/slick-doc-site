@@ -118,7 +118,7 @@ const clientItems: NavItem[] = [
 ];
 
 // AGENTS: the things the platform does for clients. Each one is a real panel
-// with its own data; the Command Center shows them all side by side.
+// with its own data; the Home page summarises them.
 const agentItems: NavItem[] = [
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "content-review", label: "Content approvals", icon: FileText, matchIds: ["approvals", "deliverables"] },
@@ -318,10 +318,10 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
                 <SidebarMenuButton
                   isActive={activeSection === "home"}
                   onClick={() => onSectionChange("home")}
-                  tooltip="Command Center"
+                  tooltip="Home"
                 >
                   <LayoutDashboard className="h-4 w-4" />
-                  <span>Command Center</span>
+                  <span>Home</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
