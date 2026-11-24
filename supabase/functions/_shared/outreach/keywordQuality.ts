@@ -104,6 +104,12 @@ export function mergeAuditKeywords(before: string[], kept: string[], probedTags:
   return normalizeKeywords([...kept, ...untested]);
 }
 
+/** Normalized tags that have not been probed yet (not in the validated list). */
+export function pendingValidation(tags: string[], validated: string[] | undefined): string[] {
+  const done = new Set((validated ?? []).map((t) => t.toLowerCase()));
+  return normalizeKeywords(tags).filter((t) => !done.has(t.toLowerCase()));
+}
+
 export interface ProbeDeps {
   /** One Apollo page for this tag. Throwing stops probing (credits, auth, rate limit). */
   search(tag: string): Promise<FoundCompany[]>;

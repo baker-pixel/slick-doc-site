@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
 import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/outreach/icp.ts";
-import { mergeAuditKeywords, validateKeywords } from "../_shared/outreach/keywordQuality.ts";
+import { mergeAuditKeywords, pendingValidation, validateKeywords } from "../_shared/outreach/keywordQuality.ts";
 import { checkApolloContacts, selectReachable } from "../_shared/outreach/apolloContacts.ts";
 import { ensurePersonaTitles } from "../_shared/outreach/personaTitles.ts";
 import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/outreach/discoveryRotation.ts";
@@ -13,7 +13,6 @@ import { resolveDiscoveryCampaign } from "../_shared/outreach/campaignScope.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
-import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/outreach/prospectInsert.ts";
 import { runInBackground } from "../_shared/core/background.ts";
 import { SEEN_MEMORY_DAYS } from "../_shared/outreach/prospectGate.ts";
@@ -29,7 +28,6 @@ import {
 } from "../_shared/outreach/apolloSearchState.ts";
 
 // See discover-prospects.ts for why this only applies to client callers.
-const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -151,9 +149,9 @@ serve(async (req) => {
     const auth = await checkClientOrAdminAuth(req, supabase, body.client_id, body.password);
     if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
-    if (auth.role === "client" && await recentDiscoveryRun(supabase, body.client_id, CLIENT_COOLDOWN_MS)) {
-      return json({ error: "Discovery already ran recently for this account -- try again later." }, 429);
-    }
+    // Discovery is automatic (daily cron) and admin-triggered; the portal no longer has a
+    // button for it, so a client session has no business spending Apollo credits.
+    if (auth.role === "client") return json({ error: "Lead discovery runs automatically." }, 403);
 
     const apolloKey = Deno.env.get("APOLLO_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
@@ -224,6 +222,7 @@ Respond with ONLY a JSON array, no prose:
       excluded_domains: number;
       /** Apollo pages spent probing new keywords (separate from apollo_calls). */
       probe_calls: number;
+      keywords_pruned: number;
       probes: { tag: string; found: number; fit: number; rate: number | null }[];
       /** Free Apollo people lookups made before inserting, and what they found. */
       contact_checks: number;
@@ -232,7 +231,7 @@ Respond with ONLY a JSON array, no prose:
       contact_rate_limited: boolean;
     } = {
       plans_tried: [], expanded_keywords: [], widened_geography: null, apollo_calls: 0, rested: [], excluded_domains: 0,
-      probe_calls: 0, probes: [], persona_titles: [], contact_checks: 0, contact_rejected: 0, contact_rate_limited: false,
+      probe_calls: 0, keywords_pruned: 0, probes: [], persona_titles: [], contact_checks: 0, contact_rejected: 0, contact_rate_limited: false,
     };
     let searchedGeography = geography;
     if (apolloKey) {
@@ -259,12 +258,40 @@ Respond with ONLY a JSON array, no prose:
 
         // The ICP's industries are broad labels; derive specific buyer keywords
         // so a niche client doesn't get every "technology" company on earth.
-        const keywords = await ensureSearchKeywords(supabase, client, icp, (tags) => probeInto(tags, 2));
-        const baseTags = keywords.length > 0 ? keywords : icp.industries;
+        let keywords = await ensureSearchKeywords(supabase, client, icp, (tags) => probeInto(tags, 2));
+        let baseTags = keywords.length > 0 ? keywords : icp.industries;
+
+        // Keywords saved before validation existed ("legacy") were never checked against
+        // Apollo. Once, on a normal (non-focus) admin/cron run, probe the unchecked ones,
+        // prune the weak and remember the rest so they are never probed again. Manually typed
+        // keywords are the client's choice and are left alone.
+        const legacyPending = pendingValidation(icp.search_keywords ?? [], icp.search_keywords_validated);
+        if (
+          !body.validate_keywords && !body.focus?.trim() &&
+          (icp.search_keywords?.length ?? 0) > 0 && legacyPending.length > 0 &&
+          (icp as { search_keywords_source?: string }).search_keywords_source !== "manual"
+        ) {
+          const before = icp.search_keywords ?? [];
+          const out = await validateKeywords({ tags: legacyPending, client, icp, apolloKey, geography, excludeDomains, minKeep: 2 });
+          if (out.results.length > 0) {
+            const final = mergeAuditKeywords(before, out.kept, out.results.map((r) => r.tag));
+            const validated = [...new Set([...(icp.search_keywords_validated ?? []), ...out.kept.map((k) => k.toLowerCase())])];
+            if (final.length > 0) {
+              // Keep the local ICP in step: later steps (keyword expansion) re-save it.
+              Object.assign(icp, { search_keywords: final, search_keywords_validated: validated });
+              await supabase.from("client_accounts").update({ icp }).eq("id", client.id);
+              keywords = final;
+              baseTags = final;
+            }
+            strategy.probe_calls += out.calls;
+            strategy.probes.push(...out.results.map((r) => ({ tag: r.tag, found: r.found, fit: r.fit, rate: r.rate })));
+            strategy.keywords_pruned = before.length - final.length;
+          }
+        }
 
         // Admin audit: prune a client's existing weak keywords. Manually typed keywords
         // are the client's choice and are left alone; tags beyond the probe budget are kept.
-        if (body.validate_keywords && auth.role !== "client") {
+        if (body.validate_keywords) {
           if ((icp as { search_keywords_source?: string }).search_keywords_source === "manual") {
             return json({ audit: "skipped", reason: "keywords were set manually" });
           }
@@ -273,7 +300,8 @@ Respond with ONLY a JSON array, no prose:
           const finalKeywords = mergeAuditKeywords(before, out.kept, out.results.map((r) => r.tag));
           const changed = out.results.length > 0 && finalKeywords.length > 0;
           if (changed) {
-            await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: finalKeywords } }).eq("id", client.id);
+            const validated = [...new Set([...(icp.search_keywords_validated ?? []), ...out.kept.map((k) => k.toLowerCase())])];
+            await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: finalKeywords, search_keywords_validated: validated } }).eq("id", client.id);
           }
           return json({ audit: { before, after: changed ? finalKeywords : before, saved: changed, apollo_calls: out.calls, results: out.results } });
         }

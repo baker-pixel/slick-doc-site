@@ -436,24 +436,35 @@ serve(async (req: Request) => {
           let verifiedEmail: string | null = null;
           let sawEmail = false;
           let matchFailed = false;
-          for (const person of found.people.slice(0, 3)) {
-            const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
-              method: "POST",
-              headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-              body: JSON.stringify({ id: person.id }),
-            });
-            if (!matchRes.ok) {
-              console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
-              matchFailed = true;
-              break;
+          const triedIds = new Set<string>();
+          const matchPeople = async (people: { id?: string }[]) => {
+            for (const person of people.filter((x) => x.id && !triedIds.has(x.id)).slice(0, 3)) {
+              triedIds.add(person.id!);
+              const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
+                method: "POST",
+                headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+                body: JSON.stringify({ id: person.id }),
+              });
+              if (!matchRes.ok) {
+                console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
+                matchFailed = true;
+                return;
+              }
+              const matched = (await matchRes.json())?.person;
+              if (matched?.email) sawEmail = true;
+              if (matched?.email && matched.email_status === "verified") {
+                verifiedEmail = matched.email;
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 300));
             }
-            const matched = (await matchRes.json())?.person;
-            if (matched?.email) sawEmail = true;
-            if (matched?.email && matched.email_status === "verified") {
-              verifiedEmail = matched.email;
-              break;
-            }
-            await new Promise((r) => setTimeout(r, 300));
+          };
+          await matchPeople(found.people);
+          // The persona's people had no verified email: a more general contact is better than none.
+          if (!verifiedEmail && !matchFailed && usedPersona) {
+            usedPersona = false;
+            const ladder = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director", "manager", "senior"]);
+            if (ladder.status === 200) await matchPeople(ladder.people);
           }
           if (matchFailed) continue;
 

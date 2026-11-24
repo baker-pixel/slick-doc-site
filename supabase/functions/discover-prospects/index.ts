@@ -13,7 +13,6 @@ import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
 import { ensureClientICP, previousDiscoveryQueries, suggestDiscoveryQueries } from "../_shared/outreach/icp.ts";
-import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/outreach/prospectInsert.ts";
 import { resolveDiscoveryCampaign } from "../_shared/outreach/campaignScope.ts";
 import { logAlert } from "../_shared/client/alerts.ts";
@@ -23,7 +22,6 @@ import { runInBackground } from "../_shared/core/background.ts";
 // with no per-click cost control that's an open tap on billed Maps/OpenAI
 // calls. Admins get no cooldown -- they're trusted to run manual searches
 // back-to-back while refining a query.
-const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
 
 interface DiscoverRequest {
   client_id: string;
@@ -100,11 +98,12 @@ serve(async (req) => {
       );
     }
 
-    if (auth.role === "client" && await recentDiscoveryRun(supabase, client_id, CLIENT_COOLDOWN_MS)) {
-      return new Response(
-        JSON.stringify({ error: "Discovery already ran recently for this account -- try again later." }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    // Discovery is automatic (daily cron) and admin-triggered; the portal has no button for it.
+    if (auth.role === "client") {
+      return new Response(JSON.stringify({ error: "Lead discovery runs automatically." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const mapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
