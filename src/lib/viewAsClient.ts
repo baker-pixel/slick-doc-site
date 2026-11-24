@@ -23,6 +23,7 @@ export const VIEW_ONLY_MESSAGE = "Read-only view: changes are disabled while vie
 const READ_ONLY_RPCS = new Set([
   "client_campaign_stats",
   "client_outreach_stats",
+  "client_get_outreach_insights",
   "client_get_prospect_emails",
   "client_get_prospect_next_email",
   "client_warm_leads",

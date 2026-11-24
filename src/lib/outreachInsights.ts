@@ -12,9 +12,11 @@ export interface InsightProspect {
 }
 
 // --- Engine constants mirrored from the backend ------------------------------
-// supabase/functions/auto-discover-prospects: daily sweep at 09:00 UTC, and it
-// pauses a client once this many leads wait for review.
+// supabase/functions/auto-discover-prospects: daily sweep at 09:20 UTC (cron
+// 'auto-discover-prospects'), and it pauses a client once this many leads that have an
+// email wait for review.
 export const DISCOVERY_HOUR_UTC = 9;
+export const DISCOVERY_MINUTE_UTC = 20;
 export const REVIEW_QUEUE_CEILING = 40;
 // supabase/functions/_shared/billing/tierPolicy.ts (prospect.*). Keep in sync.
 export const PROSPECT_TIER_POLICY: Record<string, { enabled: boolean; discoveryBatch: number; dailySendCap: number }> = {
@@ -27,9 +29,9 @@ export function prospectPolicy(tier: string | null | undefined) {
   return PROSPECT_TIER_POLICY[(tier ?? "").toLowerCase().trim()] ?? PROSPECT_TIER_POLICY.foundation;
 }
 
-/** The next daily discovery sweep (09:00 UTC) strictly after `now`. */
+/** The next daily discovery sweep (09:20 UTC) strictly after `now`. */
 export function nextDiscoveryRun(now: Date = new Date()): Date {
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DISCOVERY_HOUR_UTC));
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DISCOVERY_HOUR_UTC, DISCOVERY_MINUTE_UTC));
   if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1);
   return next;
 }
@@ -105,7 +107,7 @@ export function engineStatus(i: EngineStatusInput): EngineStatus {
   }
   if (i.awaitingReview >= REVIEW_QUEUE_CEILING) {
     return { ...base, state: "paused", headline: `Finding new leads is paused: ${i.awaitingReview} are waiting for review`,
-      detail: `The daily search pauses at ${REVIEW_QUEUE_CEILING} unreviewed leads so effort isn't wasted. It resumes automatically once the Orange Door team has reviewed them.` };
+      detail: `The daily search pauses at ${REVIEW_QUEUE_CEILING} leads waiting for review so effort isn't wasted. It resumes automatically once they have been approved or rejected.` };
   }
   const sinceDiscovery = i.lastDiscoveryAt ? now.getTime() - new Date(i.lastDiscoveryAt).getTime() : null;
   if (sinceDiscovery !== null && sinceDiscovery > 36 * HOUR) {
