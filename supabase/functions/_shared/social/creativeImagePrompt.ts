@@ -385,6 +385,8 @@ async function writeConcept(
     "Turn the post's ONE core idea into a concrete visual concept: what is in frame, where, what is happening, at what moment.",
     "It must relate to this post's specific message, not just the company's product category.",
     "Favour specific, observed, slightly unexpected real-life details over generic scenes. A concept a stock site would already have is a failure.",
+    "It must stop a thumb in under a second: ONE idea, ONE clear focal point that still reads at thumbnail size, strong contrast or a bold colour. Make it unexpected through the angle, the scale, a telling juxtaposition, or the moment just before or after the obvious one.",
+    "Do not default to two or three people sitting and talking at a table, people laughing at a laptop, handshakes or generic teamwork. Prefer a single subject, a specific action, or an object that tells the story.",
     peopleRule,
     "Depict a situation the audience recognises, not the client's actual staff, office, customers or branded products, because this is a generated image and must not pass as a photo of them.",
     prefs.has_public_location === false
@@ -400,14 +402,15 @@ async function writeConcept(
     recentConcepts.length
       ? `Recent images for this client used these concepts. Yours must clearly differ in setting, subject and composition:\n- ${recentConcepts.join("\n- ")}`
       : "",
-    'Return JSON only, no prose: {"concepts": ["...", "...", "..."]} with three clearly different concepts, each one or two complete sentences.',
+    'Return JSON only, no prose: {"concepts": ["...", "...", "..."]} with three concepts of three different kinds, each one or two complete sentences and each a concrete scene: (1) a specific human moment, (2) a close detail or object that tells the whole story, (3) an unexpected perspective, scale or juxtaposition. All three must fit the genre you were given.',
   ].filter(Boolean).join("\n");
 
   try {
     const out = await callAI({
       source: "creative-image-concept",
-      promptId: "creative-image-concept.v2",
-      model: MODELS.fast,
+      promptId: "creative-image-concept.v3",
+      model: MODELS.creative,
+      fallbackModels: [MODELS.default, MODELS.fast],
       clientId: client.id,
       system: rules,
       prompt:
