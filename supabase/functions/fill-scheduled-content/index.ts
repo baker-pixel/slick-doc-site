@@ -13,7 +13,7 @@ import { isUsableCaption } from "../_shared/social/captionGate.ts";
 import { hasBusinessContext } from "../_shared/client/businessContext.ts";
 import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/social/topicLedger.ts";
 import { extractTopic } from "../_shared/social/topicExtract.ts";
-import { collectRecentOpenings, openingCollision, openingOf, pickFormat, shouldMentionSeason, varietyBlock, type PostFormat } from "../_shared/social/postVariety.ts";
+import { collectRecentOpenings, ctaTypeFor, NARRATIVE_PILLAR, openingCollision, openingOf, pickFormat, POST_FORMATS, shouldMentionSeason, varietyBlock, type CtaType, type PostFormat } from "../_shared/social/postVariety.ts";
 import { planPostAngle, type PostBrief } from "../_shared/social/postAngle.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/client/brandKit.ts";
@@ -273,10 +273,20 @@ serve(async (req) => {
         const recentOpenings = recentOpeningsByClient[slot.client_account_id] ?? [];
         // Least-recently-used post shape for this platform; the post index only
         // breaks ties so clients don't march through formats in lockstep.
-        const format: PostFormat | undefined = isSocialPost
+        let format: PostFormat | undefined = isSocialPost
           ? pickFormat(slot.platform, recentFormatsByClient[slot.client_account_id] ?? [], postsBefore ?? 0)
           : undefined;
         const pillarDescription = pillarList.find((p) => p.name === pillar)?.description || undefined;
+        // A story-led pillar ("case studies", "success stories") with no verified
+        // client story to draw on would otherwise push the writer into inventing
+        // one. Run it as a clearly illustrative scenario instead.
+        const verifiedFacts: string[] = Array.isArray((client.context_profile as any)?.verified_facts) ? (client.context_profile as any).verified_facts : [];
+        const narrative = isSocialPost && NARRATIVE_PILLAR.test(`${pillar ?? ""} ${pillarDescription ?? ""}`) &&
+          !verifiedFacts.some((f) => /case stud|testimonial|success stor/i.test(String(f)));
+        if (narrative && slot.platform !== "twitter") {
+          const want = ((postsBefore ?? 0) % 2) ? "scenario" : "before_after";
+          format = POST_FORMATS.find((f) => f.id === want) ?? format;
+        }
         // Editor step: one fresh, specific angle chosen BEFORE writing.
         const brief: PostBrief | null = isSocialPost
           ? await planPostAngle({
@@ -290,6 +300,8 @@ serve(async (req) => {
               format,
               platform: slot.platform,
               recentTopics,
+              services: client.context_profile?.services,
+              narrative,
             })
           : null;
         const rot: Rotation = {
@@ -298,6 +310,8 @@ serve(async (req) => {
           brief,
           recentOpenings: isSocialPost ? recentOpenings : [],
           mentionSeason: shouldMentionSeason(postsBefore ?? 0),
+          ctaType: ctaTypeFor(postsBefore ?? 0),
+          narrative,
           pillarDescription: pillarList.find((p) => p.name === pillar)?.description || undefined,
           // What was already posted under THIS pillar -- the general recent-topics
           // list is too coarse to stop "same subject, new wording" within a pillar.
@@ -785,6 +799,10 @@ interface Rotation {
   recentOpenings: string[];
   /** Season/month talk is rationed to ~1 post in 4. */
   mentionSeason: boolean;
+  /** Which kind of call to action this post uses (question / pointer / reply). */
+  ctaType?: CtaType;
+  /** Story-led pillar with no verified story: write an illustrative scenario. */
+  narrative?: boolean;
   pillarDescription?: string;
   /** Recent topics already posted under the chosen pillar. */
   pillarTopics: string[];
@@ -847,7 +865,7 @@ function buildPrompt(
     ? `\n\nAlready posted under this pillar (pick a different, specific sub-topic -- a reworded version of any of these is a repeat): ${rot.pillarTopics.join(" | ")}.`
     : "";
   const avoidRepeat = avoidRepetitionInstruction(recentTopics) + pillarAvoid +
-    (contentType === "social_post" ? varietyBlock({ format: rot?.format, recentOpenings: rot?.recentOpenings ?? [], brief: rot?.brief }) : "");
+    (contentType === "social_post" ? varietyBlock({ format: rot?.format, recentOpenings: rot?.recentOpenings ?? [], brief: rot?.brief, businessName: client.business_name, services: client.context_profile?.services || [], ctaType: rot?.ctaType, narrative: rot?.narrative }) : "");
   const seasonTalk = rot ? rot.mentionSeason : true;
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
   const approvedBlock = approvedContentToPromptBlock(recentApproved);

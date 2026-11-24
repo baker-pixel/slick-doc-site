@@ -28,6 +28,10 @@ export async function planPostAngle(args: {
   format?: PostFormat;
   platform: string;
   recentTopics: string[];
+  /** The business's real services/offerings, so the angle stays something it can actually help with. */
+  services?: string[];
+  /** Story-led pillar with no verified client story: the angle must be an illustrative scenario. */
+  narrative?: boolean;
 }): Promise<PostBrief | null> {
   try {
     const res = await callAIJson<{ angle?: unknown; hook?: unknown }>({
@@ -41,7 +45,7 @@ export async function planPostAngle(args: {
       temperature: 0.95,
       system:
         "You are the editor of a social feed. Choose ONE fresh, specific angle for the next post. " +
-        "The angle is a concrete audience problem, question, situation, mistake, opinion or practical tip -- NOT a restatement of the product or service, " +
+        "The angle starts from a concrete audience problem, question, situation, mistake, opinion or practical tip rather than a product description, BUT it must be something one of the business's specific services can help with (the hook may name that service). " +
         "and NOT a broad subject area like 'leadership development'. Good: 'why the debrief call matters more than the report'. Bad: 'assessment tools for coaches'. " +
         "It must be clearly different from every recent topic. Never invent statistics, client results, product features or integrations; stay inside the facts given. " +
         'Return ONLY {"angle":"6-16 words","hook":"one-sentence opening idea that does not start with a stock phrase"}.',
@@ -49,6 +53,8 @@ export async function planPostAngle(args: {
         `Business: ${args.businessName} (${args.industry || "business"})\nAudience: ${args.audience}\nPlatform: ${args.platform}\n` +
         (args.pillar ? `Pillar: ${args.pillar}${args.pillarDescription ? ` -- ${args.pillarDescription}` : ""}\n` : "") +
         (args.format ? `Post shape: ${args.format.label} -- ${args.format.instruction}\n` : "") +
+        (args.services?.length ? `Services/offerings it can help with: ${args.services.slice(0, 8).join("; ")}\n` : "") +
+        (args.narrative ? "This is a story-led pillar with no verified client story: make the angle a short ILLUSTRATIVE scenario premise (\"picture a coach who...\"), never a claimed real client story.\n" : "") +
         `\nFACTS:\n${args.facts.slice(0, 1500)}\n\n` +
         (args.recentTopics.length ? `RECENT TOPICS (do not revisit or reword any of these): ${args.recentTopics.slice(0, 30).join(" | ")}` : ""),
     });

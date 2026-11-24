@@ -177,11 +177,27 @@ export function shouldMentionSeason(index: number): boolean {
   return ((index % 4) + 4) % 4 === 0;
 }
 
+export type CtaType = "question" | "pointer" | "reply";
+
+/** Rotates the call-to-action type so a feed does not end every post the same way. */
+export function ctaTypeFor(index: number): CtaType {
+  const types: CtaType[] = ["question", "pointer", "reply"];
+  return types[((index % 3) + 3) % 3];
+}
+
+/** True when a pillar asks for case studies / success stories / client narratives. */
+export const NARRATIVE_PILLAR = /case stud|success stor|testimonial|client stor|transformation|narrative/i;
+
 /** Prompt block appended to every platform's user prompt. */
 export function varietyBlock(opts: {
   format?: PostFormat;
   recentOpenings: string[];
   brief?: { angle: string; hook: string } | null;
+  businessName?: string;
+  services?: string[];
+  ctaType?: CtaType;
+  /** Story-led pillar with no verified client story to draw on. */
+  narrative?: boolean;
 }): string {
   const lines: string[] = [];
   if (opts.brief?.angle) {
@@ -196,8 +212,27 @@ export function varietyBlock(opts: {
     `- This feed has become repetitive. Sound like a person with a point of view, not a brochure.`,
     `- Do NOT open with: "Trusted by...", "Many [people] struggle...", "Ever wondered...", "Unlock/Discover/Uncover...", "In today's...", "In an era...", "When was the last time...", or any "As the leaves turn / winter / the season" opener.`,
     `- Do not restate who the audience is or a credibility line ("trusted worldwide") in the first sentence -- start inside the situation or the point.`,
-    `- Keep the call to action (it is required) but vary its wording. Do not use "Get started today/now", "Ready to ...?" or "Contact us today". Name the specific next step this post leads to, using only actions that are always possible (reply with your situation, tell us which you would pick, ask us a question), never an offer, demo, trial or discount the facts do not mention.`,
+    `- A call to action is required, but never "Get started today/now", "Ready to ...?" or "Contact us today", and never "Share your experience/view/approach".`,
+    `- Write complete sentences. Never join two full sentences with a comma (no "..., share your view"). The call to action is its own sentence.`,
+    `- Avoid these overused words: unlock, hidden, overlooked, game-changing, actionable, deepen, sharpen, meaningful, seamless, empower. Do not use the same industry buzzword more than once in a post.`,
+    `- No hashtags about seasons, months or weather.`,
   );
+  if (opts.businessName) {
+    const svc = (opts.services ?? []).filter(Boolean).slice(0, 6);
+    lines.push(
+      `- Name ${opts.businessName}${svc.length ? `, or one of its specific services/offerings (${svc.join("; ")}),` : ""} at least once, naturally: as the way to solve the problem, the source of the idea, or the community the reader belongs to. A post that any company in the industry could have published is a miss.`,
+    );
+  }
+  if (opts.ctaType === "question") {
+    lines.push(`- Call to action for THIS post: ask one genuine question the reader can answer in a sentence.`);
+  } else if (opts.ctaType === "pointer") {
+    lines.push(`- Call to action for THIS post: point to something real. Name the specific service or offering and invite the reader to learn more about it on the website. Never invent an offer, demo, trial or discount.`);
+  } else if (opts.ctaType === "reply") {
+    lines.push(`- Call to action for THIS post: invite a direct reply or message about the reader's own situation, in your own words.`);
+  }
+  if (opts.narrative) {
+    lines.push(`- This is a story-led pillar but no verified client story exists. Write a clearly illustrative scenario ("Picture a coach who...", "Imagine..."). Never present it as something that happened to a real client, include no numbers or measured results, and still name the specific service it relies on.`);
+  }
   if (opts.recentOpenings.length) {
     lines.push(`- Recent posts opened like this -- yours must open differently in wording AND structure: ${opts.recentOpenings.map((o) => `"${o}"`).join(" | ")}`);
   }
