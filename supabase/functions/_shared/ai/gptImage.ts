@@ -1,5 +1,4 @@
 import { imageQualityForPlatform, imageSizeForPlatform } from "../social/socialImagePrompt.ts";
-import { applyBrandOverlay, type OverlayBrand } from "../social/imageOverlay.ts";
 
 export interface GptImageRequestBody {
   model: "gpt-image-2";
@@ -47,12 +46,12 @@ export async function generateGptImage(openaiKey: string, prompt: string, platfo
 }
 
 // Decodes a gpt-image-2 base64 result and uploads it to the generated-images
-// bucket, returning its public URL. Stamps the client's real name/logo onto
-// it first when brand info is given -- see imageOverlay.ts for why that's
-// composited after generation rather than asked for in the prompt.
-export async function persistGeneratedImage(supabase: any, base64: string, fileName: string, brand?: OverlayBrand): Promise<string> {
-  let imageBytes: Uint8Array = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  if (brand) imageBytes = await applyBrandOverlay(imageBytes, brand);
+// bucket, returning its public URL. The image is stored exactly as generated.
+// (A logo overlay used to be composited here with imagescript; it needed
+// ~100-130MB to decode/re-encode and pushed the sync fallback past the edge
+// memory limit -- WORKER_RESOURCE_LIMIT -- so it was removed.)
+export async function persistGeneratedImage(supabase: any, base64: string, fileName: string): Promise<string> {
+  const imageBytes: Uint8Array = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 
   const { error: uploadErr } = await supabase.storage
     .from("generated-images")
