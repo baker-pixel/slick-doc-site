@@ -377,6 +377,7 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         clientAccountId={clientAccountId}
         prospects={allProspects}
         hasMailbox={hasMailbox}
+        humanOpenedIds={serverStats ? humanOpened : undefined}
         onOpenLead={openCampaignLead}
       />
 

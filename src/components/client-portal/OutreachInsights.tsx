@@ -26,6 +26,8 @@ interface Props {
   /** Every pipeline prospect, including leads still awaiting review. */
   prospects: InsightProspect[];
   hasMailbox: boolean | null;
+  /** Leads opened by a person (scanner opens removed), from the server stats. */
+  humanOpenedIds?: Set<string>;
   onOpenLead: (prospectId: string) => void;
 }
 
@@ -58,7 +60,7 @@ function Fact({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-export function OutreachInsights({ clientAccountId, prospects, hasMailbox, onOpenLead }: Props) {
+export function OutreachInsights({ clientAccountId, prospects, hasMailbox, humanOpenedIds, onOpenLead }: Props) {
   const [tier, setTier] = useState<string | null>(null);
   const [insights, setInsights] = useState<Insights | null>(null);
   const [activity, setActivity] = useState<ActivityRow[] | null>(null);
@@ -106,7 +108,7 @@ export function OutreachInsights({ clientAccountId, prospects, hasMailbox, onOpe
   const style = STATE_STYLE[status.state];
   const StatusIcon = style.icon;
 
-  const stages = useMemo(() => funnelStages(prospects), [prospects]);
+  const stages = useMemo(() => funnelStages(prospects, humanOpenedIds), [prospects, humanOpenedIds]);
   const top = Math.max(1, stages[0]?.count ?? 1);
   const timeline = useMemo(() => groupByDay(summarizeActivity(activity ?? [])), [activity]);
   const chartData = useMemo(
