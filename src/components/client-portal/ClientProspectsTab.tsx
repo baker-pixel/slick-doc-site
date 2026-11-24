@@ -136,6 +136,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [selected, setSelected] = useState<Prospect | null>(null);
   const [emails, setEmails] = useState<ProspectEmail[] | null>(null);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  // A failed load must not read as "no emails": the timeline would claim a finished lead never started.
+  const [emailsError, setEmailsError] = useState(false);
   const [viewingEmail, setViewingEmail] = useState<ProspectEmail | null>(null);
   // null until the SMTP section reports; outreach is blocked without a mailbox.
   const [hasMailbox, setHasMailbox] = useState<boolean | null>(null);
@@ -205,10 +207,13 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     setEmails(null);
     setViewingEmail(null);
     setEmailsLoading(true);
+    setEmailsError(false);
     const { data, error } = await (supabase.rpc as any)("client_get_prospect_emails", {
       p_client_account_id: clientAccountId,
       p_prospect_id: p.id,
     });
+    if (error) console.error("Failed to load prospect emails:", error);
+    setEmailsError(!!error);
     setEmails(error ? [] : (data as ProspectEmail[]));
     setEmailsLoading(false);
   };
@@ -681,6 +686,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                     <div className="flex items-center justify-center py-6">
                       <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                     </div>
+                  ) : emailsError ? (
+                    <p className="text-xs text-destructive">Couldn't load this lead's emails. Please close and reopen it to try again.</p>
                   ) : !emails || emails.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Nothing queued yet — this lead hasn't entered the sequence.</p>
                   ) : (
