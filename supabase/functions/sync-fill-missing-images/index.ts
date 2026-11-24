@@ -80,9 +80,6 @@ serve(async (req) => {
     // bypasses the batch-window wait since there's no cron cadence to
     // protect here, just this one client's backlog.
     const force: boolean = !!body.force;
-    // Diagnostic: skip the logo overlay (imagescript decode/encode is memory-heavy
-    // and the sync path has been dying with WORKER_RESOURCE_LIMIT).
-    const skipOverlay: boolean = !!body.skip_overlay;
 
     // Cron (x-internal-secret), other functions (service key) or an admin.
     // Previously ungated when called without client_id -> anyone with the
@@ -203,7 +200,7 @@ serve(async (req) => {
         const prompt = imageFeedback
           ? `${built.prompt}\nThe client rejected the previous image and asked for this change, which must be followed: "${imageFeedback}"`
           : built.prompt;
-        const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, skipOverlay ? undefined : brandMap[slot.client_account_id]);
+        const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, brandMap[slot.client_account_id]);
 
         const { image_feedback: _used, image_attempts: _a, ...keptMeta } = meta;
         await supabase
