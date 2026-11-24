@@ -24,7 +24,12 @@ interface ClientICP {
   /** Company-type tags lead discovery searches with. AI-derived unless a person set them. */
   search_keywords?: string[];
   search_keywords_source?: KeywordSource;
+  /** Job titles derived from the buyer persona; shown read-only. Valid only while persona_titles_for matches. */
+  persona_titles?: string[];
+  persona_titles_for?: string;
 }
+
+const personaKey = (s?: string) => (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
 const EMPTY_ICP: ClientICP = {
   industries: [],
@@ -181,6 +186,13 @@ export function ProspectIcpCard({ clientAccountId }: { clientAccountId: string }
             onChange={(e) => update("buyer_persona", e.target.value)}
             placeholder="e.g. Owner or office manager"
           />
+          <p className="text-xs text-muted-foreground">
+            {icp.persona_titles?.length && personaKey(icp.persona_titles_for) === personaKey(icp.buyer_persona)
+              ? `Contacts are searched as: ${icp.persona_titles.join(", ")}. If nobody holds those titles, we fall back to the most senior person.`
+              : icp.buyer_persona?.trim()
+                ? "Job titles to search are worked out from this on the next lead search."
+                : "Leave blank to contact the most senior person at each company."}
+          </p>
         </div>
 
         <TagEditor

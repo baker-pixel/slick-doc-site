@@ -17,7 +17,6 @@ import {
   HelpCircle,
   Search,
   Bell,
-  RefreshCw,
   UserCog,
   Radar,
   Activity,
@@ -74,7 +73,6 @@ export type AdminSection =
   | "reports-review"
   | "alerts"
   | "ai-spend"
-  | "cycles"
   | "activity-feed"
   | "feature-guide"
   | "quick-actions"
@@ -118,7 +116,7 @@ const clientItems: NavItem[] = [
 ];
 
 // WORK: the things the platform does for clients. Each one is a real panel
-// with its own data; the Command Center shows them all side by side.
+// with its own data; the Home page summarises them.
 // Reports is not here: it has no approval step, it is a send log (see Monitoring).
 const agentItems: NavItem[] = [
   { id: "social-posts", label: "Social", icon: Share2 },
@@ -130,7 +128,6 @@ const agentItems: NavItem[] = [
 
 // MONITORING: is it all running, and what happened.
 const monitoringItems: NavItem[] = [
-  { id: "cycles", label: "Work cycles", icon: RefreshCw },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "reports-review", label: "Client reports", icon: BarChart3 },
   { id: "ai-spend", label: "AI spend", icon: DollarSign },
@@ -350,10 +347,10 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
                 <SidebarMenuButton
                   isActive={activeSection === "home"}
                   onClick={() => onSectionChange("home")}
-                  tooltip="Command Center"
+                  tooltip="Home"
                 >
                   <LayoutDashboard className="h-4 w-4" />
-                  <span>Command Center</span>
+                  <span>Home</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

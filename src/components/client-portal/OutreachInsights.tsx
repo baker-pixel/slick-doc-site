@@ -15,6 +15,8 @@ import {
 
 interface Insights {
   queue: { pending?: number; next_send_at?: string | null; sent_24h?: number };
+  /** Leads with an email waiting for approval: the same count the daily search pauses on. */
+  awaiting_review?: number;
   upcoming: { scheduled_for: string; subject: string; drip_step: number | null; prospect_id: string; prospect_name: string }[];
   replies: { id: string; received_at: string; prospect_id: string | null; prospect_name: string | null; from_address: string | null; subject: string | null; body: string; classification: string }[];
   daily: { day: string; sent: number; opened: number; replied: number }[];
@@ -92,7 +94,9 @@ export function OutreachInsights({ clientAccountId, prospects, hasMailbox, onOpe
     return () => { cancelled = true; clearInterval(poll); document.removeEventListener("visibilitychange", refresh); };
   }, [clientAccountId]);
 
-  const awaitingReview = prospects.filter((p) => p.status === "discovered").length;
+  // From the database, not counted here: leads with no email also sit in "discovered" but can never
+  // be approved, and the daily search ignores them. Counting them showed a pause that wasn't real.
+  const awaitingReview = insights?.awaiting_review ?? 0;
   const lastDiscovery = activity?.find((a) => a.activity_type === "prospect_discovery") ?? null;
 
   const status = engineStatus({
@@ -145,7 +149,7 @@ export function OutreachInsights({ clientAccountId, prospects, hasMailbox, onOpe
           <Fact
             label="Emails queued"
             value={insights ? String(insights.queue.pending ?? 0) : "…"}
-            sub={nextSend ? `Next ${format(new Date(nextSend), "EEE d MMM, h:mm a")}` : "Nothing scheduled"}
+            sub={!insights ? undefined : nextSend ? `Next ${format(new Date(nextSend), "EEE d MMM, h:mm a")}` : "Nothing scheduled"}
           />
           <Fact
             label="Sent in last 24h"
@@ -153,12 +157,6 @@ export function OutreachInsights({ clientAccountId, prospects, hasMailbox, onOpe
             sub={cap > 0 ? "Daily limit protects your inbox's reputation" : undefined}
           />
         </div>
-        {awaitingReview > 0 && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{awaitingReview}</span> new lead{awaitingReview === 1 ? " is" : "s are"} being reviewed
-            by the Orange Door team before any email is sent. Nobody is contacted until a lead is approved, then there is a 48-hour hold before the first email.
-          </p>
-        )}
       </Card>
 
       {/* Detail tabs */}

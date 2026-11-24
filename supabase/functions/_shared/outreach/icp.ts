@@ -5,6 +5,10 @@
 import { callAIJson, MODELS } from "../ai/ai.ts";
 import { hasBusinessContext, isPlaceholderIndustry } from "../client/businessContext.ts";
 import { mergeKeywords } from "./discoveryRotation.ts";
+import { normalizeKeywords } from "./keywordQuality.ts";
+
+/** Filters newly generated keyword tags (e.g. by probing Apollo). Return the tags worth keeping. */
+export type KeywordValidator = (tags: string[]) => Promise<string[]>;
 
 export interface ClientICP {
   industries: string[];
@@ -17,6 +21,8 @@ export interface ClientICP {
   summary: string;
   /** Specific buyer keywords for Apollo, derived once from the ICP and cached here. */
   search_keywords?: string[];
+  /** Lower-cased keywords that passed the Apollo probe. Anything in search_keywords but not here predates validation. */
+  search_keywords_validated?: string[];
 }
 
 export function hasValidICP(icp: unknown): icp is ClientICP {
@@ -137,6 +143,7 @@ export async function ensureSearchKeywords(
   supabase: any,
   client: { id: string; business_name: string; context_profile?: Record<string, unknown> | null },
   icp: ClientICP,
+  validate?: KeywordValidator,
 ): Promise<string[]> {
   if (icp.search_keywords?.length) return icp.search_keywords;
   try {
@@ -159,14 +166,13 @@ Rules:
 - No bare generic labels ("technology", "software", "AI", "consulting", "HR").
 Return ONLY JSON: {"keywords":["..."]}`,
     });
-    const keywords = [...new Set(
-      (Array.isArray(res.keywords) ? res.keywords : [])
-        .filter((k): k is string => typeof k === "string")
-        .map((k) => k.trim())
-        .filter((k) => k.length >= 3 && k.length <= 60),
-    )].slice(0, 6);
+    let keywords = normalizeKeywords(
+      (Array.isArray(res.keywords) ? res.keywords : []).filter((k): k is string => typeof k === "string"),
+    ).slice(0, 6);
+    if (validate && keywords.length > 0) keywords = await validate(keywords);
     if (keywords.length > 0) {
-      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: keywords } }).eq("id", client.id);
+      const validated = validate ? keywords.map((k) => k.toLowerCase()) : icp.search_keywords_validated;
+      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: keywords, search_keywords_validated: validated } }).eq("id", client.id);
     }
     return keywords;
   } catch (e) {
@@ -185,6 +191,7 @@ export async function expandSearchKeywords(
   client: { id: string; business_name: string; context_profile?: Record<string, unknown> | null },
   icp: ClientICP,
   tried: string[],
+  validate?: KeywordValidator,
 ): Promise<string[]> {
   try {
     const res = await callAIJson<{ keywords?: unknown }>({
@@ -203,14 +210,17 @@ ALREADY SEARCHED (do not repeat or lightly reword): ${tried.join("; ")}
 Give 4-6 DIFFERENT buyer segments: adjacent company types that would plausibly buy, each a concrete TYPE OF COMPANY in 2-4 words. Same rules as before: no outcome words ("solutions", "optimization"), no staffing/recruiting/job-board unless that is the ideal customer, no bare generic labels.
 Return ONLY JSON: {"keywords":["..."]}`,
     });
-    const candidates = (Array.isArray(res.keywords) ? res.keywords : [])
-      .filter((k): k is string => typeof k === "string")
-      .map((k) => k.trim())
-      .filter((k) => k.length >= 3 && k.length <= 60);
+    let candidates = normalizeKeywords(
+      (Array.isArray(res.keywords) ? res.keywords : []).filter((k): k is string => typeof k === "string"),
+    ).filter((k) => !tried.some((t) => t.toLowerCase() === k.toLowerCase()));
+    if (validate && candidates.length > 0) candidates = await validate(candidates);
     const merged = mergeKeywords(tried, candidates);
     const added = merged.filter((k) => !tried.some((t) => t.toLowerCase() === k.toLowerCase()));
     if (added.length > 0) {
-      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: merged } }).eq("id", client.id);
+      const validated = validate
+        ? [...new Set([...(icp.search_keywords_validated ?? []), ...added.map((k) => k.toLowerCase())])]
+        : icp.search_keywords_validated;
+      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: merged, search_keywords_validated: validated } }).eq("id", client.id);
     }
     return added;
   } catch (e) {

@@ -3,19 +3,31 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
 import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/outreach/icp.ts";
+import { mergeAuditKeywords, pendingValidation, validateKeywords } from "../_shared/outreach/keywordQuality.ts";
+import { checkApolloContacts, selectReachable } from "../_shared/outreach/apolloContacts.ts";
+import { ensurePersonaTitles } from "../_shared/outreach/personaTitles.ts";
 import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/outreach/discoveryRotation.ts";
+import { apolloSearchCompanies, parseEmployeeRange, type FoundCompany } from "../_shared/outreach/apolloSearch.ts";
 import { filterProspectCandidates } from "../_shared/outreach/prospectFilter.ts";
 import { resolveDiscoveryCampaign } from "../_shared/outreach/campaignScope.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { refreshProspectProject } from "../_shared/outreach/prospectProject.ts";
-import { recentDiscoveryRun } from "../_shared/outreach/discoveryCooldown.ts";
 import { insertNewProspects } from "../_shared/outreach/prospectInsert.ts";
 import { runInBackground } from "../_shared/core/background.ts";
 import { SEEN_MEMORY_DAYS } from "../_shared/outreach/prospectGate.ts";
+import {
+  applyOutcome,
+  buildExcludeList,
+  isResting,
+  loadSearchState,
+  saveSearchState,
+  searchKey,
+  toBareDomain,
+  type SearchStateRow,
+} from "../_shared/outreach/apolloSearchState.ts";
 
 // See discover-prospects.ts for why this only applies to client callers.
-const CLIENT_COOLDOWN_MS = 60 * 60 * 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,86 +52,13 @@ interface RequestBody {
   max_results?: number;
   /** Tag discovered leads with this (discovery) campaign. */
   campaign_id?: string;
+  /** Admin only: probe the client's existing search keywords against Apollo and prune the weak ones, instead of discovering. */
+  validate_keywords?: boolean;
   password?: string;
 }
 
-interface FoundCompany {
-  name: string;
-  website_url: string;
-  city?: string;
-  business_type?: string;
-  why_fit?: string;
-}
 
 const OPENAI_API = "https://api.openai.com/v1";
-const APOLLO_API = "https://api.apollo.io/api/v1";
-
-// Apollo's location matcher wants plain city/state/country terms ("texas",
-// "tokyo" -- verified against docs.apollo.io/reference/organization-search),
-// but the ICP's geography string is LLM-generated and can carry a trailing
-// qualifier like "Knoxville, TN metro" that isn't a term Apollo recognizes.
-// Strip the common ones rather than sending it through unmatched.
-function normalizeGeographyForApollo(geography: string): string {
-  return geography.replace(/\s*(metro area|metro|region)\s*$/i, "").trim();
-}
-
-// "10-200 employees" / "10 to 200" -> "10,200" (Apollo's range format).
-// Returns undefined for "any" or anything unparseable -- an omitted filter
-// searches all sizes, which is the safer default over guessing wrong.
-function parseEmployeeRange(companySize?: string): string | undefined {
-  if (!companySize) return undefined;
-  const nums = companySize.match(/\d+/g);
-  if (!nums || nums.length < 2) return undefined;
-  return `${nums[0]},${nums[1]}`;
-}
-
-async function apolloSearchCompanies(
-  apolloKey: string,
-  keywords: string[],
-  icp: { company_size?: string },
-  geography: string,
-  maxResults: number,
-  focus?: string,
-  page = 1,
-): Promise<FoundCompany[]> {
-  // Note: Apollo's organization search has no keyword/tag exclusion filter
-  // (only organization_not_locations / not_organization_websites_list) --
-  // verified against docs.apollo.io/reference/organization-search. ICP
-  // disqualifiers can't be applied at the source; they're applied downstream
-  // in scoreProspectFit once a prospect has real context to judge against
-  // (this search response only returns name + domain, too thin to self-filter).
-  const body: Record<string, unknown> = {
-    q_organization_keyword_tags: focus?.trim() ? [...keywords, focus.trim()] : keywords,
-    // Over-fetch: results on known non-prospect domains are dropped afterwards.
-    per_page: Math.min(maxResults * 2, 100),
-    page,
-  };
-  if (!/global/i.test(geography)) body.organization_locations = [normalizeGeographyForApollo(geography)];
-  const employeeRange = parseEmployeeRange(icp.company_size);
-  if (employeeRange) body.organization_num_employees_ranges = [employeeRange];
-
-  const res = await fetch(`${APOLLO_API}/mixed_companies/search`, {
-    method: "POST",
-    headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Apollo organization search failed (${res.status}: ${(await res.text()).slice(0, 300)})`);
-  }
-
-  const data = await res.json();
-  const orgs: any[] = data?.organizations ?? [];
-  // Apollo's search response doesn't include city/industry/employee-count
-  // fields (those need a separate per-org enrichment call) -- leave city and
-  // business_type unset rather than fabricate them.
-  return orgs
-    .map((o) => ({
-      name: o.name as string,
-      website_url: (o.website_url || (o.primary_domain ? `https://${o.primary_domain}` : "")) as string,
-    }))
-    .filter((c) => c.name && c.website_url);
-}
 
 async function webSearchCompanies(
   openaiKey: string,
@@ -210,9 +149,9 @@ serve(async (req) => {
     const auth = await checkClientOrAdminAuth(req, supabase, body.client_id, body.password);
     if (!auth.authorized) return json({ error: "Unauthorized" }, 401);
 
-    if (auth.role === "client" && await recentDiscoveryRun(supabase, body.client_id, CLIENT_COOLDOWN_MS)) {
-      return json({ error: "Discovery already ran recently for this account -- try again later." }, 429);
-    }
+    // Discovery is automatic (daily cron) and admin-triggered; the portal no longer has a
+    // button for it, so a client session has no business spending Apollo credits.
+    if (auth.role === "client") return json({ error: "Lead discovery runs automatically." }, 403);
 
     const apolloKey = Deno.env.get("APOLLO_API_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
@@ -268,21 +207,111 @@ Respond with ONLY a JSON array, no prose:
     const keepCandidates = (found: FoundCompany[]): FoundCompany[] => {
       const { kept, dropped } = filterProspectCandidates(found);
       droppedNonProspects += dropped.length;
-      return kept.slice(0, maxResults);
+      // Not truncated here: cutting a page to maxResults *before* the known-company
+      // check threw away fresh companies ranked below known ones. The batch cap is
+      // applied to the fresh list at the end.
+      return kept;
     };
     // What this run did, saved with the usage row so a zero-yield run can be explained.
-    const strategy: { plans_tried: string[]; expanded_keywords: string[]; widened_geography: string | null; apollo_calls: number } =
-      { plans_tried: [], expanded_keywords: [], widened_geography: null, apollo_calls: 0 };
+    const strategy: {
+      plans_tried: string[];
+      expanded_keywords: string[];
+      widened_geography: string | null;
+      apollo_calls: number;
+      rested: string[];
+      excluded_domains: number;
+      /** Apollo pages spent probing new keywords (separate from apollo_calls). */
+      probe_calls: number;
+      keywords_pruned: number;
+      probes: { tag: string; found: number; fit: number; rate: number | null }[];
+      /** Free Apollo people lookups made before inserting, and what they found. */
+      contact_checks: number;
+      persona_titles: string[];
+      contact_rejected: number;
+      contact_rate_limited: boolean;
+    } = {
+      plans_tried: [], expanded_keywords: [], widened_geography: null, apollo_calls: 0, rested: [], excluded_domains: 0,
+      probe_calls: 0, keywords_pruned: 0, probes: [], persona_titles: [], contact_checks: 0, contact_rejected: 0, contact_rate_limited: false,
+    };
     let searchedGeography = geography;
     if (apolloKey) {
       try {
+        // Newest first, so if the exclusion list is capped the most recent memory is kept.
+        const { data: known } = await supabase.from("prospects").select("website_url")
+          .eq("client_id", body.client_id).order("created_at", { ascending: false });
+        const knownUrls: string[] = (known ?? []).map((p: { website_url: string }) => p.website_url || "");
+        const judged = await recentlyJudgedDomains(supabase, body.client_id);
+        const knownNorm = new Set(knownUrls.map(normalizeUrl));
+        for (const d of judged) knownNorm.add(d);
+        // Told to Apollo so pages hold companies this client doesn't already have.
+        const excludeDomains = buildExcludeList([...knownUrls, ...judged]);
+        strategy.excluded_domains = excludeDomains.length;
+
+        // New keyword tags are probed with one Apollo page each and judged against the
+        // ICP before they are kept (see keywordQuality.ts); weak ones never get searched.
+        const probeInto = async (tags: string[], minKeep: number): Promise<string[]> => {
+          const out = await validateKeywords({ tags, client, icp, apolloKey, geography, excludeDomains, minKeep });
+          strategy.probe_calls += out.calls;
+          strategy.probes.push(...out.results.map((r) => ({ tag: r.tag, found: r.found, fit: r.fit, rate: r.rate })));
+          return out.kept;
+        };
+
         // The ICP's industries are broad labels; derive specific buyer keywords
         // so a niche client doesn't get every "technology" company on earth.
-        const keywords = await ensureSearchKeywords(supabase, client, icp);
-        const baseTags = keywords.length > 0 ? keywords : icp.industries;
-        const { data: known } = await supabase.from("prospects").select("website_url").eq("client_id", body.client_id);
-        const knownNorm = new Set((known ?? []).map((p: { website_url: string }) => normalizeUrl(p.website_url || "")));
-        for (const d of await recentlyJudgedDomains(supabase, body.client_id)) knownNorm.add(d);
+        let keywords = await ensureSearchKeywords(supabase, client, icp, (tags) => probeInto(tags, 2));
+        let baseTags = keywords.length > 0 ? keywords : icp.industries;
+
+        // Keywords saved before validation existed ("legacy") were never checked against
+        // Apollo. Once, on a normal (non-focus) admin/cron run, probe the unchecked ones,
+        // prune the weak and remember the rest so they are never probed again. Manually typed
+        // keywords are the client's choice and are left alone.
+        const legacyPending = pendingValidation(icp.search_keywords ?? [], icp.search_keywords_validated);
+        if (
+          !body.validate_keywords && !body.focus?.trim() &&
+          (icp.search_keywords?.length ?? 0) > 0 && legacyPending.length > 0 &&
+          (icp as { search_keywords_source?: string }).search_keywords_source !== "manual"
+        ) {
+          const before = icp.search_keywords ?? [];
+          const out = await validateKeywords({ tags: legacyPending, client, icp, apolloKey, geography, excludeDomains, minKeep: 2 });
+          if (out.results.length > 0) {
+            const final = mergeAuditKeywords(before, out.kept, out.results.map((r) => r.tag));
+            const validated = [...new Set([...(icp.search_keywords_validated ?? []), ...out.kept.map((k) => k.toLowerCase())])];
+            if (final.length > 0) {
+              // Keep the local ICP in step: later steps (keyword expansion) re-save it.
+              Object.assign(icp, { search_keywords: final, search_keywords_validated: validated });
+              await supabase.from("client_accounts").update({ icp }).eq("id", client.id);
+              keywords = final;
+              baseTags = final;
+            }
+            strategy.probe_calls += out.calls;
+            strategy.probes.push(...out.results.map((r) => ({ tag: r.tag, found: r.found, fit: r.fit, rate: r.rate })));
+            strategy.keywords_pruned = before.length - final.length;
+          }
+        }
+
+        // Admin audit: prune a client's existing weak keywords. Manually typed keywords
+        // are the client's choice and are left alone; tags beyond the probe budget are kept.
+        if (body.validate_keywords) {
+          if ((icp as { search_keywords_source?: string }).search_keywords_source === "manual") {
+            return json({ audit: "skipped", reason: "keywords were set manually" });
+          }
+          const before = icp.search_keywords ?? baseTags;
+          const out = await validateKeywords({ tags: before, client, icp, apolloKey, geography, excludeDomains, minKeep: 2 });
+          const finalKeywords = mergeAuditKeywords(before, out.kept, out.results.map((r) => r.tag));
+          const changed = out.results.length > 0 && finalKeywords.length > 0;
+          if (changed) {
+            const validated = [...new Set([...(icp.search_keywords_validated ?? []), ...out.kept.map((k) => k.toLowerCase())])];
+            await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: finalKeywords, search_keywords_validated: validated } }).eq("id", client.id);
+          }
+          return json({ audit: { before, after: changed ? finalKeywords : before, saved: changed, apollo_calls: out.calls, results: out.results } });
+        }
+
+        // Manual runs with a focus are one-off explorations: they neither skip nor
+        // update the daily searches' memory.
+        const trackState = !body.focus?.trim();
+        const states = trackState ? await loadSearchState(supabase, body.client_id) : new Map<string, SearchStateRow>();
+        const employeeRange = parseEmployeeRange(icp.company_size);
+        const outcomes: SearchStateRow[] = [];
 
         // The same keyword set every day returns the same top-ranked companies, so
         // after a few cycles all of them are known. Instead: lead with a different
@@ -298,23 +327,45 @@ Respond with ONLY a JSON array, no prose:
         const counted = new Set<string>();
         let freshCount = 0;
         const runPlan = async (tags: string[], geo: string) => {
-          strategy.plans_tried.push(tags.join(" + "));
+          const label = tags.join(" + ");
+          const key = await searchKey(tags, geo, employeeRange);
+          if (trackState && isResting(states.get(key))) {
+            strategy.rested.push(label); // found nothing new twice in a row; resting, spend no credits
+            return;
+          }
+          strategy.plans_tried.push(label);
+
+          let pagesFetched = 0;
+          let found = 0;
+          let fresh = 0;
+          // Only a search that actually looked at results can be judged dry: an error
+          // or a spent call budget before the first page says nothing about the search.
+          const record = () => {
+            if (!trackState || pagesFetched === 0) return;
+            outcomes.push(applyOutcome(states.get(key), { client_id: body.client_id, search_key: key, label: label.slice(0, 300) }, { found, fresh }));
+          };
+
           for (let page = 1; page <= MAX_PAGES && freshCount < maxResults && strategy.apollo_calls < MAX_APOLLO_CALLS; page++) {
             strategy.apollo_calls++;
             let batch: FoundCompany[];
             try {
-              batch = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geo, maxResults, body.focus, page));
+              batch = keepCandidates(await apolloSearchCompanies(apolloKey, tags, icp, geo, maxResults, body.focus, page, excludeDomains));
             } catch (e) {
               if (pool.length === 0) throw e;
+              record();
               return; // keep what earlier pages found
             }
-            if (batch.length === 0) return;
+            pagesFetched++;
+            if (batch.length === 0) break;
+            for (const c of batch) c.found_by = { key, label: label.slice(0, 300) };
             pool.push(...batch);
+            found += batch.length;
             for (const c of batch) {
               const n = normalizeUrl(c.website_url);
-              if (n && !knownNorm.has(n) && !counted.has(n)) { counted.add(n); freshCount++; }
+              if (n && !knownNorm.has(n) && !counted.has(n)) { counted.add(n); freshCount++; fresh++; }
             }
           }
+          record();
         };
         const runAll = async (plans: string[][], geo: string) => {
           for (const tags of plans) {
@@ -328,7 +379,7 @@ Respond with ONLY a JSON array, no prose:
 
         if (freshCount === 0) {
           // 1. Every known keyword is searched dry: ask for adjacent buyer segments.
-          const added = await expandSearchKeywords(supabase, client, icp, baseTags);
+          const added = await expandSearchKeywords(supabase, client, icp, baseTags, (tags) => probeInto(tags, 0));
           strategy.expanded_keywords = added;
           if (added.length > 0) await runAll(buildSearchPlans(added), geography);
         }
@@ -341,6 +392,11 @@ Respond with ONLY a JSON array, no prose:
             await runAll(rotatePlans(buildSearchPlans(baseTags), priorRuns ?? 0), wider);
           }
         }
+        // Merge repeat visits to the same search within one run (e.g. a widened pass
+        // re-uses a key) so each key is written once; later outcome wins.
+        const latest = new Map<string, SearchStateRow>();
+        for (const o of outcomes) latest.set(o.search_key, o);
+        await saveSearchState(supabase, [...latest.values()]);
         companies = pool;
         via = "apollo";
       } catch (e) {
@@ -378,12 +434,43 @@ Respond with ONLY a JSON array, no prose:
     for (const d of await recentlyJudgedDomains(supabase, body.client_id)) existingNorm.add(d);
 
     const seen = new Set<string>();
-    const fresh = companies.filter((c) => {
+    const candidates = companies.filter((c) => {
       const norm = normalizeUrl(c.website_url);
       if (!norm || existingNorm.has(norm) || seen.has(norm)) return false;
       seen.add(norm);
       return true;
-    }).slice(0, maxResults);
+    });
+
+    // Apollo companies only become leads if Apollo has someone reachable there. The
+    // lookup is free and fails open (see apolloContacts.ts); unreachable ones are
+    // remembered so they are not re-found, instead of being scanned and scored first.
+    let fresh = candidates.slice(0, maxResults);
+    if (via === "apollo" && apolloKey && candidates.length > 0) {
+      // The buyer persona from the ICP decides who counts as a contact (never throws; [] = seniority ladder).
+      const personaTitles = await ensurePersonaTitles(supabase, client, icp);
+      strategy.persona_titles = personaTitles;
+      const sel = await selectReachable(candidates, maxResults, (c) => checkApolloContacts(apolloKey, toBareDomain(c.website_url), fetch, personaTitles));
+      fresh = sel.chosen;
+      strategy.contact_checks = sel.checks;
+      strategy.contact_rejected = sel.rejected.length;
+      strategy.contact_rate_limited = sel.rateLimited;
+      if (sel.rejected.length > 0) {
+        const now = new Date().toISOString();
+        const { error: rememberErr } = await supabase.from("prospect_seen_domains").upsert(
+          sel.rejected.map(({ item, status }) => ({
+            client_id: body.client_id,
+            domain: normalizeUrl(item.website_url),
+            name: item.name,
+            fit_score: null,
+            reason: status === "no_people" ? "Apollo has no contacts at this company" : "Apollo has contacts but no email on file",
+            outcome: "no_contact",
+            seen_at: now,
+          })),
+          { onConflict: "client_id,domain" },
+        );
+        if (rememberErr) console.warn("could not remember unreachable companies:", rememberErr.message);
+      }
+    }
 
     let inserted: { id: string; name: string; website_url: string; city: string | null }[] = [];
     if (fresh.length === 0) await recordEmptyRun();
@@ -398,7 +485,7 @@ Respond with ONLY a JSON array, no prose:
         source: "outbound",
         status: "discovered",
         business_type: c.business_type || null,
-        research_snapshot: { via, why_fit: c.why_fit || null, focus: body.focus || null, geography },
+        research_snapshot: { via, why_fit: c.why_fit || null, focus: body.focus || null, geography, ...(c.found_by ? { found_by: c.found_by } : {}) },
         ...(campaign.campaignId ? { campaign_id: campaign.campaignId } : {}),
       }));
 

@@ -33,6 +33,23 @@ export function widenGeography(geography: string): string | null {
   return broader && broader.toLowerCase() !== g.toLowerCase() ? broader : null;
 }
 
+/**
+ * Location term Apollo's organization/people search can match. Its docs list
+ * cities, US states, countries and postal codes ("texas", "tokyo", "spain"); the
+ * ICP's geography is LLM-written prose, e.g. "United States (focus on urban and
+ * suburban markets)", which matches nothing and silently returns zero companies.
+ * Drops parenthetical asides, trailing clauses and "metro"/"region" suffixes, and
+ * maps the common spellings of the US to "united states". Returns "" when nothing
+ * usable is left, so the caller omits the filter instead of sending junk.
+ */
+export function normalizeGeographyForApollo(geography: string): string {
+  let g = (geography ?? "").replace(/\s*\(.*?\)\s*/g, " ");
+  g = g.split(/\s[-\u2013\u2014:]\s|;/)[0];
+  g = g.replace(/\s*(metro area|metro|region)\s*$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (/^(the )?(united states( of america)?|usa|u\.s\.a?\.?|us)$/.test(g)) return "united states";
+  return g;
+}
+
 /** Append new keywords to the cached list, case-insensitively de-duplicated and capped. */
 export function mergeKeywords(existing: string[], fresh: string[], cap = MAX_KEYWORDS): string[] {
   const seen = new Set(existing.map((k) => k.toLowerCase()));

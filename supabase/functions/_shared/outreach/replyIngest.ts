@@ -52,6 +52,15 @@ export async function ingestReply(
     .maybeSingle();
   if (existing?.processed_at) return out;
 
+  // Replies are matched by tracking id, not sender, so record whether the sender
+  // is the prospect we actually emailed (forwards/colleagues share the tag).
+  const { data: prospectRow } = a.prospectId
+    ? await supabase.from("prospects").select("name, status, reply_snippet, email").eq("id", a.prospectId).maybeSingle()
+    : { data: null };
+  const senderMatches: boolean | null = prospectRow?.email && a.fromAddress
+    ? String(prospectRow.email).trim().toLowerCase() === a.fromAddress.trim().toLowerCase()
+    : null;
+
   const { data: stored, error: storeErr } = await supabase
     .from("prospect_replies")
     .upsert({
@@ -67,6 +76,7 @@ export async function ingestReply(
       match_method: a.matchMethod,
       snippet: a.snippet,
       body_text: a.replyBody,
+      sender_matches_prospect: senderMatches,
     }, { onConflict: "client_id,message_id" })
     .select("id")
     .maybeSingle();
@@ -84,11 +94,7 @@ export async function ingestReply(
 
   if (!a.prospectId) { await markProcessed(); return out; } // stored for review, nothing to update
 
-  const { data: prospect } = await supabase
-    .from("prospects")
-    .select("name, status, reply_snippet")
-    .eq("id", a.prospectId)
-    .maybeSingle();
+  const prospect = prospectRow;
   if (!prospect) { await markProcessed(); return out; }
   // A prospect someone already marked "replied" by hand still gets its reply
   // text captured once; every other settled status is left alone.
@@ -111,11 +117,12 @@ export async function ingestReply(
     // prospect (notifyClientBlocked keys on title) so a redelivery never
     // re-notifies.
     const who = prospect.name ?? "A prospect";
+    const fromOther = senderMatches === false && a.fromAddress ? ` (sent from ${a.fromAddress}, not the address we emailed)` : "";
     const preview = replySnippet ? `"${replySnippet.replace(/\s+/g, " ").slice(0, 280)}${replySnippet.length > 280 ? "…" : ""}"` : "Open your portal to read it in your inbox.";
     await notifyClientBlocked(supabase, a.clientId, {
       notificationType: "prospect_reply",
       title: `${who} replied to your outreach`,
-      description: preview,
+      description: preview + fromOther,
       dedupeHours: 24 * 60,
     });
     await logActivity(supabase, a.clientId, {
@@ -123,7 +130,7 @@ export async function ingestReply(
       title: `${who} replied to your outreach`,
       description: replySnippet ? replySnippet.slice(0, 140) : undefined,
       icon: "mail",
-      metadata: { prospect_id: a.prospectId },
+      metadata: { prospect_id: a.prospectId, ...(senderMatches === false ? { sender_mismatch: a.fromAddress } : {}) },
     });
   }
   // Stop the rest of the sequence either way.

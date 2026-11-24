@@ -16,7 +16,7 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 | `social/` | Content and caption gates, social strategy and budget, image prompts, channel plan, Post for Me helpers, topic ledger |
 | `seo/` | Audit rubric and checks, crawl health, scan scoring, AI readiness, schema markup, `crawler/` engine |
 | `wordpress/` | Plugin version, WordPress site helpers and fix application, first-party traffic ingest |
-| `client/` | Client context, cycles, onboarding, alerts, outcomes, command center, `profile/` company-profile agent |
+| `client/` | Client context, cycles, onboarding, alerts, outcomes, `profile/` company-profile agent |
 | `steward/` | Goal-driven per-client steward agents (gate, loop, proposals, run, SEO actions) and their tools |
 
 ## Index
@@ -61,4 +61,4 @@ Shared logic lives in `_shared/`, grouped by the same domains:
 `billing-enforce`, `stripe-billing-portal`, `stripe-create-checkout`, `stripe-webhook`
 
 **Admin and ops**
-`admin-ai-spend`, `admin-command-center`, `chat`, `test-api-key`
+`admin-ai-spend`, `chat`, `test-api-key`

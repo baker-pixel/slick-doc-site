@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import {
-  Loader2, Info, Radar, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin, Sparkles,
+  Loader2, Info, Radar, Users, CheckCircle2, Mail, Target, AlertTriangle, MapPin,
   Eye, MousePointerClick, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Search, Reply,
   XCircle, Clock, Send, Settings2,
 } from "lucide-react";
@@ -19,8 +19,9 @@ import { OutreachSettingsCard } from "./OutreachSettingsCard";
 import { SmtpSenderSection } from "./SmtpSenderSection";
 import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
 import { CampaignsSection } from "./CampaignsSection";
+import { OutreachFactsNudge } from "./OutreachFactsNudge";
 import { OutreachInsights } from "./OutreachInsights";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
+import { WarmLeadsCard } from "./WarmLeadsCard";
 
 interface Prospect {
   id: string;
@@ -136,9 +137,9 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
   const [selected, setSelected] = useState<Prospect | null>(null);
   const [emails, setEmails] = useState<ProspectEmail[] | null>(null);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  // A failed load must not read as "no emails": the timeline would claim a finished lead never started.
+  const [emailsError, setEmailsError] = useState(false);
   const [viewingEmail, setViewingEmail] = useState<ProspectEmail | null>(null);
-  const [icpLocal, setIcpLocal] = useState(true);
-  const [findingLeads, setFindingLeads] = useState(false);
   // null until the SMTP section reports; outreach is blocked without a mailbox.
   const [hasMailbox, setHasMailbox] = useState<boolean | null>(null);
   const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[] | null>(null);
@@ -179,10 +180,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     const refresh = () => { if (document.visibilityState === "visible") loadProspects(true); };
     const poll = setInterval(refresh, 30_000);
     document.addEventListener("visibilitychange", refresh);
-    supabase.from("client_accounts").select("icp, business_name, outreach_settings").eq("id", clientAccountId).single()
+    supabase.from("client_accounts").select("business_name, outreach_settings").eq("id", clientAccountId).single()
       .then(({ data }) => {
-        const icp = data?.icp as { local?: boolean } | null;
-        if (icp && typeof icp.local === "boolean") setIcpLocal(icp.local);
         const sig = (data?.outreach_settings as { signature?: { name?: string } } | null)?.signature?.name?.trim() || null;
         setSignatureName(sig);
         setSender((prev) => ({ ...prev, name: sig || data?.business_name || prev.name }));
@@ -204,34 +203,18 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientAccountId]);
 
-  const findLeadsNow = async () => {
-    setFindingLeads(true);
-    try {
-      const { data, error } = await supabase.functions.invoke(
-        icpLocal ? "discover-prospects" : "discover-prospects-web",
-        { body: { client_id: clientAccountId } },
-      );
-      const errMsg = await getEdgeErrorMessage(error, data);
-      if (errMsg) throw new Error(friendlyEdgeMessage(errMsg));
-      toast({ title: `${data.discovered ?? 0} new leads found`, description: "They'll be reviewed and added to your outreach queue shortly." });
-      if ((data.discovered ?? 0) > 0) loadProspects();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Couldn't find new leads", description: msg, variant: "destructive" });
-    } finally {
-      setFindingLeads(false);
-    }
-  };
-
   const openDetail = async (p: Prospect) => {
     setSelected(p);
     setEmails(null);
     setViewingEmail(null);
     setEmailsLoading(true);
+    setEmailsError(false);
     const { data, error } = await (supabase.rpc as any)("client_get_prospect_emails", {
       p_client_account_id: clientAccountId,
       p_prospect_id: p.id,
     });
+    if (error) console.error("Failed to load prospect emails:", error);
+    setEmailsError(!!error);
     setEmails(error ? [] : (data as ProspectEmail[]));
     setEmailsLoading(false);
   };
@@ -361,16 +344,21 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         </div>
       )}
 
+      <OutreachFactsNudge
+        clientAccountId={clientAccountId}
+        onOpen={() => {
+          setSettingsOpen(true);
+          // The card only exists once the settings area is open.
+          setTimeout(() => document.getElementById("company-context")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+        }}
+      />
+
       <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary/60" />
         <span className="flex-1">
           Orange Door is running outreach on your behalf, based on your ideal customer profile. Click a lead
           below to see why it was matched and what's been sent.
         </span>
-        <Button size="sm" variant="outline" className="gap-2 shrink-0" onClick={findLeadsNow} disabled={findingLeads || hasMailbox !== true}>
-          {findingLeads ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-          {findingLeads ? "Searching..." : "Find leads now"}
-        </Button>
       </div>
 
       <OutreachInsights
@@ -379,6 +367,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         hasMailbox={hasMailbox}
         onOpenLead={openCampaignLead}
       />
+
+      <WarmLeadsCard clientAccountId={clientAccountId} />
 
       <CampaignsSection clientAccountId={clientAccountId} hasMailbox={hasMailbox} onOpenLead={openCampaignLead} />
 
@@ -706,6 +696,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
                     <div className="flex items-center justify-center py-6">
                       <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                     </div>
+                  ) : emailsError ? (
+                    <p className="text-xs text-destructive">Couldn't load this lead's emails. Please close and reopen it to try again.</p>
                   ) : !emails || emails.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Nothing queued yet — this lead hasn't entered the sequence.</p>
                   ) : (
