@@ -108,9 +108,9 @@ export interface StepBrief { theme: string; maxWords: number }
 
 const COLD_BRIEFS: Record<number, StepBrief> = {
   1: { theme: "Open with the ANGLE observation in your own words (one sentence, so they see it is about their business), then ask the ANGLE question. Then, in one short clause, say who the sender is and what they do (verified facts). No offer yet.", maxWords: 90 },
-  2: { theme: "Follow-up that looks at a DIFFERENT side of their business than step 1 (another RECIPIENT fact). Add one specific, relevant thing the sender does (verified facts) and ask one question about it.", maxWords: 80 },
-  3: { theme: "Plainly say what the sender offers and what the recipient would get, from verified facts only, tied to the ANGLE. Suggest one small next step, such as a short call.", maxWords: 100 },
-  4: { theme: "Final note. Acknowledge they are busy; ask if it is worth a chat or who else to speak to.", maxWords: 55 },
+  2: { theme: "Follow-up built on the ANGLE given, which is a DIFFERENT side of their business than step 1. Do not repeat step 1's wording or question. Add one specific, relevant thing the sender does (verified facts) and ask one question.", maxWords: 80 },
+  3: { theme: "Plainly say what the sender offers and what the recipient would get, from verified facts only, tied to the ANGLE given. Do not repeat earlier questions. Suggest one small next step, such as a short call.", maxWords: 100 },
+  4: { theme: "Final note. Do not restate earlier points or questions. Acknowledge they are busy; ask if it is worth a chat or who else to speak to.", maxWords: 55 },
 };
 
 // Existing customers/contacts already know the sender: announce, don't introduce.
@@ -268,4 +268,10 @@ export function angleBlock(angle: OutreachAngle | null | undefined): string {
   return `ANGLE (the hook for this recipient; use it, in your own words):
 - Observation (true of them, from RECIPIENT facts): ${angle.observation}
 - Question to ask (a hypothesis phrased as a question, never state it as a fact): ${angle.question}`;
+}
+
+/** Which angle a step uses: each follow-up looks at a different side of the business. The last step is a plain nudge and uses none. */
+export function angleForStep(angles: OutreachAngle[], step: number): OutreachAngle | null {
+  if (angles.length === 0 || step >= 4) return null;
+  return angles[(step - 1) % angles.length];
 }

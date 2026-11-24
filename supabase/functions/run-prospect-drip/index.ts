@@ -21,9 +21,9 @@ import {
   senderFactsBlock,
   stepBrief,
   toneInstruction,
-  angleBlock, type OutreachAngle,
+  angleBlock, angleForStep, type OutreachAngle,
 } from "../_shared/outreach/outreachPrompt.ts";
-import { cachedAngle, deriveOutreachAngle } from "../_shared/outreach/outreachAngle.ts";
+import { cachedAngles, deriveOutreachAngle } from "../_shared/outreach/outreachAngle.ts";
 // logActivity for "email sent" moved to process-email-queue -- that's where
 // the actual send now happens (this function only enrolls/schedules).
 
@@ -645,19 +645,22 @@ serve(async (req) => {
 
       // The hook: one true observation about this business and one honest question, derived once
       // and shared by every step (cached on the lead). Not for existing contacts, who already know us.
-      let angle: OutreachAngle | null = null;
+      let angles: OutreachAngle[] = [];
       if (missing.length > 0 && campaign?.audience !== "existing") {
-        angle = cachedAngle(prospect) ?? await deriveOutreachAngle(client, prospect);
-        if (angle && !cachedAngle(prospect)) {
-          await supabase.from("prospects").update({
-            research_snapshot: { ...(prospect.research_snapshot ?? {}), outreach_angle: { ...angle, at: new Date().toISOString() } },
-          }).eq("id", prospect.id);
+        angles = cachedAngles(prospect);
+        if (angles.length === 0) {
+          angles = await deriveOutreachAngle(client, prospect);
+          if (angles.length > 0) {
+            await supabase.from("prospects").update({
+              research_snapshot: { ...(prospect.research_snapshot ?? {}), outreach_angles: angles, outreach_angles_at: new Date().toISOString() },
+            }).eq("id", prospect.id);
+          }
         }
       }
 
       // Draft the missing steps concurrently -- they're independent LLM calls.
       const drafted = await Promise.all(missing.map(async ({ stepNumber }) => {
-        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber, campaign, angle))
+        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber, campaign, angleForStep(angles, stepNumber)))
           ?? buildStaticOutreachEmail(prospect, client, stepNumber);
         return { stepNumber, content };
       }));

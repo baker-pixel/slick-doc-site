@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { cachedAngle, recipientFacts } from "./outreachAngle.ts";
+import { cachedAngles, recipientFacts } from "./outreachAngle.ts";
 
 Deno.test("recipientFacts labels only what we hold and flattens it for grounding", () => {
   const f = recipientFacts({
@@ -19,9 +19,12 @@ Deno.test("recipientFacts falls back to the lead's own columns and top weaknesse
   assert(f.lines.includes("- Known gaps: no online booking"));
 });
 
-Deno.test("cachedAngle reads a saved angle and ignores missing or malformed ones", () => {
-  assertEquals(cachedAngle({ name: "A", research_snapshot: { outreach_angle: { observation: "o", question: "q?", at: "x" } } }), { observation: "o", question: "q?" });
-  assertEquals(cachedAngle({ name: "A", research_snapshot: {} }), null);
-  assertEquals(cachedAngle({ name: "A", research_snapshot: { outreach_angle: { observation: 1 } } }), null);
-  assertEquals(cachedAngle({ name: "A" }), null);
+Deno.test("cachedAngles reads saved angles, the older single angle, and ignores malformed ones", () => {
+  const one = { observation: "o", question: "q?" };
+  assertEquals(cachedAngles({ name: "A", research_snapshot: { outreach_angles: [one, { ...one, question: "q2?" }] } }).length, 2);
+  assertEquals(cachedAngles({ name: "A", research_snapshot: { outreach_angle: { ...one, at: "x" } } }), [one]);
+  assertEquals(cachedAngles({ name: "A", research_snapshot: { outreach_angles: [{ observation: 1 }, null, one] } }), [one]);
+  assertEquals(cachedAngles({ name: "A", research_snapshot: {} }), []);
+  assertEquals(cachedAngles({ name: "A" }), []);
+  assertEquals(cachedAngles({ name: "A", research_snapshot: { outreach_angles: [one, one, one, one, one] } }).length, 3);
 });

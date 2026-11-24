@@ -36,29 +36,34 @@ export function recipientFacts(p: AngleProspect): { lines: string; flat: string 
   return { lines: kept.map(([k, v]) => `- ${k}: ${v}`).join("\n"), flat: kept.map(([, v]) => v).join(". ") };
 }
 
-/** Cached angle on the lead, if one was derived before. */
-export function cachedAngle(p: AngleProspect): OutreachAngle | null {
-  const a = p.research_snapshot?.outreach_angle as { observation?: unknown; question?: unknown } | undefined;
-  return a && typeof a.observation === "string" && typeof a.question === "string"
-    ? { observation: a.observation, question: a.question }
-    : null;
+/** Cached angles on the lead (also reads the single angle saved by the first version). */
+export function cachedAngles(p: AngleProspect): OutreachAngle[] {
+  const snap = p.research_snapshot ?? {};
+  const raw = Array.isArray(snap.outreach_angles) ? snap.outreach_angles : snap.outreach_angle ? [snap.outreach_angle] : [];
+  return raw
+    .filter((a): a is { observation: string; question: string } =>
+      !!a && typeof (a as { observation?: unknown }).observation === "string" && typeof (a as { question?: unknown }).question === "string")
+    .map((a) => ({ observation: a.observation, question: a.question }))
+    .slice(0, MAX_ANGLES);
 }
 
-/** Returns null when there is too little about the recipient to say anything specific. Never throws. */
+export const MAX_ANGLES = 3;
+
+/** Returns [] when there is too little about the recipient to say anything specific. Never throws. */
 export async function deriveOutreachAngle(
   client: { id: string; business_name: string; context_profile?: SenderContext | null },
   prospect: AngleProspect,
-): Promise<OutreachAngle | null> {
+): Promise<OutreachAngle[]> {
   const facts = recipientFacts(prospect);
   // A name and a type is not a hook.
-  if (facts.lines.split("\n").length < 3) return null;
+  if (facts.lines.split("\n").length < 3) return [];
   try {
-    const raw = await callAIJson<{ observation?: unknown; question?: unknown }>({
+    const raw = await callAIJson<{ angles?: unknown }>({
       source: "run-prospect-drip",
       clientId: client.id,
-      promptId: "prospect-outreach-angle.v1",
+      promptId: "prospect-outreach-angle.v2",
       jsonMode: true,
-      maxTokens: 300,
+      maxTokens: 700,
       temperature: 0.4,
       prompt: `A sender is writing a cold email to a small business. Find the hook: one true thing about THEM, and one honest question.
 
@@ -68,14 +73,23 @@ ${senderFactsBlock(client.context_profile, client.business_name)}
 RECIPIENT (the only facts you may use):
 ${facts.lines}
 
-Return ONLY JSON: {"observation":"...","question":"..."}
+Give up to ${MAX_ANGLES} angles for a sequence of emails. Each must look at a DIFFERENT side of their business (for example a different offer, location or audience), so the follow-ups do not repeat each other.
+Return ONLY JSON: {"angles":[{"observation":"...","question":"..."}]}
+Each angle:
 - observation: ONE sentence saying something specific about what they do, using only RECIPIENT facts (their offers, places, audience). Add no number, award or judgement about quality. Written to them ("You ...").
 - question: ONE question about a marketing or visibility challenge that follows naturally from that observation and that the sender's services could plausibly help with. Do not claim they have a problem. Not generic ("Are you looking to grow?").
-- If the facts are too thin to say anything specific, return {"observation":"","question":""}.`,
+If the facts are too thin to say anything specific, return {"angles":[]}.`,
     });
-    return parseAngle(raw, facts.flat);
+    const out: OutreachAngle[] = [];
+    for (const a of Array.isArray(raw.angles) ? raw.angles : []) {
+      const parsed = parseAngle(a, facts.flat);
+      // Skip an angle that just repeats an earlier one's question.
+      if (parsed && !out.some((o) => o.question.toLowerCase() === parsed.question.toLowerCase())) out.push(parsed);
+      if (out.length >= MAX_ANGLES) break;
+    }
+    return out;
   } catch (e) {
     console.warn(`outreach angle failed for ${prospect.name}:`, e instanceof Error ? e.message : e);
-    return null;
+    return [];
   }
 }

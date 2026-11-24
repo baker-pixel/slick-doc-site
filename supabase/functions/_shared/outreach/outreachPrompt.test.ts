@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { angleBlock, findOutreachViolations, groundedIn, parseAngle, stepBrief } from "./outreachPrompt.ts";
+import { angleBlock, angleForStep, findOutreachViolations, groundedIn, parseAngle, stepBrief } from "./outreachPrompt.ts";
 
 const FACTS = "Vienna Coffee Company. Coffee Roastery & Retail in Maryville, Tennessee. Coffee Sales, Coffee Subscriptions, Gift Cards, Coffee Classes and Tours, Meeting Room Rentals, Catering, Wholesale Coffee Supply. Multiple locations including Downtown Maryville and Maryville College.";
 
@@ -47,4 +47,14 @@ Deno.test("cold step 1 and 2 briefs tell the writer to use the angle", () => {
   assert(stepBrief(1)!.theme.includes("ANGLE"));
   assert(stepBrief(2)!.theme.includes("DIFFERENT"));
   assertEquals(stepBrief(4)!.maxWords, 55);
+});
+
+Deno.test("angleForStep gives each follow-up a different angle and the last step none", () => {
+  const a = { observation: "a obs long enough here", question: "a q?" };
+  const b = { observation: "b obs long enough here", question: "b q?" };
+  assertEquals(angleForStep([a, b], 1), a);
+  assertEquals(angleForStep([a, b], 2), b);
+  assertEquals(angleForStep([a, b], 3), a);
+  assertEquals(angleForStep([a, b], 4), null);
+  assertEquals(angleForStep([], 1), null);
 });
