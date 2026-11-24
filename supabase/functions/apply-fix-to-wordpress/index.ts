@@ -5,6 +5,7 @@ import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { applyWpFix, verifyWpFix, currentWpFieldValue } from "../_shared/wordpress/wpApply.ts";
 import { wpWriteBlockedReason } from "../_shared/wordpress/wpSite.ts";
+import { agentFieldForFixType, findAgentSite, queueAgentChange } from "../_shared/wordpress/agentQueue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,25 @@ serve(async (req) => {
 
       const blocked = await wpWriteBlockedReason(supabase, client_id);
       if (blocked) return jsonRes({ error: blocked }, 409);
+
+      // v2 site: it is never called. Queue the change; the site applies it at its next check-in.
+      const agentSite = await findAgentSite(supabase, client_id);
+      if (agentSite) {
+        const field = agentFieldForFixType(String(seo_fix.type));
+        if (!field) return jsonRes({ error: "This kind of change can't be applied automatically." }, 422);
+        const p = (seo_fix.payload ?? {}) as Record<string, unknown>;
+        try {
+          const changeId = await queueAgentChange(supabase, {
+            siteId: agentSite.id, field, value: String(p.value ?? ""),
+            pageUrl: typeof p.post_url === "string" ? p.post_url : null,
+            imageSrc: typeof p.image_src === "string" ? p.image_src : null,
+            requestedBy: "admin",
+          });
+          return jsonRes({ success: true, queued: true, change_id: changeId });
+        } catch (e) {
+          return jsonRes({ error: e instanceof Error ? e.message : "Could not queue the change" }, 422);
+        }
+      }
 
       const { data: creds } = await supabase
         .from("client_credentials")
@@ -142,6 +162,24 @@ serve(async (req) => {
 
     const blocked = await wpWriteBlockedReason(supabase, fix.client_account_id);
     if (blocked) throw new Error(blocked);
+
+    const agentSite = await findAgentSite(supabase, fix.client_account_id);
+    if (agentSite) {
+      const field = agentFieldForFixType(String(ready.type));
+      if (!field) throw new Error("This kind of change can't be applied automatically.");
+      const p = (ready.payload ?? {}) as Record<string, unknown>;
+      const changeId = await queueAgentChange(supabase, {
+        siteId: agentSite.id, field, value: String(p.value ?? ""),
+        pageUrl: typeof p.post_url === "string" ? p.post_url : null,
+        imageSrc: typeof p.image_src === "string" ? p.image_src : null,
+        aiFixId: fixId, requestedBy: "admin",
+      });
+      await supabase.from("ai_fixes").update({ status: "approved", error_message: null }).eq("id", fixId);
+      return new Response(
+        JSON.stringify({ success: true, queued: true, change_id: changeId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const { data: creds } = await supabase
       .from("client_credentials")

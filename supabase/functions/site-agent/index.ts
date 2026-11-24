@@ -193,7 +193,7 @@ async function pull(supabase: Supabase, siteId: string) {
   const redeliverBefore = new Date(Date.now() - REDELIVER_AFTER_MS).toISOString();
   const { data: rows } = await supabase
     .from("site_changes")
-    .select("id, status, field, post_id, media_id, new_value, before_value, attempts")
+    .select("id, status, field, post_id, media_id, page_url, image_src, new_value, before_value, attempts")
     .eq("site_id", siteId)
     .or(`status.in.(queued,revert_queued),and(status.in.(delivered,revert_delivered),delivered_at.lt.${redeliverBefore},attempts.lt.${MAX_ATTEMPTS})`)
     .order("created_at", { ascending: true })
@@ -213,7 +213,7 @@ async function pull(supabase: Supabase, siteId: string) {
       })
       .eq("id", r.id).eq("status", r.status).select("id").maybeSingle();
     if (!claimed) continue;
-    changes.push({ id: r.id, op: revert ? "revert" : "apply", field: r.field, post_id: r.post_id, media_id: r.media_id, value: r.new_value, before: revert ? r.before_value : null });
+    changes.push({ id: r.id, op: revert ? "revert" : "apply", field: r.field, post_id: r.post_id, media_id: r.media_id, page_url: r.page_url, image_src: r.image_src, value: r.new_value, before: revert ? r.before_value : null });
   }
   return json({ changes });
 }
@@ -270,10 +270,12 @@ async function report(supabase: Supabase, site: { id: string; client_id: string 
     if (r.outcome === "failed") {
       await supabase.from("site_changes").update({ status: "failed", error_message: str(r.error, 500) ?? "The site could not apply this change.", updated_at: now }).eq("id", change.id);
       if (change.fix_id) await supabase.from("wp_fix_queue").update({ status: "failed", error_message: str(r.error, 500), updated_at: now }).eq("id", change.fix_id);
+      if (change.ai_fix_id) await supabase.from("ai_fixes").update({ status: "failed", error_message: str(r.error, 500) }).eq("id", change.ai_fix_id);
     } else if (r.outcome === "reverted") {
       await supabase.from("site_changes").update({ status: "reverted", reverted_at: now, updated_at: now }).eq("id", change.id);
       // Back to "pending" so the owner can approve it again if they change their mind.
       if (change.fix_id) await supabase.from("wp_fix_queue").update({ status: "pending", applied_at: null, error_message: null, updated_at: now }).eq("id", change.fix_id);
+      if (change.ai_fix_id) await supabase.from("ai_fixes").update({ status: "proposed", applied_at: null }).eq("id", change.ai_fix_id);
     } else {
       await supabase.from("site_changes").update({
         status: "applied", applied_at: now, before_value: typeof r.before === "string" ? r.before.slice(0, 5000) : null, error_message: null, updated_at: now,
@@ -289,7 +291,7 @@ async function report(supabase: Supabase, site: { id: string; client_id: string 
 async function confirmOnLivePage(
   supabase: Supabase,
   site: { id: string; client_id: string | null; site_url: string },
-  change: { id: string; fix_id: string | null; field: string; new_value: string; page_url: string | null },
+  change: { id: string; fix_id: string | null; ai_fix_id?: string | null; field: string; new_value: string; page_url: string | null; before_value?: string | null },
 ) {
   const now = new Date().toISOString();
   const html = change.page_url ? await fetchLiveHtml(change.page_url) : null;
@@ -312,6 +314,12 @@ async function confirmOnLivePage(
   if (change.fix_id) {
     await supabase.from("wp_fix_queue").update({ status: "applied", applied_at: now, error_message: null, updated_at: now }).eq("id", change.fix_id);
   }
+  if (change.ai_fix_id) {
+    await supabase.from("ai_fixes").update({
+      status: "applied", applied_at: now, error_message: null,
+      before_snapshot: { value: change.before_value ?? null }, after_snapshot: { value: change.new_value },
+    }).eq("id", change.ai_fix_id);
+  }
   if (site.client_id) {
     await logActivity(supabase, site.client_id, {
       type: "seo_fix_applied",
@@ -328,7 +336,7 @@ async function reverifyStale(supabase: Supabase, siteId: string) {
   const before = new Date(Date.now() - REVERIFY_AFTER_MS).toISOString();
   const { data: stale } = await supabase
     .from("site_changes")
-    .select("id, fix_id, field, new_value, page_url, attempts, applied_at")
+    .select("id, fix_id, ai_fix_id, field, new_value, before_value, page_url, attempts, applied_at")
     .eq("site_id", siteId).eq("status", "unverified").lt("updated_at", before)
     .order("updated_at", { ascending: true }).limit(REVERIFY_BATCH);
   if (!stale?.length) return;
@@ -341,6 +349,7 @@ async function reverifyStale(supabase: Supabase, siteId: string) {
       const now = new Date().toISOString();
       await supabase.from("site_changes").update({ status: "failed", error_message: "Saved on the site, but the live page still doesn't show it after 24 hours (a page cache or another SEO plugin may be overriding it).", updated_at: now }).eq("id", c.id);
       if (c.fix_id) await supabase.from("wp_fix_queue").update({ status: "failed", error_message: "Saved on the site, but the live page doesn't show it.", updated_at: now }).eq("id", c.fix_id);
+      if (c.ai_fix_id) await supabase.from("ai_fixes").update({ status: "failed", error_message: "Saved on the site, but the live page doesn't show it." }).eq("id", c.ai_fix_id);
       continue;
     }
     await confirmOnLivePage(supabase, site, c);

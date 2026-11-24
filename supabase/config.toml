@@ -251,3 +251,6 @@ verify_jwt = false
 
 [functions.site-agent]
 verify_jwt = false
+
+[functions.revert-site-change]
+verify_jwt = false

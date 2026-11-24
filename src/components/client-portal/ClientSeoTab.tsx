@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { ConnectSitePanel } from "@/components/admin/content/ConnectSitePanel";
 import { PluginUpdateNotice } from "@/components/client-portal/PluginUpdateNotice";
+import { WpChangeHistory } from "@/components/client-portal/WpChangeHistory";
 import { pluginNeedsUpdate } from "@/lib/pluginVersion";
 import { SeoScoreCard } from "@/components/admin/shared/SeoScoreCard";
 
@@ -1001,6 +1002,9 @@ export function ClientSeoTab({ clientAccountId }: Props) {
             )}
           </div>
         )}
+
+        {/* ── Changes made through the plugin (v2 sites), each with an Undo ── */}
+        {wpSite?.status === "connected" && wpSite.id && <WpChangeHistory siteId={wpSite.id} />}
 
         {/* ── Site Improvements ─────────────────────────────── */}
         {(wpSite?.status === "connected" || wpSite?.status === "unreachable") && (() => {

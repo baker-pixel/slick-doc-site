@@ -141,5 +141,18 @@ od_agent_tick();
 $acts = array_map( fn( $c ) => json_decode( $c['args']['body'], true )['action'], $GLOBALS['od_http'] );
 check( 'scan_requested heartbeat leads to inventory parts', $acts === [ 'heartbeat', 'inventory', 'inventory' ] );
 
+// ── targets by URL ────────────────────────────────────────────────────────
+reset_site();
+$r = od_run_change( [ 'id' => 'u1', 'op' => 'apply', 'field' => 'meta_title', 'page_url' => 'https://client.example/about', 'value' => 'About us' ] );
+check( 'page found by URL (trailing slash tolerated)', $r['outcome'] === 'applied' && get_post_meta( 11, '_od_meta_title' ) === 'About us' );
+$r = od_run_change( [ 'id' => 'u2', 'op' => 'apply', 'field' => 'meta_desc', 'page_url' => 'https://client.example/?utm=x#top', 'value' => 'Home desc' ] );
+check( 'home page found, query and fragment ignored', $r['outcome'] === 'applied' && get_post_meta( 10, '_od_meta_desc' ) === 'Home desc' );
+$r = od_run_change( [ 'id' => 'u3', 'op' => 'apply', 'field' => 'meta_title', 'page_url' => 'https://client.example/missing', 'value' => 'x' ] );
+check( 'unknown URL fails with a plain message', $r['outcome'] === 'failed' && strpos( $r['error'], 'Could not find that page' ) === 0 );
+$r = od_run_change( [ 'id' => 'u4', 'op' => 'apply', 'field' => 'alt_text', 'image_src' => 'https://client.example/uploads/door.jpg', 'value' => 'A red door' ] );
+check( 'image found by URL', $r['outcome'] === 'applied' && get_post_meta( 20, '_wp_attachment_image_alt' ) === 'A red door' );
+$r = od_run_change( [ 'id' => 'u5', 'op' => 'revert', 'field' => 'meta_title', 'page_url' => 'https://client.example/about' ] );
+check( 'revert also resolves by URL', $r['outcome'] === 'reverted' && ! metadata_exists( 'post', 11, '_od_meta_title' ) );
+
 echo $fails ? "\n$fails of $n checks failed\n" : "all $n checks passed\n";
 exit( $fails ? 1 : 0 );

@@ -13,6 +13,7 @@ $GLOBALS['od_opts'] = is_file( $state_file ) ? json_decode( file_get_contents( $
 $GLOBALS['od_meta'] = $GLOBALS['od_opts']['_meta'] ?? [];
 unset( $GLOBALS['od_opts']['_meta'] );
 $url_override = getenv( 'OD_E2E_BASE' );
+$GLOBALS['od_urls']['https://example.com/'] = 10;   // the page our test site pretends to own
 
 // real HTTP instead of the stub
 $GLOBALS['od_http_reply'] = function ( $url, $args ) {

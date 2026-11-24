@@ -84,3 +84,8 @@ function od_get_sitemap_info() { return [ 'sitemap_url' => 'https://client.examp
 function get_attached_file( $id ) { return "/uploads/img-$id.jpg"; }
 function wp_get_attachment_url( $id ) { return "https://client.example/uploads/img-$id.jpg"; }
 function wp_schedule_single_event( $t, $h ) { $GLOBALS['od_scheduled'][] = $h; }
+
+function trailingslashit( $v ) { return rtrim( $v, '/' ) . '/'; }
+$GLOBALS['od_urls'] = [ 'https://client.example/about/' => 11, 'https://client.example/' => 10 ];
+function url_to_postid( $u ) { return $GLOBALS['od_urls'][ $u ] ?? 0; }
+function attachment_url_to_postid( $u ) { return $u === 'https://client.example/uploads/door.jpg' ? 20 : 0; }

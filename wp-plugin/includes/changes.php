@@ -118,7 +118,7 @@ function od_apply_change( $c ) {
 
     if ( ! in_array( $field, OD_POST_FIELDS, true ) ) return [ 'ok' => false, 'error' => 'Unsupported change: ' . $field ];
     $post_id = intval( $c['post_id'] ?? 0 );
-    if ( ! $post_id || ! get_post( $post_id ) ) return [ 'ok' => false, 'error' => 'Page not found.' ];
+    if ( ! $post_id || ! get_post( $post_id ) ) return [ 'ok' => false, 'error' => 'Could not find that page on the site (it may have moved or been deleted).' ];
 
     $clean = od_clean_value( $field, $value );
     if ( $clean === null ) return [ 'ok' => false, 'error' => 'Invalid structured data.' ];
@@ -171,11 +171,36 @@ function od_revert_change( $c ) {
     return od_restore_meta( $object_id, $is_media ? 'alt_text' : $field, $c['before'] ?? null, $key );
 }
 
+/**
+ * Changes arrive with a page URL or image URL when Orange Door only knows those (SEO audit
+ * findings). WordPress ids are looked up here, on the site that owns them.
+ */
+function od_resolve_target( $c ) {
+    $field = (string) ( $c['field'] ?? '' );
+    if ( in_array( $field, OD_SITE_FIELDS, true ) ) return $c;
+
+    if ( $field === 'alt_text' ) {
+        if ( empty( $c['media_id'] ) && ! empty( $c['image_src'] ) ) {
+            $id = attachment_url_to_postid( esc_url_raw( $c['image_src'] ) );
+            if ( $id ) $c['media_id'] = $id;
+        }
+        return $c;
+    }
+    if ( empty( $c['post_id'] ) && ! empty( $c['page_url'] ) ) {
+        $url = strtok( esc_url_raw( $c['page_url'] ), '#' );
+        $id  = url_to_postid( $url );
+        if ( ! $id ) $id = url_to_postid( trailingslashit( strtok( $url, '?' ) ) );
+        if ( $id ) $c['post_id'] = $id;
+    }
+    return $c;
+}
+
 /** Run one pulled change and describe the outcome in the shape the backend expects. Never throws. */
 function od_run_change( $c ) {
     $id = (string) ( $c['id'] ?? '' );
     try {
         $revert = ( $c['op'] ?? 'apply' ) === 'revert';
+        $c = od_resolve_target( $c );
         $r = $revert ? od_revert_change( $c ) : od_apply_change( $c );
         if ( empty( $r['ok'] ) ) return [ 'id' => $id, 'outcome' => 'failed', 'error' => (string) ( $r['error'] ?? 'Unknown error' ) ];
         return $revert
