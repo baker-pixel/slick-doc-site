@@ -452,7 +452,11 @@ export function ClientSeoTab({ clientAccountId }: Props) {
         const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Could not apply fix");
       }
-      toast.success(`Fix applied to ${fix.page_title ?? fix.page_url ?? "your page"}`);
+      const where = fix.page_title ?? fix.page_url ?? "your page";
+      // Sites on the v2 plugin pick changes up when they next check in (about 5 minutes).
+      toast.success(data?.status === "queued"
+        ? `Queued for ${where}. Your site picks it up within a few minutes.`
+        : `Fix applied to ${where}`);
       setWpFixes(prev => prev.filter(f => f.id !== fix.id));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not apply fix");
