@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
-import { Building2, Save, Plus, X, Loader2, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Building2, Save, Plus, X, Loader2, ShieldCheck, AlertTriangle, Sparkles } from "lucide-react";
 
 interface ContextProfile {
   services: string[];
@@ -140,6 +140,9 @@ export function CompanyContextCard({ clientAccountId, autoOpen = false }: Compan
   const [targetAudience, setTargetAudience] = useState("");
   const [location, setLocation] = useState("");
   const [businessSummary, setBusinessSummary] = useState("");
+  // "Tell us what you do": the owner's own words, turned into fact statements they review and save.
+  const [factsText, setFactsText] = useState("");
+  const [drafting, setDrafting] = useState(false);
 
   useEffect(() => {
     fetchContext();
@@ -195,6 +198,30 @@ export function CompanyContextCard({ clientAccountId, autoOpen = false }: Compan
   };
 
   const handleProfileChange = () => setHasChanges(true);
+
+  const draftFacts = async () => {
+    setDrafting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("draft-verified-facts", {
+        body: { client_id: clientAccountId, description: factsText },
+      });
+      if (error) throw error;
+      const drafted = ((data as { facts?: string[] } | null)?.facts ?? []).filter((f) => !verifiedFacts.includes(f));
+      if (drafted.length === 0) {
+        toast({ title: "No new facts found", description: (data as { message?: string } | null)?.message ?? "Try a few plain sentences about what you offer and who you help." });
+        return;
+      }
+      setVerifiedFacts([...verifiedFacts, ...drafted]);
+      setFactsText("");
+      setHasChanges(true);
+      toast({ title: `Added ${drafted.length} fact${drafted.length === 1 ? "" : "s"}`, description: "Check they're right, edit or remove any, then press Save." });
+    } catch (err) {
+      console.error("draft-verified-facts failed:", err);
+      toast({ title: "Couldn't draft facts", description: "Please try again, or type them in below.", variant: "destructive" });
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   // Website suggestions: accepting puts the item into the form (saved with the rest); either way it leaves the list,
   // and a dismissed item is remembered so the next crawl doesn't offer it again.
@@ -366,6 +393,22 @@ export function CompanyContextCard({ clientAccountId, autoOpen = false }: Compan
                 <span>Add at least 3 facts so posts stay accurate. Until then the AI will keep product descriptions general.</span>
               </div>
             )}
+            <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-background/60 p-3">
+              <Label className="text-sm font-medium">Not sure what to write? Tell us in your own words</Label>
+              <Textarea
+                value={factsText}
+                onChange={(e) => setFactsText(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder="What do you offer, who do you help, and anything you can prove (years in business, how you work)? A few plain sentences is enough."
+              />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">We only use what you write. You review the facts before anything is saved.</p>
+                <Button type="button" size="sm" variant="outline" className="gap-1 shrink-0" disabled={drafting || factsText.trim().length < 30} onClick={draftFacts}>
+                  {drafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Turn into facts
+                </Button>
+              </div>
+            </div>
             <TagEditor
               label="What your business really does"
               values={verifiedFacts}

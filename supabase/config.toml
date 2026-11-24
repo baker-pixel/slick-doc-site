@@ -233,6 +233,9 @@ verify_jwt = false
 [functions.build-company-profile]
 verify_jwt = false
 
+[functions.draft-verified-facts]
+verify_jwt = false
+
 # Steward functions authenticate in code: admin session or password, or the service key.
 [functions.steward-run]
 verify_jwt = false
