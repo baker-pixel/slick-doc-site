@@ -20,7 +20,6 @@ import { SmtpSenderSection } from "./SmtpSenderSection";
 import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
 import { CampaignsSection } from "./CampaignsSection";
 import { OutreachInsights } from "./OutreachInsights";
-import { getEdgeErrorMessage, friendlyEdgeMessage } from "@/lib/edge-error";
 
 interface Prospect {
   id: string;
