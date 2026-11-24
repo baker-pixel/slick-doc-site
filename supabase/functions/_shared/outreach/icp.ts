@@ -21,6 +21,8 @@ export interface ClientICP {
   summary: string;
   /** Specific buyer keywords for Apollo, derived once from the ICP and cached here. */
   search_keywords?: string[];
+  /** Lower-cased keywords that passed the Apollo probe. Anything in search_keywords but not here predates validation. */
+  search_keywords_validated?: string[];
 }
 
 export function hasValidICP(icp: unknown): icp is ClientICP {
@@ -169,7 +171,8 @@ Return ONLY JSON: {"keywords":["..."]}`,
     ).slice(0, 6);
     if (validate && keywords.length > 0) keywords = await validate(keywords);
     if (keywords.length > 0) {
-      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: keywords } }).eq("id", client.id);
+      const validated = validate ? keywords.map((k) => k.toLowerCase()) : icp.search_keywords_validated;
+      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: keywords, search_keywords_validated: validated } }).eq("id", client.id);
     }
     return keywords;
   } catch (e) {
@@ -214,7 +217,10 @@ Return ONLY JSON: {"keywords":["..."]}`,
     const merged = mergeKeywords(tried, candidates);
     const added = merged.filter((k) => !tried.some((t) => t.toLowerCase() === k.toLowerCase()));
     if (added.length > 0) {
-      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: merged } }).eq("id", client.id);
+      const validated = validate
+        ? [...new Set([...(icp.search_keywords_validated ?? []), ...added.map((k) => k.toLowerCase())])]
+        : icp.search_keywords_validated;
+      await supabase.from("client_accounts").update({ icp: { ...icp, search_keywords: merged, search_keywords_validated: validated } }).eq("id", client.id);
     }
     return added;
   } catch (e) {

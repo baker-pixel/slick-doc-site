@@ -434,33 +434,53 @@ serve(async (req: Request) => {
           // to 3 people (each match costs a credit) and keep the first that Apollo
           // verifies -- the first person often has no email on file while the next does.
           let verifiedEmail: string | null = null;
+          // Who the verified address belongs to: lets the greeting use a real first name.
+          let verifiedWho: { first_name?: string; title?: string } | null = null;
           let sawEmail = false;
           let matchFailed = false;
-          for (const person of found.people.slice(0, 3)) {
-            const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
-              method: "POST",
-              headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-              body: JSON.stringify({ id: person.id }),
-            });
-            if (!matchRes.ok) {
-              console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
-              matchFailed = true;
-              break;
+          const triedIds = new Set<string>();
+          const matchPeople = async (people: { id?: string }[]) => {
+            for (const person of people.filter((x) => x.id && !triedIds.has(x.id)).slice(0, 3)) {
+              triedIds.add(person.id!);
+              const matchRes = await fetch("https://api.apollo.io/api/v1/people/match", {
+                method: "POST",
+                headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
+                body: JSON.stringify({ id: person.id }),
+              });
+              if (!matchRes.ok) {
+                console.warn(`Apollo people match failed for ${domain}: ${matchRes.status}`);
+                matchFailed = true;
+                return;
+              }
+              const matched = (await matchRes.json())?.person;
+              if (matched?.email) sawEmail = true;
+              if (matched?.email && matched.email_status === "verified") {
+                verifiedEmail = matched.email;
+                verifiedWho = { first_name: matched.first_name, title: matched.title };
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 300));
             }
-            const matched = (await matchRes.json())?.person;
-            if (matched?.email) sawEmail = true;
-            if (matched?.email && matched.email_status === "verified") {
-              verifiedEmail = matched.email;
-              break;
-            }
-            await new Promise((r) => setTimeout(r, 300));
+          };
+          await matchPeople(found.people);
+          // The persona's people had no verified email: a more general contact is better than none.
+          if (!verifiedEmail && !matchFailed && usedPersona) {
+            usedPersona = false;
+            const ladder = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director", "manager", "senior"]);
+            if (ladder.status === 200) await matchPeople(ladder.people);
           }
           if (matchFailed) continue;
 
           if (verifiedEmail) {
+            // Machine-discovered leads only: campaign leads carry the client's own contact details.
+            const who = verifiedWho as { first_name?: string; title?: string } | null;
             await supabase
               .from("prospects")
-              .update({ email: verifiedEmail })
+              .update({
+                email: verifiedEmail,
+                ...(!p.campaign_id && who?.first_name ? { contact_first_name: who.first_name } : {}),
+                ...(!p.campaign_id && who?.title ? { contact_title: who.title } : {}),
+              })
               .eq("id", p.id);
             emailsEnriched++;
 

@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { mergeAuditKeywords, normalizeKeyword, normalizeKeywords, pickKeywords, probeKeywords, type ProbeResult } from "./keywordQuality.ts";
+import { mergeAuditKeywords, normalizeKeyword, pendingValidation, normalizeKeywords, pickKeywords, probeKeywords, type ProbeResult } from "./keywordQuality.ts";
 import type { FoundCompany } from "./apolloSearch.ts";
 
 const co = (n: number): FoundCompany[] => Array.from({ length: n }, (_, i) => ({ name: `Co ${i}`, website_url: `https://co${i}.com` }));
@@ -95,4 +95,10 @@ Deno.test("mergeAuditKeywords keeps passed tags and untested ones, never a prune
 Deno.test("mergeAuditKeywords drops generic leftovers and de-duplicates", () => {
   assertEquals(mergeAuditKeywords(["software", "talent management", "Talent Management"], ["talent management"], []), ["talent management"]);
   assertEquals(mergeAuditKeywords([], [], []), []);
+});
+
+Deno.test("pendingValidation lists only tags not yet validated, normalized, ignoring case", () => {
+  assertEquals(pendingValidation(["Team development software", "executive coaching firms", "people analytics"], ["team development software", "people analytics"]), ["executive coaching"]);
+  assertEquals(pendingValidation(["a b c"], undefined), ["a b c"]);
+  assertEquals(pendingValidation([], ["x"]), []);
 });
