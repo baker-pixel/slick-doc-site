@@ -25,6 +25,8 @@ export interface ImageStyle {
   photographic: boolean;
   /** Used only when the client explicitly lists it in image_styles. */
   optIn?: boolean;
+  /** "title": the image may carry one short exact title and simple chart labels (reports, charts, graphics). */
+  text?: "title";
 }
 
 export const IMAGE_STYLES: ImageStyle[] = [
@@ -83,6 +85,24 @@ export const IMAGE_STYLES: ImageStyle[] = [
       "Natural outdoor lifestyle photograph on a real street, in a park or neighbourhood, where the idea plays out in everyday life.",
     people: "full",
     photographic: true,
+  },
+  {
+    id: "artifact_document",
+    label: "Artifact still life",
+    direction:
+      "Still-life photograph of ONE real artifact at the centre of the idea: a printed report page, worksheet, chart on paper, diagram, tool or document, on a real desk or surface, in natural light with believable paper texture. One clear focal point, nobody in frame.",
+    people: "none",
+    photographic: true,
+    text: "title",
+  },
+  {
+    id: "data_graphic",
+    label: "Editorial graphic",
+    direction:
+      "Bold modern editorial graphic that visualises the idea with simple chart forms (a quadrant, bar chart, radar, wheel or overlapping circles). Flat vector style, a limited confident palette, generous negative space, one focal shape and one short headline.",
+    people: "none",
+    photographic: false,
+    text: "title",
   },
   // Non-photographic styles: only used when a client opts in via image_styles.
   {
@@ -159,7 +179,8 @@ const AI_TELLS =
 
 const CLICHES =
   "glowing or mechanical brain, scales of justice, lightbulb-as-idea, gears/cogs, handshake close-up, circuit-board overlays, DNA helix, " +
-  "floating abstract geometry, posed businesspeople at a meeting table, laptops with charts, stacks of coloured blocks on a desk";
+  "floating abstract geometry, posed businesspeople at a meeting table, laptops with charts, stacks of coloured blocks on a desk, " +
+  "puzzle pieces, compasses, magnifying glasses, an old key as a symbol of insight, ladders, mountain summits, chess pieces";
 
 export interface CreativeImagePrefs {
   /** Allowed style ids. Empty or missing means all non-opt-in styles. */
@@ -219,6 +240,15 @@ export function pickImageStyle(
     ? IMAGE_STYLES.filter((s) => wanted.includes(s.id))
     : IMAGE_STYLES.filter((s) => !s.optIn);
   if (!pool.length) pool = IMAGE_STYLES.filter((s) => !s.optIn);
+
+  // No more than half of a client's recent images should have people in them:
+  // once 4 of the last 8 do, draw only from the people-free styles.
+  const peopleIds = new Set(IMAGE_STYLES.filter((s) => s.people === "full").map((s) => s.id));
+  const recentPeople = recent.slice(0, 8).filter((r) => r.styleId && peopleIds.has(r.styleId)).length;
+  if (recentPeople >= 4) {
+    const noPeople = pool.filter((s) => s.people !== "full");
+    if (noPeople.length) pool = noPeople;
+  }
 
   // Skip the styles used in the last few posts when there are others to choose from.
   const recentIds = new Set(recent.slice(0, 3).map((r) => r.styleId).filter(Boolean));
@@ -393,7 +423,9 @@ async function writeConcept(
       ? "This business has no storefront or office open to the public; do not show one as theirs. Set the scene where their customers or the work actually are."
       : "",
     prefs.location ? `Setting, people, architecture and objects must plausibly belong in ${prefs.location}.` : "",
-    "Do NOT depict software screens, dashboards, AI visuals or product UIs. No text, letters, numbers or logos anywhere. Nothing that needs readable writing to make sense: no signs, chalkboards, handwritten notes or screens.",
+    style.text === "title"
+      ? `Printed reports, charts, diagrams and worksheets are welcome here, and the image model renders them cleanly. Put the exact words of ONE short title (6 words maximum) in double quotes inside the scene (the quotes only mark the words for the artist; they are not drawn). Show the title ONCE, never repeated around a frame or border. ${style.photographic ? "Because this is a photographed page, the title is the ONLY readable text: the rest of the page is bars, lines, shapes and blurred text blocks with no legible labels." : "Add at most 8 chart labels, each 1-3 words and large enough to read; leave out any label that would be small."} No software screens or dashboards, no logos, no paragraphs of text. Any numbers must be plainly illustrative, never statistics, results or claims. Base the artifact on the business's real services and offerings in the facts; never invent a product. Do not end the concept with a quotation.`
+      : "Do NOT depict software screens, dashboards, AI visuals or product UIs. No text, letters, numbers or logos anywhere. Nothing that needs readable writing to make sense: no signs, chalkboards, handwritten notes or screens.",
     `Do not default to ${DEFAULT_SCENES}. Use any of those only when the post is genuinely about it.`,
     `For variety, set it in or around: ${setting}. Adapt if that makes no sense for this post's message.`,
     overused.length ? `This client's recent images already leaned on ${overused.join(", ")}. Do not use them again.` : "",
@@ -416,7 +448,7 @@ async function writeConcept(
       prompt:
         `Business: ${client.business_name} (${client.industry || "business"})\n${facts}\n\n` +
         `Post${post.title ? ` "${post.title}"` : ""}:\n${(post.content || "").slice(0, 600)}\n\n` +
-        `Photographic genre to shoot it in: ${style.direction}`,
+        `${style.photographic ? "Photographic genre to shoot it in" : "Visual format"}: ${style.direction}`,
       maxTokens: 450,
       temperature: 0.9,
     });
@@ -477,7 +509,9 @@ export async function buildCreativeImage(
 
   const seed = postSeed(post);
   const shared = [
-    `No text of any kind: no letters, numbers, captions, signage, logos or watermarks. Anything that would normally carry text (a screen, page, sign, label, shirt) shows only soft out-of-focus shapes.`,
+    style.text === "title"
+      ? `Text: render ONLY the short title, once, spelled exactly, large and crisp. Do NOT draw quotation marks around the title. Never repeat the title around a frame or border. ${style.photographic ? "Every other mark on the page is shapes, bars, lines or soft blurred text blocks with no legible labels." : "You may add at most 8 simple chart labels of 1-3 words, large and crisp; leave out any label that would be small."} No other readable words, no logos or watermarks.`
+      : `No text of any kind: no letters, numbers, captions, signage, logos or watermarks. Anything that would normally carry text (a screen, page, sign, label, shirt) shows only soft out-of-focus shapes.`,
     ...(never.length ? [`Never show: ${never.join("; ")}.`] : []),
   ];
 
@@ -507,6 +541,7 @@ export async function buildCreativeImage(
       `Visual concept: ${concept}`,
       `Style: ${style.direction}`,
       `People: ${peopleConstraint(style)}`,
+      prefs.brand_colors?.length ? `Palette: lean on ${prefs.brand_colors.slice(0, 3).join(", ")}.` : "",
       `Avoid: ${CLICHES}.`,
       ...shared,
     ];

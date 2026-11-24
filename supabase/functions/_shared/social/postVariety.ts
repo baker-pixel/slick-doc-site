@@ -177,11 +177,27 @@ export function shouldMentionSeason(index: number): boolean {
   return ((index % 4) + 4) % 4 === 0;
 }
 
+export type CtaType = "question" | "pointer" | "reply";
+
+/** Rotates the call-to-action type so a feed does not end every post the same way. */
+export function ctaTypeFor(index: number): CtaType {
+  const types: CtaType[] = ["question", "pointer", "reply"];
+  return types[((index % 3) + 3) % 3];
+}
+
+/** True when a pillar asks for case studies / success stories / client narratives. */
+export const NARRATIVE_PILLAR = /case stud|success stor|testimonial|client stor|transformation|narrative/i;
+
 /** Prompt block appended to every platform's user prompt. */
 export function varietyBlock(opts: {
   format?: PostFormat;
   recentOpenings: string[];
   brief?: { angle: string; hook: string } | null;
+  businessName?: string;
+  services?: string[];
+  ctaType?: CtaType;
+  /** Story-led pillar with no verified client story to draw on. */
+  narrative?: boolean;
 }): string {
   const lines: string[] = [];
   if (opts.brief?.angle) {
@@ -196,10 +212,81 @@ export function varietyBlock(opts: {
     `- This feed has become repetitive. Sound like a person with a point of view, not a brochure.`,
     `- Do NOT open with: "Trusted by...", "Many [people] struggle...", "Ever wondered...", "Unlock/Discover/Uncover...", "In today's...", "In an era...", "When was the last time...", or any "As the leaves turn / winter / the season" opener.`,
     `- Do not restate who the audience is or a credibility line ("trusted worldwide") in the first sentence -- start inside the situation or the point.`,
-    `- Do not end with a generic invitation to "reach out" unless the call to action is genuinely specific.`,
+    `- A call to action is required, but never "Get started today/now", "Ready to ...?" or "Contact us today", and never "Share your experience/view/approach".`,
+    `- Write complete sentences. Never join two full sentences with a comma (no "..., share your view"). The call to action is its own sentence.`,
+    `- Avoid these overused words: unlock, hidden, overlooked, game-changing, actionable, deepen, sharpen, meaningful, seamless, empower, and puzzle metaphors. Do not use the same industry buzzword more than once in a post.`,
+    `- No hashtags about seasons, months or weather.`,
+    `- Speak as the company ("we", "us", "our"), never as "I" or "me".`,
+    `- Refer to a specific offering by its own name (for example a named assessment from the facts) instead of repeating the same generic service description in every post.`,
   );
+  if (opts.businessName) {
+    const svc = (opts.services ?? []).filter(Boolean).slice(0, 6);
+    lines.push(
+      `- Name ${opts.businessName}${svc.length ? `, or one of its specific services/offerings (${svc.join("; ")}; refer to them in natural wording, not capitalised like product names),` : ""} at least once, naturally: as the way to solve the problem, the source of the idea, or the community the reader belongs to. A post that any company in the industry could have published is a miss.`,
+    );
+  }
+  if (opts.ctaType === "question") {
+    lines.push(`- Call to action for THIS post: ask one genuine question the reader can answer in a sentence.`);
+  } else if (opts.ctaType === "pointer") {
+    lines.push(`- Call to action for THIS post: point to something real. Name the specific service or offering and invite the reader to learn more about it on the website. Never invent an offer, demo, trial or discount.`);
+  } else if (opts.ctaType === "reply") {
+    lines.push(`- Call to action for THIS post: invite a direct reply or message about the reader's own situation, in your own words.`);
+  }
+  if (opts.narrative) {
+    lines.push(`- This is a story-led pillar but no verified client story exists. Write a clearly illustrative scenario ("Picture a coach who...", "Imagine..."). Never present it as something that happened to a real client, include no numbers or measured results, and still name the specific service it relies on.`);
+  }
   if (opts.recentOpenings.length) {
     lines.push(`- Recent posts opened like this -- yours must open differently in wording AND structure: ${opts.recentOpenings.map((o) => `"${o}"`).join(" | ")}`);
   }
   return `\n\n${lines.join("\n")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Copy checks enforced in code. The writer model ignores soft bans in the
+// prompt (comma-spliced endings and banned words kept coming back), so these
+// are detected and sent back for one targeted rewrite.
+
+export interface CopyContext {
+  businessName?: string;
+  services?: string[];
+  platform?: string;
+}
+
+const BANNED_WORDS = /\b(unlock\w*|unleash\w*|hidden|overlooked|game-changing|actionable|deepen\w*|sharpen\w*|meaningful|seamless\w*|empower\w*|puzzle)\b/gi;
+// "..., share your view" / "..., we're listening": a new sentence glued on with a comma.
+const SPLICE = /[a-z0-9\u2019')"],\s+(share|tell|let|embrace|ask|reply|join|explore|use|try|see|learn|check|consider|start|take|choose|pick|visit|read|message|comment|drop|we[\u2019']re|we[\u2019']ll|we are|we can)\b/i;
+const SHARE_CTA = /\bshare your (experience|view|approach|thoughts|story)\b/i;
+
+const withoutHashtagLines = (c: string) =>
+  c.split("\n").filter((l) => !/^\s*(#[\p{L}\p{N}_]+\s*)+$/u.test(l)).join("\n");
+
+/** Problems in a draft that should trigger one rewrite. Empty array = clean. */
+export function copyViolations(content: string, ctx: CopyContext = {}): string[] {
+  const body = withoutHashtagLines(content);
+  const found: string[] = [];
+
+  const banned = [...new Set((body.match(BANNED_WORDS) ?? []).map((w) => w.toLowerCase()))];
+  if (banned.length) found.push(`it uses overused words (${banned.join(", ")}); say it plainly instead`);
+
+  const splice = body.match(SPLICE);
+  if (splice) found.push(`it joins two full sentences with a comma ("...${splice[0]}..."); end the sentence with a full stop and make the call to action its own sentence`);
+
+  if (/\b(I|I[\u2019']d|I[\u2019']m|I[\u2019']ll|I[\u2019']ve|me|my)\b/.test(body)) found.push(`it speaks as "I" or "me"; a company page says "we", "us" and "our"`);
+  if (SHARE_CTA.test(body)) found.push(`it uses a "Share your ..." call to action; ask a specific question or point to something real instead`);
+
+  if (ctx.businessName) {
+    const lower = body.toLowerCase();
+    const names = [ctx.businessName, ...(ctx.services ?? [])].filter(Boolean).map((n) => n.toLowerCase());
+    if (!names.some((n) => lower.includes(n))) found.push(`it never names ${ctx.businessName} or one of its services; name it naturally at least once`);
+  }
+
+  if (ctx.platform === "twitter" && content.length > 250) {
+    found.push(`it is ${content.length} characters; a tweet must be 240 or fewer including hashtags`);
+  }
+  return found;
+}
+
+/** A draft must never end in a dangling ellipsis (truncation artefact). */
+export function stripTrailingEllipsis(content: string): string {
+  return content.replace(/\s*(\u2026|\.\.\.)\s*$/, "");
 }
