@@ -19,6 +19,7 @@ import { OutreachSettingsCard } from "./OutreachSettingsCard";
 import { SmtpSenderSection } from "./SmtpSenderSection";
 import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
 import { CampaignsSection } from "./CampaignsSection";
+import { OutreachFactsNudge } from "./OutreachFactsNudge";
 import { OutreachInsights } from "./OutreachInsights";
 import { WarmLeadsCard } from "./WarmLeadsCard";
 
@@ -342,6 +343,15 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
           </span>
         </div>
       )}
+
+      <OutreachFactsNudge
+        clientAccountId={clientAccountId}
+        onOpen={() => {
+          setSettingsOpen(true);
+          // The card only exists once the settings area is open.
+          setTimeout(() => document.getElementById("company-context")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+        }}
+      />
 
       <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary/60" />
