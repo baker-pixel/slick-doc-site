@@ -6,6 +6,8 @@ import { getConversionWins } from "../_shared/client/outcomes.ts";
 import { gateVerdict, isDroppable, minFitFor, normalizeUrl } from "../_shared/outreach/prospectGate.ts";
 import { AUTO_APPROVED_BY, selectForAutoApproval, type AutoApproveCandidate } from "../_shared/outreach/autoApprove.ts";
 import { clientIdsWithMailbox } from "../_shared/outreach/outreachMailbox.ts";
+import { peopleSearchBody } from "../_shared/outreach/apolloContacts.ts";
+import { ensurePersonaTitles } from "../_shared/outreach/personaTitles.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 
 const corsHeaders = {
@@ -63,6 +65,16 @@ serve(async (req: Request) => {
       minFitCache.set(clientId, minFitFor(data?.outreach_settings));
     }
     return minFitCache.get(clientId)!;
+  };
+  // Buyer-persona job titles per client (from the ICP), derived once and cached on the ICP.
+  const titlesCache = new Map<string, string[]>();
+  const getPersonaTitles = async (clientId: string): Promise<string[]> => {
+    if (!titlesCache.has(clientId)) {
+      const { data } = await supabase.from("client_accounts").select("business_name, icp").eq("id", clientId).maybeSingle();
+      const icp = data?.icp as (ClientICP & Record<string, unknown>) | null;
+      titlesCache.set(clientId, icp && data ? await ensurePersonaTitles(supabase, { id: clientId, business_name: data.business_name }, icp) : []);
+    }
+    return titlesCache.get(clientId)!;
   };
   let dropped = 0;
 
@@ -379,23 +391,25 @@ serve(async (req: Request) => {
           // Small companies often have no owner/director on file, which made 72% of
           // lookups a dead end, so widen the seniority list before giving up. The
           // search is free; only the match in step 2 spends a credit.
-          const searchPeople = async (seniorities: string[]) => {
+          const personaTitles = p.client_id ? await getPersonaTitles(p.client_id) : [];
+          const searchPeople = async (seniorities: string[], titles: string[] = []) => {
             const res = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
               method: "POST",
               headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                q_organization_domains_list: [domain],
-                person_seniorities: seniorities,
-                per_page: 3,
-                page: 1,
-              }),
+              body: JSON.stringify(peopleSearchBody(domain, { titles, seniorities })),
             });
             if (!res.ok) return { status: res.status, people: [] as { id?: string }[] };
             const data = await res.json();
             return { status: 200, people: ((data?.people ?? []) as { id?: string }[]).filter((x) => x?.id) };
           };
 
-          let found = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director"]);
+          // The client's buyer persona first; the seniority ladder only when nobody holds those titles.
+          let usedPersona = personaTitles.length > 0;
+          let found = usedPersona ? await searchPeople([], personaTitles) : { status: 200, people: [] as { id?: string }[] };
+          if (found.status === 200 && found.people.length === 0) {
+            usedPersona = false;
+            found = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director"]);
+          }
           if (found.status === 200 && found.people.length === 0) {
             found = await searchPeople(["owner", "founder", "c_suite", "partner", "vp", "head", "director", "manager", "senior"]);
           }
@@ -456,7 +470,7 @@ serve(async (req: Request) => {
                 event_type: "prospect_research",
                 units: 1,
                 source_fn: "backfill-prospect-context",
-                metadata: { kind: "apollo_email_lookup", domain, email_status: "verified" },
+                metadata: { kind: "apollo_email_lookup", domain, email_status: "verified", matched_by: usedPersona ? "persona" : "seniority" },
               });
             }
           } else {

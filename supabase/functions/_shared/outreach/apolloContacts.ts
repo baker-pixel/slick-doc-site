@@ -26,22 +26,34 @@ export interface ContactCheck {
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
-export async function checkApolloContacts(
-  apolloKey: string,
+/**
+ * Body for Apollo's free people search: by the client's buyer-persona titles when given
+ * (Apollo also matches similar titles), otherwise by the seniority ladder.
+ */
+export function peopleSearchBody(
   domain: string,
-  fetchFn: FetchLike = fetch,
+  opts: { titles?: string[]; seniorities?: string[]; perPage?: number } = {},
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    q_organization_domains_list: [domain],
+    per_page: opts.perPage ?? 3,
+    page: 1,
+  };
+  if (opts.titles?.length) body.person_titles = opts.titles;
+  else body.person_seniorities = opts.seniorities ?? SENIORITIES;
+  return body;
+}
+
+async function searchPeopleOnce(
+  apolloKey: string,
+  body: Record<string, unknown>,
+  fetchFn: FetchLike,
 ): Promise<ContactCheck> {
-  if (!domain) return { status: "unknown", people: 0 };
   try {
     const res = await fetchFn(`${APOLLO_API}/mixed_people/api_search`, {
       method: "POST",
       headers: { "x-api-key": apolloKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        q_organization_domains_list: [domain],
-        person_seniorities: SENIORITIES,
-        per_page: 3,
-        page: 1,
-      }),
+      body: JSON.stringify(body),
     });
     if (res.status === 429) {
       await res.body?.cancel().catch(() => {});
@@ -65,6 +77,25 @@ export async function checkApolloContacts(
   } catch {
     return { status: "unknown", people: 0 };
   }
+}
+
+/**
+ * Is there anyone reachable at `domain`? With persona `titles`, people holding those titles
+ * are looked for first; if there are none (or none with an email) it falls back to the
+ * general seniority ladder, so a narrow persona never makes a company look unreachable.
+ */
+export async function checkApolloContacts(
+  apolloKey: string,
+  domain: string,
+  fetchFn: FetchLike = fetch,
+  titles: string[] = [],
+): Promise<ContactCheck> {
+  if (!domain) return { status: "unknown", people: 0 };
+  if (titles.length > 0) {
+    const byTitle = await searchPeopleOnce(apolloKey, peopleSearchBody(domain, { titles }), fetchFn);
+    if (byTitle.status === "reachable" || byTitle.status === "unknown") return byTitle;
+  }
+  return await searchPeopleOnce(apolloKey, peopleSearchBody(domain), fetchFn);
 }
 
 export interface Candidate {
