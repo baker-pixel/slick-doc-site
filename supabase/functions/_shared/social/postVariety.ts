@@ -216,6 +216,8 @@ export function varietyBlock(opts: {
     `- Write complete sentences. Never join two full sentences with a comma (no "..., share your view"). The call to action is its own sentence.`,
     `- Avoid these overused words: unlock, hidden, overlooked, game-changing, actionable, deepen, sharpen, meaningful, seamless, empower, and puzzle metaphors. Do not use the same industry buzzword more than once in a post.`,
     `- No hashtags about seasons, months or weather.`,
+    `- Speak as the company ("we", "us", "our"), never as "I" or "me".`,
+    `- Refer to a specific offering by its own name (for example a named assessment from the facts) instead of repeating the same generic service description in every post.`,
   );
   if (opts.businessName) {
     const svc = (opts.services ?? []).filter(Boolean).slice(0, 6);
@@ -269,6 +271,7 @@ export function copyViolations(content: string, ctx: CopyContext = {}): string[]
   const splice = body.match(SPLICE);
   if (splice) found.push(`it joins two full sentences with a comma ("...${splice[0]}..."); end the sentence with a full stop and make the call to action its own sentence`);
 
+  if (/\b(I|I[\u2019']d|I[\u2019']m|I[\u2019']ll|I[\u2019']ve|me|my)\b/.test(body)) found.push(`it speaks as "I" or "me"; a company page says "we", "us" and "our"`);
   if (SHARE_CTA.test(body)) found.push(`it uses a "Share your ..." call to action; ask a specific question or point to something real instead`);
 
   if (ctx.businessName) {
