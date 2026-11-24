@@ -4,6 +4,7 @@
 
 /** Minimal prospect shape the insights need (a subset of the tab's Prospect). */
 export interface InsightProspect {
+  id?: string;
   status: string;
   drip_step: number;
   opened_at: string | null;
@@ -52,15 +53,22 @@ export function wasContacted(p: InsightProspect): boolean {
   return p.drip_step >= 1 || SENT_TERMINAL.has(p.status);
 }
 
-export function funnelStages(prospects: InsightProspect[]): FunnelStage[] {
+/**
+ * `humanOpenedIds` is the server's list of leads opened by a person (opens in the first
+ * minute after sending are mail-security scanners). When given, Opened and Clicked use it
+ * so the funnel matches the stat cards; a click with no real open is a scanner too.
+ */
+export function funnelStages(prospects: InsightProspect[], humanOpenedIds?: Set<string>): FunnelStage[] {
   const found = prospects.length;
   const approved = prospects.filter((p) => p.status !== "discovered" && p.status !== "rejected").length;
   const contacted = prospects.filter(wasContacted);
-  const opened = contacted.filter((p) => p.opened_at).length;
-  const clicked = contacted.filter((p) => p.clicked_at).length;
+  const isOpened = (p: InsightProspect) =>
+    humanOpenedIds && p.id ? humanOpenedIds.has(p.id) : !!p.opened_at;
+  const opened = contacted.filter(isOpened).length;
+  const clicked = contacted.filter((p) => p.clicked_at && isOpened(p)).length;
   const replied = prospects.filter((p) => p.status === "replied" || p.status === "converted" || (p.replied_at && wasContacted(p))).length;
   return [
-    { key: "found", label: "Found", hint: "Leads matched to your ideal customer profile", count: found },
+    { key: "found", label: "Found", hint: found > approved ? `Matched to your ideal customer profile, including ${found - approved} still being checked for a contact` : "Leads matched to your ideal customer profile", count: found },
     { key: "approved", label: "Approved", hint: "Reviewed and cleared for outreach", count: approved },
     { key: "contacted", label: "Emailed", hint: "Received at least one email", count: contacted.length },
     { key: "opened", label: "Opened", hint: "Opened an email (an estimate: some mail apps hide opens)", count: opened },
