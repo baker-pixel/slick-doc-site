@@ -44,3 +44,4 @@ api/_reportRenderer.generated.mjs
 # Build / test output
 coverage
 *.tsbuildinfo
+wp-plugin/build

@@ -807,6 +807,14 @@ function od_admin_page() {
         $status = get_option( 'od_connect_status', 'pending' );
         $error  = get_option( 'od_connect_error', '' );
     }
+    $agent = od_agent_enabled();
+    $checked_in = '';
+    if ( $agent && isset( $_POST['od_checkin_now'] ) && current_user_can( 'manage_options' ) && check_admin_referer( 'od_checkin_now' ) ) {
+        // Same as the 5-minute check-in, on demand (also makes a staging test quick).
+        delete_transient( 'od_agent_lock' );
+        od_agent_tick();
+        $checked_in = 'Checked in with Orange Door just now.';
+    }
     ?>
     <div class="wrap">
         <h1>Orange Door SEO</h1>
@@ -815,10 +823,35 @@ function od_admin_page() {
                 <th>Site URL</th>
                 <td><code><?php echo esc_html( get_site_url() ); ?></code></td>
             </tr>
+            <?php if ( $agent ) : ?>
+            <tr>
+                <th>Connection</th>
+                <td>Signed agent (v2). This site contacts Orange Door; nothing is sent to it, and there is no shared secret.</td>
+            </tr>
+            <tr>
+                <th>Site ID</th>
+                <td><code><?php echo esc_html( get_option( 'od_agent_site_id', 'Not registered yet' ) ); ?></code></td>
+            </tr>
+            <tr>
+                <th>Last check-in</th>
+                <td><?php
+                    $t = (int) get_option( 'od_agent_last_tick', 0 );
+                    echo $t ? esc_html( human_time_diff( $t ) . ' ago' ) : 'Not yet';
+                ?></td>
+            </tr>
+            <tr>
+                <th>Recent problems</th>
+                <td><?php
+                    $errs = get_option( 'od_agent_errors', [] );
+                    echo $errs ? '<code>' . esc_html( implode( ' | ', (array) $errs ) ) . '</code>' : 'None';
+                ?></td>
+            </tr>
+            <?php else : ?>
             <tr>
                 <th>Secret Token</th>
                 <td><code><?php echo esc_html( $token ); ?></code></td>
             </tr>
+            <?php endif; ?>
             <tr>
                 <th>Yoast SEO</th>
                 <td><?php echo defined('WPSEO_VERSION') ? '&#10003; Active' : '&#10007; Not installed'; ?></td>
@@ -838,10 +871,12 @@ function od_admin_page() {
                     echo isset( $labels[ $ts['reason'] ] ) ? $labels[ $ts['reason'] ] : esc_html( $ts['reason'] );
                 ?></td>
             </tr>
+            <?php if ( ! $agent ) : ?>
             <tr>
                 <th>Scan endpoint</th>
                 <td><code><?php echo esc_html( get_site_url() ); ?>/wp-json/orangedoor/v1/scan</code></td>
             </tr>
+            <?php endif; ?>
         </table>
 
         <?php if ( $status === 'connected' ) : ?>
@@ -862,6 +897,13 @@ function od_admin_page() {
             <?php wp_nonce_field( 'od_retry_connect' ); ?>
             <button type="submit" name="od_retry_connect" value="1" class="button <?php echo $status === 'connected' ? '' : 'button-primary'; ?>"><?php echo esc_html( $button ); ?></button>
         </form>
+        <?php if ( $agent && $status === 'connected' ) : ?>
+        <form method="post" style="margin-top:8px;">
+            <?php wp_nonce_field( 'od_checkin_now' ); ?>
+            <button type="submit" name="od_checkin_now" value="1" class="button button-primary">Check in now</button>
+            <?php if ( $checked_in ) echo ' <span>' . esc_html( $checked_in ) . '</span>'; ?>
+        </form>
+        <?php endif; ?>
     </div>
     <?php
 }
