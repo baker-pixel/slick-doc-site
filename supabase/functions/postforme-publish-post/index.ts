@@ -4,7 +4,7 @@ import { stripInDepthLabel } from "../_shared/seo/frontLoaded.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
 import { shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
-import { buildCreativeImagePrompt } from "../_shared/social/creativeImagePrompt.ts";
+import { buildCreativeImagePrompt, loadRecentImageLedger } from "../_shared/social/creativeImagePrompt.ts";
 import { getClientBrandKit } from "../_shared/client/brandKit.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/social/socialStrategy.ts";
@@ -271,7 +271,7 @@ serve(async (req) => {
         .single();
 
       const prompt = clientRow
-        ? await buildCreativeImagePrompt({ ...clientRow, id: item.client_account_id }, { content: item.content || "", title: item.title, platform: item.platform })
+        ? await buildCreativeImagePrompt({ ...clientRow, id: item.client_account_id }, { content: item.content || "", title: item.title, platform: item.platform }, await loadRecentImageLedger(supabase, item.client_account_id))
         : `Professional marketing image for a business on ${item.platform}.`;
 
       const kit = await getClientBrandKit(supabase, item.client_account_id);
