@@ -434,6 +434,8 @@ serve(async (req: Request) => {
           // to 3 people (each match costs a credit) and keep the first that Apollo
           // verifies -- the first person often has no email on file while the next does.
           let verifiedEmail: string | null = null;
+          // Who the verified address belongs to: lets the greeting use a real first name.
+          let verifiedWho: { first_name?: string; title?: string } | null = null;
           let sawEmail = false;
           let matchFailed = false;
           const triedIds = new Set<string>();
@@ -454,6 +456,7 @@ serve(async (req: Request) => {
               if (matched?.email) sawEmail = true;
               if (matched?.email && matched.email_status === "verified") {
                 verifiedEmail = matched.email;
+                verifiedWho = { first_name: matched.first_name, title: matched.title };
                 return;
               }
               await new Promise((r) => setTimeout(r, 300));
@@ -469,9 +472,15 @@ serve(async (req: Request) => {
           if (matchFailed) continue;
 
           if (verifiedEmail) {
+            // Machine-discovered leads only: campaign leads carry the client's own contact details.
+            const who = verifiedWho as { first_name?: string; title?: string } | null;
             await supabase
               .from("prospects")
-              .update({ email: verifiedEmail })
+              .update({
+                email: verifiedEmail,
+                ...(!p.campaign_id && who?.first_name ? { contact_first_name: who.first_name } : {}),
+                ...(!p.campaign_id && who?.title ? { contact_title: who.title } : {}),
+              })
               .eq("id", p.id);
             emailsEnriched++;
 

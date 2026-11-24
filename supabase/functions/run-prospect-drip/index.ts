@@ -21,7 +21,9 @@ import {
   senderFactsBlock,
   stepBrief,
   toneInstruction,
+  angleBlock, type OutreachAngle,
 } from "../_shared/outreach/outreachPrompt.ts";
+import { cachedAngle, deriveOutreachAngle } from "../_shared/outreach/outreachAngle.ts";
 // logActivity for "email sent" moved to process-email-queue -- that's where
 // the actual send now happens (this function only enrolls/schedules).
 
@@ -56,6 +58,8 @@ interface Prospect {
   contact_first_name?: string | null;
   contact_title?: string | null;
   personalization_hook?: string | null;
+  research_snapshot?: Record<string, unknown> | null;
+  city?: string | null;
 }
 
 interface Campaign {
@@ -202,6 +206,7 @@ async function buildPersonalizedOutreachEmail(
   client: ClientAccount,
   step: number,
   campaign: Campaign | null,
+  angle: OutreachAngle | null = null,
 ): Promise<{ subject: string; html: string } | null> {
   const ctx = prospect.context_profile;
   const clientCtx = client.context_profile;
@@ -253,7 +258,7 @@ ${senderFactsBlock(clientCtx, client.business_name)}
 
 RECIPIENT (a person at this company):
 ${prospectLines}${knownLittle ? "\n- Little is known about them. Do not pretend otherwise." : ""}
-
+${angle ? "\n" + angleBlock(angle) + "\n" : ""}
 ${campaignBlock(campaign) ? campaignBlock(campaign) + "\n\n" : ""}STEP ${step}/${campaign?.max_steps ?? 4}: ${brief.theme} Max ${brief.maxWords} words.
 
 ${OUTREACH_STYLE_RULES}
@@ -267,7 +272,7 @@ Return ONLY JSON: {"subject":"...","html":"..."}`;
       const parsed = await callAIJson<{ subject?: string; html?: string }>({
         source: "run-prospect-drip",
         clientId: client.id,
-        promptId: "prospect-outreach-email.v2",
+        promptId: angle ? "prospect-outreach-email.v3" : "prospect-outreach-email.v2",
         prompt: feedback ? `${basePrompt}\n\n${feedback}` : basePrompt,
         maxTokens: 700,
         temperature: 0.7,
@@ -638,9 +643,21 @@ serve(async (req) => {
         previousSendAt = sendAt;
       }
 
+      // The hook: one true observation about this business and one honest question, derived once
+      // and shared by every step (cached on the lead). Not for existing contacts, who already know us.
+      let angle: OutreachAngle | null = null;
+      if (missing.length > 0 && campaign?.audience !== "existing") {
+        angle = cachedAngle(prospect) ?? await deriveOutreachAngle(client, prospect);
+        if (angle && !cachedAngle(prospect)) {
+          await supabase.from("prospects").update({
+            research_snapshot: { ...(prospect.research_snapshot ?? {}), outreach_angle: { ...angle, at: new Date().toISOString() } },
+          }).eq("id", prospect.id);
+        }
+      }
+
       // Draft the missing steps concurrently -- they're independent LLM calls.
       const drafted = await Promise.all(missing.map(async ({ stepNumber }) => {
-        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber, campaign))
+        const content = (await buildPersonalizedOutreachEmail(prospect, client, stepNumber, campaign, angle))
           ?? buildStaticOutreachEmail(prospect, client, stepNumber);
         return { stepNumber, content };
       }));
