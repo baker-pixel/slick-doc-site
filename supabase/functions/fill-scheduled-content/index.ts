@@ -13,7 +13,7 @@ import { isUsableCaption } from "../_shared/social/captionGate.ts";
 import { hasBusinessContext } from "../_shared/client/businessContext.ts";
 import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/social/topicLedger.ts";
 import { extractTopic } from "../_shared/social/topicExtract.ts";
-import { collectRecentOpenings, ctaTypeFor, NARRATIVE_PILLAR, openingCollision, openingOf, pickFormat, POST_FORMATS, shouldMentionSeason, varietyBlock, type CtaType, type PostFormat } from "../_shared/social/postVariety.ts";
+import { collectRecentOpenings, copyViolations, ctaTypeFor, stripTrailingEllipsis, NARRATIVE_PILLAR, openingCollision, openingOf, pickFormat, POST_FORMATS, shouldMentionSeason, varietyBlock, type CtaType, type PostFormat } from "../_shared/social/postVariety.ts";
 import { planPostAngle, type PostBrief } from "../_shared/social/postAngle.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/client/brandKit.ts";
@@ -341,6 +341,29 @@ serve(async (req) => {
           } catch (e) {
             console.warn("opening-rewrite failed, keeping first draft:", e instanceof Error ? e.message : e);
           }
+        }
+
+        // Copy checks enforced in code (comma-spliced endings, overused words,
+        // "Share your...", no mention of the business, over-long tweets). One
+        // targeted rewrite; the retry only replaces the draft if it has fewer problems.
+        if (isSocialPost && isUsableCaption(generatedContent)) {
+          const copyCtx = { businessName: client.business_name, services: client.context_profile?.services, platform: slot.platform };
+          const first = copyViolations(generatedContent, copyCtx);
+          if (first.length) {
+            const copyFeedback: ContentFeedbackItem[] = [
+              { content_type: slot.content_type, title: "Previous draft", reason: `Rewrite this post and fix these problems: ${first.join("; ")}.` },
+              ...recentFeedback,
+            ];
+            try {
+              const retry = await generateContent(supabase, slot, client, recentTopics, copyFeedback, recentApproved, GROQ_API_KEY, pillar, rot);
+              if (isUsableCaption(retry) && copyViolations(retry, copyCtx).length < first.length && !openingCollision(retry, rot.recentOpenings)) {
+                generatedContent = retry;
+              }
+            } catch (e) {
+              console.warn("copy-rewrite failed, keeping first draft:", e instanceof Error ? e.message : e);
+            }
+          }
+          generatedContent = stripTrailingEllipsis(generatedContent);
         }
 
         // Social posts skip both checks below: the client reviews them in their
@@ -708,9 +731,15 @@ async function generateContent(
   };
   const charLimit = CHAR_LIMITS[slot.platform];
   if (charLimit && content.length > charLimit) {
-    const truncated = content.slice(0, charLimit - 3);
-    const lastSpace = truncated.lastIndexOf(" ");
-    content = (lastSpace > charLimit * 0.8 ? truncated.slice(0, lastSpace) : truncated) + "…";
+    const cut = content.slice(0, charLimit);
+    const sentenceEnd = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("? "), cut.lastIndexOf("! "), cut.lastIndexOf(".\n"));
+    if (sentenceEnd > charLimit * 0.5) {
+      content = cut.slice(0, sentenceEnd + 1).trim(); // a clean sentence, no ellipsis
+    } else {
+      const truncated = content.slice(0, charLimit - 3);
+      const lastSpace = truncated.lastIndexOf(" ");
+      content = (lastSpace > charLimit * 0.8 ? truncated.slice(0, lastSpace) : truncated) + "…";
+    }
     console.warn(`Content for ${slot.platform} truncated from ${originalLength} to ${content.length} chars`);
   }
 

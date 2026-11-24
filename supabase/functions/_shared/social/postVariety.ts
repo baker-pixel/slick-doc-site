@@ -214,13 +214,13 @@ export function varietyBlock(opts: {
     `- Do not restate who the audience is or a credibility line ("trusted worldwide") in the first sentence -- start inside the situation or the point.`,
     `- A call to action is required, but never "Get started today/now", "Ready to ...?" or "Contact us today", and never "Share your experience/view/approach".`,
     `- Write complete sentences. Never join two full sentences with a comma (no "..., share your view"). The call to action is its own sentence.`,
-    `- Avoid these overused words: unlock, hidden, overlooked, game-changing, actionable, deepen, sharpen, meaningful, seamless, empower. Do not use the same industry buzzword more than once in a post.`,
+    `- Avoid these overused words: unlock, hidden, overlooked, game-changing, actionable, deepen, sharpen, meaningful, seamless, empower, and puzzle metaphors. Do not use the same industry buzzword more than once in a post.`,
     `- No hashtags about seasons, months or weather.`,
   );
   if (opts.businessName) {
     const svc = (opts.services ?? []).filter(Boolean).slice(0, 6);
     lines.push(
-      `- Name ${opts.businessName}${svc.length ? `, or one of its specific services/offerings (${svc.join("; ")}),` : ""} at least once, naturally: as the way to solve the problem, the source of the idea, or the community the reader belongs to. A post that any company in the industry could have published is a miss.`,
+      `- Name ${opts.businessName}${svc.length ? `, or one of its specific services/offerings (${svc.join("; ")}; refer to them in natural wording, not capitalised like product names),` : ""} at least once, naturally: as the way to solve the problem, the source of the idea, or the community the reader belongs to. A post that any company in the industry could have published is a miss.`,
     );
   }
   if (opts.ctaType === "question") {
@@ -237,4 +237,53 @@ export function varietyBlock(opts: {
     lines.push(`- Recent posts opened like this -- yours must open differently in wording AND structure: ${opts.recentOpenings.map((o) => `"${o}"`).join(" | ")}`);
   }
   return `\n\n${lines.join("\n")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Copy checks enforced in code. The writer model ignores soft bans in the
+// prompt (comma-spliced endings and banned words kept coming back), so these
+// are detected and sent back for one targeted rewrite.
+
+export interface CopyContext {
+  businessName?: string;
+  services?: string[];
+  platform?: string;
+}
+
+const BANNED_WORDS = /\b(unlock\w*|unleash\w*|hidden|overlooked|game-changing|actionable|deepen\w*|sharpen\w*|meaningful|seamless\w*|empower\w*|puzzle)\b/gi;
+// "..., share your view" / "..., we're listening": a new sentence glued on with a comma.
+const SPLICE = /[a-z0-9\u2019')"],\s+(share|tell|let|embrace|ask|reply|join|explore|use|try|see|learn|check|consider|start|take|choose|pick|visit|read|message|comment|drop|we[\u2019']re|we[\u2019']ll|we are|we can)\b/i;
+const SHARE_CTA = /\bshare your (experience|view|approach|thoughts|story)\b/i;
+
+const withoutHashtagLines = (c: string) =>
+  c.split("\n").filter((l) => !/^\s*(#[\p{L}\p{N}_]+\s*)+$/u.test(l)).join("\n");
+
+/** Problems in a draft that should trigger one rewrite. Empty array = clean. */
+export function copyViolations(content: string, ctx: CopyContext = {}): string[] {
+  const body = withoutHashtagLines(content);
+  const found: string[] = [];
+
+  const banned = [...new Set((body.match(BANNED_WORDS) ?? []).map((w) => w.toLowerCase()))];
+  if (banned.length) found.push(`it uses overused words (${banned.join(", ")}); say it plainly instead`);
+
+  const splice = body.match(SPLICE);
+  if (splice) found.push(`it joins two full sentences with a comma ("...${splice[0]}..."); end the sentence with a full stop and make the call to action its own sentence`);
+
+  if (SHARE_CTA.test(body)) found.push(`it uses a "Share your ..." call to action; ask a specific question or point to something real instead`);
+
+  if (ctx.businessName) {
+    const lower = body.toLowerCase();
+    const names = [ctx.businessName, ...(ctx.services ?? [])].filter(Boolean).map((n) => n.toLowerCase());
+    if (!names.some((n) => lower.includes(n))) found.push(`it never names ${ctx.businessName} or one of its services; name it naturally at least once`);
+  }
+
+  if (ctx.platform === "twitter" && content.length > 250) {
+    found.push(`it is ${content.length} characters; a tweet must be 240 or fewer including hashtags`);
+  }
+  return found;
+}
+
+/** A draft must never end in a dangling ellipsis (truncation artefact). */
+export function stripTrailingEllipsis(content: string): string {
+  return content.replace(/\s*(\u2026|\.\.\.)\s*$/, "");
 }
