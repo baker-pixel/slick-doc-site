@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { persistGeneratedImage } from "../_shared/ai/gptImage.ts";
-import { getClientBrandKit } from "../_shared/client/brandKit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -236,12 +235,8 @@ async function applyResultLine(supabase: any, line: BatchOutputLine) {
   }
 
   try {
-    const kit = slot?.client_account_id ? await getClientBrandKit(supabase, slot.client_account_id) : null;
-    const brand = kit
-      ? { businessName: kit.business.name, logoUrl: kit.visual.primary_logo_url, colorHex: kit.visual.color_palette[0] ?? null }
-      : undefined;
     const fileName = `social/batch/${contentCalendarId}_${Date.now()}.png`;
-    const imageUrl = await persistGeneratedImage(supabase, b64, fileName, brand);
+    const imageUrl = await persistGeneratedImage(supabase, b64, fileName);
     await supabase
       .from("content_calendar")
       .update({ metadata: { ...existingMeta, image_url: imageUrl, image_batch_status: "completed" } })

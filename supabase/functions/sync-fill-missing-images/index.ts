@@ -3,9 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
 import { buildCreativeImage, type RecentImage } from "../_shared/social/creativeImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/ai/gptImage.ts";
-import { getClientBrandKit } from "../_shared/client/brandKit.ts";
 import { checkPipelineAuth } from "../_shared/core/auth.ts";
-import type { OverlayBrand } from "../_shared/social/imageOverlay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,10 +53,10 @@ function isFallbackEligible(slot: { metadata: unknown; scheduled_for: string | n
   return false; // still within the batch's window -- leave it alone
 }
 
-async function generateAndPersistImage(supabase: any, openaiKey: string, prompt: string, contentCalendarId: string, platform: string, brand?: OverlayBrand): Promise<string> {
+async function generateAndPersistImage(supabase: any, openaiKey: string, prompt: string, contentCalendarId: string, platform: string): Promise<string> {
   const base64 = await generateGptImage(openaiKey, prompt, platform);
   const fileName = `social/sync/${contentCalendarId}_${Date.now()}.png`;
-  return persistGeneratedImage(supabase, base64, fileName, brand);
+  return persistGeneratedImage(supabase, base64, fileName);
 }
 
 serve(async (req) => {
@@ -162,14 +160,6 @@ serve(async (req) => {
       .in("id", clientIds);
     const clientMap = Object.fromEntries((clients || []).map((c: any) => [c.id, c]));
 
-    const brandKits = await Promise.all(clientIds.map((id) => getClientBrandKit(supabase, id)));
-    const brandMap: Record<string, OverlayBrand> = Object.fromEntries(
-      brandKits.map((kit) => [
-        kit.client_id,
-        { businessName: kit.business.name, logoUrl: kit.visual.primary_logo_url, colorHex: kit.visual.color_palette[0] ?? null },
-      ]),
-    );
-
     let filled = 0;
     const failures: { id: string; error: string }[] = [];
 
@@ -200,7 +190,7 @@ serve(async (req) => {
         const prompt = imageFeedback
           ? `${built.prompt}\nThe client rejected the previous image and asked for this change, which must be followed: "${imageFeedback}"`
           : built.prompt;
-        const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform, brandMap[slot.client_account_id]);
+        const imageUrl = await generateAndPersistImage(supabase, openaiKey, prompt, slot.id, slot.platform);
 
         const { image_feedback: _used, image_attempts: _a, ...keptMeta } = meta;
         await supabase
