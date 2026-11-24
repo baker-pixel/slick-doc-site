@@ -115,20 +115,21 @@ const clientItems: NavItem[] = [
   { id: "brand-assets", label: "Brand Assets", icon: Palette },
 ];
 
-// AGENTS: the things the platform does for clients. Each one is a real panel
+// WORK: the things the platform does for clients. Each one is a real panel
 // with its own data; the Home page summarises them.
+// Reports is not here: it has no approval step, it is a send log (see Monitoring).
 const agentItems: NavItem[] = [
   { id: "social-posts", label: "Social", icon: Share2 },
   { id: "content-review", label: "Content approvals", icon: FileText, matchIds: ["approvals", "deliverables"] },
   { id: "prospect-engine", label: "Prospecting", icon: Radar },
   { id: "emails", label: "Outreach emails", icon: Mail },
   { id: "seo-dashboard", label: "SEO", icon: Search },
-  { id: "reports-review", label: "Reports", icon: BarChart3 },
 ];
 
 // MONITORING: is it all running, and what happened.
 const monitoringItems: NavItem[] = [
   { id: "alerts", label: "Alerts", icon: Bell },
+  { id: "reports-review", label: "Client reports", icon: BarChart3 },
   { id: "ai-spend", label: "AI spend", icon: DollarSign },
   { id: "activity-feed", label: "Activity log", icon: Activity },
 ];
@@ -258,6 +259,36 @@ function useUnacknowledgedAlertCount(): number {
   return count;
 }
 
+/**
+ * Content that is stuck on a person: a client asked for changes, or a publish failed in the
+ * last 14 days. (Drafts nobody has sent yet are not counted: that needs the three-table
+ * join the Content page does, and the auto-send pipeline rarely leaves any.)
+ */
+function useContentAttentionCount(): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+      const head = { count: "exact" as const, head: true };
+      const [changes, failed] = await Promise.all([
+        supabase.from("content_approvals").select("id", head).eq("status", "changes_requested"),
+        supabase.from("content_calendar").select("id", head).eq("status", "failed").gte("created_at", since),
+      ]);
+      if (!cancelled) setCount((changes.count ?? 0) + (failed.count ?? 0));
+    };
+    load();
+    const timer = setInterval(load, 120_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  return count;
+}
+
 /** New lead submissions (any source) since the admin last opened the Leads page. */
 function useNewLeadCount(): number {
   const [count, setCount] = useState(0);
@@ -293,6 +324,7 @@ function useNewLeadCount(): number {
 export function AdminSidebar({ activeSection, onSectionChange, onLogout }: AdminSidebarProps) {
   const alertCount = useUnacknowledgedAlertCount();
   const newLeadCount = useNewLeadCount();
+  const contentAttentionCount = useContentAttentionCount();
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -325,7 +357,7 @@ export function AdminSidebar({ activeSection, onSectionChange, onLogout }: Admin
           </SidebarGroupContent>
         </SidebarGroup>
         <NavGroup label="Clients" items={clientItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
-        <NavGroup label="Agents" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
+        <NavGroup label="Work" items={agentItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ "content-review": contentAttentionCount }} />
         <NavGroup label="Monitoring" items={monitoringItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ alerts: alertCount }} />
         <NavGroup label="Growth" items={growthItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} badges={{ contacts: newLeadCount }} />
         <NavGroup label="Admin" items={adminItems} activeSection={activeSection} onSectionChange={onSectionChange} defaultOpen collapsible={false} />
