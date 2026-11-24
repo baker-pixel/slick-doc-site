@@ -13,6 +13,8 @@ import { isUsableCaption } from "../_shared/social/captionGate.ts";
 import { hasBusinessContext } from "../_shared/client/businessContext.ts";
 import { collectRecentTopics, pickPillar, RECENT_TOPIC_LIMIT } from "../_shared/social/topicLedger.ts";
 import { extractTopic } from "../_shared/social/topicExtract.ts";
+import { collectRecentOpenings, openingCollision, openingOf, pickFormat, shouldMentionSeason, varietyBlock, type PostFormat } from "../_shared/social/postVariety.ts";
+import { planPostAngle, type PostBrief } from "../_shared/social/postAngle.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/client/brandKit.ts";
 import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform, stripInDepthLabel } from "../_shared/seo/frontLoaded.ts";
@@ -144,22 +146,28 @@ serve(async (req) => {
     // cycle boundaries, so a new cycle doesn't re-pitch last cycle's topics.
     const { data: recentContent } = await supabase
       .from("content_calendar")
-      .select("client_account_id, title, metadata")
+      .select("client_account_id, title, content, metadata")
       .in("client_account_id", clientIds)
       .not("content", "like", "[Auto-generated placeholder%")
       .in("status", ["draft", "scheduled", "published"])
       .order("scheduled_for", { ascending: false })
       .limit(clientIds.length * (RECENT_TOPIC_LIMIT * 2));
 
-    const recentRowsByClient: Record<string, { title: string | null; metadata: any }[]> = {};
+    const recentRowsByClient: Record<string, { title: string | null; content?: string | null; metadata: any }[]> = {};
     for (const item of recentContent || []) {
       (recentRowsByClient[item.client_account_id] ??= []).push(item);
     }
     const recentByClient: Record<string, string[]> = {};
     const recentPillarsByClient: Record<string, (string | null)[]> = {};
+    // Post shape + opener memory (see _shared/postVariety.ts): the topic ledger
+    // alone left every post in the same shape with the same openers.
+    const recentFormatsByClient: Record<string, (string | null)[]> = {};
+    const recentOpeningsByClient: Record<string, string[]> = {};
     for (const [cid, rows] of Object.entries(recentRowsByClient)) {
       recentByClient[cid] = collectRecentTopics(rows);
       recentPillarsByClient[cid] = rows.slice(0, 24).map((r) => r.metadata?.pillar ?? null);
+      recentFormatsByClient[cid] = rows.slice(0, 24).map((r) => r.metadata?.format ?? null);
+      recentOpeningsByClient[cid] = collectRecentOpenings(rows, 8);
     }
 
     // Feedback loop: batch-fetch recent hard-rejection reasons across all
@@ -261,8 +269,35 @@ serve(async (req) => {
           .eq("client_account_id", slot.client_account_id)
           .eq("content_type", "social_post")
           .lt("scheduled_for", slot.scheduled_for ?? new Date().toISOString());
+        const isSocialPost = slot.content_type === "social_post";
+        const recentOpenings = recentOpeningsByClient[slot.client_account_id] ?? [];
+        // Least-recently-used post shape for this platform; the post index only
+        // breaks ties so clients don't march through formats in lockstep.
+        const format: PostFormat | undefined = isSocialPost
+          ? pickFormat(slot.platform, recentFormatsByClient[slot.client_account_id] ?? [], postsBefore ?? 0)
+          : undefined;
+        const pillarDescription = pillarList.find((p) => p.name === pillar)?.description || undefined;
+        // Editor step: one fresh, specific angle chosen BEFORE writing.
+        const brief: PostBrief | null = isSocialPost
+          ? await planPostAngle({
+              clientId: client.id,
+              businessName: client.business_name,
+              industry: client.industry,
+              audience: client.context_profile?.target_audience || "local customers",
+              facts: buildClientContext(client),
+              pillar,
+              pillarDescription,
+              format,
+              platform: slot.platform,
+              recentTopics,
+            })
+          : null;
         const rot: Rotation = {
           index: postsBefore ?? 0,
+          format,
+          brief,
+          recentOpenings: isSocialPost ? recentOpenings : [],
+          mentionSeason: shouldMentionSeason(postsBefore ?? 0),
           pillarDescription: pillarList.find((p) => p.name === pillar)?.description || undefined,
           // What was already posted under THIS pillar -- the general recent-topics
           // list is too coarse to stop "same subject, new wording" within a pillar.
@@ -272,6 +307,27 @@ serve(async (req) => {
         };
 
         let generatedContent = await generateContent(supabase, slot, client, recentTopics, recentFeedback, recentApproved, GROQ_API_KEY, pillar, rot);
+
+        // Opening check: a draft that opens like a recent post, or with a
+        // reflex opener ("Trusted by...", "Many X struggle..."), gets one
+        // rewrite. Best-effort -- the retry only replaces the draft if it is
+        // usable and no longer collides.
+        if (isSocialPost && isUsableCaption(generatedContent) && openingCollision(generatedContent, rot.recentOpenings)) {
+          const retryFeedback: ContentFeedbackItem[] = [
+            {
+              content_type: slot.content_type,
+              title: "Previous draft",
+              reason: `The opening "${openingOf(generatedContent)}" repeats an earlier post or a stock opener. Rewrite so the first sentence is different in wording and structure, and starts inside the situation or the point.`,
+            },
+            ...recentFeedback,
+          ];
+          try {
+            const retry = await generateContent(supabase, slot, client, recentTopics, retryFeedback, recentApproved, GROQ_API_KEY, pillar, rot);
+            if (isUsableCaption(retry) && !openingCollision(retry, rot.recentOpenings)) generatedContent = retry;
+          } catch (e) {
+            console.warn("opening-rewrite failed, keeping first draft:", e instanceof Error ? e.message : e);
+          }
+        }
 
         // Social posts skip both checks below: the client reviews them in their
         // Approvals tab, so an AI/admin gate in front of that is wasted time and
@@ -350,6 +406,7 @@ serve(async (req) => {
               generated_at: new Date().toISOString(),
               ...(topic ? { topic } : {}),
               ...(pillar ? { pillar } : {}),
+              ...(format ? { format: format.id } : {}),
               ...(qa ? { qa } : {}),
               ...(claimsFlagged ? { unsupported_claims: unsupportedClaims } : {}),
               ...(autoForward ? { auto_forwarded: true } : {}),
@@ -391,6 +448,7 @@ serve(async (req) => {
               context_used: !!(client.context_profile),
               ...(topic ? { topic } : {}),
               ...(pillar ? { pillar } : {}),
+              ...(format ? { format: format.id } : {}),
             },
           })
           .eq("id", slot.id);
@@ -400,6 +458,8 @@ serve(async (req) => {
         // Later slots in this same run see this one too.
         if (topic) (recentByClient[slot.client_account_id] ??= []).unshift(topic);
         (recentPillarsByClient[slot.client_account_id] ??= []).unshift(pillar ?? null);
+        (recentFormatsByClient[slot.client_account_id] ??= []).unshift(format?.id ?? null);
+        if (isSocialPost) (recentOpeningsByClient[slot.client_account_id] ??= []).unshift(openingOf(generatedContent));
 
         if (autoForward && draftRecord?.id) {
           // QA passed on a target social platform -- skip the manual admin
@@ -587,7 +647,7 @@ async function generateContent(
       system,
       prompt,
       maxTokens,
-      temperature: 0.75,
+      temperature: 0.85,
       // MODELS.default (gpt-oss-120b) intermittently still burns the whole
       // token budget on hidden reasoning even after max_tokens growth --
       // 24 final failures ("AI returned empty response") over the last 2
@@ -717,6 +777,14 @@ function getBrandVoice(client: ClientInfo): string {
 interface Rotation {
   /** Monotonic position of this post among the client's posts. */
   index: number;
+  /** Least-recently-used post shape (social posts only). */
+  format?: PostFormat;
+  /** Editor-chosen fresh angle for this post, if the brief step succeeded. */
+  brief?: PostBrief | null;
+  /** Openers of the client's recent posts, to be avoided. */
+  recentOpenings: string[];
+  /** Season/month talk is rationed to ~1 post in 4. */
+  mentionSeason: boolean;
   pillarDescription?: string;
   /** Recent topics already posted under the chosen pillar. */
   pillarTopics: string[];
@@ -762,7 +830,10 @@ function buildPrompt(
   // post for a platform land on the same pitch even though pillars rotated.
   const rotIdx = rot?.index ?? 0;
   const rotate = <T,>(arr: T[], offset = 0): T | undefined => (arr.length ? arr[(rotIdx + offset) % arr.length] : undefined);
-  const angleOf = (menu: string[]) => `Use THIS angle and no other: ${rotate(menu)}`;
+  // When the editor step produced a specific brief, that IS the angle; the
+  // static menu would just fight it, so it steps aside.
+  const angleOf = (menu: string[]) =>
+    rot?.brief ? `Subject: the SPECIFIC ANGLE given below.` : `Use THIS angle and no other: ${rotate(menu)}`;
   // The feedback loop, consumed: whats_working is refined from real outcomes
   // (client-context-refresh) and pulled here so content leans into what has
   // actually been resonating for this client.
@@ -775,7 +846,9 @@ function buildPrompt(
   const pillarAvoid = rot?.pillarTopics.length
     ? `\n\nAlready posted under this pillar (pick a different, specific sub-topic -- a reworded version of any of these is a repeat): ${rot.pillarTopics.join(" | ")}.`
     : "";
-  const avoidRepeat = avoidRepetitionInstruction(recentTopics) + pillarAvoid;
+  const avoidRepeat = avoidRepetitionInstruction(recentTopics) + pillarAvoid +
+    (contentType === "social_post" ? varietyBlock({ format: rot?.format, recentOpenings: rot?.recentOpenings ?? [], brief: rot?.brief }) : "");
+  const seasonTalk = rot ? rot.mentionSeason : true;
   const feedbackBlock = feedbackToPromptBlock(recentFeedback);
   const approvedBlock = approvedContentToPromptBlock(recentApproved);
   const services = client.context_profile?.services || [];
@@ -790,13 +863,13 @@ ${clientContext}
 
 ${brandSection}
 PLATFORM: ${platform}
-CURRENT MONTH: ${month} (${season} season)${pillarLine}${workingLine}
+${seasonTalk ? `CURRENT MONTH: ${month} (${season} season)` : "TIMING: do not mention the month, the season or the weather in this post."}${pillarLine}${workingLine}
 
 RULES:
 - Write ONLY the final content — no labels, preamble, meta-commentary, or "here is your post" phrases
 - Be specific to ${biz}'s actual services and differentiators — never generic filler
 - Every piece must sound like it comes from this specific business, not a template
-- Reference ${month} or ${season} naturally only when it adds genuine value
+${seasonTalk ? `- Reference ${month} or ${season} naturally only when it adds genuine value` : "- Do not reference any month, season, weather or holiday"}
 - FACT RULE: product capabilities, technology, integrations, statistics and outcomes may only come from VERIFIED FACTS / services / business summary above. Positioning lines marked unverified are tone only. If facts are thin, write about the audience's problem or a practical tip instead of describing the product${approvedBlock ? `\n\n${approvedBlock}` : ""}${feedbackBlock ? `\n\n${feedbackBlock}` : ""}${NO_FABRICATION_GUARDRAIL}`;
 
   switch (contentType) {
