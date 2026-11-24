@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { checkApolloContacts, selectReachable, type ContactCheck, type FetchLike } from "./apolloContacts.ts";
+import { checkApolloContacts, peopleSearchBody, selectReachable, type ContactCheck, type FetchLike } from "./apolloContacts.ts";
 
 const reply = (status: number, body: unknown): FetchLike => () =>
   Promise.resolve(new Response(typeof body === "string" ? body : JSON.stringify(body), { status }));
@@ -86,4 +86,38 @@ Deno.test("selectReachable honours maxChecks and never exceeds quota", async () 
 Deno.test("selectReachable handles empty input", async () => {
   const sel = await selectReachable([], 5, () => Promise.resolve({ status: "reachable" as const, people: 1 }));
   assertEquals([sel.chosen.length, sel.rejected.length, sel.checks], [0, 0, 0]);
+});
+
+Deno.test("peopleSearchBody uses persona titles when given, else the seniority ladder", () => {
+  const t = peopleSearchBody("a.com", { titles: ["Head of People"] });
+  assertEquals(t.person_titles, ["Head of People"]);
+  assertEquals("person_seniorities" in t, false);
+  const s = peopleSearchBody("a.com");
+  assertEquals("person_titles" in s, false);
+  assert(Array.isArray(s.person_seniorities));
+});
+
+Deno.test("checkApolloContacts with titles searches by title first, then falls back to seniority", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const f: FetchLike = (_u, init) => {
+    const b = JSON.parse(String(init.body));
+    bodies.push(b);
+    return Promise.resolve(new Response(JSON.stringify({ people: "person_titles" in b ? [] : [{ id: "1", has_email: true }] })));
+  };
+  const r = await checkApolloContacts("k", "a.com", f, ["Head of People"]);
+  assertEquals(r.status, "reachable");
+  assertEquals(bodies.length, 2);
+  assertEquals("person_titles" in bodies[0], true);
+  assertEquals("person_seniorities" in bodies[1], true);
+});
+
+Deno.test("checkApolloContacts stops after a reachable title match and on rate limit", async () => {
+  let calls = 0;
+  const ok: FetchLike = () => { calls++; return Promise.resolve(new Response(JSON.stringify({ people: [{ id: "1", has_email: true }] }))); };
+  await checkApolloContacts("k", "a.com", ok, ["CEO"]);
+  assertEquals(calls, 1);
+  calls = 0;
+  const rl: FetchLike = () => { calls++; return Promise.resolve(new Response("x", { status: 429 })); };
+  const r = await checkApolloContacts("k", "a.com", rl, ["CEO"]);
+  assertEquals([calls, r.rateLimited], [1, true]);
 });

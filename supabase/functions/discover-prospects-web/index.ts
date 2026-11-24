@@ -5,6 +5,7 @@ import { checkClientOrAdminAuth } from "../_shared/core/auth.ts";
 import { ensureClientICP, ensureSearchKeywords, expandSearchKeywords } from "../_shared/outreach/icp.ts";
 import { mergeAuditKeywords, validateKeywords } from "../_shared/outreach/keywordQuality.ts";
 import { checkApolloContacts, selectReachable } from "../_shared/outreach/apolloContacts.ts";
+import { ensurePersonaTitles } from "../_shared/outreach/personaTitles.ts";
 import { buildSearchPlans, rotatePlans, widenGeography } from "../_shared/outreach/discoveryRotation.ts";
 import { apolloSearchCompanies, parseEmployeeRange, type FoundCompany } from "../_shared/outreach/apolloSearch.ts";
 import { filterProspectCandidates } from "../_shared/outreach/prospectFilter.ts";
@@ -226,11 +227,12 @@ Respond with ONLY a JSON array, no prose:
       probes: { tag: string; found: number; fit: number; rate: number | null }[];
       /** Free Apollo people lookups made before inserting, and what they found. */
       contact_checks: number;
+      persona_titles: string[];
       contact_rejected: number;
       contact_rate_limited: boolean;
     } = {
       plans_tried: [], expanded_keywords: [], widened_geography: null, apollo_calls: 0, rested: [], excluded_domains: 0,
-      probe_calls: 0, probes: [], contact_checks: 0, contact_rejected: 0, contact_rate_limited: false,
+      probe_calls: 0, probes: [], persona_titles: [], contact_checks: 0, contact_rejected: 0, contact_rate_limited: false,
     };
     let searchedGeography = geography;
     if (apolloKey) {
@@ -416,7 +418,10 @@ Respond with ONLY a JSON array, no prose:
     // remembered so they are not re-found, instead of being scanned and scored first.
     let fresh = candidates.slice(0, maxResults);
     if (via === "apollo" && apolloKey && candidates.length > 0) {
-      const sel = await selectReachable(candidates, maxResults, (c) => checkApolloContacts(apolloKey, toBareDomain(c.website_url)));
+      // The buyer persona from the ICP decides who counts as a contact (never throws; [] = seniority ladder).
+      const personaTitles = await ensurePersonaTitles(supabase, client, icp);
+      strategy.persona_titles = personaTitles;
+      const sel = await selectReachable(candidates, maxResults, (c) => checkApolloContacts(apolloKey, toBareDomain(c.website_url), fetch, personaTitles));
       fresh = sel.chosen;
       strategy.contact_checks = sel.checks;
       strategy.contact_rejected = sel.rejected.length;
