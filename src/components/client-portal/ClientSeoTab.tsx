@@ -317,6 +317,8 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   const [showAllFixes, setShowAllFixes] = useState(false);
   const [hasWebsiteUrl, setHasWebsiteUrl] = useState(true);
   const autoScanFired = useRef(false);
+  // v2 sites upload their pages at their next check-in, so a scan is requested, not run on the spot.
+  const [scanRequestedAt, setScanRequestedAt] = useState<number | null>(null);
 
   // AI search visibility — separate from the Google-facing audit above.
   const [clientTier, setClientTier] = useState<string | null>(null);
@@ -433,6 +435,28 @@ export function ClientSeoTab({ clientAccountId }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wpSite?.id, wpSite?.status, wpSite?.last_scanned_at]);
 
+  // After a scan request on a v2 site, watch for the result (the site answers within ~5 minutes).
+  useEffect(() => {
+    if (!scanRequestedAt) return;
+    const t = setInterval(() => {
+      if (Date.now() - scanRequestedAt > 15 * 60_000) {
+        setScanRequestedAt(null);
+        toast.info("Your site hasn't sent its pages yet. It will on its next check-in; you can also try again.");
+        return;
+      }
+      loadWpData();
+    }, 20_000);
+    return () => clearInterval(t);
+  }, [scanRequestedAt, loadWpData]);
+
+  useEffect(() => {
+    if (!scanRequestedAt || !wpSite?.last_scanned_at) return;
+    if (new Date(wpSite.last_scanned_at).getTime() >= scanRequestedAt - 5_000) {
+      setScanRequestedAt(null);
+      toast.success("Scan complete. New improvements are listed below.");
+    }
+  }, [wpSite?.last_scanned_at, scanRequestedAt]);
+
   // While a connection is pending the plugin checks in from the client's own
   // WordPress admin, in another tab -- nothing here would otherwise notice, so
   // the card sat on "Waiting for plugin…" until a manual reload.
@@ -488,6 +512,11 @@ export function ClientSeoTab({ clientAccountId }: Props) {
       if (error || data?.error) {
         const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Scan failed");
+      }
+      if (data?.requested) {
+        setScanRequestedAt(Date.now());
+        toast.info(data.message ?? "Scan requested. Your site sends its pages at its next check-in.");
+        return;
       }
       const issueCount = data.total_issues ?? 0;
       const fixCount   = data.fixes_generated ?? 0;

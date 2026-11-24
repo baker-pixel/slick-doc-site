@@ -20,6 +20,7 @@ if ( ! defined( 'OD_AGENT_ENABLED' ) ) define( 'OD_AGENT_ENABLED', false );
 
 require_once __DIR__ . '/includes/changes.php';
 require_once __DIR__ . '/includes/agent.php';
+require_once __DIR__ . '/includes/inventory.php';
 
 // ─────────────────────────────────────────────
 // 1. CONNECT — generate token + ping OD backend

@@ -65,3 +65,22 @@ function od_apply_site_level_fix( $field, $value ) {
     if ( $field === 'llms_txt' ) { update_option( 'od_llms_txt', $value ); return true; }
     return 'Unknown site-level field: ' . $field;
 }
+
+// ── content stand-ins for the inventory uploader ──
+$GLOBALS['od_content'] = [ 'post' => 0, 'page' => 0, 'attachment' => 0 ];   // how many of each exist
+$GLOBALS['od_scheduled'] = [];
+class WP_Query {
+    public $found_posts = 0;
+    function __construct( $a ) { $this->found_posts = $GLOBALS['od_content'][ $a['post_type'] ] ?? 0; }
+}
+function get_posts( $a ) {
+    $total = $GLOBALS['od_content'][ $a['post_type'] ] ?? 0;
+    $out = [];
+    for ( $i = $a['offset']; $i < min( $total, $a['offset'] + $a['posts_per_page'] ); $i++ ) $out[] = (object) [ 'ID' => $i + 1, 'post_type' => $a['post_type'] ];
+    return $out;
+}
+function od_build_post_data( $post ) { return [ 'id' => $post->ID, 'type' => $post->post_type ]; }
+function od_get_sitemap_info() { return [ 'sitemap_url' => 'https://client.example/sitemap.xml', 'robots_txt_ok' => true ]; }
+function get_attached_file( $id ) { return "/uploads/img-$id.jpg"; }
+function wp_get_attachment_url( $id ) { return "https://client.example/uploads/img-$id.jpg"; }
+function wp_schedule_single_event( $t, $h ) { $GLOBALS['od_scheduled'][] = $h; }

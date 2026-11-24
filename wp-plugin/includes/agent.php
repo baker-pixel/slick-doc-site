@@ -182,6 +182,9 @@ function od_agent_tick() {
         update_option( 'od_agent_errors', [], false );
 
         if ( (int) ( $hb['data']['pending_changes'] ?? 0 ) > 0 ) od_agent_process_changes();
+
+        // A scan was asked for (or an earlier upload was cut short): send the inventory.
+        if ( ! empty( $hb['data']['scan_requested'] ) || is_array( get_option( 'od_inventory_state' ) ) ) od_agent_push_inventory();
     } finally {
         delete_transient( 'od_agent_lock' );
     }

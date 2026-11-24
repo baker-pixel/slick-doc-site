@@ -3,6 +3,7 @@
 require __DIR__ . '/stubs.php';
 require __DIR__ . '/../includes/changes.php';
 require __DIR__ . '/../includes/agent.php';
+require __DIR__ . '/../includes/inventory.php';
 
 $fails = 0; $n = 0;
 function check( $label, $cond ) { global $fails, $n; $n++; if ( ! $cond ) { $fails++; echo "FAIL: $label\n"; } }
@@ -96,6 +97,49 @@ $GLOBALS['od_http'] = [];
 set_transient( 'od_agent_lock', 1 );
 od_agent_tick();
 check( 'tick skipped while locked', count( $GLOBALS['od_http'] ) === 0 );
+
+// ── inventory upload ──────────────────────────────────────────────────────
+reset_site();
+od_agent_keypair();
+update_option( 'od_agent_site_id', '11111111-1111-1111-1111-111111111111' );
+$GLOBALS['od_content'] = [ 'post' => 85, 'page' => 5, 'attachment' => 650 ];
+$GLOBALS['od_http_reply'] = fn() => [ 'code' => 200, 'body' => '{"ok":true}' ];
+$plan = od_inventory_plan();
+// posts: ceil(85/40)=3, pages: 1, media: ceil(650/300)=3, meta: 1
+check( 'plan has 3 post parts, 1 page part, 3 media parts and a meta part', count( $plan ) === 8 );
+check( 'plan ends with the meta (sitemap) part', end( $plan )['kind'] === 'meta' );
+
+$res = od_agent_push_inventory();
+check( 'upload completes', $res === 'done' );
+$sent = array_map( fn( $c ) => json_decode( $c['args']['body'], true ), $GLOBALS['od_http'] );
+check( 'one signed request per part', count( $sent ) === 8 && $sent[0]['action'] === 'inventory' );
+check( 'all parts share one upload id and know the total', count( array_unique( array_column( $sent, 'upload_id' ) ) ) === 1 && $sent[7]['parts_total'] === 8 );
+check( 'parts are numbered 0..7 in order', array_column( $sent, 'part' ) === range( 0, 7 ) );
+$ids = []; foreach ( array_slice( $sent, 0, 3 ) as $p ) foreach ( $p['items'] as $it ) $ids[] = $it['id'];
+check( 'posts are all sent exactly once, in pages of 40', $ids === range( 1, 85 ) && count( $sent[0]['items'] ) === 40 );
+check( 'media records carry alt-text state', $sent[4]['items'][0]['missing_alt'] === true && strpos( $sent[4]['items'][0]['filename'], 'img-' ) === 0 );
+check( 'last part is the sitemap info', $sent[7]['kind'] === 'meta' && $sent[7]['sitemap']['robots_txt_ok'] === true );
+check( 'state cleared after a full upload', get_option( 'od_inventory_state', 'GONE' ) === 'GONE' );
+
+// failure part-way: resume from the failed part, same upload id
+reset_site(); od_agent_keypair(); update_option( 'od_agent_site_id', '11111111-1111-1111-1111-111111111111' );
+$calls = 0;
+$GLOBALS['od_http_reply'] = function ( $u, $a ) use ( &$calls ) { $calls++; return $calls === 3 ? [ 'code' => 500, 'body' => '{"error":"x"}' ] : [ 'code' => 200, 'body' => '{"ok":true}' ]; };
+check( 'a failing part reports error', od_agent_push_inventory() === 'error' );
+$st = get_option( 'od_inventory_state' );
+check( 'progress is remembered (2 parts sent, retry the 3rd)', is_array( $st ) && $st['next'] === 2 );
+$GLOBALS['od_http'] = []; $GLOBALS['od_http_reply'] = fn() => [ 'code' => 200, 'body' => '{"ok":true}' ];
+check( 'resume finishes the rest', od_agent_push_inventory() === 'done' );
+$first = json_decode( $GLOBALS['od_http'][0]['args']['body'], true );
+check( 'resume continues with the same upload id at the failed part', $first['upload_id'] === $st['upload_id'] && $first['part'] === 2 );
+
+// a scan request in the heartbeat triggers the upload from a tick
+reset_site(); od_agent_keypair(); update_option( 'od_agent_site_id', '11111111-1111-1111-1111-111111111111' );
+$GLOBALS['od_content'] = [ 'post' => 3, 'page' => 0, 'attachment' => 0 ];
+$GLOBALS['od_http_reply'] = fn( $u, $a ) => [ 'code' => 200, 'body' => json_decode( $a['body'], true )['action'] === 'heartbeat' ? '{"ok":true,"pending_changes":0,"scan_requested":true}' : '{"ok":true}' ];
+od_agent_tick();
+$acts = array_map( fn( $c ) => json_decode( $c['args']['body'], true )['action'], $GLOBALS['od_http'] );
+check( 'scan_requested heartbeat leads to inventory parts', $acts === [ 'heartbeat', 'inventory', 'inventory' ] );
 
 echo $fails ? "\n$fails of $n checks failed\n" : "all $n checks passed\n";
 exit( $fails ? 1 : 0 );

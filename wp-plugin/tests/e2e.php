@@ -5,6 +5,8 @@
 require __DIR__ . '/stubs.php';
 require __DIR__ . '/../includes/changes.php';
 require __DIR__ . '/../includes/agent.php';
+require __DIR__ . '/../includes/inventory.php';
+$GLOBALS['od_content'] = [ 'post' => (int) getenv( 'OD_E2E_POSTS' ), 'page' => (int) getenv( 'OD_E2E_PAGES' ), 'attachment' => (int) getenv( 'OD_E2E_MEDIA' ) ];
 
 list( , $mode, $state_file ) = array_pad( $argv, 3, null );
 $GLOBALS['od_opts'] = is_file( $state_file ) ? json_decode( file_get_contents( $state_file ), true ) : [];

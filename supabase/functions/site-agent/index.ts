@@ -14,6 +14,8 @@ import {
   readSignedHeaders,
   verifySignature,
 } from "../_shared/wordpress/agentAuth.ts";
+import { runInBackground } from "../_shared/core/background.ts";
+import { MAX_ITEMS_PER_PART, MAX_PARTS, CHUNK_KINDS, validUploadId } from "../_shared/wordpress/inventory.ts";
 import { fetchLiveHtml, verifyRenderedField } from "../_shared/wordpress/renderVerify.ts";
 import {
   isPublicSiteUrl,
@@ -139,7 +141,7 @@ async function authenticate(supabase: Supabase, req: Request, raw: string) {
   if (!h.siteId || !/^[0-9a-f-]{36}$/i.test(h.siteId)) return { error: json({ error: "Unauthorized" }, 401) };
   const { data: site } = await supabase
     .from("connected_sites")
-    .select("id, client_id, site_url, status, agent_mode, agent_public_key")
+    .select("id, client_id, site_url, status, agent_mode, agent_public_key, scan_requested_at")
     .eq("id", h.siteId)
     .maybeSingle();
   if (!site || site.agent_mode !== "agent" || !site.agent_public_key) return { error: json({ error: "Unauthorized" }, 401) };
@@ -162,7 +164,7 @@ async function authenticate(supabase: Supabase, req: Request, raw: string) {
   return { site };
 }
 
-async function heartbeat(supabase: Supabase, site: { id: string; status: string }, body: Record<string, unknown>) {
+async function heartbeat(supabase: Supabase, site: { id: string; status: string; scan_requested_at: string | null }, body: Record<string, unknown>) {
   const plugins = Array.isArray(body.plugins) ? body.plugins.map(String) : [];
   const update: Record<string, unknown> = {
     last_heartbeat_at: new Date().toISOString(),
@@ -184,7 +186,7 @@ async function heartbeat(supabase: Supabase, site: { id: string; status: string 
   const { count } = await supabase
     .from("site_changes").select("id", { count: "exact", head: true })
     .eq("site_id", site.id).in("status", ["queued", "revert_queued"]);
-  return json({ ok: true, server_time: Math.floor(Date.now() / 1000), pending_changes: count ?? 0, poll_seconds: POLL_SECONDS });
+  return json({ ok: true, server_time: Math.floor(Date.now() / 1000), pending_changes: count ?? 0, scan_requested: !!site.scan_requested_at, poll_seconds: POLL_SECONDS });
 }
 
 async function pull(supabase: Supabase, siteId: string) {
@@ -214,6 +216,43 @@ async function pull(supabase: Supabase, siteId: string) {
     changes.push({ id: r.id, op: revert ? "revert" : "apply", field: r.field, post_id: r.post_id, media_id: r.media_id, value: r.new_value, before: revert ? r.before_value : null });
   }
   return json({ changes });
+}
+
+// ── inventory: the plugin uploads its pages in parts; the last part triggers the scan ──
+async function inventory(supabase: Supabase, site: { id: string }, body: Record<string, unknown>) {
+  const uploadId = body.upload_id;
+  const part = Number(body.part);
+  const total = Number(body.parts_total);
+  const kind = String(body.kind ?? "");
+  if (!validUploadId(uploadId) || !Number.isInteger(part) || !Number.isInteger(total)) return json({ error: "Bad inventory part" }, 400);
+  if (total < 1 || total > MAX_PARTS || part < 0 || part >= total) return json({ error: "Bad inventory part" }, 400);
+  if (!(CHUNK_KINDS as readonly string[]).includes(kind)) return json({ error: "Bad inventory kind" }, 400);
+
+  let payload: Record<string, unknown>;
+  if (kind === "meta") {
+    payload = { sitemap: typeof body.sitemap === "object" && body.sitemap ? body.sitemap : {} };
+  } else {
+    if (!Array.isArray(body.items) || body.items.length > MAX_ITEMS_PER_PART) return json({ error: "Bad inventory items" }, 400);
+    payload = { items: body.items };
+  }
+
+  const { error } = await supabase.from("site_inventory_chunks")
+    .upsert({ upload_id: uploadId, part, site_id: site.id, kind, payload }, { onConflict: "upload_id,part" });
+  if (error) throw new Error("Could not store inventory part: " + error.message);
+
+  const { data: parts } = await supabase.from("site_inventory_chunks")
+    .select("part").eq("upload_id", uploadId).eq("site_id", site.id).gte("part", 0);
+  if ((parts?.length ?? 0) < total) return json({ ok: true, complete: false });
+
+  // Everything is here. Exactly one request wins the marker row and runs the scan.
+  const { error: claim } = await supabase.from("site_inventory_chunks")
+    .insert({ upload_id: uploadId, part: -1, site_id: site.id, kind: "marker" });
+  if (claim) return json({ ok: true, complete: true });
+
+  // The request is consumed now, so a failing analysis cannot make the plugin re-upload forever.
+  await supabase.from("connected_sites").update({ scan_requested_at: null }).eq("id", site.id);
+  runInBackground(supabase.functions.invoke("scan-wordpress-site", { body: { site_id: site.id, inventory_upload_id: uploadId } }));
+  return json({ ok: true, complete: true });
 }
 
 interface Report { id: string; outcome: "applied" | "failed" | "reverted"; before?: string | null; error?: string | null }
@@ -334,6 +373,7 @@ serve(async (req) => {
       case "heartbeat": return await heartbeat(supabase, site, body);
       case "pull": return await pull(supabase, site.id);
       case "report": return await report(supabase, site, body);
+      case "inventory": return await inventory(supabase, site, body);
       default: return json({ error: "Unknown action" }, 400);
     }
   } catch (e) {

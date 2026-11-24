@@ -6,6 +6,7 @@ import { checkClientOrAdminAuth, isServiceRequest } from "../_shared/core/auth.t
 import { unlockReadySteps } from "../_shared/client/workflowUnlock.ts";
 import { fetchHtml, parseOnPage } from "../_shared/seo/seoSignals.ts";
 import { filenameHint } from "../_shared/wordpress/wpSite.ts";
+import { assembleInventory } from "../_shared/wordpress/inventory.ts";
 
 // wp_fix_queue's field names -> the canonical seo-audit finding types that
 // cover the same underlying WordPress field. Where the canonical engine
@@ -270,6 +271,8 @@ serve(async (req) => {
     const { site_url, token, client_id: clientId, status: siteStatus } = site as {
       site_url: string; token: string; client_id: string | null; status: string;
     };
+    // v2 sites are never called: they upload their inventory when asked (see site-agent).
+    const isAgent = (site as { agent_mode?: string }).agent_mode === "agent";
 
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const isServer = isServiceRequest(req);
@@ -289,35 +292,57 @@ serve(async (req) => {
     if (siteStatus === "disconnected") {
       throw new Error("This WordPress site is disconnected. Reconnect it first.");
     }
-    if (!token || siteStatus === "pending") {
+    if (!isAgent && (!token || siteStatus === "pending")) {
       throw new Error("WordPress plugin not yet activated. Install and activate the OrangeDoor plugin on your WordPress site first.");
     }
 
-    // 1. Ping to verify connection
-    const pingRes = await fetchWithRetry(
-      `${site_url}/wp-json/orangedoor/v1/ping`,
-      { headers: { "X-OD-Token": token } },
-    ).catch(() => null);
+    let scanData: ScanData;
+    if (isAgent) {
+      const uploadId = body.inventory_upload_id as string | undefined;
+      if (!uploadId) {
+        // Ask for a scan; the plugin uploads its inventory on its next check-in
+        // (within ~5 minutes) and site-agent calls us back with inventory_upload_id.
+        await supabase.from("connected_sites")
+          .update({ scan_requested_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq("id", siteId);
+        return new Response(
+          JSON.stringify({ requested: true, message: "Scan requested. Your site sends its pages at its next check-in, usually within 5 minutes." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const { data: chunks } = await supabase
+        .from("site_inventory_chunks")
+        .select("part, kind, payload")
+        .eq("upload_id", uploadId).eq("site_id", siteId).gte("part", 0);
+      if (!chunks?.length) throw new Error("Inventory not found. Request a new scan.");
+      scanData = assembleInventory(site_url, chunks) as unknown as ScanData;
+    } else {
+      // 1. Ping to verify connection
+      const pingRes = await fetchWithRetry(
+        `${site_url}/wp-json/orangedoor/v1/ping`,
+        { headers: { "X-OD-Token": token } },
+      ).catch(() => null);
 
-    if (!pingRes || !pingRes.ok) {
-      // Token-guarded: a disconnect that lands mid-scan clears the token, so
-      // this can't overwrite "disconnected".
-      await supabase
-        .from("connected_sites")
-        .update({ status: "unreachable", updated_at: new Date().toISOString() })
-        .eq("id", siteId)
-        .eq("token", token);
-      throw new Error("Site unreachable — ping failed");
+      if (!pingRes || !pingRes.ok) {
+        // Token-guarded: a disconnect that lands mid-scan clears the token, so
+        // this can't overwrite "disconnected".
+        await supabase
+          .from("connected_sites")
+          .update({ status: "unreachable", updated_at: new Date().toISOString() })
+          .eq("id", siteId)
+          .eq("token", token);
+        throw new Error("Site unreachable — ping failed");
+      }
+
+      // 2. Fetch full scan
+      const scanRes = await fetchWithRetry(
+        `${site_url}/wp-json/orangedoor/v1/scan`,
+        { headers: { "X-OD-Token": token } },
+      );
+      if (!scanRes.ok) throw new Error(`Scan endpoint returned ${scanRes.status}`);
+
+      scanData = (await scanRes.json()) as ScanData;
     }
-
-    // 2. Fetch full scan
-    const scanRes = await fetchWithRetry(
-      `${site_url}/wp-json/orangedoor/v1/scan`,
-      { headers: { "X-OD-Token": token } },
-    );
-    if (!scanRes.ok) throw new Error(`Scan endpoint returned ${scanRes.status}`);
-
-    const scanData = (await scanRes.json()) as ScanData;
 
     // 2b. Re-verify meta_title/meta_desc/h1/content against the actually
     // rendered page before trusting the plugin's raw-DB-field read (see
@@ -476,6 +501,10 @@ serve(async (req) => {
         .eq("site_id", siteId)
         .in("status", ["pending", "failed"])
         .or(`scan_id.is.null,scan_id.neq.${scanRecord.id}`);
+    }
+
+    if (isAgent && body.inventory_upload_id) {
+      await supabase.from("site_inventory_chunks").delete().eq("upload_id", body.inventory_upload_id as string);
     }
 
     // 7. Update last_scanned_at. Token-guarded so a disconnect that happened
