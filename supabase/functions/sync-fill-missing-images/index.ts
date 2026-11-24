@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
-import { buildCreativeImage, type RecentImage } from "../_shared/social/creativeImagePrompt.ts";
+import { buildCreativeImage, loadRecentImageLedger, type RecentImage } from "../_shared/social/creativeImagePrompt.ts";
 import { generateGptImage, persistGeneratedImage } from "../_shared/ai/gptImage.ts";
 import { checkPipelineAuth } from "../_shared/core/auth.ts";
 
@@ -160,6 +160,10 @@ serve(async (req) => {
       .in("id", clientIds);
     const clientMap = Object.fromEntries((clients || []).map((c: any) => [c.id, c]));
 
+    // Each client's recent images, so consecutive posts rotate style and subject
+    // instead of repeating one look. Kept up to date as this run fills slots.
+    const ledgerByClient: Record<string, RecentImage[]> = {};
+
     let filled = 0;
     const failures: { id: string; error: string }[] = [];
 
@@ -175,7 +179,8 @@ serve(async (req) => {
           : undefined;
         // A retry reuses the saved concept. Feedback means the client rejected
         // it, so write a new one that must differ from the old.
-        const recent: RecentImage[] = imageFeedback && stored ? [stored] : [];
+        const ledger = (ledgerByClient[slot.client_account_id] ??= await loadRecentImageLedger(supabase, slot.client_account_id, slot.id));
+        const recent: RecentImage[] = [...(imageFeedback && stored ? [stored] : []), ...ledger];
         const built = await buildCreativeImage(
           client,
           { content: slot.content || "", title: slot.title, platform: slot.platform },
@@ -198,6 +203,7 @@ serve(async (req) => {
           .update({ metadata: { ...keptMeta, image_url: imageUrl } })
           .eq("id", slot.id);
 
+        if (built.concept) ledger.unshift({ styleId: built.styleId, concept: built.concept });
         filled++;
         console.log(`Filled image for slot ${slot.id} (${slot.platform})`);
       } catch (e) {

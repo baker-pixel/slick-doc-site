@@ -228,6 +228,76 @@ export function pickImageStyle(
   return finalPool[hashSeed(postSeed(post)) % finalPool.length];
 }
 
+// ---------- setting variety ----------
+
+// Where the scene happens. Rotated per post (hash of the post) so one client's
+// feed moves between worlds instead of living in one café. The concept writer
+// may adapt it when it makes no sense for the post's message.
+const SETTINGS = [
+  "a working space where the trade actually happens (workshop, studio, kitchen, shop floor, garage, job site)",
+  "outdoors in a real neighbourhood: a street, market, park, porch or parking lot",
+  "inside someone's home: a doorstep, hallway, living room or home office",
+  "a venue or event: a pop-up, class, meetup, fitting, rehearsal or the wings of a stage",
+  "on the move: a car, a train platform, a walk between places, a loading dock",
+  "behind or in front of a local shop counter, with the day's ordinary activity around it",
+  "a tight detail of a real task with its surroundings falling out of focus",
+  "a place at a specific time of day with nobody in it yet, or no longer",
+];
+
+// Scenes the concept writer falls into by default, whatever the business.
+const DEFAULT_SCENES =
+  "a café or coffee shop, a steaming mug or cup, a notebook and pen, a laptop, or a phone resting on a wooden table by a window";
+
+// Motifs worth steering away from once they show up in a client's recent images.
+const MOTIFS: { label: string; re: RegExp }[] = [
+  { label: "a café or coffee shop", re: /\b(caf[eé]s?|coffee)\b/i },
+  { label: "a mug, cup or latte", re: /\b(mugs?|cups?|latte|teacup)\b/i },
+  { label: "a notebook, journal or pen", re: /\b(notebooks?|journals?|pens?)\b/i },
+  { label: "a laptop", re: /\blaptops?\b/i },
+  { label: "a smartphone", re: /\b(smartphones?|phones?)\b/i },
+  { label: "a wooden table, desk or counter", re: /\bwooden (table|desk|counter)s?\b/i },
+  { label: "a window with soft light", re: /\bwindows?\b/i },
+];
+
+/** Motifs that already appear in two or more of a client's recent concepts. */
+export function overusedMotifs(recentConcepts: string[]): string[] {
+  return MOTIFS
+    .filter((m) => recentConcepts.filter((c) => m.re.test(c)).length >= 2)
+    .map((m) => m.label);
+}
+
+/**
+ * A client's most recent images (newest first), so the next one can avoid their
+ * styles, concepts and overused motifs. Reads what the image pipeline already
+ * stores on each post (image_style_id, image_concept).
+ */
+export async function loadRecentImageLedger(
+  supabase: any,
+  clientId: string,
+  excludeId?: string,
+  limit = 8,
+): Promise<RecentImage[]> {
+  try {
+    const { data } = await supabase
+      .from("content_calendar")
+      .select("id, metadata")
+      .eq("client_account_id", clientId)
+      .not("metadata->>image_concept", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(limit + 1);
+    return (data ?? [])
+      .filter((r: any) => r.id !== excludeId)
+      .slice(0, limit)
+      .map((r: any) => ({
+        styleId: (r.metadata?.image_style_id as string | undefined) ?? null,
+        concept: (r.metadata?.image_concept as string | undefined) ?? null,
+      }));
+  } catch (e) {
+    console.warn("[creative-image] could not load recent images:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
 // ---------- concept novelty ----------
 
 const STOP = new Set([
@@ -293,7 +363,9 @@ async function writeConcept(
   prefs: CreativeImagePrefs,
   never: string[],
   recentConcepts: string[],
+  setting: string,
 ): Promise<string | null> {
+  const overused = overusedMotifs(recentConcepts);
   const facts = [
     prefs.business_summary,
     prefs.services?.length ? `Services: ${prefs.services.join(", ")}` : "",
@@ -319,7 +391,10 @@ async function writeConcept(
       ? "This business has no storefront or office open to the public; do not show one as theirs. Set the scene where their customers or the work actually are."
       : "",
     prefs.location ? `Setting, people, architecture and objects must plausibly belong in ${prefs.location}.` : "",
-    "Do NOT depict software screens, dashboards, AI visuals or product UIs. No text, letters, numbers or logos anywhere.",
+    "Do NOT depict software screens, dashboards, AI visuals or product UIs. No text, letters, numbers or logos anywhere. Nothing that needs readable writing to make sense: no signs, chalkboards, handwritten notes or screens.",
+    `Do not default to ${DEFAULT_SCENES}. Use any of those only when the post is genuinely about it.`,
+    `For variety, set it in or around: ${setting}. Adapt if that makes no sense for this post's message.`,
+    overused.length ? `This client's recent images already leaned on ${overused.join(", ")}. Do not use them again.` : "",
     `Avoid clichés: ${CLICHES}.`,
     never.length ? `The client never wants to see: ${never.join("; ")}.` : "",
     recentConcepts.length
@@ -390,7 +465,7 @@ export async function buildCreativeImage(
     .filter((c): c is string => typeof c === "string" && c.length > 0)
     .slice(0, 6);
 
-  const concept = fixed?.concept?.trim() || await writeConcept(client, post, style, prefs, never, recentConcepts);
+  const concept = fixed?.concept?.trim() || await writeConcept(client, post, style, prefs, never, recentConcepts, pick(SETTINGS, postSeed(post), "setting"));
   if (!concept) {
     const base = await buildSocialImagePrompt(client, post);
     const prompt = never.length ? `${base}\nNever show: ${never.join("; ")}.` : base;
@@ -400,7 +475,6 @@ export async function buildCreativeImage(
   const seed = postSeed(post);
   const shared = [
     `No text of any kind: no letters, numbers, captions, signage, logos or watermarks. Anything that would normally carry text (a screen, page, sign, label, shirt) shows only soft out-of-focus shapes.`,
-    `Keep the bottom 15% of the frame visually calm and uncluttered (a brand bar is added there afterwards).`,
     ...(never.length ? [`Never show: ${never.join("; ")}.`] : []),
   ];
 

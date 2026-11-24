@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { checkAdminAuth, isServiceRequest } from "../_shared/core/auth.ts";
 import { IMAGE_ELIGIBLE_PLATFORMS, shouldGenerateImage } from "../_shared/social/socialImagePrompt.ts";
-import { buildCreativeImage } from "../_shared/social/creativeImagePrompt.ts";
+import { buildCreativeImage, loadRecentImageLedger, type RecentImage } from "../_shared/social/creativeImagePrompt.ts";
 import { buildGptImageRequestBody } from "../_shared/ai/gptImage.ts";
 
 const corsHeaders = {
@@ -89,6 +89,10 @@ serve(async (req) => {
       .in("id", clientIds);
     const clientMap = Object.fromEntries((clients || []).map((c: any) => [c.id, c]));
 
+    // Each client's recent images (kept current as this batch is built) so a
+    // client's slots don't all come out in the same setting and style.
+    const ledgerByClient: Record<string, RecentImage[]> = {};
+
     const jsonlLines: string[] = [];
     const includedSlotIds: string[] = [];
 
@@ -113,7 +117,9 @@ serve(async (req) => {
       const stored = typeof meta.image_concept === "string" && meta.image_concept
         ? { concept: meta.image_concept as string, styleId: (meta.image_style_id as string | undefined) ?? null }
         : undefined;
-      const built = await buildCreativeImage(client, { content: slot.content || "", title: slot.title, platform: slot.platform }, [], stored);
+      const ledger = (ledgerByClient[slot.client_account_id] ??= await loadRecentImageLedger(supabase, slot.client_account_id, slot.id));
+      const built = await buildCreativeImage(client, { content: slot.content || "", title: slot.title, platform: slot.platform }, ledger, stored);
+      if (built.concept) ledger.unshift({ styleId: built.styleId, concept: built.concept });
       const prompt = built.prompt;
       if (built.concept && built.concept !== meta.image_concept) {
         const newMeta = { ...meta, image_concept: built.concept, image_style_id: built.styleId };
