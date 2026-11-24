@@ -20,6 +20,7 @@ import { SmtpSenderSection } from "./SmtpSenderSection";
 import { OutreachEmailViewer, type OutreachSender } from "./OutreachEmailViewer";
 import { CampaignsSection } from "./CampaignsSection";
 import { OutreachInsights } from "./OutreachInsights";
+import { WarmLeadsCard } from "./WarmLeadsCard";
 
 interface Prospect {
   id: string;
@@ -351,6 +352,8 @@ export default function ClientProspectsTab({ clientAccountId }: { clientAccountI
         hasMailbox={hasMailbox}
         onOpenLead={openCampaignLead}
       />
+
+      <WarmLeadsCard clientAccountId={clientAccountId} />
 
       <CampaignsSection clientAccountId={clientAccountId} hasMailbox={hasMailbox} onOpenLead={openCampaignLead} />
 
