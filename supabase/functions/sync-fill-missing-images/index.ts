@@ -26,7 +26,9 @@ const TARGET_PLATFORMS = IMAGE_ELIGIBLE_PLATFORMS;
 // to this synchronous, slightly pricier path. This is the same per-image
 // call generate-social-image already makes elsewhere (postforme-publish-post's
 // last-resort fallback, the admin Social Media Posts panel).
-const MAX_PER_RUN = 5;
+// 1 image takes ~50s on gpt-image-2 and the cron's pg_net timeout is 60s, so a
+// larger cap makes the whole request time out before anything is saved.
+const MAX_PER_RUN = 1;
 // Cap for an admin-triggered, single-client, forced run (see client_id/force
 // below) -- higher than the cron's MAX_PER_RUN since it's bounded to one
 // client's backlog instead of racing every client's slots for a shared quota.
