@@ -196,7 +196,7 @@ export function varietyBlock(opts: {
     `- This feed has become repetitive. Sound like a person with a point of view, not a brochure.`,
     `- Do NOT open with: "Trusted by...", "Many [people] struggle...", "Ever wondered...", "Unlock/Discover/Uncover...", "In today's...", "In an era...", "When was the last time...", or any "As the leaves turn / winter / the season" opener.`,
     `- Do not restate who the audience is or a credibility line ("trusted worldwide") in the first sentence -- start inside the situation or the point.`,
-    `- Do not end with a generic invitation to "reach out" unless the call to action is genuinely specific.`,
+    `- Keep the call to action (it is required) but vary its wording. Do not use "Get started today/now", "Ready to ...?" or "Contact us today". Name the specific next step this post leads to, using only actions that are always possible (reply with your situation, tell us which you would pick, ask us a question), never an offer, demo, trial or discount the facts do not mention.`,
   );
   if (opts.recentOpenings.length) {
     lines.push(`- Recent posts opened like this -- yours must open differently in wording AND structure: ${opts.recentOpenings.map((o) => `"${o}"`).join(" | ")}`);
