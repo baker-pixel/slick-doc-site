@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.apollo_search_state (
 );
 
 ALTER TABLE public.apollo_search_state ENABLE ROW LEVEL SECURITY; -- no policies: service role only
+REVOKE ALL ON public.apollo_search_state FROM anon, authenticated;
 
 COMMENT ON TABLE public.apollo_search_state IS
   'Outcome of each Apollo company search per client, so dry searches rest instead of burning credits daily. Service role only.';

@@ -82,5 +82,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.client_warm_leads(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.client_warm_leads(UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.client_warm_leads(UUID) TO authenticated;
