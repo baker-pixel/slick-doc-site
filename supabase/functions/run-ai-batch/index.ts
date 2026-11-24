@@ -248,26 +248,9 @@ serve(async (req) => {
 
         // 1. Process automated tasks (FULL, AI, AUTOMATED types)
         if (config.processAutomatedTasks) {
-          // For daily batches, run FULL automation tasks via auto-run-client-tasks
-          try {
-            console.log(`Running auto-run-client-tasks for ${client.business_name}...`);
-            
-            // Call the auto-run-client-tasks function
-            const { data: autoRunResult, error: autoRunError } = await supabase.functions.invoke('auto-run-client-tasks', {
-              body: { clientId: client.id },
-            });
-
-            if (autoRunError) {
-              console.error(`Auto-run error for ${client.business_name}:`, autoRunError);
-              results.errors.push(`Auto-run error for ${client.business_name}: ${autoRunError.message}`);
-            } else {
-              results.tasksCompleted += autoRunResult?.completed || 0;
-              console.log(`Auto-run completed: ${autoRunResult?.completed || 0} tasks for ${client.business_name}`);
-            }
-          } catch (autoRunErr) {
-            console.error(`Auto-run exception for ${client.business_name}:`, autoRunErr);
-            results.errors.push(`Auto-run exception for ${client.business_name}: ${autoRunErr}`);
-          }
+          // (auto-run-client-tasks was called here, but it only accepts an admin
+          // session/password -- never the service key -- so every call 401'd, and
+          // the client_tasks system it served was removed in 9479b40.)
 
           // Also process AI/AUTOMATED type tasks
           const { data: pendingTasks, error: tasksError } = await supabase
