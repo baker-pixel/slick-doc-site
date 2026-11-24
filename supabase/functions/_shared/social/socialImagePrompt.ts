@@ -30,7 +30,9 @@ const TONE_MOOD: Record<string, string> = {
 // contradicts the canvas (the old hardcoded-square bug) just confuses the
 // model.
 const PLATFORM_SIZE: Record<string, string> = {
-  instagram: "1024x1024",
+  // 4:5 portrait: the tallest ratio the Instagram feed shows uncropped, so it takes
+  // the most screen. 1024x1280 is accepted by gpt-image-2.
+  instagram: "1024x1280",
   facebook: "1536x1024",
   linkedin: "1536x1024",
   twitter: "1536x1024",

@@ -14,6 +14,10 @@ export const MODELS = {
   default: "gpt-4.1-mini",
   /** Cheap/fast model for classification and low-stakes calls. */
   fast: "gpt-4o-mini",
+  /** Creative-direction model (image concepts). Non-reasoning, so no hidden reasoning
+   * tokens eating the budget; noticeably less generic than the mini models. A few
+   * hundred output tokens per image, so cost is negligible next to the image itself. */
+  creative: "gpt-4.1",
 } as const;
 
 // Append to any system prompt that draws on real client business facts
