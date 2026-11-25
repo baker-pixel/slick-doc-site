@@ -188,6 +188,10 @@ export interface CreativeImagePrefs {
   image_styles?: string[];
   /** Things the client never wants shown. */
   image_never?: string[];
+  /** Things the client favours, learned from their feedback on images. */
+  image_prefer?: string[];
+  /** Concepts of images the client approved: taste examples, never subjects to repeat. */
+  image_liked?: string[];
   /** Overrides the per-client colour grade. */
   image_grade?: string;
   /** Colour names work better than hex codes ("deep teal", not "#0F6B6B"). */
@@ -433,6 +437,10 @@ async function writeConcept(
     `For variety, set it in or around: ${setting}. Adapt if that makes no sense for this post's message.`,
     overused.length ? `This client's recent images already leaned on ${overused.join(", ")}. Do not use them again.` : "",
     briefForConcept(prefs.visual_brief),
+    prefs.image_prefer?.length ? `The client has said they prefer: ${prefs.image_prefer.join("; ")}.` : "",
+    prefs.image_liked?.length
+      ? `Images this client approved earlier (learn their taste from these, such as the kind of subject, light and mood; your scene must still be clearly different from them):\n- ${prefs.image_liked.slice(0, 4).join("\n- ")}`
+      : "",
     `Avoid clichés: ${CLICHES}.`,
     never.length ? `The client never wants to see: ${never.join("; ")}.` : "",
     recentConcepts.length
