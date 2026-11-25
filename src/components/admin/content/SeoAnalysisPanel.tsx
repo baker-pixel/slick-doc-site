@@ -257,7 +257,11 @@ export default function SeoAnalysisPanel({ selectedClientId, selectedClientName 
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Couldn't apply fix");
       }
       if (data?.error) throw new Error(data.error);
-      toast({ title: "Applied to WordPress", description: `${f.title} — re-audit will confirm it resolved.` });
+      if (data?.queued) {
+        toast({ title: "Queued for WordPress", description: `${f.title} — the site applies it at its next check-in (about 5 minutes).` });
+      } else {
+        toast({ title: "Applied to WordPress", description: `${f.title} — re-audit will confirm it resolved.` });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast({ title: "Couldn't apply", description: msg, variant: "destructive" });

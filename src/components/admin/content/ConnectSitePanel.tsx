@@ -95,6 +95,10 @@ export function ConnectSitePanel({ clientId, mode = "admin", onSiteConnected, ad
         const msg = await getEdgeErrorMessage(error, data);
         throw new Error(msg ? friendlyEdgeMessage(msg) : "Scan failed");
       }
+      if (data?.requested) {
+        toast.info(data.message ?? "Scan requested. The site sends its pages at its next check-in.");
+        return;
+      }
       toast.success(
         `Scan complete — ${data.total_issues} issues, ${data.fixes_generated} fixes queued`,
       );

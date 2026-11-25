@@ -2,14 +2,25 @@
 /**
  * Plugin Name: Orange Door SEO
  * Description: Connects your WordPress site to Orange Door for automated SEO auditing and fixes, and shows your website visitor numbers in your Orange Door dashboard.
- * Version: 1.3.0
+ * Version: 2.0.0
  * Author: Orange Door
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'OD_PLUGIN_VERSION', '1.3.0' );
+define( 'OD_PLUGIN_VERSION', '2.0.0' );
+define( 'OD_PLUGIN_FILE', __FILE__ );
 define( 'OD_BACKEND_BASE', 'https://axbeaqpjyzzmbvyaofbn.supabase.co/functions/v1' );
+
+// v2 "site agent": this site signs its own requests to Orange Door and pulls
+// approved changes, instead of Orange Door calling in with a shared token. It
+// stays OFF until the backend can scan agent sites too (the v1 routes below
+// keep working in the meantime). Flip to true when that ships.
+if ( ! defined( 'OD_AGENT_ENABLED' ) ) define( 'OD_AGENT_ENABLED', false );
+
+require_once __DIR__ . '/includes/changes.php';
+require_once __DIR__ . '/includes/agent.php';
+require_once __DIR__ . '/includes/inventory.php';
 
 // ─────────────────────────────────────────────
 // 1. CONNECT — generate token + ping OD backend
@@ -26,6 +37,7 @@ register_activation_hook( __FILE__, 'od_attempt_connect' );
 add_action( 'admin_init', 'od_maybe_connect' );
 
 function od_maybe_connect() {
+    if ( od_agent_enabled() ) return;   // the agent registers itself (includes/agent.php)
     // 'disconnected' is a deliberate removal from the Orange Door dashboard --
     // never silently undo it. Reconnecting takes an explicit action: the
     // Reconnect button on Settings > Orange Door, or reactivating the plugin.
@@ -50,6 +62,7 @@ function od_maybe_connect() {
 add_action( 'admin_init', 'od_maybe_resync_after_upgrade' );
 
 function od_maybe_resync_after_upgrade() {
+    if ( od_agent_enabled() ) return;
     if ( get_option( 'od_plugin_version' ) === OD_PLUGIN_VERSION ) return;
     if ( ! current_user_can( 'manage_options' ) ) return;
     if ( ! get_option( 'od_secret_token' ) ) return;                 // never connected; the normal connect path handles it
@@ -60,6 +73,13 @@ function od_maybe_resync_after_upgrade() {
 
 function od_attempt_connect() {
     update_option( 'od_connect_last_attempt', time() );
+
+    if ( od_agent_enabled() ) {
+        od_agent_register();
+        add_rewrite_rule( '^llms\.txt$', 'index.php?od_llms_txt=1', 'top' );
+        flush_rewrite_rules();
+        return;
+    }
 
     $token = get_option( 'od_secret_token' );
     if ( ! $token ) {
@@ -313,6 +333,12 @@ function od_build_post_data( $post ) {
     preg_match_all( '/<a[^>]+href=["\']' . preg_quote( get_site_url(), '/' ) . '[^"\']*["\'][^>]*>/i', $post->post_content, $link_matches );
     $internal_links = count( $link_matches[0] );
 
+    // SEOPress, or our own store when no SEO plugin is active.
+    $meta_title = $meta_title ?: od_read_seo_field( $post->ID, 'meta_title' );
+    $meta_desc  = $meta_desc  ?: od_read_seo_field( $post->ID, 'meta_desc' );
+    $focus_kw   = $focus_kw   ?: od_read_seo_field( $post->ID, 'focus_keyword' );
+    $canonical  = $canonical  ?: od_read_seo_field( $post->ID, 'canonical' );
+
     $word_count = str_word_count( wp_strip_all_tags( $post->post_content ) );
 
     $images = [];
@@ -481,7 +507,10 @@ function od_apply_single_fix( $fix ) {
             } elseif ( defined( 'RANK_MATH_VERSION' ) ) {
                 update_post_meta( $post_id, 'rank_math_title', sanitize_text_field( $value ) );
             } else {
-                wp_update_post([ 'ID' => $post_id, 'post_title' => sanitize_text_field( $value ) ]);
+                // No SEO plugin: store it as our own title override (printed via the
+                // document-title filter). This used to rewrite post_title, which is the
+                // visible page heading, not the SEO title.
+                update_post_meta( $post_id, '_od_meta_title', wp_slash( sanitize_text_field( $value ) ) );
             }
             return true;
 
@@ -491,7 +520,7 @@ function od_apply_single_fix( $fix ) {
             } elseif ( defined( 'RANK_MATH_VERSION' ) ) {
                 update_post_meta( $post_id, 'rank_math_description', sanitize_textarea_field( $value ) );
             } else {
-                return 'No SEO plugin active to write meta description';
+                update_post_meta( $post_id, '_od_meta_desc', wp_slash( sanitize_textarea_field( $value ) ) );
             }
             return true;
 
@@ -708,12 +737,13 @@ function od_verify( WP_REST_Request $request ) {
     $focus_kw    = '';
     $canonical   = '';
 
-    if ( defined( 'WPSEO_VERSION' ) ) {
-        $meta_title = get_post_meta( $post_id, '_yoast_wpseo_title', true ) ?: '';
-        $meta_desc  = get_post_meta( $post_id, '_yoast_wpseo_metadesc', true ) ?: '';
-        $focus_kw   = get_post_meta( $post_id, '_yoast_wpseo_focuskw', true ) ?: '';
-        $canonical  = get_post_meta( $post_id, '_yoast_wpseo_canonical', true ) ?: '';
-    }
+    // Read from whichever store actually holds the fields on this site (Yoast, Rank Math,
+    // SEOPress, or our own). This only knew Yoast, so a fix applied on any other setup
+    // always failed its read-back check.
+    $meta_title = od_read_seo_field( $post_id, 'meta_title' );
+    $meta_desc  = od_read_seo_field( $post_id, 'meta_desc' );
+    $focus_kw   = od_read_seo_field( $post_id, 'focus_keyword' );
+    $canonical  = od_read_seo_field( $post_id, 'canonical' );
 
     // Not gated behind an SEO plugin -- this is our own post meta.
     $faq_jsonld = get_post_meta( $post_id, '_od_faq_jsonld', true ) ?: '';
@@ -777,6 +807,14 @@ function od_admin_page() {
         $status = get_option( 'od_connect_status', 'pending' );
         $error  = get_option( 'od_connect_error', '' );
     }
+    $agent = od_agent_enabled();
+    $checked_in = '';
+    if ( $agent && isset( $_POST['od_checkin_now'] ) && current_user_can( 'manage_options' ) && check_admin_referer( 'od_checkin_now' ) ) {
+        // Same as the 5-minute check-in, on demand (also makes a staging test quick).
+        delete_transient( 'od_agent_lock' );
+        od_agent_tick();
+        $checked_in = 'Checked in with Orange Door just now.';
+    }
     ?>
     <div class="wrap">
         <h1>Orange Door SEO</h1>
@@ -785,10 +823,35 @@ function od_admin_page() {
                 <th>Site URL</th>
                 <td><code><?php echo esc_html( get_site_url() ); ?></code></td>
             </tr>
+            <?php if ( $agent ) : ?>
+            <tr>
+                <th>Connection</th>
+                <td>Signed agent (v2). This site contacts Orange Door; nothing is sent to it, and there is no shared secret.</td>
+            </tr>
+            <tr>
+                <th>Site ID</th>
+                <td><code><?php echo esc_html( get_option( 'od_agent_site_id', 'Not registered yet' ) ); ?></code></td>
+            </tr>
+            <tr>
+                <th>Last check-in</th>
+                <td><?php
+                    $t = (int) get_option( 'od_agent_last_tick', 0 );
+                    echo $t ? esc_html( human_time_diff( $t ) . ' ago' ) : 'Not yet';
+                ?></td>
+            </tr>
+            <tr>
+                <th>Recent problems</th>
+                <td><?php
+                    $errs = get_option( 'od_agent_errors', [] );
+                    echo $errs ? '<code>' . esc_html( implode( ' | ', (array) $errs ) ) . '</code>' : 'None';
+                ?></td>
+            </tr>
+            <?php else : ?>
             <tr>
                 <th>Secret Token</th>
                 <td><code><?php echo esc_html( $token ); ?></code></td>
             </tr>
+            <?php endif; ?>
             <tr>
                 <th>Yoast SEO</th>
                 <td><?php echo defined('WPSEO_VERSION') ? '&#10003; Active' : '&#10007; Not installed'; ?></td>
@@ -808,10 +871,12 @@ function od_admin_page() {
                     echo isset( $labels[ $ts['reason'] ] ) ? $labels[ $ts['reason'] ] : esc_html( $ts['reason'] );
                 ?></td>
             </tr>
+            <?php if ( ! $agent ) : ?>
             <tr>
                 <th>Scan endpoint</th>
                 <td><code><?php echo esc_html( get_site_url() ); ?>/wp-json/orangedoor/v1/scan</code></td>
             </tr>
+            <?php endif; ?>
         </table>
 
         <?php if ( $status === 'connected' ) : ?>
@@ -832,6 +897,13 @@ function od_admin_page() {
             <?php wp_nonce_field( 'od_retry_connect' ); ?>
             <button type="submit" name="od_retry_connect" value="1" class="button <?php echo $status === 'connected' ? '' : 'button-primary'; ?>"><?php echo esc_html( $button ); ?></button>
         </form>
+        <?php if ( $agent && $status === 'connected' ) : ?>
+        <form method="post" style="margin-top:8px;">
+            <?php wp_nonce_field( 'od_checkin_now' ); ?>
+            <button type="submit" name="od_checkin_now" value="1" class="button button-primary">Check in now</button>
+            <?php if ( $checked_in ) echo ' <span>' . esc_html( $checked_in ) . '</span>'; ?>
+        </form>
+        <?php endif; ?>
     </div>
     <?php
 }

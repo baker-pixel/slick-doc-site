@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  Globe,
   BarChart3,
   FolderOpen,
   Mail,
@@ -71,6 +72,7 @@ export type AdminSection =
   | "automation-center"
   | "content-review"
   | "reports-review"
+  | "wordpress-sites"
   | "alerts"
   | "ai-spend"
   | "activity-feed"
@@ -130,6 +132,7 @@ const agentItems: NavItem[] = [
 const monitoringItems: NavItem[] = [
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "reports-review", label: "Client reports", icon: BarChart3 },
+  { id: "wordpress-sites", label: "WordPress sites", icon: Globe },
   { id: "ai-spend", label: "AI spend", icon: DollarSign },
   { id: "activity-feed", label: "Activity log", icon: Activity },
 ];

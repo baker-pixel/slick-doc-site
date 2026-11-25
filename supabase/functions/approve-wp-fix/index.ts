@@ -24,6 +24,7 @@ interface ConnectedSite {
   site_url: string;
   token: string;
   client_id: string | null;
+  agent_mode: "legacy" | "agent";
 }
 
 // field -> wp_* fixType, so this queue's rows can go through the same
@@ -92,16 +93,16 @@ serve(async (req) => {
     // Fetch site credentials
     const { data: site, error: siteErr } = await supabase
       .from("connected_sites")
-      .select("site_url, token, client_id")
+      .select("site_url, token, client_id, agent_mode")
       .eq("id", (fix as Fix).site_id)
       .single();
     if (siteErr || !site) throw new Error("Connected site not found");
 
-    const { site_url, token, client_id } = site as ConnectedSite;
+    const { site_url, token, client_id, agent_mode } = site as ConnectedSite;
 
     // A disconnected/pending site has no token. Say so up front rather than
     // marking the fix approved and then failed with a generic credentials error.
-    if (!token) {
+    if (agent_mode !== "agent" && !token) {
       return new Response(
         JSON.stringify({ error: "This WordPress site isn't connected. Reconnect it to apply fixes." }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -120,6 +121,36 @@ serve(async (req) => {
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
+    }
+
+    // v2 sites are never called: queue the change in the ledger and the site
+    // picks it up on its next poll (site-agent), applies it, and reports back.
+    // The fix turns "applied" only once the live page shows it.
+    if (agent_mode === "agent") {
+      const f = fix as Fix & { page_url: string | null };
+      const { data: open } = await supabase
+        .from("site_changes").select("id, status").eq("fix_id", fixId)
+        .in("status", ["queued", "delivered", "applied", "unverified"]).maybeSingle();
+      if (!open) {
+        const { error: insErr } = await supabase.from("site_changes").insert({
+          site_id: f.site_id,
+          fix_id: fixId,
+          post_id: f.post_id,
+          media_id: f.media_id,
+          page_url: f.page_url,
+          field: f.field,
+          new_value: f.suggested_value,
+          requested_by: "client",
+        });
+        if (insErr) throw new Error("Could not queue the change: " + insErr.message);
+      }
+      await supabase.from("wp_fix_queue")
+        .update({ status: "approved", error_message: null, updated_at: new Date().toISOString() })
+        .eq("id", fixId);
+      return new Response(
+        JSON.stringify({ success: true, fix_id: fixId, status: "queued" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // Mark approved

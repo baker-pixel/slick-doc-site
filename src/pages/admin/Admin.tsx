@@ -42,6 +42,7 @@ import { CampaignSenderPanel } from "@/components/admin/email/CampaignSenderPane
 import { QuickActionsPanel } from "@/components/admin/core/QuickActionsPanel";
 import PipelineDashboard from "@/components/admin/sales/PipelineDashboard";
 import AutomationAlertsPanel from "@/components/admin/workflow/AutomationAlertsPanel";
+import { WordPressSitesPanel } from "@/components/admin/workflow/WordPressSitesPanel";
 import ClientDocumentsPanel from "@/components/admin/clients/ClientDocumentsPanel";
 import ClientMessagesAdminPanel from "@/components/admin/clients/ClientMessagesAdminPanel";
 import ClientMeetingsAdminPanel from "@/components/admin/clients/ClientMeetingsAdminPanel";
@@ -1406,6 +1407,8 @@ const AdminInner = () => {
         return renderLeadsHub();
       case "alerts":
         return <AutomationAlertsPanel />;
+      case "wordpress-sites":
+        return <WordPressSitesPanel />;
       case "ai-spend":
         return <AiSpendPanel adminPassword={storedPassword} />;
       case "quick-actions":
@@ -1516,6 +1519,7 @@ const AdminInner = () => {
       "pdf-leads": "Leads",
       emails: "Client Outreach",
       "social-posts": "Social Media Posts",
+      "wordpress-sites": "WordPress Sites",
       automation: "Automation",
       sops: "SOPs",
       onboarding: "Client Onboarding",
@@ -1557,7 +1561,7 @@ const AdminInner = () => {
   // Sections that don't require a client selection
   const globalSections: AdminSection[] = [
     "home", "pipeline", "contacts", "gap-analysis", "pdf-leads", "quick-scans",
-    "emails", "templates", "sequences", "campaigns", "alerts", "ai-spend",
+    "emails", "templates", "sequences", "campaigns", "alerts", "wordpress-sites", "ai-spend",
     "sops", "task-templates", "settings", "analytics", "feature-guide",
     "clients", "team-directory", "integrations",
     "quick-actions", "activity-feed",

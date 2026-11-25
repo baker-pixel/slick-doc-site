@@ -63,7 +63,7 @@ serve(async (req) => {
     // stopped working.
     const { data: site } = await supabase
       .from("connected_sites")
-      .select("client_id, site_url, token")
+      .select("client_id, site_url, token, agent_mode")
       .eq("id", site_id)
       .maybeSingle();
 
@@ -71,9 +71,25 @@ serve(async (req) => {
     // about to erase). Best-effort: an unreachable or pre-1.2 plugin still
     // gets disconnected on our side, and the result tells the UI whether the
     // owner has to remove the plugin by hand.
-    const plugin = site?.token
-      ? await removePluginFromSite(site.site_url, site.token)
-      : { reached: false, deactivated: false, removed: false };
+    // A v2 (agent) site is never called by us: it learns it was disconnected on
+    // its next signed request (HTTP 410) and removes itself. Its key stays on
+    // file until then so that answer can reach it; every action is refused
+    // meanwhile because the status is 'disconnected'.
+    const isAgent = site?.agent_mode === "agent";
+    const plugin = isAgent
+      ? { reached: false, deactivated: false, removed: false, scheduled: true }
+      : site?.token
+        ? await removePluginFromSite(site.site_url, site.token)
+        : { reached: false, deactivated: false, removed: false };
+
+    if (isAgent) {
+      // Changes that were never delivered must not run if the site reconnects later.
+      await supabase
+        .from("site_changes")
+        .update({ status: "failed", error_message: "Site was disconnected.", updated_at: new Date().toISOString() })
+        .eq("site_id", site_id)
+        .in("status", ["queued", "revert_queued"]);
+    }
 
     const { error: updErr } = await supabase
       .from("connected_sites")

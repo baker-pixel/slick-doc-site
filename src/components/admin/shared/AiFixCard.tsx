@@ -89,8 +89,13 @@ export const AiFixCard = ({
       });
       const errMsg = await getEdgeErrorMessage(error, data);
       if (errMsg) throw new Error(errMsg);
-      setFix({ ...fix, status: "applied" });
-      toast({ title: "Published to WordPress", description: "The fix has been applied to the live site." });
+      if (data?.queued) {
+        setFix({ ...fix, status: "approved" });
+        toast({ title: "Queued for WordPress", description: "The site applies it at its next check-in (about 5 minutes)." });
+      } else {
+        setFix({ ...fix, status: "applied" });
+        toast({ title: "Published to WordPress", description: "The fix has been applied to the live site." });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to apply fix";
       toast({ title: "Couldn't publish", description: friendlyEdgeMessage(msg), variant: "destructive" });

@@ -248,3 +248,9 @@ verify_jwt = false
 # authenticates by tracking key + Origin and always answers 204.
 [functions.track-pageview]
 verify_jwt = false
+
+[functions.site-agent]
+verify_jwt = false
+
+[functions.revert-site-change]
+verify_jwt = false
