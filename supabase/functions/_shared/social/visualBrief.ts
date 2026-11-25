@@ -40,6 +40,32 @@ function safeHttpsUrl(raw: string, base?: string): string | null {
   }
 }
 
+/** True when the hostname resolves to a private or internal address. Fails open on a DoH outage; the literal-host check still applies. */
+async function resolvesToPrivateAddress(hostname: string): Promise<boolean> {
+  if (isPrivateHost(hostname)) return true;
+  const lookup = async (type: "A" | "AAAA"): Promise<string[]> => {
+    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`, {
+      headers: { accept: "application/dns-json" },
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) throw new Error(`DoH ${res.status}`);
+    const want = type === "A" ? 1 : 28;
+    return ((await res.json()).Answer ?? []).filter((a: { type: number }) => a.type === want).map((a: { data: string }) => a.data);
+  };
+  const [v4, v6] = await Promise.allSettled([lookup("A"), lookup("AAAA")]);
+  const ips = [...(v4.status === "fulfilled" ? v4.value : []), ...(v6.status === "fulfilled" ? v6.value : [])];
+  return ips.some(isPrivateHost);
+}
+
+/** Public http(s) URL whose host does not resolve to an internal address. */
+async function isSafeToFetch(raw: string): Promise<boolean> {
+  try {
+    return !(await resolvesToPrivateAddress(new URL(raw).hostname));
+  } catch {
+    return false;
+  }
+}
+
 const SKIP_IMG = /logo|icon|sprite|favicon|avatar|badge|payment|flag|spinner|pixel|tracking|1x1|placeholder|\.svg(\?|$)|\.gif(\?|$)/i;
 
 /** Large content photos from a page: og:image first, then <img> tags, skipping logos, icons and trackers. */
@@ -78,6 +104,7 @@ export function extractPhotoUrls(html: string, baseUrl: string): string[] {
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
+  if (!(await isSafeToFetch(url))) return null;
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 12_000);
   try {
@@ -87,7 +114,7 @@ async function fetchHtml(url: string): Promise<string | null> {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; OrangeDoorBot/1.0)", Accept: "text/html" },
     });
     if (!res.ok) return null;
-    if (res.url && !safeHttpsUrl(res.url)) return null; // redirected somewhere internal
+    if (res.url && (!safeHttpsUrl(res.url) || !(await isSafeToFetch(res.url)))) return null; // redirected somewhere internal
     return (await res.text()).slice(0, 600_000);
   } catch {
     return null;
@@ -96,20 +123,29 @@ async function fetchHtml(url: string): Promise<string | null> {
   }
 }
 
-/** Only keep images that are reachable and look like real photos (not tiny, not huge). */
+/** HEAD first; many servers reject it, so fall back to a one-byte ranged GET. */
+async function probeImage(url: string): Promise<{ type: string; len: number } | null> {
+  const attempt = async (init: RequestInit) => {
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(6_000), redirect: "follow" });
+    if (!res.ok) return null;
+    const range = res.headers.get("content-range")?.match(/\/(\d+)$/)?.[1];
+    return { type: res.headers.get("content-type") || "", len: Number(range ?? res.headers.get("content-length") ?? 0) };
+  };
+  try {
+    return (await attempt({ method: "HEAD" })) ?? (await attempt({ method: "GET", headers: { Range: "bytes=0-0" } }));
+  } catch {
+    try { return await attempt({ method: "GET", headers: { Range: "bytes=0-0" } }); } catch { return null; }
+  }
+}
+
+/** Only keep images that are reachable, on a public host, and look like real photos (not tiny, not huge). */
 async function usablePhotos(urls: string[]): Promise<string[]> {
   const checks = await Promise.all(urls.slice(0, MAX_IMAGES * 3).map(async (u) => {
-    try {
-      const res = await fetch(u, { method: "HEAD", signal: AbortSignal.timeout(6_000), redirect: "follow" });
-      if (!res.ok) return null;
-      const type = res.headers.get("content-type") || "";
-      const len = Number(res.headers.get("content-length") || 0);
-      if (!/^image\/(jpeg|png|webp)/i.test(type)) return null;
-      if (len && (len < 15_000 || len > 15_000_000)) return null;
-      return u;
-    } catch {
-      return null;
-    }
+    if (!(await isSafeToFetch(u))) return null;
+    const info = await probeImage(u);
+    if (!info || !/^image\/(jpeg|png|webp)/i.test(info.type)) return null;
+    if (info.len && (info.len < 15_000 || info.len > 15_000_000)) return null;
+    return u;
   }));
   return checks.filter((u): u is string => !!u).slice(0, MAX_IMAGES);
 }
@@ -127,7 +163,7 @@ const SYSTEM =
 const strs = (v: unknown, max: number): string[] =>
   Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => (x as string).trim().slice(0, 80)).slice(0, max) : [];
 // Terms that describe UI/graphics, not photography; they would fight the image rules.
-const NOT_PHOTO = /logo|icon|screen|dashboard|software|\bui\b|interface|app\b|website|graphic|illustration|infographic|chart|graph|banner/i;
+const NOT_PHOTO = /\b(logos?|icons?|screens?|dashboards?|software|ui|interfaces?|apps?|websites?|graphics?|illustrations?|infographics?|charts?|graphs?|banners?|slides?|decks?|presentations?|overlays?|text|typography|wireframes?|grids?)\b/i;
 const clean = (a: string[]) => a.filter((x) => !NOT_PHOTO.test(x));
 const str = (v: unknown, max = 120): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -192,25 +228,30 @@ export async function buildVisualBrief(
   return { brief };
 }
 
+/** Palette entries that name real colours. "Black and white" or "monochrome" would read as an instruction to shoot in b&w. */
+export function colourPalette(b: Partial<VisualBrief> | undefined | null): string[] {
+  return (b?.palette ?? []).filter((c) => !/black|white|monochrom|grey ?scale|gray ?scale|b&w/i.test(c));
+}
+
 /** Prompt text for the concept writer. Empty when there is no brief. */
 export function briefForConcept(b: Partial<VisualBrief> | undefined | null): string {
-  if (!b || (!b.settings?.length && !b.palette?.length)) return "";
+  if (!b || (!clean(b.settings ?? []).length && !colourPalette(b).length)) return "";
   const parts = [
     b.mood ? `mood: ${b.mood}` : "",
-    b.settings?.length ? `places they photograph: ${b.settings.join("; ")}` : "",
-    b.objects?.length ? `objects that recur: ${b.objects.join("; ")}` : "",
-    b.palette?.length ? `palette: ${b.palette.join(", ")}` : "",
+    clean(b.settings ?? []).length ? `places they photograph: ${clean(b.settings ?? []).join("; ")}` : "",
+    clean(b.objects ?? []).length ? `objects that recur: ${clean(b.objects ?? []).join("; ")}` : "",
+    colourPalette(b).length ? `palette: ${colourPalette(b).join(", ")}` : "",
   ].filter(Boolean);
   return `Brand look, learned from the photography on their own website (${parts.join(" | ")}). Make the scene feel like it belongs to this brand: lean on these kinds of places, objects and palette, but invent a NEW scene for this post. Never recreate or imitate a specific photo, and never show their real staff or premises.`;
 }
 
 /** One line for the final image prompt. */
 export function briefForPrompt(b: Partial<VisualBrief> | undefined | null): string {
-  if (!b || (!b.palette?.length && !b.photo_style)) return "";
+  if (!b || (!colourPalette(b).length && !b.photo_style)) return "";
   const parts = [
-    b.palette?.length ? `colours drawn from ${b.palette.slice(0, 4).join(", ")}` : "",
+    colourPalette(b).length ? `colours drawn from ${colourPalette(b).slice(0, 4).join(", ")}` : "",
     b.lighting ? `light like ${b.lighting}` : "",
-    b.photo_style ? b.photo_style : "",
+    b.photo_style && !NOT_PHOTO.test(b.photo_style) && !/minimal realism/i.test(b.photo_style) ? b.photo_style : "",
   ].filter(Boolean);
   return `Brand look: ${parts.join("; ")}.`;
 }

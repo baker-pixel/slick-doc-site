@@ -3,6 +3,7 @@ import { isServiceRequest } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, callAIJson, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { isUsableCaption } from "../_shared/social/captionGate.ts";
+import { learnFromImageFeedback, rememberLikedImage } from "../_shared/social/imageTaste.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -227,6 +228,9 @@ serve(async (req) => {
         }
       }
 
+      // An approved image is a positive example for this client's future images.
+      await rememberLikedImage(supabase, clientId, generatedContentId);
+
       // Sync status back to generated_content so admin sees client approved
       if (generatedContentId) {
         await supabase
@@ -372,6 +376,10 @@ serve(async (req) => {
         const { image_url: _i, image_skip: _s, image_batch_id: _b, image_batch_status: _bs, ...rest } = (c.metadata || {}) as Record<string, unknown>;
         await supabase.from("content_calendar").update({ metadata: { ...rest, image_feedback: imageFeedback } }).eq("id", c.id);
       }
+      // Standing preferences in the note ("never people in suits") are kept for
+      // every future image, not just this regeneration. Runs before the kick so
+      // the new image already obeys them.
+      await learnFromImageFeedback(supabase, clientId, imageFeedback);
       fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-fill-missing-images`, {
         method: "POST",
         headers: { Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "Content-Type": "application/json" },
