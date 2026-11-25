@@ -1,3 +1,4 @@
+import { briefForConcept, briefForPrompt, type VisualBrief } from "./visualBrief.ts";
 import { callAI, MODELS } from "../ai/ai.ts";
 import { buildSocialImagePrompt, type ImagePromptClient, type ImagePromptPost } from "./socialImagePrompt.ts";
 
@@ -198,6 +199,8 @@ export interface CreativeImagePrefs {
   services?: string[];
   business_summary?: string;
   verified_facts?: string[];
+  /** Learned from the client's website photos by extract-visual-brief. */
+  visual_brief?: Partial<VisualBrief>;
 }
 
 /** Newest first. Store image_style_id and image_concept on each post to build this. */
@@ -429,6 +432,7 @@ async function writeConcept(
     `Do not default to ${DEFAULT_SCENES}. Use any of those only when the post is genuinely about it.`,
     `For variety, set it in or around: ${setting}. Adapt if that makes no sense for this post's message.`,
     overused.length ? `This client's recent images already leaned on ${overused.join(", ")}. Do not use them again.` : "",
+    briefForConcept(prefs.visual_brief),
     `Avoid clichés: ${CLICHES}.`,
     never.length ? `The client never wants to see: ${never.join("; ")}.` : "",
     recentConcepts.length
@@ -517,7 +521,7 @@ export async function buildCreativeImage(
 
   let lines: string[];
   if (style.photographic) {
-    const grade = prefs.image_grade || pick(GRADES, String(client.id ?? client.business_name), "grade");
+    const grade = prefs.image_grade || (prefs.visual_brief?.palette?.length ? `a natural grade that keeps the ${prefs.visual_brief.palette.slice(0, 3).join(", ")} tones true` : "") || pick(GRADES, String(client.id ?? client.business_name), "grade");
     const accent = prefs.brand_colors?.length
       ? `A quiet accent of ${prefs.brand_colors.slice(0, 2).join(" or ")} may appear naturally in a prop, garment or surrounding, never dominant and never as a logo.`
       : "";
@@ -528,6 +532,7 @@ export async function buildCreativeImage(
       `Camera: ${pick(LENSES, seed, "lens")}; ${pick(FRAMING, seed, "framing")}.`,
       `Light: ${pick(LIGHT, seed, "light")}.`,
       `Colour: ${grade}.`,
+      briefForPrompt(prefs.visual_brief),
       `Realism: ${REALISM}`,
       `People: ${peopleConstraint(style)}`,
       prefs.location ? `Place: the setting, architecture and people plausibly belong in ${prefs.location}.` : "",
