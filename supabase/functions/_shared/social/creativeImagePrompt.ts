@@ -1,4 +1,4 @@
-import { briefForConcept, briefForPrompt, type VisualBrief } from "./visualBrief.ts";
+import { briefForConcept, briefForPrompt, colourPalette, type VisualBrief } from "./visualBrief.ts";
 import { callAI, MODELS } from "../ai/ai.ts";
 import { buildSocialImagePrompt, type ImagePromptClient, type ImagePromptPost } from "./socialImagePrompt.ts";
 
@@ -521,7 +521,7 @@ export async function buildCreativeImage(
 
   let lines: string[];
   if (style.photographic) {
-    const grade = prefs.image_grade || (prefs.visual_brief?.palette?.length ? `a natural grade that keeps the ${prefs.visual_brief.palette.slice(0, 3).join(", ")} tones true` : "") || pick(GRADES, String(client.id ?? client.business_name), "grade");
+    const grade = prefs.image_grade || (colourPalette(prefs.visual_brief).length ? `a natural grade that keeps the ${colourPalette(prefs.visual_brief).slice(0, 3).join(", ")} tones true` : "") || pick(GRADES, String(client.id ?? client.business_name), "grade");
     const accent = prefs.brand_colors?.length
       ? `A quiet accent of ${prefs.brand_colors.slice(0, 2).join(" or ")} may appear naturally in a prop, garment or surrounding, never dominant and never as a logo.`
       : "";

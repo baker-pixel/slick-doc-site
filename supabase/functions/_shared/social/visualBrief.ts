@@ -127,7 +127,7 @@ const SYSTEM =
 const strs = (v: unknown, max: number): string[] =>
   Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => (x as string).trim().slice(0, 80)).slice(0, max) : [];
 // Terms that describe UI/graphics, not photography; they would fight the image rules.
-const NOT_PHOTO = /logo|icon|screen|dashboard|software|\bui\b|interface|app\b|website|graphic|illustration|infographic|chart|graph|banner/i;
+const NOT_PHOTO = /\b(logos?|icons?|screens?|dashboards?|software|ui|interfaces?|apps?|websites?|graphics?|illustrations?|infographics?|charts?|graphs?|banners?)\b/i;
 const clean = (a: string[]) => a.filter((x) => !NOT_PHOTO.test(x));
 const str = (v: unknown, max = 120): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -192,6 +192,11 @@ export async function buildVisualBrief(
   return { brief };
 }
 
+/** Palette entries that name real colours. "Black and white" or "monochrome" would read as an instruction to shoot in b&w. */
+export function colourPalette(b: Partial<VisualBrief> | undefined | null): string[] {
+  return (b?.palette ?? []).filter((c) => !/black|white|monochrom|grey ?scale|gray ?scale|b&w/i.test(c));
+}
+
 /** Prompt text for the concept writer. Empty when there is no brief. */
 export function briefForConcept(b: Partial<VisualBrief> | undefined | null): string {
   if (!b || (!b.settings?.length && !b.palette?.length)) return "";
@@ -199,16 +204,16 @@ export function briefForConcept(b: Partial<VisualBrief> | undefined | null): str
     b.mood ? `mood: ${b.mood}` : "",
     b.settings?.length ? `places they photograph: ${b.settings.join("; ")}` : "",
     b.objects?.length ? `objects that recur: ${b.objects.join("; ")}` : "",
-    b.palette?.length ? `palette: ${b.palette.join(", ")}` : "",
+    colourPalette(b).length ? `palette: ${colourPalette(b).join(", ")}` : "",
   ].filter(Boolean);
   return `Brand look, learned from the photography on their own website (${parts.join(" | ")}). Make the scene feel like it belongs to this brand: lean on these kinds of places, objects and palette, but invent a NEW scene for this post. Never recreate or imitate a specific photo, and never show their real staff or premises.`;
 }
 
 /** One line for the final image prompt. */
 export function briefForPrompt(b: Partial<VisualBrief> | undefined | null): string {
-  if (!b || (!b.palette?.length && !b.photo_style)) return "";
+  if (!b || (!colourPalette(b).length && !b.photo_style)) return "";
   const parts = [
-    b.palette?.length ? `colours drawn from ${b.palette.slice(0, 4).join(", ")}` : "",
+    colourPalette(b).length ? `colours drawn from ${colourPalette(b).slice(0, 4).join(", ")}` : "",
     b.lighting ? `light like ${b.lighting}` : "",
     b.photo_style ? b.photo_style : "",
   ].filter(Boolean);
