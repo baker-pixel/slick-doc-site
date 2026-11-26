@@ -4842,6 +4842,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_gap_submission: { Args: { p_data: Json }; Returns: Json }
+      get_gap_report_by_id: { Args: { p_id: string }; Returns: Json }
+      get_gap_submission_by_token: { Args: { p_token: string }; Returns: Json }
+      save_gap_scorecard: {
+        Args: { p_overall_score: number; p_score_breakdown: Json; p_token: string }
+        Returns: boolean
+      }
       agent_jobs_archive: { Args: { msg_id: number }; Returns: boolean }
       agent_jobs_delete: { Args: { msg_id: number }; Returns: boolean }
       agent_jobs_enqueue: { Args: { msg: Json }; Returns: number }

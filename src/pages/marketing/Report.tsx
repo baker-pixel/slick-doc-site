@@ -83,17 +83,16 @@ export default function Report() {
 
   const fetchReport = async () => {
     try {
-      const { data, error } = await supabase
-        .from("gap_analysis_submissions")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
+      // Finished reports are read through an RPC: it returns the report without contact
+      // details, and only for submitted + completed rows. Direct table reads are closed.
+      const { data: rpcRow, error } = await supabase.rpc("get_gap_report_by_id", { p_id: id! });
 
       if (error) throw error;
-      if (!data) {
+      if (!rpcRow) {
         setNotFound(true);
         return;
       }
+      const data = rpcRow as unknown as SubmissionRow & Parameters<typeof calculateSystemScorecard>[0];
 
       const reportData: SubmissionRow = {
         ...data,

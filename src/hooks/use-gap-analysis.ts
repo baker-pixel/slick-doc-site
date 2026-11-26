@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { handleEdgeError } from "@/lib/edge-error";
 import { calculateSystemScorecard } from "@/lib/systemScorecard";
 import type { GapAnalysisData } from "@/components/gap-analysis/GapAnalysisForm";
@@ -301,13 +302,11 @@ export function useGapAnalysis({ resumeToken, prefillEmail, totalSteps }: UseGap
 
   const loadSavedProgress = async () => {
     try {
-      const { data, error } = await supabase
-        .from("gap_analysis_submissions")
-        .select("*")
-        .eq("resume_token", resumeToken)
-        .maybeSingle();
-
+      // Direct table access is closed to anonymous visitors: read through the token-checked
+      // RPC (returns the row for this resume token, or null).
+      const { data: rpcRow, error } = await supabase.rpc("get_gap_submission_by_token", { p_token: resumeToken! });
       if (error) throw error;
+      const data = (rpcRow ?? null) as (Record<string, unknown> & { current_step?: number; first_name?: string }) | null;
 
       if (data) {
         setFormData(mapDbToFormData(data as Record<string, unknown>));
@@ -366,14 +365,16 @@ export function useGapAnalysis({ resumeToken, prefillEmail, totalSteps }: UseGap
 
     setIsSaving(true);
     try {
-      const { data, error } = await supabase.from("gap_analysis_submissions").insert({
-        ...mapFormDataToDb(formData),
-        current_step: currentStep,
-        is_partial: true,
-        status: "in_progress",
-      }).select('resume_token').single();
-
+      const { data: created, error } = await supabase.rpc("create_gap_submission", {
+        p_data: {
+          ...mapFormDataToDb(formData),
+          current_step: currentStep,
+          is_partial: true,
+          status: "in_progress",
+        } as unknown as Json,
+      });
       if (error) throw error;
+      const data = created as unknown as { id: string; resume_token: string };
 
       await supabase.functions.invoke("send-resume-link", {
         body: {
@@ -438,24 +439,25 @@ export function useGapAnalysis({ resumeToken, prefillEmail, totalSteps }: UseGap
 
     try {
       const dbData = mapFormDataToDb(formData);
-      const { data: insertedData, error } = await supabase.from("gap_analysis_submissions").insert({
-        ...dbData,
-        status: "submitted",
-        completed_at: new Date().toISOString(),
-      }).select('id, resume_token').single();
-
+      const { data: created, error } = await supabase.rpc("create_gap_submission", {
+        p_data: {
+          ...dbData,
+          status: "submitted",
+          completed_at: new Date().toISOString(),
+        } as unknown as Json,
+      });
       if (error) throw error;
+      const insertedData = created as unknown as { id: string; resume_token: string };
 
-      // Compute and persist SYSTEM scorecard
+      // Compute and persist SYSTEM scorecard (by resume token: the caller owns that row)
       try {
         const scorecard = calculateSystemScorecard(dbData);
-        await supabase
-          .from("gap_analysis_submissions")
-          .update({
-            overall_score: scorecard.overallScore,
-            score_breakdown: scorecard.scores as any,
-          })
-          .eq("id", insertedData.id);
+        const { error: scoreSaveErr } = await supabase.rpc("save_gap_scorecard", {
+          p_token: insertedData.resume_token,
+          p_overall_score: scorecard.overallScore,
+          p_score_breakdown: scorecard.scores as unknown as Json,
+        });
+        if (scoreSaveErr) throw scoreSaveErr;
       } catch (scoreErr) {
         console.error("Failed to save scorecard:", scoreErr);
       }
