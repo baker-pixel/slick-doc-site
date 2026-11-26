@@ -11,6 +11,7 @@ import { refreshSocialPlanProgress } from "../_shared/social/socialStrategy.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
 import { notifyClientBlocked } from "../_shared/client/clientAlerts.ts";
 import { flagNeedsReauth, isReconnectError } from "../_shared/social/pfmReauth.ts";
+import { claimForPublish } from "../_shared/social/publishClaim.ts";
 
 function platformLabel(platform: string): string {
   return platform.charAt(0).toUpperCase() + platform.slice(1);
@@ -41,7 +42,9 @@ function enforceCharLimit(content: string, platform: string): string {
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   let lastResponse: Response | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, options);
+    // Hard timeout: a hung call used to outlive the edge worker, leaving the row claimed for the
+    // 15-min reset to re-post. A timeout now surfaces as an error and counts as an attempt.
+    const res = await fetch(url, { ...options, signal: AbortSignal.timeout(30_000) });
     if (res.status !== 429) return res;
     lastResponse = res;
     if (attempt === maxRetries) break;
@@ -161,22 +164,18 @@ serve(async (req) => {
 
     existingMeta = (item.metadata as Record<string, unknown>) || {};
 
-    // Atomic claim: mark as processing only if not already published.
-    // Returns the row count so we can detect races.
-    const { data: claimedRows, error: lockErr } = await supabase
-      .from("content_calendar")
-      .update({ status: "processing", updated_at: new Date().toISOString() })
-      .eq("id", contentCalendarId)
-      .neq("status", "published")
-      .select("id");
-
-    if (lockErr) {
-      console.error("Lock error:", lockErr.message);
+    // Atomic claim: refuse rows that are published OR already processing (another run or an
+    // admin click is mid-publish). The old `.neq("published")` let a second caller claim a
+    // "processing" row and post it twice. Stuck claims are re-opened by the 15-min reset in
+    // publish-scheduled-content, not here.
+    const claim = await claimForPublish(supabase, contentCalendarId);
+    if (claim.error) {
+      console.error("Lock error:", claim.error);
       return json({ error: "Failed to acquire lock", success: false }, 409);
     }
-    if (!claimedRows || claimedRows.length === 0) {
-      // Another concurrent call won the race and published it
-      return json({ success: true, skipped: true, reason: "already_published" });
+    if (!claim.claimed) {
+      // Another concurrent call owns it (or it is already published)
+      return json({ success: true, skipped: true, reason: "already_handled" });
     }
 
     claimed = true; // we now own this row
@@ -386,14 +385,14 @@ serve(async (req) => {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("postforme-publish-post unhandled error:", msg);
 
-    // If we claimed the row but crashed before calling markFailed/markPublished,
-    // reset to "scheduled" so the cron can retry rather than leaving it stuck.
+    // If we claimed the row but crashed before calling markFailed/markPublished, send it
+    // through markFailed as a retryable failure: back to "scheduled" for the cron, but the
+    // attempt is COUNTED, so a row that keeps crashing ends in "failed" with an alert after
+    // MAX_PUBLISH_ATTEMPTS instead of being reset forever without a trace.
+    // NOTE: if the crash came after PfM accepted the post (e.g. a lost response) the retry can
+    // post again; closing that needs a PfM-side dedupe check, not verified here.
     if (claimed && contentCalendarId) {
-      await supabase
-        .from("content_calendar")
-        .update({ status: "scheduled", updated_at: new Date().toISOString() })
-        .eq("id", contentCalendarId)
-        .eq("status", "processing");
+      await markFailed(contentCalendarId, existingMeta, msg, true, {});
     }
 
     return json({ error: msg, success: false }, 500);
