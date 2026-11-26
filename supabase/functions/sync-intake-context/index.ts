@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
 import { syncClientAccountFromSubmission } from "../_shared/client/onboardingContext.ts";
+import { checkRateLimit, getClientIp } from "../_shared/core/rateLimit.ts";
+import { isServiceRequest } from "../_shared/core/auth.ts";
 
 // Called right after a gap-analysis submit. Ties the submission to an
 // existing client_accounts row (context_profile + intake_completed_at) via
@@ -19,6 +21,13 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Public (the marketing funnel calls it once per submit): limit per IP so it
+    // can't be hammered to rewrite client intake context. Our own backend is exempt.
+    if (!isServiceRequest(req)) {
+      const rl = await checkRateLimit(supabase, getClientIp(req), "sync-intake-context");
+      if (rl.limited) return errorResponse("Too many requests. Please try again later.", 429);
+    }
 
     const { data: submission, error } = await supabase
       .from("gap_analysis_submissions")

@@ -140,3 +140,36 @@ export async function checkPipelineAuth(
   if (await checkInternalSecret(req, supabase, "pipeline_cron")) return true;
   return (await checkAdminAuth(req, supabase, password)).authorized;
 }
+
+/**
+ * Endpoint guard for functions that only our own crons, other edge functions
+ * or the admin panel call. Returns a ready 401 Response to send back, or null
+ * when the caller may proceed:
+ *   const denied = await requirePipelineAuth(req, supabase, corsHeaders);
+ *   if (denied) return denied;
+ * Accepts the service key, the pipeline_cron x-internal-secret, an admin
+ * session JWT, or the admin password in a JSON body (read from a clone, so the
+ * handler can still read the body itself).
+ *
+ * DEPLOY ORDER: the cron migration that sends x-internal-secret must be applied
+ * BEFORE a function adopting this guard is deployed, or its cron job starts
+ * getting 401s (this is what stopped publishing 24-30 Sep 2026).
+ */
+export async function requirePipelineAuth(
+  req: Request,
+  supabase: SupabaseClient,
+  corsHeaders: Record<string, string> = {},
+): Promise<Response | null> {
+  let password: string | null = null;
+  if ((req.headers.get("content-type") ?? "").includes("json")) {
+    try {
+      const body = await req.clone().json();
+      if (typeof body?.password === "string") password = body.password;
+    } catch { /* no/invalid JSON body: no password */ }
+  }
+  if (await checkPipelineAuth(req, supabase, password)) return null;
+  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    status: 401,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}

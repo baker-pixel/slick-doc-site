@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requirePipelineAuth } from "../_shared/core/auth.ts";
 import { corsHeaders } from "../_shared/core/http.ts";
 import { callAI as sharedCallAI, MODELS, NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
@@ -185,6 +186,8 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+  const denied = await requirePipelineAuth(req, supabase, corsHeaders);
+  if (denied) return denied;
   try {
     const { batchType, clientId } = await req.json() as BatchConfig;
     

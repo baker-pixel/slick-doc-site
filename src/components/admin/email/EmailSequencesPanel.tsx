@@ -17,6 +17,7 @@ import { Json } from "@/integrations/supabase/types";
 import { Mail, Plus, Edit, Trash2, Clock, RefreshCw, Eye, Copy, BarChart3, Send, Loader2, Play } from "lucide-react";
 import { format } from "date-fns";
 import { EmailSequenceAnalytics } from "./EmailSequenceAnalytics";
+import { useAdminAuth } from "@/contexts/AdminAuthContext";
 
 interface SequenceEmail {
   delay_hours: number;
@@ -83,6 +84,9 @@ const TIMEZONES = [
 ];
 
 export function EmailSequencesPanel() {
+  // send-test-email is admin-only: the admin session JWT normally proves it, and the
+  // shared password covers a password-only login where no session could be minted.
+  const { adminPassword } = useAdminAuth();
   const [sequences, setSequences] = useState<EmailSequence[]>([]);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -297,7 +301,7 @@ export function EmailSequencesPanel() {
     setIsLoadingPreview(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-test-email", {
-        body: { template, previewOnly: true },
+        body: { template, previewOnly: true, password: adminPassword },
       });
       if (error) {
         const msg = await getEdgeErrorMessage(error, data);
@@ -321,7 +325,7 @@ export function EmailSequencesPanel() {
     setIsSendingTest(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-test-email", {
-        body: { template: testTemplate, testEmail },
+        body: { template: testTemplate, testEmail, password: adminPassword },
       });
       if (error) {
         const msg = await getEdgeErrorMessage(error, data);

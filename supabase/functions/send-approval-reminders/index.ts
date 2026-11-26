@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requirePipelineAuth } from "../_shared/core/auth.ts";
 import { filterEngagedClients } from "../_shared/client/engagedClients.ts";
 import { emailLogo } from "../_shared/client/brandEmail.ts";
 
@@ -71,6 +72,8 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  const denied = await requirePipelineAuth(req, supabase, corsHeaders);
+  if (denied) return denied;
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "Orange Door <hello@orangedoormarketing.com>";

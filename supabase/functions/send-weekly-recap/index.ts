@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
-import { checkAdminAuth } from "../_shared/core/auth.ts";
+import { checkAdminAuth, requirePipelineAuth } from "../_shared/core/auth.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -57,6 +57,10 @@ Deno.serve(async (req) => {
       if (!auth.authorized) {
         return errorResponse("Unauthorized", 401);
       }
+    } else {
+      // The all-clients run emails every active client: cron, service or admin only.
+      const denied = await requirePipelineAuth(req, supabase);
+      if (denied) return denied;
     }
 
     const clientQuery = supabase
