@@ -50,7 +50,11 @@ async function withEnv<T>(vars: Record<string, string>, fn: () => Promise<T>): P
   const old: Record<string, string | undefined> = {};
   for (const k of Object.keys(vars)) { old[k] = Deno.env.get(k); Deno.env.set(k, vars[k]); }
   try { return await fn(); } finally {
-    for (const k of Object.keys(vars)) old[k] === undefined ? Deno.env.delete(k) : Deno.env.set(k, old[k]!);
+    for (const k of Object.keys(vars)) {
+      const prev = old[k];
+      if (prev === undefined) Deno.env.delete(k);
+      else Deno.env.set(k, prev);
+    }
   }
 }
 
