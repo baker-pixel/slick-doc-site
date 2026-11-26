@@ -120,27 +120,31 @@ Deno.serve(async (req) => {
 
       if (action === "report") {
         if (!conn.property_id) return jsonResponse({ state: "no_property" });
+        // Window = the last N days including today; "previous" is the N days before that.
+        const days = [7, 28, 90].includes(Number(args.days)) ? Number(args.days) : 28;
+        const cur = { startDate: `${days - 1}daysAgo`, endDate: "today" };
+        const prev = { startDate: `${days * 2 - 1}daysAgo`, endDate: `${days}daysAgo` };
         const j = await google(token, `https://analyticsdata.googleapis.com/v1beta/${conn.property_id}:batchRunReports`, {
           requests: [
             { // 0: daily trend
-              dateRanges: [{ startDate: "27daysAgo", endDate: "today" }],
+              dateRanges: [cur],
               dimensions: [{ name: "date" }],
               metrics: [{ name: "sessions" }, { name: "activeUsers" }],
               orderBys: [{ dimension: { dimensionName: "date" } }],
             },
             { // 1: totals, this 28 days vs the 28 before
-              dateRanges: [{ startDate: "27daysAgo", endDate: "today" }, { startDate: "55daysAgo", endDate: "28daysAgo" }],
+              dateRanges: [cur, prev],
               metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "screenPageViews" }, { name: "engagementRate" }],
             },
             { // 2: top pages
-              dateRanges: [{ startDate: "27daysAgo", endDate: "today" }],
+              dateRanges: [cur],
               dimensions: [{ name: "pagePath" }],
               metrics: [{ name: "screenPageViews" }],
               orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
               limit: 5,
             },
             { // 3: channels
-              dateRanges: [{ startDate: "27daysAgo", endDate: "today" }],
+              dateRanges: [cur],
               dimensions: [{ name: "sessionDefaultChannelGroup" }],
               metrics: [{ name: "sessions" }],
               orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
@@ -157,6 +161,7 @@ Deno.serve(async (req) => {
         };
         return jsonResponse({
           state: "active",
+          days,
           property: { id: conn.property_id, name: conn.property_name },
           email: conn.google_email,
           current: tot(0),
