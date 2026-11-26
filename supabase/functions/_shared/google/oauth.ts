@@ -38,14 +38,20 @@ export async function verifyState(state: string | null): Promise<OAuthState | nu
   }
 }
 
-const ALLOWED_HOSTS = new Set(["orangedoormarketing.com", "www.orangedoormarketing.com", "localhost", "127.0.0.1"]);
+const ROOT_DOMAIN = "orangedoormarketing.com";
+const isAllowedHost = (h: string) =>
+  h === ROOT_DOMAIN || h.endsWith(`.${ROOT_DOMAIN}`) || h === "localhost" || h === "127.0.0.1";
 
-/** Only ever send the user back to one of our own origins. */
+/**
+ * Only ever send the user back to one of our own origins. The portal runs on client.<root>
+ * (see getAppMode), so subdomains of our root domain are allowed, not just the apex/www.
+ */
 export function safeReturnOrigin(candidate: unknown): string {
-  const fallback = Deno.env.get("APP_URL") || "https://orangedoormarketing.com";
+  const fallback = Deno.env.get("APP_URL") || `https://${ROOT_DOMAIN}`;
   try {
     const u = new URL(String(candidate));
-    if (ALLOWED_HOSTS.has(u.hostname) && (u.protocol === "https:" || u.hostname === "localhost" || u.hostname === "127.0.0.1")) return u.origin;
+    const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+    if (isAllowedHost(u.hostname) && (u.protocol === "https:" || local)) return u.origin;
   } catch { /* fall through */ }
   return new URL(fallback).origin;
 }

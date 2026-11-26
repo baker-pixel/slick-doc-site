@@ -25,4 +25,7 @@ Deno.test("return origin is limited to our own hosts", () => {
   assertEquals(safeReturnOrigin("https://evil.com/x"), "https://orangedoormarketing.com");
   assertEquals(safeReturnOrigin("http://orangedoormarketing.com"), "https://orangedoormarketing.com");
   assertEquals(safeReturnOrigin("http://localhost:8080/portal"), "http://localhost:8080");
+  assertEquals(safeReturnOrigin("https://client.orangedoormarketing.com/portal"), "https://client.orangedoormarketing.com");
+  assertEquals(safeReturnOrigin("https://orangedoormarketing.com.evil.com"), "https://orangedoormarketing.com");
+  assertEquals(safeReturnOrigin("https://evilorangedoormarketing.com"), "https://orangedoormarketing.com");
 });
