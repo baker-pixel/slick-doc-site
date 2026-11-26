@@ -18,6 +18,7 @@ import { planPostAngle, type PostBrief } from "../_shared/social/postAngle.ts";
 import { NO_FABRICATION_GUARDRAIL } from "../_shared/ai/ai.ts";
 import { getClientBrandKit, brandKitToPromptBlock, type BrandKit } from "../_shared/client/brandKit.ts";
 import { checkFrontLoaded, frontLoadedRequirements, frontLoadedRetryNote, isFrontLoadedPlatform, stripInDepthLabel } from "../_shared/seo/frontLoaded.ts";
+import { claimSlot } from "../_shared/core/claims.ts";
 
 // Platforms where a QA-passing draft skips the manual admin "send for
 // approval" click and goes straight to the client's Approvals tab. Blog,
@@ -222,7 +223,7 @@ serve(async (req) => {
       }
     }
 
-    const results: { id: string; success: boolean; error?: string }[] = [];
+    const results: { id: string; success: boolean; skipped?: boolean; error?: string }[] = [];
 
     // The edge gateway cuts a request off at 150s of idle time. A slot takes
     // 15-25s (draft, topic, claims/QA), so stop starting new ones early enough
@@ -242,6 +243,14 @@ serve(async (req) => {
         break;
       }
       try {
+        // Short lease on this slot so an overlapping run (cron + manual, or a slow run and the
+        // next one) does not draft, and pay for, the same slot twice. "unavailable" = migration
+        // not applied yet: carry on without the lease rather than stop all drafting.
+        if ((await claimSlot(supabase, slot.id)) === "taken") {
+          console.log(`Slot ${slot.id} is being drafted by another run, skipping`);
+          results.push({ id: slot.id, success: true, skipped: true });
+          continue;
+        }
         const client = clientMap[slot.client_account_id];
         if (!client) throw new Error("Client not found");
 
@@ -452,18 +461,24 @@ serve(async (req) => {
           .select("id")
           .single();
 
-        if (draftErr) {
-          console.error(`generated_content insert failed for slot ${slot.id}:`, draftErr.message);
+        if (draftErr || !draftRecord) {
+          const why = draftErr?.message ?? "no row returned";
+          console.error(`generated_content insert failed for slot ${slot.id}:`, why);
           try {
             await supabase.from("automation_alerts").insert({
               alert_type: "data_error",
-              severity: "warning",
+              // error, not warning: the digest only emails error/high/critical
+              severity: "error",
               title: "generated_content insert failed in fill-scheduled-content",
-              message: draftErr.message,
+              message: why,
               source: "fill-scheduled-content",
               metadata: { slot_id: slot.id, client_id: slot.client_account_id, timestamp: new Date().toISOString() },
             });
           } catch { /* best-effort */ }
+          // Stop here. Writing the draft text to the slot anyway (as this used to) made it
+          // look filled with content_id = null: never retried, never forwarded to the client.
+          // Left untouched it stays a placeholder and the next run drafts it again.
+          throw new Error(`generated_content insert failed: ${why}`);
         }
 
         // Update the calendar slot with the generated draft text (and the
@@ -517,6 +532,24 @@ serve(async (req) => {
 
           if (approvalErr) {
             console.error(`content_approvals insert failed for slot ${slot.id}:`, approvalErr.message);
+            // The draft was saved as "approved" for the client, but the approval row the client
+            // sees does not exist. Fall back to the admin review queue so it is not invisible,
+            // and say so loudly.
+            const { error: demoteErr } = await supabase
+              .from("generated_content")
+              .update({ status: "pending_admin_review" })
+              .eq("id", draftRecord.id);
+            if (demoteErr) console.error(`could not move draft ${draftRecord.id} to admin review:`, demoteErr.message);
+            try {
+              await supabase.from("automation_alerts").insert({
+                alert_type: "data_error",
+                severity: "error",
+                title: "Client approval not created in fill-scheduled-content",
+                message: `${approvalErr.message}. Draft ${draftRecord.id} moved to admin review.`,
+                source: "fill-scheduled-content",
+                metadata: { slot_id: slot.id, client_id: slot.client_account_id, generated_content_id: draftRecord.id },
+              });
+            } catch { /* best-effort */ }
           }
 
           try {

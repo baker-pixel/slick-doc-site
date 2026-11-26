@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/core/http.ts";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 const SYSTEM_PROMPT = `You are the Orange Door AI Assistant - a friendly, knowledgeable digital marketing expert for small businesses in East Tennessee.
 Never use em dashes or en dashes in your replies; use commas, periods, or a plain hyphen instead.
@@ -48,6 +49,27 @@ serve(async (req) => {
       });
     }
 
+    // The caller supplies the whole history. The admin AI Copilot legitimately sends
+    // its own role:"system" persona and long prompts, so a signed-in admin keeps the
+    // original pass-through. Anonymous callers (the public chat widget) only get
+    // user/assistant text turns, capped in size and count, so nobody can inject a
+    // system message or run up an unbounded model bill.
+    const MAX_TURNS = 20;
+    const MAX_CHARS = 2000;
+    const isAdmin = (await checkAdminAuth(req, _sb, null)).authorized;
+    const safeMessages = isAdmin
+      ? messages
+      : messages
+        .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+        .slice(-MAX_TURNS)
+        .map((m: any) => ({ role: m.role, content: m.content.slice(0, MAX_CHARS) }));
+    if (safeMessages.length === 0) {
+      return new Response(JSON.stringify({ error: "At least one user message is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
@@ -63,7 +85,7 @@ serve(async (req) => {
         model: "openai/gpt-oss-20b",
         reasoning_effort: "low",
         max_tokens: 1024,
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...safeMessages],
         stream: true,
       }),
     });

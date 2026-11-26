@@ -150,6 +150,7 @@ serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${openaiKey}` },
       body: uploadForm,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!fileRes.ok) {
@@ -170,6 +171,7 @@ serve(async (req) => {
         completion_window: "24h",
         metadata: { source: "generate-social-images-batch", item_count: String(includedSlotIds.length) },
       }),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!batchRes.ok) {
@@ -186,14 +188,32 @@ serve(async (req) => {
       input_file_id: inputFileId,
       item_count: includedSlotIds.length,
     });
-    if (jobInsertErr) console.error("Failed to record image_batch_jobs row:", jobInsertErr.message);
+    if (jobInsertErr) {
+      // The paid OpenAI batch exists but nothing tracks it: check-image-batches polls
+      // image_batch_jobs rows, and the slots would be un-stamped and submitted AGAIN next
+      // run (double spend, orphaned results). Cancel the batch to stop the spend and fail
+      // loudly; the slots stay un-stamped so the next run starts clean.
+      let cancelNote = "cancelled";
+      try {
+        const cancelRes = await fetch(`${OPENAI_API}/batches/${batch.id}/cancel`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}` },
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!cancelRes.ok) cancelNote = `cancel FAILED (${cancelRes.status}), cancel it by hand`;
+      } catch (e) {
+        cancelNote = `cancel FAILED (${e instanceof Error ? e.message : String(e)}), cancel it by hand`;
+      }
+      throw new Error(`Could not record image batch ${batch.id} (${jobInsertErr.message}); OpenAI batch ${cancelNote}. Slots not stamped.`);
+    }
 
+    const stampFailures: string[] = [];
     for (const slot of slots) {
       if (!includedSlotIds.includes(slot.id)) continue;
       // image_batch_status intentionally left unset here -- check-image-batches
       // treats "no status yet" and "any non-terminal status" the same way
       // (still pending), only "completed"/"failed" mean done.
-      await supabase
+      const { error: stampErr } = await supabase
         .from("content_calendar")
         .update({
           metadata: {
@@ -202,6 +222,22 @@ serve(async (req) => {
           },
         })
         .eq("id", slot.id);
+      if (stampErr) stampFailures.push(`${slot.id}: ${stampErr.message}`);
+    }
+    if (stampFailures.length > 0) {
+      // The batch is tracked and will land, but these slots are not marked as part of it, so
+      // the next run would pay to generate their images again.
+      console.error(`Image batch ${batch.id}: ${stampFailures.length} slot stamp(s) failed:`, stampFailures);
+      try {
+        await supabase.from("automation_alerts").insert({
+          alert_type: "data_error",
+          severity: "error",
+          title: "Image batch slots not stamped (risk of double spend)",
+          message: `Batch ${batch.id}: ${stampFailures.length} slot(s) could not be marked; they may be submitted again. ${stampFailures.slice(0, 3).join("; ")}`,
+          source: "generate-social-images-batch",
+          metadata: { batch_id: batch.id, failures: stampFailures.slice(0, 10) },
+        });
+      } catch { /* best-effort */ }
     }
 
     console.log(`Submitted image batch ${batch.id} with ${includedSlotIds.length} items`);

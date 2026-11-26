@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
 import { serviceClient } from "../_shared/core/supabase.ts";
+import { requirePipelineAuth } from "../_shared/core/auth.ts";
 import { logAlert, functionErrorAlert } from "../_shared/client/alerts.ts";
 
 // Worker for the agent_jobs durable queue (Phase 4). Replaces advance-workflow's
@@ -36,6 +37,8 @@ serve(async (req) => {
   if (preflight) return preflight;
 
   const supabase = serviceClient();
+  const denied = await requirePipelineAuth(req, supabase);
+  if (denied) return denied;
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminPassword = Deno.env.get("ADMIN_PASSWORD");

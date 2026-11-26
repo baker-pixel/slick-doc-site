@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { checkAdminAuth } from "../_shared/core/auth.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -230,7 +231,17 @@ const handler = async (req: Request): Promise<Response> => {
 
       const _sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { template, testEmail, testData, previewOnly }: TestEmailRequest = await req.json();
+    const reqBody = await req.json();
+    // Admin panel only (it sends the admin session JWT). This used to be public and
+    // mailed any address from the branded domain: an open relay for spam/phishing.
+    const auth = await checkAdminAuth(req, _sb, typeof reqBody?.password === "string" ? reqBody.password : null);
+    if (!auth.authorized) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { template, testEmail, testData, previewOnly }: TestEmailRequest = reqBody;
 
     console.log(`Test email request - template: ${template}, email: ${testEmail}, previewOnly: ${previewOnly}`);
 

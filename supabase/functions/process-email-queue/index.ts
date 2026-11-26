@@ -1,13 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { sendViaClientEmail } from "../_shared/client/clientEmailSend.ts";
 import { checkPipelineAuth } from "../_shared/core/auth.ts";
 import { decideProspectGate, repairPreferencesLinks } from "../_shared/outreach/outreachEmail.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
+import { deterministicUuid, queueSendKey, sendWithIdempotency } from "../_shared/outreach/idempotentSend.ts";
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -556,6 +556,8 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       attempted++;
+      // Id of the email_logs row written BEFORE the send (see "Record the attempt" below).
+      let sendLogId: string | null = null;
       try {
         // Atomically claim this email — prevents duplicate sends when two cron instances overlap.
         // claimed_at lets reapStaleClaims() recover the row if this run dies mid-send.
@@ -599,8 +601,11 @@ const handler = async (req: Request): Promise<Response> => {
 
         console.log(`Sending email to ${email.recipient_email}: ${email.subject}`);
 
-        // Generate a tracking ID for this email
-        const trackingId = crypto.randomUUID();
+        // Tracking id derived from the row and its attempt number, NOT random: after a crash
+        // the reaper re-queues the row and the retry must produce a byte-identical payload,
+        // otherwise Resend's idempotency key answers 409 instead of de-duplicating the send.
+        const attemptNo = Number((email.metadata as Record<string, unknown> | null)?.retry_count ?? 0) || 0;
+        const trackingId = await deterministicUuid(`email-queue:${email.id}:r${attemptNo}`);
 
         // Add tracking pixel, wrap links, and add unsubscribe footer
         const outreachClient = emailClientId ? clientById.get(emailClientId) : undefined;
@@ -624,6 +629,41 @@ const handler = async (req: Request): Promise<Response> => {
         let sentVia: string = "resend";
         let resendId: string | null = null;
 
+        // Record the attempt BEFORE sending (log-before-send). Previously the log row was
+        // written after the send, so a crash in between left no trace and the reaper re-sent.
+        // A retry of the same attempt reuses the row instead of adding a second one.
+        {
+          const { data: existingLog } = await supabase
+            .from("email_logs")
+            .select("id")
+            .eq("tracking_id", trackingId)
+            .eq("status", "sending")
+            .maybeSingle();
+          if (existingLog) {
+            sendLogId = existingLog.id;
+          } else {
+            const { data: logRow, error: logErr } = await supabase
+              .from("email_logs")
+              .insert({
+                recipient_email: email.recipient_email,
+                subject: email.subject,
+                status: "sending",
+                tracking_id: trackingId,
+                metadata: {
+                  ...(emailMeta ?? {}),
+                  queue_id: email.id,
+                  via: emailMeta?.client_id ? "smtp" : "resend",
+                  attempt: attemptNo,
+                },
+              })
+              .select("id")
+              .single();
+            // No record, no send: an unrecorded send is exactly the duplicate-email bug.
+            if (logErr || !logRow) throw new Error(`Could not record the send attempt, not sending: ${logErr?.message ?? "no row"}`);
+            sendLogId = logRow.id;
+          }
+        }
+
         const clientSendResult = emailMeta?.client_id
           ? await sendViaClientEmail(supabase, emailMeta.client_id as string, {
               to: email.recipient_email,
@@ -641,45 +681,48 @@ const handler = async (req: Request): Promise<Response> => {
         if (clientSendResult.sent) {
           sentVia = clientSendResult.provider!;
         } else {
-          const emailResponse = await resend.emails.send({
-            from: Deno.env.get("EMAIL_FROM") || "Orange Door Marketing <hello@orangedoormarketing.com>",
-            to: [email.recipient_email],
-            subject: email.subject,
-            html: trackedHtml,
-            // Outreach goes out from the shared sender when the client has no
-            // mailbox connected -- make sure a reply still reaches the client.
-            ...(outreachClient?.email ? { reply_to: outreachClient.email } : {}),
-            headers: {
-              "List-Unsubscribe": `<${oneClickUrl}>`,
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          // Idempotency-Key = row + retry count: a crash-retry (same key, same payload) is
+          // answered by Resend without a second email; a known failure moves to a new key.
+          // sendWithIdempotency throws on any non-2xx, so a rejected send is never "sent".
+          const sent = await sendWithIdempotency({
+            apiKey: resendApiKey,
+            key: queueSendKey(email.id, attemptNo),
+            payload: {
+              from: Deno.env.get("EMAIL_FROM") || "Orange Door Marketing <hello@orangedoormarketing.com>",
+              to: [email.recipient_email],
+              subject: email.subject,
+              html: trackedHtml,
+              // Outreach goes out from the shared sender when the client has no
+              // mailbox connected -- make sure a reply still reaches the client.
+              ...(outreachClient?.email ? { reply_to: outreachClient.email } : {}),
+              headers: {
+                "List-Unsubscribe": `<${oneClickUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              },
             },
           });
-          // resend@2 returns { data, error } instead of throwing. Ignoring
-          // `error` marked rejected sends (bad domain, rate limit, suppressed
-          // recipient...) as "sent" and advanced the drip for mail never sent.
-          if (emailResponse.error) {
-            throw new Error(`Resend rejected the send: ${emailResponse.error.message ?? JSON.stringify(emailResponse.error)}`);
-          }
-          resendId = emailResponse.data?.id ?? null;
-          console.log("Email sent via Resend:", emailResponse);
+          resendId = sent.id;
+          console.log("Email sent via Resend:", sent.id);
         }
 
-        // Update queue status
-        await supabase
+        // The email is out. Never throw from here: a throw would retry a sent email. A failed
+        // write is logged loudly and left for the reaper, which trusts a 'sent' log row.
+        const { error: logUpdErr } = await supabase
+          .from("email_logs")
+          .update({
+            status: "sent",
+            resend_id: resendId,
+            metadata: { ...(emailMeta ?? {}), queue_id: email.id, via: emailMeta?.client_id ? "smtp" : "resend", sent_via: sentVia, attempt: attemptNo },
+          })
+          .eq("id", sendLogId!);
+        if (logUpdErr) console.error(`email_logs update failed after a successful send (queue ${email.id}):`, logUpdErr.message);
+
+        const { error: queueUpdErr } = await supabase
           .from("email_queue")
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", email.id)
           .eq("status", "processing");
-
-        // Log the sent email with tracking_id
-        await supabase.from("email_logs").insert({
-          recipient_email: email.recipient_email,
-          subject: email.subject,
-          status: "sent",
-          resend_id: resendId,
-          tracking_id: trackingId,
-          metadata: { ...(email.metadata as Record<string, unknown> | null), sent_via: sentVia },
-        });
+        if (queueUpdErr) console.error(`email_queue update failed after a successful send (queue ${email.id}):`, queueUpdErr.message);
 
         // Prospect-outreach sequence steps carry prospect_id/drip_step in
         // metadata (set by run-prospect-drip at enrollment time) -- this is
@@ -720,6 +763,12 @@ const handler = async (req: Request): Promise<Response> => {
 
         const retryCount = ((email.metadata as any)?.retry_count || 0) + 1;
         const maxRetries = 3;
+        // The attempt did not send: drop its 'sending' row for a retry (retries never wrote
+        // log rows before), or turn it into the permanent 'failed' row below.
+        const willRetry = retryCount < maxRetries;
+        if (sendLogId && willRetry) {
+          await supabase.from("email_logs").delete().eq("id", sendLogId).eq("status", "sending");
+        }
 
         if (retryCount < maxRetries) {
           const backoffMinutes = 5 * Math.pow(3, retryCount - 1);
@@ -737,12 +786,17 @@ const handler = async (req: Request): Promise<Response> => {
             error_message: `All ${maxRetries} attempts failed. Last error: ${emailError.message}`,
             metadata: { ...email.metadata, retry_count: retryCount },
           }).eq("id", email.id).eq("status", "processing");
-          await supabase.from("email_logs").insert({
-            recipient_email: email.recipient_email,
-            subject: email.subject,
-            status: "failed",
-            metadata: { ...email.metadata, error: emailError.message, retry_count: retryCount },
-          });
+          const failedMeta = { ...email.metadata, error: emailError.message, retry_count: retryCount };
+          if (sendLogId) {
+            await supabase.from("email_logs").update({ status: "failed", metadata: failedMeta }).eq("id", sendLogId);
+          } else {
+            await supabase.from("email_logs").insert({
+              recipient_email: email.recipient_email,
+              subject: email.subject,
+              status: "failed",
+              metadata: failedMeta,
+            });
+          }
           await supabase.from("automation_alerts").insert({
             alert_type: "email_failure",
             severity: "error",
@@ -804,7 +858,44 @@ async function reapStaleClaims(): Promise<void> {
       return;
     }
     for (const row of stale ?? []) {
-      const { data: log } = await supabase
+      // Authoritative record: the log row the sender wrote BEFORE sending (metadata.queue_id).
+      // 'sent'    -> the send finished, only the queue write was lost: close it out.
+      // 'sending' -> died mid-send. Resend path: safe to re-queue, the Idempotency-Key makes a
+      //              second attempt a no-op if the first went out. Client SMTP path: no such
+      //              guarantee, so NEVER re-send; fail loudly for a human to check the mailbox.
+      const { data: attempt } = await supabase
+        .from("email_logs")
+        .select("id, status, sent_at, metadata")
+        .eq("metadata->>queue_id", row.id)
+        // The Resend webhook later flips a sent row to delivered/bounced: all mean "it went out".
+        .in("status", ["sent", "delivered", "bounced", "sending"])
+        .order("sent_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (attempt && attempt.status !== "sending") {
+        await supabase.from("email_queue").update({ status: "sent", sent_at: attempt.sent_at })
+          .eq("id", row.id).eq("status", "processing");
+        continue;
+      }
+      if (attempt?.status === "sending" && (row.metadata as Record<string, unknown> | null)?.client_id) {
+        await supabase.from("email_queue").update({
+          status: "failed",
+          error_message: "Send interrupted mid-flight via the client's own mailbox; it may or may not have been delivered. Not re-sent to avoid a duplicate -- check the mailbox.",
+        }).eq("id", row.id).eq("status", "processing");
+        await supabase.from("email_logs").update({ status: "failed" }).eq("id", attempt.id).eq("status", "sending");
+        await supabase.from("automation_alerts").insert({
+          alert_type: "email_failure",
+          severity: "high",
+          title: "Outreach send interrupted, delivery unknown",
+          message: `Email to ${row.recipient_email} ("${row.subject}") was interrupted mid-send through the client mailbox. It was NOT re-sent. Check the sent folder before retrying.`,
+          source: "process-email-queue",
+          source_id: row.id,
+        });
+        continue;
+      }
+      // Rows enqueued/claimed before the log-before-send deploy have no queue_id log:
+      // keep the old recipient+subject heuristic for them.
+      const { data: log } = attempt ? { data: null } : await supabase
         .from("email_logs")
         .select("id, created_at")
         .eq("recipient_email", row.recipient_email)

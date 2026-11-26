@@ -40,3 +40,38 @@ export function groupAlerts<T extends DigestAlert>(alerts: T[]): DigestGroup<T>[
   }
   return [...groups.values()];
 }
+
+/**
+ * Severities that reach the digest email. `warning` and `info` stay in the
+ * admin panel only. `high` and `critical` MUST be here: stripe-webhook writes
+ * a duplicate-payment alert as `critical`, and check-stalled-workflows writes
+ * every stuck-work alert as `high`; an error-only filter never emailed them.
+ */
+export const DIGEST_SEVERITIES = ["error", "high", "critical"] as const;
+
+export function severityColor(severity: string): string {
+  return severity === "critical" || severity === "error" ? "#DC2626" : "#D97706";
+}
+
+/** A pg_cron job that has not started within twice its expected gap. */
+export interface StaleCronJob {
+  jobname: string;
+  schedule: string;
+  /** ISO timestamp of the newest run, or null when the job never ran. */
+  last_run: string | null;
+  /** Postgres interval text, e.g. "01:00:00" or "1 day". */
+  expected_gap: string;
+}
+
+export const STALE_CRON_SOURCE = "cron-staleness";
+
+/** The alert raised for one stale job. Title is the dedupe key. */
+export function staleJobAlert(job: StaleCronJob): { title: string; message: string } {
+  const last = job.last_run ? new Date(job.last_run).toUTCString() : "never (since run history began)";
+  return {
+    title: `Cron job "${job.jobname}" has stopped running`,
+    message:
+      `Schedule "${job.schedule}" should start about every ${job.expected_gap}; last start: ${last}. ` +
+      `Check cron.job (active flag) and cron.job_run_details.`,
+  };
+}

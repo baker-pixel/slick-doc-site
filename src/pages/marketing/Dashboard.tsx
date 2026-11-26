@@ -106,11 +106,9 @@ const Dashboard = () => {
       }
 
       try {
-        const { data: submission, error: fetchError } = await supabase
-          .from("gap_analysis_submissions")
-          .select("*")
-          .eq("resume_token", token)
-          .single();
+        // Token-checked RPC: anonymous visitors cannot read the table directly any more.
+        const { data: rpcRow, error: fetchError } = await supabase.rpc("get_gap_submission_by_token", { p_token: token });
+        const submission = rpcRow as unknown as SubmissionData | null;
 
         if (fetchError || !submission) {
           setError("We couldn't find that report");

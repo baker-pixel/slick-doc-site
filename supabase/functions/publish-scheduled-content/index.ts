@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { checkPipelineAuth } from "../_shared/core/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { contentSendKey, isRetryableSendError, sendWithIdempotency } from "../_shared/outreach/idempotentSend.ts";
 import { logActivity } from "../_shared/core/activityLog.ts";
 import { refreshSocialPlanProgress } from "../_shared/social/socialStrategy.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
@@ -19,13 +19,6 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// Resend error `name` values that mean "try again later" rather than "this
-// will never work" (bad address, missing field, invalid key, etc).
-const RETRYABLE_RESEND_ERRORS = new Set(["rate_limit_exceeded", "internal_server_error", "application_error", "concurrent_idempotent_requests"]);
-function isRetryableResendError(name: string | undefined): boolean {
-  return !!name && RETRYABLE_RESEND_ERRORS.has(name);
-}
 
 // Best-effort bookkeeping after a successful direct publish: activity trail
 // for reporting + keep the Social Media Plan progress current.
@@ -130,7 +123,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
     // ── Self-heal: client-approved posts whose calendar slot went missing ──
     // Runs first so a re-attached post that is already due publishes this run.
@@ -254,28 +246,56 @@ serve(async (req) => {
             const metadata = item.metadata as { recipients?: string[]; subject?: string } | null;
             const recipients = metadata?.recipients || [];
 
-            if (recipients.length > 0 && resend) {
-              const emailRes = await resend.emails.send({
-                from: "Orange Door Marketing <hello@orangedoormarketing.com>",
-                to: recipients,
-                subject: metadata?.subject || item.title,
-                html: item.content,
-              });
-              if (emailRes.error) {
-                const msg = emailRes.error.message;
+            if (recipients.length > 0 && resendApiKey) {
+              // Idempotency-Key = item + publish attempt. The 15-minute stuck-claim reset above
+              // can put an already-sent email back to "scheduled"; the same key + same payload
+              // makes Resend answer with the original send instead of mailing everyone twice.
+              // The attempt number only moves on a known retryable failure (markFailed).
+              const attempt = Number((item.metadata as Record<string, unknown> | null)?.publish_attempts) || 0;
+              let sendError: unknown = null;
+              try {
+                await sendWithIdempotency({
+                  apiKey: resendApiKey,
+                  key: contentSendKey(item.id, attempt),
+                  payload: {
+                    from: "Orange Door Marketing <hello@orangedoormarketing.com>",
+                    to: recipients,
+                    subject: metadata?.subject || item.title,
+                    html: item.content,
+                  },
+                });
+              } catch (e) {
+                sendError = e;
+              }
+              if (sendError) {
+                const msg = sendError instanceof Error ? sendError.message : String(sendError);
                 console.error("Resend error:", msg);
-                await markFailed(supabase, item, msg, isRetryableResendError(emailRes.error.name));
+                await markFailed(supabase, item, msg, isRetryableSendError(sendError));
                 results.push({ id: item.id, platform: "email", success: false, error: msg });
               } else {
-                await supabase.from("content_calendar")
+                // The email is out. A failed bookkeeping write must be loud, not silent: the
+                // row would sit in "processing" until the reset (a same-key resend is a no-op).
+                const { error: pubErr } = await supabase.from("content_calendar")
                   .update({ status: "published", published_at: new Date().toISOString() })
                   .eq("id", item.id);
+                if (pubErr) {
+                  console.error(`Email ${item.id} was sent but marking it published failed:`, pubErr.message);
+                  await logAlert(supabase, {
+                    source: "publish-scheduled-content",
+                    alertType: "content_publish_failure",
+                    severity: "high",
+                    title: "Email sent but not marked published",
+                    message: pubErr.message,
+                    sourceId: item.id,
+                    metadata: { platform: "email", title: item.title, client_account_id: item.client_account_id },
+                  });
+                }
                 await recordPublish(supabase, item);
                 results.push({ id: item.id, platform: "email", success: true });
               }
             } else {
               // Config/data problem, not transient -- retrying won't help.
-              const msg = !resend ? "RESEND_API_KEY not configured" : "No recipients on this email item";
+              const msg = !resendApiKey ? "RESEND_API_KEY not configured" : "No recipients on this email item";
               await markFailed(supabase, item, msg);
               results.push({ id: item.id, platform: "email", success: false, error: msg });
             }

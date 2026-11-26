@@ -43,6 +43,11 @@ jobs:
         working-directory: supabase/functions
         run: deno check $(find _shared -name "*.ts" | sort)
 
+
+      - name: Unit tests (blocking)
+        working-directory: supabase/functions
+        run: deno test --allow-read --allow-env --allow-run=php _shared
+
       # The legacy functions carry pre-existing type debt (untyped `any`
       # clients, `.catch()` on query builders). Full check is informational
       # until that debt is cleared — do NOT let new errors hide in here;

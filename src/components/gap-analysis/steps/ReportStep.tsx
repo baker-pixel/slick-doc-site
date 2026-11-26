@@ -108,11 +108,8 @@ export function ReportStep({ formData, submissionId, resumeToken }: ReportStepPr
         }
 
         try {
-          const { data: row } = await supabase
-            .from("gap_analysis_submissions")
-            .select("ai_analysis")
-            .eq("id", submissionId)
-            .single();
+          const { data: rpcRow } = await supabase.rpc("get_gap_report_by_id", { p_id: submissionId });
+          const row = rpcRow as unknown as { ai_analysis?: unknown } | null;
 
           if (row?.ai_analysis) {
             setAiAnalysis(row.ai_analysis as unknown as AIAnalysis);

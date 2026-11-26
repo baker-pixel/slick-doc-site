@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requirePipelineAuth } from "../_shared/core/auth.ts";
 import { refineClientContext } from "../_shared/client/contextRefine.ts";
 import { refreshSocialPlanProgress, upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
 import { tierPolicy } from "../_shared/billing/tierPolicy.ts";
@@ -29,6 +30,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const denied = await requirePipelineAuth(req, supabase, corsHeaders);
+  if (denied) return denied;
   const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {

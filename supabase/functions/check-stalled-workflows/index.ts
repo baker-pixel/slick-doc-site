@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, handleOptions, jsonResponse, errorResponse } from "../_shared/core/http.ts";
 import { serviceClient } from "../_shared/core/supabase.ts";
+import { requirePipelineAuth } from "../_shared/core/auth.ts";
 import { logAlert, functionErrorAlert } from "../_shared/client/alerts.ts";
 import { unlockReadySteps } from "../_shared/client/workflowUnlock.ts";
 import { completeSocialStepIfConnected } from "../_shared/social/socialStep.ts";
@@ -17,6 +18,8 @@ serve(async (req) => {
   if (preflight) return preflight;
 
   const supabase = serviceClient();
+  const denied = await requirePipelineAuth(req, supabase, corsHeaders);
+  if (denied) return denied;
 
   try {
     const now = new Date();
