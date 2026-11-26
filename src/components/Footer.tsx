@@ -84,8 +84,9 @@ export function Footer() {
             © {new Date().getFullYear()} Orange Door Marketing. All rights
             reserved.
           </p>
-          <p className="text-cream/50 text-sm">
-            Proudly serving East Tennessee SMBs
+          <p className="text-cream/50 text-sm flex gap-4">
+            <a href="/privacy-policy" className="hover:text-cream">Privacy Policy</a>
+            <a href="/terms-of-service" className="hover:text-cream">Terms of Service</a>
           </p>
         </div>
       </div>

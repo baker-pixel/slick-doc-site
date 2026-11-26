@@ -249,6 +249,10 @@ verify_jwt = false
 [functions.track-pageview]
 verify_jwt = false
 
+# Google redirects the browser here (no Supabase JWT). Authenticated by an HMAC-signed state.
+[functions.google-oauth-callback]
+verify_jwt = false
+
 [functions.site-agent]
 verify_jwt = false
 

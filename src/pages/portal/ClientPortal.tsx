@@ -120,7 +120,9 @@ export default function ClientPortal({ viewAsClientId }: { viewAsClientId?: stri
   // Stripe sends people back to /portal?tab=invoices&checkout=success|cancelled.
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<PortalTab>(
-    searchParams.get("tab") === "invoices" ? "invoices" : preferences.default_landing_page || "activity",
+    searchParams.get("tab") === "invoices" ? "invoices"
+      : searchParams.get("tab") === "analytics" ? "analytics"
+      : preferences.default_landing_page || "activity",
   );
   // When navigating to social from the onboarding activity tab, open to Connected Accounts
   const [socialInitialTab, setSocialInitialTab] = useState<"composer" | "accounts">("accounts");
@@ -198,7 +200,7 @@ export default function ClientPortal({ viewAsClientId }: { viewAsClientId?: stri
   // Update active tab when preferences load
   useEffect(() => {
     // A Stripe return (?tab=invoices) wins over the saved landing page.
-    if (!preferencesLoading && preferences.default_landing_page && searchParams.get("tab") !== "invoices") {
+    if (!preferencesLoading && preferences.default_landing_page && !["invoices", "analytics"].includes(searchParams.get("tab") ?? "")) {
       setActiveTab(preferences.default_landing_page);
     }
   }, [preferences.default_landing_page, preferencesLoading]);

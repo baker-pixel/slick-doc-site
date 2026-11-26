@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
 const PrivacyPolicy = () => {
-  const lastUpdated = "April 28, 2026";
+  const lastUpdated = "November 25, 2026";
 
   useEffect(() => {
     document.title = "Privacy Policy | Orange Door Marketing";
@@ -46,7 +46,7 @@ const PrivacyPolicy = () => {
                 orangedoormarketing.com
               </a>
               , our client portal, and any services that integrate with
-              third-party platforms such as LinkedIn, Facebook, Instagram, and
+              third-party platforms such as Google, LinkedIn, Facebook, Instagram, and
               X (Twitter).
             </p>
           </section>
@@ -88,7 +88,7 @@ const PrivacyPolicy = () => {
               </li>
               <li>
                 <strong>Information from third-party platforms:</strong> when
-                you connect a social account (LinkedIn, Facebook, Instagram,
+                you connect a social account (Google, LinkedIn, Facebook, Instagram,
                 X), we receive only the data you authorize during the
                 permission ("OAuth") flow.
               </li>
@@ -156,6 +156,44 @@ const PrivacyPolicy = () => {
                 LinkedIn API Terms of Use
               </a>
               .
+            </p>
+          </section>
+
+          <section>
+            <h2 className="font-serif text-2xl text-foreground">
+              Google user data
+            </h2>
+            <p>
+              If you connect Google Analytics, we ask for one permission:{" "}
+              <code>https://www.googleapis.com/auth/analytics.readonly</code> (view your Google
+              Analytics data), plus your Google email address to show which account is connected.
+              We use it only to read website traffic reports (sessions, users, page views, top
+              pages and traffic sources) for the property you choose, and to display them in your
+              Orange Door client portal. We cannot change anything in your Google Analytics account.
+              We do not sell Google user data, use
+              it for advertising, or use it to train generalized AI models, and humans do not read it
+              except with your consent, for security, or to comply with law. Tokens are stored
+              encrypted and used only server-side. You can revoke access at any time in the client
+              portal or at{" "}
+              <a
+                href="https://myaccount.google.com/permissions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                myaccount.google.com/permissions
+              </a>
+              ; we delete stored tokens within 30 days. Orange Door's use and transfer of
+              information received from Google APIs to any other app adheres to the{" "}
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                Google API Services User Data Policy
+              </a>
+              , including the Limited Use requirements.
             </p>
           </section>
 

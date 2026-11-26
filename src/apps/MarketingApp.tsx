@@ -31,6 +31,7 @@ const Dashboard = lazy(() => import("@/pages/marketing/Dashboard"));
 const LegacyReportRedirect = lazy(() => import("@/pages/marketing/LegacyReportRedirect"));
 const EmailPreferences = lazy(() => import("@/pages/marketing/EmailPreferences"));
 const PrivacyPolicy = lazy(() => import("@/pages/marketing/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("@/pages/marketing/TermsOfService"));
 
 function PageLoader() {
   return (
@@ -69,6 +70,8 @@ function AnimatedRoutes() {
           <Route path="/dashboard/:token" element={<PageTransition><Dashboard /></PageTransition>} />
           <Route path="/email-preferences" element={<PageTransition><EmailPreferences /></PageTransition>} />
           <Route path="/privacy-policy" element={<PageTransition><PrivacyPolicy /></PageTransition>} />
+          <Route path="/terms" element={<PageTransition><TermsOfService /></PageTransition>} />
+          <Route path="/terms-of-service" element={<PageTransition><TermsOfService /></PageTransition>} />
           <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
         </Routes>
       </AnimatePresence>

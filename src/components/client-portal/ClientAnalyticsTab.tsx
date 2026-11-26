@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import { PageHeader, StatCard, ModernCard, EmptyState } from "./PortalUI";
 import LiveAnalyticsSection from "./LiveAnalyticsSection";
+import GoogleAnalyticsCard from "./GoogleAnalyticsCard";
 import { PostPerformanceCard } from "./social/PostPerformanceCard";
 import type { PortalTab } from "./ClientPortalSidebar";
 
@@ -243,6 +244,7 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName, onOp
     return (
       <div className="space-y-6">
         <LiveAnalyticsSection clientAccountId={clientAccountId} onOpenTab={onOpenTab} />
+        <GoogleAnalyticsCard clientAccountId={clientAccountId} />
         <PostPerformanceCard clientAccountId={clientAccountId} />
         <EmptyState icon={BarChart3} title="No Analytics Yet" description="Performance data will appear here as campaigns run." />
       </div>
@@ -282,6 +284,7 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName, onOp
 
       {/* Live: computed on demand. The cards below are the weekly snapshot. */}
       <LiveAnalyticsSection clientAccountId={clientAccountId} onOpenTab={onOpenTab} />
+      <GoogleAnalyticsCard clientAccountId={clientAccountId} />
 
       {/* Social post impressions and engagement, per post (from post_metrics) */}
       <PostPerformanceCard clientAccountId={clientAccountId} />
