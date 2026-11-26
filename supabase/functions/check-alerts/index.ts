@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { groupAlerts } from "../_shared/client/alertDigest.ts";
+import {
+  DIGEST_SEVERITIES,
+  groupAlerts,
+  severityColor,
+  STALE_CRON_SOURCE,
+  staleJobAlert,
+  type StaleCronJob,
+} from "../_shared/client/alertDigest.ts";
+import { checkPipelineAuth } from "../_shared/core/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,16 +27,30 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Cron (x-internal-secret), other functions (service key) or an admin only.
+  // The pipeline cron migration must send the secret before this guard is deployed.
+  if (!(await checkPipelineAuth(req, supabase))) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
-    // Fetch unacknowledged error/warning alerts from the last 2 hours
+    // 1. Turn stopped cron jobs into alerts first, so they ride the same
+    //    acknowledge-and-repeat path as every other alert below.
+    await raiseStaleCronAlerts(supabase);
+
+    // 2. Fetch unacknowledged error/high/critical alerts from the last 2 hours
     const windowStart = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
-    // Only alert on hard errors — batch_complete/info warnings are noise
+    // warning/info/batch_complete stay in the admin panel; high and critical
+    // must email (duplicate payments are critical, stuck workflows are high).
     const { data: alerts, error } = await supabase
       .from("automation_alerts")
       .select("id, alert_type, severity, title, message, source, source_id, created_at, metadata")
       .is("acknowledged_at", null)
-      .eq("severity", "error")
+      .in("severity", [...DIGEST_SEVERITIES])
       .gte("created_at", windowStart)
       .order("created_at", { ascending: false });
 
@@ -59,7 +81,6 @@ serve(async (req) => {
     // Collapse identical alerts so one failing post isn't N rows / "N errors".
     const groups = groupAlerts(alerts);
     const errorCount   = groups.length;
-    const warningCount = 0;
 
     // deno-lint-ignore no-explicit-any
     const detailsHtml = (a: any): string => {
@@ -78,7 +99,7 @@ serve(async (req) => {
 
     const rows = groups.map(({ alert: a, count }) => `
       <tr style="border-bottom:1px solid #E4E2DC;">
-        <td style="padding:10px 12px;font-family:monospace;font-size:12px;color:${a.severity === "error" ? "#DC2626" : "#D97706"};">
+        <td style="padding:10px 12px;font-family:monospace;font-size:12px;color:${severityColor(a.severity)};">
           ${a.severity.toUpperCase()}
         </td>
         <td style="padding:10px 12px;font-size:13px;font-weight:600;">${escapeHtml(a.title)}${count > 1 ? ` <span style="font-weight:400;color:#6B6B6F;">×${count}</span>` : ""}</td>
@@ -106,8 +127,7 @@ serve(async (req) => {
 
     <div style="padding:24px 28px;">
       <p style="margin:0 0 6px;font-size:22px;font-weight:700;color:#18181A;">
-        ${errorCount > 0 ? `⚠️ ${errorCount} error${errorCount !== 1 ? "s" : ""}` : ""}
-        ${warningCount > 0 ? `${errorCount > 0 ? " · " : ""}${warningCount} warning${warningCount !== 1 ? "s" : ""}` : ""}
+        ${errorCount > 0 ? `⚠️ ${errorCount} alert${errorCount !== 1 ? "s" : ""}` : ""}
         <span style="font-weight:400;color:#6B6B6F;font-size:16px;"> in the last 2 hours</span>
       </p>
       <p style="margin:0 0 24px;color:#6B6B6F;font-size:13px;">
@@ -157,7 +177,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from:    FROM_EMAIL,
         to:      [ADMIN_EMAIL],
-        subject: `[Orange Door] ${errorCount > 0 ? `${errorCount} error${errorCount !== 1 ? "s" : ""}` : `${warningCount} warning${warningCount !== 1 ? "s" : ""}`} — action required`,
+        subject: `[Orange Door] ${errorCount} alert${errorCount !== 1 ? "s" : ""} — action required`,
         html,
       }),
     });
@@ -175,10 +195,10 @@ serve(async (req) => {
     // out, whether or not anyone read it or fixed anything, so unresolved
     // errors could vanish from the radar after exactly one notification.
 
-    console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} distinct, ${warningCount} warnings)`);
+    console.log(`check-alerts: sent digest for ${alerts.length} alerts (${errorCount} distinct)`);
 
     return new Response(
-      JSON.stringify({ sent: true, count: alerts.length, errorCount, warningCount }),
+      JSON.stringify({ sent: true, count: alerts.length, errorCount }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
@@ -190,6 +210,44 @@ serve(async (req) => {
     });
   }
 });
+
+/**
+ * Asks the database which pg_cron jobs have not started within twice their
+ * expected gap (public.stale_cron_jobs) and writes one `high` alert per job,
+ * at most once per 24h per job (title is the dedupe key, acknowledged or not).
+ * A failed lookup or insert throws: a monitor that fails silently is the bug
+ * this exists to fix.
+ */
+// deno-lint-ignore no-explicit-any
+async function raiseStaleCronAlerts(supabase: any): Promise<void> {
+  const { data: stale, error } = await supabase.rpc("stale_cron_jobs");
+  if (error) throw new Error(`stale_cron_jobs failed: ${error.message}`);
+  const jobs = (stale ?? []) as StaleCronJob[];
+  if (jobs.length === 0) return;
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recent, error: recentErr } = await supabase
+    .from("automation_alerts")
+    .select("title")
+    .eq("source", STALE_CRON_SOURCE)
+    .gte("created_at", since);
+  if (recentErr) throw new Error(`stale alert dedupe lookup failed: ${recentErr.message}`);
+  const seen = new Set((recent ?? []).map((r: { title: string }) => r.title));
+
+  for (const job of jobs) {
+    const { title, message } = staleJobAlert(job);
+    if (seen.has(title)) continue;
+    const { error: insErr } = await supabase.from("automation_alerts").insert({
+      alert_type: "cron_stale",
+      severity: "high",
+      title,
+      message,
+      source: STALE_CRON_SOURCE,
+      metadata: { jobname: job.jobname, schedule: job.schedule, last_run: job.last_run },
+    });
+    if (insErr) throw new Error(`stale alert insert failed: ${insErr.message}`);
+  }
+}
 
 function escapeHtml(s: string): string {
   return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
