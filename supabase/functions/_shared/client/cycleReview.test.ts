@@ -1,7 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   type Bet, type CycleMetricsData, type Window,
-  enoughFor, reviewLines, reviewMode, runCycleReview, sampleOk, validateReview,
+  enoughFor, perDay, reviewLines, reviewMode, runCycleReview, sampleOk, validateReview,
 } from "./cycleReview.ts";
 
 const win = (days: number, o: Partial<{ posts: number; views: number; leads: number; opens: number; seo: number | null }> = {}): Window => ({
@@ -118,4 +118,12 @@ Deno.test("runCycleReview: off means no model call; on judges the closed cycle's
   assertEquals(r?.lines, ["Keep doing: change b1", "Try this cycle (social): try x", "l"]);
 
   assertEquals(await runCycleReview(db({ settings, closed: null, metrics }), "c1", { period_end: "2026-12-01" }, { callModel }), null); // nothing closed yet
+});
+
+Deno.test("perDay: totals from unequal cycles become comparable rates", () => {
+  const short = perDay(win(8, { posts: 4, opens: 4, seo: 75 }));
+  const long = perDay(win(30, { posts: 15, opens: 12, seo: 83 }));
+  assertEquals([short.posts, short.opens, short.seo_score], [0.5, 0.5, 75]);
+  assertEquals([long.posts, long.opens, long.seo_score], [0.5, 0.4, 83]);
+  assertEquals(perDay(win(8, {})).seo_score, null);
 });

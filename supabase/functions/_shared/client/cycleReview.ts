@@ -68,6 +68,17 @@ export function sampleOk(d: CycleMetricsData, m: Metric): boolean {
   return d.current.window.days >= MIN_DAYS && p.window.days >= MIN_DAYS && cur + prev >= MIN_EVENTS;
 }
 
+/** Each metric per day of its window, so the model compares rates instead of totals from unequal cycles. */
+export function perDay(w: Window): Record<string, number | null> {
+  const days = Math.max(w.window.days, 1);
+  const out: Record<string, number | null> = {};
+  for (const m of METRICS) {
+    const v = metricValue(w, m);
+    out[m] = v === null ? null : m === "seo_score" ? v : Math.round((v / days) * 100) / 100;
+  }
+  return out;
+}
+
 const clip = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const asList = (v: unknown, max: number, n: number) =>
   (Array.isArray(v) ? v : []).map((x) => clip(x, n)).filter(Boolean).slice(0, max);
@@ -129,11 +140,12 @@ export const REVIEW_SYSTEM = `You review one marketing client's last billing cyc
 You get that cycle's numbers next to the cycle before it, the bets made last time, and the client's goals.
 
 Rules:
-- Use only the numbers given. Never invent a figure, cause or result.
+- Use only the numbers given, quoted exactly. Never invent a figure, cause or result, and never compute a percentage or rate yourself.
+- Check the direction of every comparison before writing it: a number that went from 113 to 160 rose. Say "rose", "fell" or "flat" only after comparing the two values.
 - Samples are usually small and cycles differ in length. If the data cannot show a difference, say so: verdict "inconclusive", and say what is missing. Do not guess a winner.
 - Judge each previous bet against its own metric: "worked", "failed" or "inconclusive".
 - Every group carries its count (posts, measured). A platform, pillar or post with fewer than ${MIN_EVENTS} posts is an anecdote: never call it best or worst, never say it "performs" or "should be prioritized". With one post, say nothing about it.
-- A shorter or longer cycle explains a lot. Compare per day before calling anything a drop or a rise, and never blame a change in posting frequency for a number caused by cycle length.
+- Cycles differ in length. Compare the "per_day" figures, never the raw totals, when you say something rose or fell (seo_score is a score, not per day). A total that is lower only because the cycle was shorter is not a drop.
 - Propose at most ${MAX_BETS} new bets, each on a DIFFERENT metric, each with "evidence": the exact figure it rests on. If no figure supports a change, propose no bet. Change little, so the result can be attributed. A bet changes ONE thing the planners control: a content topic or pillar, platform mix or posting cadence (scope "social"), or a lead-research angle (scope "prospect").
 - Never propose publishing, sending, brand or offer changes, or spending.
 - "metric" must be one of: ${METRICS.join(", ")}.
@@ -145,7 +157,7 @@ export interface ReviewDeps {
   now?: () => Date;
 }
 const defaultModel: ReviewDeps["callModel"] = (system, prompt, clientId) =>
-  callAIJson({ system, prompt, model: MODELS.default, maxTokens: 1500, temperature: 0.2, source: "cycle-review", clientId, promptId: "cycle-review.v1" });
+  callAIJson({ system, prompt, model: MODELS.creative, maxTokens: 1500, temperature: 0.2, source: "cycle-review", clientId, promptId: "cycle-review.v1" });
 
 export async function reviewMode(supabase: any, clientId: string): Promise<ReviewMode> {
   const { data } = await supabase.from("admin_settings").select("key, value").in("key", ["cycle_review", "cycle_review_clients"]);
@@ -184,7 +196,8 @@ export async function runCycleReview(
   const { data: goals } = await supabase.from("client_goals")
     .select("engine, objective, metric, baseline_value, target_value, due_date").eq("client_account_id", clientId).eq("status", "active");
 
-  const prompt = JSON.stringify({ cycle_metrics: data, previous_bets: prior, goals: goals ?? [] });
+  const rates = { current: perDay(data.current), previous: data.previous ? perDay(data.previous.metrics) : null };
+  const prompt = JSON.stringify({ cycle_metrics: data, per_day: rates, previous_bets: prior, goals: goals ?? [] });
   const raw = await deps.callModel(REVIEW_SYSTEM, prompt, clientId);
   const review = validateReview(raw, prior, data, mode, deps.now?.());
   review.lines = reviewLines(review, prior, data);
