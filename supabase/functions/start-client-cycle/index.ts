@@ -422,6 +422,26 @@ async function sweep(supabase: Supabase): Promise<Record<string, unknown>> {
   return { due: due.length, processed: results.length, results, replans };
 }
 
+async function previewPlanners(supabase: Supabase, clientId: string, lines: string[]) {
+  const { data: client } = await supabase.from("client_accounts")
+    .select("id, business_name, industry, tier, status, context_profile, icp, current_period_end, onboarded_at, created_at")
+    .eq("id", clientId).maybeSingle();
+  if (!client) return { error: "client not found" };
+  const policy = tierPolicy(client.tier);
+  const { data: rows } = await supabase.from("content_calendar").select("title, metadata")
+    .eq("client_account_id", clientId).not("content", "like", "[Auto-generated placeholder%")
+    .order("scheduled_for", { ascending: false }).limit(80);
+  const recentTopics = collectRecentTopics(rows ?? [], 30);
+  const pillars = async (learned: string[]) =>
+    (await upsertSocialStrategy(supabase, client, policy, { learned, recentTopics }, { dryRun: true })).pillars.map((p) => p.name);
+  const icp = await ensureClientICP(supabase, client);
+  const previous = await previousDiscoveryFocuses(supabase, clientId);
+  const focus = async (learned: string[]) => (icp ? await nextDiscoveryFocus(clientId, icp, previous, learned) : null);
+  const [b1, b2, w] = await Promise.all([pillars([]), pillars([]), pillars(lines)]);
+  const [f1, f2, fw] = await Promise.all([focus([]), focus([]), focus(lines)]);
+  return { lines, pillars: { baseline_a: b1, baseline_b: b2, with_lines: w }, focus: { baseline_a: f1, baseline_b: f2, with_lines: fw } };
+}
+
 serve(async (req) => {
   const pre = handleOptions(req);
   if (pre) return pre;
@@ -432,6 +452,12 @@ serve(async (req) => {
     if (!(await checkPipelineAuth(req, supabase, body.password))) return errorResponse("Unauthorized", 401);
 
     if (!body.client_id) return jsonResponse(await sweep(supabase));
+
+    // Does the review change the plan? Runs the social strategy and the discovery focus without and
+    // with the given decision lines, saving nothing. Baseline runs twice to show the model's own variance.
+    if (body.plan_preview === true) {
+      return jsonResponse(await previewPlanners(supabase, body.client_id, Array.isArray(body.lines) ? body.lines.map(String) : []));
+    }
 
     // Preview the cycle review for the latest closed cycle: one AI call, nothing is saved or planned.
     if (body.review_only === true) {

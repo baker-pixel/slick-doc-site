@@ -2,6 +2,7 @@
 // Shared by prospect-icp (admin-facing suggest/check) and
 // backfill-prospect-context (scores enriched prospects in the background).
 
+import { splitLearned } from "../client/learnedLines.ts";
 import { callAIJson, MODELS } from "../ai/ai.ts";
 import { hasBusinessContext, isPlaceholderIndustry } from "../client/businessContext.ts";
 import { mergeKeywords } from "./discoveryRotation.ts";
@@ -346,6 +347,7 @@ export async function nextDiscoveryFocus(
   previous: string[],
   learned: string[] = [],
 ): Promise<string | null> {
+  const { facts, decisions } = splitLearned(learned, "prospect");
   try {
     const res = await callAIJson<{ focus?: unknown }>({
       source: "discovery-focus",
@@ -359,7 +361,7 @@ ICP: ${icp.summary}
 Industries: ${icp.industries.join(", ")}
 Geography: ${icp.geography}
 Disqualifiers: ${(icp.disqualifiers || []).join("; ") || "none"}
-${previous.length ? `Already used (pick something clearly different):\n${previous.slice(0, 15).map((f) => `- ${f}`).join("\n")}\n` : ""}${learned.length ? `Last cycle's results:\n${learned.map((l) => `- ${l}`).join("\n")}\n` : ""}Return ONLY {"focus":"..."}.`,
+${previous.length ? `Already used (pick something clearly different):\n${previous.slice(0, 15).map((f) => `- ${f}`).join("\n")}\n` : ""}${facts.length ? `Last cycle's results:\n${facts.map((l) => `- ${l}`).join("\n")}\n` : ""}${decisions.length ? `Decisions from last cycle's review (follow them when picking the focus):\n${decisions.map((l) => `- ${l}`).join("\n")}\n` : ""}Return ONLY {"focus":"..."}.`,
     });
     const focus = typeof res.focus === "string" ? res.focus.trim() : "";
     return focus.length >= 3 && focus.length <= 120 ? focus : null;

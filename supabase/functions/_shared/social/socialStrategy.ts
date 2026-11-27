@@ -4,6 +4,7 @@
 // by fill-scheduled-content so every post ladders up to a pillar instead of
 // being an ad-hoc one-off.
 
+import { splitLearned } from "../client/learnedLines.ts";
 import { callAIJson, MODELS } from "../ai/ai.ts";
 import type { TierPolicy } from "../billing/tierPolicy.ts";
 import { hasBusinessContext } from "../client/businessContext.ts";
@@ -28,6 +29,8 @@ export async function upsertSocialStrategy(
   policy: TierPolicy,
   /** From the cycle rollover: what last cycle's digest says, and topics already used. */
   cycle?: { learned?: string[]; recentTopics?: string[] },
+  /** dryRun: draft the pillars and return them without writing anything (preview). */
+  opts: { dryRun?: boolean } = {},
 ): Promise<{ projectId: string | null; pillars: Pillar[] }> {
   // Don't derive pillars from "unknown"/"n/a" -- that's guessing, not
   // strategy. Every caller already treats a null projectId as "not ready".
@@ -55,9 +58,11 @@ export async function upsertSocialStrategy(
     ? `\n\nCurrent pillars: ${existingPillarNames.join(", ")}. This is a monthly refresh, not a first draft -- keep what's still genuinely on-strategy, but evolve or replace at least one with a fresher angle. Don't just re-list the same pillars unchanged.`
     : "";
 
-  const learnedBlock = cycle?.learned?.length
-    ? `\n\nWhat happened last cycle (factual -- use it to decide what to keep, drop or reframe):\n- ${cycle.learned.join("\n- ")}`
-    : "";
+  // Facts and the review's decisions are different things: facts inform, decisions are to be applied.
+  const { facts, decisions } = splitLearned(cycle?.learned ?? [], "social");
+  const learnedBlock =
+    (facts.length ? `\n\nWhat happened last cycle (factual -- use it to decide what to keep, drop or reframe):\n- ${facts.join("\n- ")}` : "") +
+    (decisions.length ? `\n\nDecisions from last cycle's review (apply them to the pillars unless they contradict the business above):\n- ${decisions.join("\n- ")}` : "");
   const topicsBlock = cycle?.recentTopics?.length
     ? `\n\nTopics already posted recently (pillars should open fresh angles, not re-cover these): ${cycle.recentTopics.slice(0, 30).join(" | ")}`
     : "";
@@ -80,6 +85,7 @@ export async function upsertSocialStrategy(
     return { projectId: null, pillars: [] };
   }
   if (pillars.length === 0) return { projectId: null, pillars: [] };
+  if (opts.dryRun) return { projectId: existing?.id ?? null, pillars };
 
   const description = `${policy.social.postsPerMonth} posts/month across ${policy.social.contentTypes.length} channel(s). ${pillars.length} content pillars guide what gets posted and why.`;
 

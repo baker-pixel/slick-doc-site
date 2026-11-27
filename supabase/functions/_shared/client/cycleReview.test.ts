@@ -63,12 +63,12 @@ Deno.test("reviewLines: keeps what worked, stops what failed, names the new bets
   };
   const plenty = data(win(30, { posts: 20, leads: 20 }), win(30, { posts: 20, leads: 20 }));
   assertEquals(reviewLines(r, [bet("b1"), bet("b2"), bet("b3")], plenty), [
-    "Keep doing: change b1", "Stop: change b2", "Try this cycle (social): post on Tuesdays", "Short posts did better",
+    "Keep doing (social): change b1", "Stop (social): change b2", "Try this cycle (social): post on Tuesdays", "Review lesson: Short posts did better",
   ]);
   // Too little activity (3 posts, 2 leads): no new bet and no free-text lesson reaches the planners.
   // (Verdicts were already downgraded to inconclusive by validateReview when the sample was small.)
   const thin = data(win(8, { posts: 3, leads: 2 }), win(30, { posts: 16, leads: 30 }));
-  assertEquals(reviewLines(r, [bet("b1"), bet("b2"), bet("b3")], thin), ["Keep doing: change b1", "Stop: change b2"]);
+  assertEquals(reviewLines(r, [bet("b1"), bet("b2"), bet("b3")], thin), ["Keep doing (social): change b1", "Stop (social): change b2"]);
 });
 
 Deno.test("enoughFor: needs the window length and activity in that scope", () => {
@@ -115,7 +115,7 @@ Deno.test("runCycleReview: off means no model call; on judges the closed cycle's
   const r = await runCycleReview(db({ settings, closed, metrics }), "c1", { period_end: "2026-12-01" }, { callModel, now: () => NOW });
   assertEquals(calls, 1);
   assertEquals(r?.verdicts[0].verdict, "worked");
-  assertEquals(r?.lines, ["Keep doing: change b1", "Try this cycle (social): try x", "l"]);
+  assertEquals(r?.lines, ["Keep doing (social): change b1", "Try this cycle (social): try x", "Review lesson: l"]);
 
   assertEquals(await runCycleReview(db({ settings, closed: null, metrics }), "c1", { period_end: "2026-12-01" }, { callModel }), null); // nothing closed yet
 });

@@ -8,6 +8,7 @@
 //   cycle_review          off (default) | shadow | live
 //   cycle_review_clients  comma-separated client ids; empty = every client
 import { callAIJson, MODELS } from "../ai/ai.ts";
+import { LESSON_PREFIX, decisionLine } from "./learnedLines.ts";
 
 export type ReviewMode = "off" | "shadow" | "live";
 export type Scope = "social" | "prospect";
@@ -131,11 +132,11 @@ export function reviewLines(r: Omit<Review, "lines">, prior: Bet[], d: CycleMetr
   const out: string[] = [];
   for (const v of r.verdicts) {
     const b = byId.get(v.bet_id);
-    if (b && v.verdict === "worked") out.push(`Keep doing: ${b.change}`);
-    if (b && v.verdict === "failed") out.push(`Stop: ${b.change}`);
+    if (b && v.verdict === "worked") out.push(decisionLine("Keep doing", b.scope, b.change));
+    if (b && v.verdict === "failed") out.push(decisionLine("Stop", b.scope, b.change));
   }
-  for (const b of r.bets) if (enoughFor(d, b.scope)) out.push(`Try this cycle (${b.scope}): ${b.change}`);
-  if (enoughFor(d, "social") && enoughFor(d, "prospect")) out.push(...r.learned); // free text: only when both sides have data
+  for (const b of r.bets) if (enoughFor(d, b.scope)) out.push(decisionLine("Try this cycle", b.scope, b.change));
+  if (enoughFor(d, "social") && enoughFor(d, "prospect")) out.push(...r.learned.map((l) => LESSON_PREFIX + l)); // free text: only when both sides have data
   return out.slice(0, 8);
 }
 
