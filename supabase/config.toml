@@ -236,13 +236,6 @@ verify_jwt = false
 [functions.draft-verified-facts]
 verify_jwt = false
 
-# Steward functions authenticate in code: admin session or password, or the service key.
-[functions.steward-run]
-verify_jwt = false
-
-[functions.steward-proposals]
-verify_jwt = false
-
 # Public beacon from the WordPress plugin's footer script. Visitors' browsers
 # carry no Supabase JWT, so the gateway must not require one; the function
 # authenticates by tracking key + Origin and always answers 204.

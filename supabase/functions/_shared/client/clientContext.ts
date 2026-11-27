@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 // The client brain's read side: one assembled, size-bounded view of everything
-// known about a client, for a steward's wake. Each source is
+// known about a client. Each source is
 // loaded best-effort, so one broken table degrades the view (listed in `gaps`)
 // instead of failing the whole call. Nothing here writes.
 import { tierPolicy, type TierPolicy } from "../billing/tierPolicy.ts";
