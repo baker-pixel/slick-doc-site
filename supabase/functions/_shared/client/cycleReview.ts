@@ -39,7 +39,7 @@ export interface Window {
   window: { days: number };
   social: { published: number; by_platform: Record<string, { views_total: number }> };
   outreach: { leads: number; opens: number; clicks: number; replies: number };
-  website: { visits: number };
+  website: { visits: number; days_with_data?: number };
   seo: { score_end: number | null };
 }
 export interface CycleMetricsData { cycle: { cycle_no: number }; current: Window; previous: { cycle_no: number; metrics: Window } | null }
@@ -74,7 +74,10 @@ export function perDay(w: Window): Record<string, number | null> {
   const out: Record<string, number | null> = {};
   for (const m of METRICS) {
     const v = metricValue(w, m);
-    out[m] = v === null ? null : m === "seo_score" ? v : Math.round((v / days) * 100) / 100;
+    // Website data can cover only part of a window (collection starts when the plugin does), so
+    // visits are per day WITH data, and unknown when there is none.
+    const d = m === "visits" && w.website.days_with_data !== undefined ? w.website.days_with_data : days;
+    out[m] = v === null || d === 0 ? null : m === "seo_score" ? v : Math.round((v / d) * 100) / 100;
   }
   return out;
 }

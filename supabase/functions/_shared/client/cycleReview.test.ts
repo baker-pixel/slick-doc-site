@@ -127,3 +127,11 @@ Deno.test("perDay: totals from unequal cycles become comparable rates", () => {
   assertEquals([long.posts, long.opens, long.seo_score], [0.5, 0.4, 83]);
   assertEquals(perDay(win(8, {})).seo_score, null);
 });
+
+Deno.test("perDay: visits are per day that has website data, not per day of the window", () => {
+  const w = win(8, {});
+  w.website = { visits: 59, days_with_data: 2 };
+  assertEquals(perDay(w).visits, 29.5);
+  w.website = { visits: 0, days_with_data: 0 };
+  assertEquals(perDay(w).visits, null);
+});
