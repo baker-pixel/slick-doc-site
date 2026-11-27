@@ -10,6 +10,7 @@ import { upsertSocialStrategy } from "../_shared/social/socialStrategy.ts";
 import { clientIdsWithMailbox } from "../_shared/outreach/outreachMailbox.ts";
 import { ensureClientICP, nextDiscoveryFocus, previousDiscoveryFocuses } from "../_shared/outreach/icp.ts";
 import { recordOutcome } from "../_shared/client/outcomes.ts";
+import { runCycleReview, type Review } from "../_shared/client/cycleReview.ts";
 import { sendFirstCycleReadyEmail } from "../_shared/client/cycleEmail.ts";
 import { collectRecentTopics } from "../_shared/social/topicLedger.ts";
 import {
@@ -158,7 +159,16 @@ async function rolloverClient(
       ...cycle, period_start: lookback.toISOString(), period_end: cycle.period_start,
     }).catch(() => null);
   }
-  const learned: string[] = previousDigest?.learned ?? [];
+  // 1b. Cycle review: judge the closed cycle's numbers and last cycle's bets. Isolated and kept
+  // across resumes; a failure never blocks planning. Shadow mode stores it, live mode also feeds `learned`.
+  let review: Review | null = cycle.plan?.review ?? null;
+  try {
+    review ??= await runCycleReview(supabase, clientId, cycle);
+  } catch (e) {
+    console.error(`start-client-cycle: cycle review failed for ${clientId}:`, e);
+  }
+  if (review) startedPlan.review = review;
+  const learned: string[] = [...(previousDigest?.learned ?? []), ...(review?.mode === "live" ? review.lines : [])];
 
   // 2-5. Plan. Each step isolated.
   // Resume a cycle that died mid-run (timeout): steps already done are kept

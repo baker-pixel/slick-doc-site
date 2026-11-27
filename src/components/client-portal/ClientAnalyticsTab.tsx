@@ -10,6 +10,7 @@ import { buildInsights, fmtNum, pctChange } from "@/lib/analyticsInsights";
 import { generatePerformancePdf } from "@/lib/analyticsPdf";
 import { PageHeader } from "./PortalUI";
 import { KpiCard } from "./analytics/KpiCard";
+import { CycleComparison } from "./analytics/CycleComparison";
 import { InsightsStrip } from "./analytics/InsightsStrip";
 import { OutreachTab } from "./analytics/OutreachTab";
 import { RangeToggle, type Range } from "./analytics/RangeToggle";
@@ -141,6 +142,8 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName, onOp
       </div>
 
       <InsightsStrip insights={insights} />
+
+      <CycleComparison clientAccountId={clientAccountId} />
 
       <Tabs defaultValue="website" className="space-y-6">
         <TabsList>
