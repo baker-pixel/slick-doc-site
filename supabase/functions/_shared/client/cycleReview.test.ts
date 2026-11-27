@@ -1,7 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   type Bet, type CycleMetricsData, type Window,
-  reviewLines, reviewMode, runCycleReview, sampleOk, validateReview,
+  enoughFor, perDay, reviewLines, reviewMode, runCycleReview, sampleOk, validateReview,
 } from "./cycleReview.ts";
 
 const win = (days: number, o: Partial<{ posts: number; views: number; leads: number; opens: number; seo: number | null }> = {}): Window => ({
@@ -14,7 +14,7 @@ const win = (days: number, o: Partial<{ posts: number; views: number; leads: num
 const data = (cur: Window, prev: Window | null): CycleMetricsData => ({
   cycle: { cycle_no: 2 }, current: cur, previous: prev ? { cycle_no: 1, metrics: prev } : null,
 });
-const bet = (id: string, metric: Bet["metric"] = "social_views"): Bet => ({ id, hypothesis: "h", change: `change ${id}`, scope: "social", metric });
+const bet = (id: string, metric: Bet["metric"] = "social_views"): Bet => ({ id, hypothesis: "h", change: `change ${id}`, scope: "social", metric, evidence: "e" });
 const NOW = new Date("2026-11-27T00:00:00Z");
 
 Deno.test("sampleOk: needs a previous cycle, long enough windows and enough events", () => {
@@ -43,10 +43,11 @@ Deno.test("validateReview: an unjudged prior bet is reported, an unknown bet id 
 
 Deno.test("validateReview: at most two bets, with a valid scope and metric", () => {
   const d = data(win(30), win(30));
-  const mk = (scope: string, metric: string, change = "do a thing") => ({ hypothesis: "h", change, scope, metric });
-  const r = validateReview({ bets: [mk("billing", "leads"), mk("social", "nonsense"), mk("social", "posts"), mk("prospect", "replies"), mk("social", "visits")] }, [], d, "shadow", NOW);
+  const mk = (scope: string, metric: string, change = "do a thing") => ({ hypothesis: "h", change, scope, metric, evidence: "e" });
+  const r = validateReview({ bets: [mk("billing", "leads"), mk("social", "nonsense"), mk("social", "posts"), mk("social", "posts"), mk("prospect", "replies"), mk("social", "visits")] }, [], d, "shadow", NOW);
   assertEquals(r.bets.map((b) => [b.id, b.scope, b.metric]), [["c2-b1", "social", "posts"], ["c2-b2", "prospect", "replies"]]);
   assertEquals(validateReview({ bets: [mk("social", "posts", "")] }, [], d, "shadow", NOW).bets.length, 0);
+  assertEquals(validateReview({ bets: [{ ...mk("social", "posts"), evidence: "" }] }, [], d, "shadow", NOW).bets.length, 0); // no evidence, no bet
   assertEquals(validateReview("garbage", [], d, "shadow", NOW).bets, []);
 });
 
@@ -58,11 +59,23 @@ Deno.test("reviewLines: keeps what worked, stops what failed, names the new bets
       { bet_id: "b2", verdict: "failed" as const, evidence: "" },
       { bet_id: "b3", verdict: "inconclusive" as const, evidence: "" },
     ],
-    bets: [{ id: "c2-b1", hypothesis: "h", change: "post on Tuesdays", scope: "social" as const, metric: "posts" as const }],
+    bets: [{ id: "c2-b1", hypothesis: "h", change: "post on Tuesdays", scope: "social" as const, metric: "posts" as const, evidence: "e" }],
   };
-  assertEquals(reviewLines(r, [bet("b1"), bet("b2"), bet("b3")]), [
+  const plenty = data(win(30, { posts: 20, leads: 20 }), win(30, { posts: 20, leads: 20 }));
+  assertEquals(reviewLines(r, [bet("b1"), bet("b2"), bet("b3")], plenty), [
     "Keep doing: change b1", "Stop: change b2", "Try this cycle (social): post on Tuesdays", "Short posts did better",
   ]);
+  // Too little activity (3 posts, 2 leads): no new bet and no free-text lesson reaches the planners.
+  // (Verdicts were already downgraded to inconclusive by validateReview when the sample was small.)
+  const thin = data(win(8, { posts: 3, leads: 2 }), win(30, { posts: 16, leads: 30 }));
+  assertEquals(reviewLines(r, [bet("b1"), bet("b2"), bet("b3")], thin), ["Keep doing: change b1", "Stop: change b2"]);
+});
+
+Deno.test("enoughFor: needs the window length and activity in that scope", () => {
+  const d = data(win(30, { posts: 20, leads: 2 }), null);
+  assertEquals(enoughFor(d, "social"), true);
+  assertEquals(enoughFor(d, "prospect"), false);
+  assertEquals(enoughFor(data(win(3, { posts: 20, leads: 20 }), null), "social"), false);
 });
 
 // A chainable stand-in for the supabase client: every query method returns itself, awaiting it yields the rows.
@@ -90,10 +103,10 @@ Deno.test("runCycleReview: off means no model call; on judges the closed cycle's
   const callModel = (_s: string, prompt: string) => {
     calls++;
     assertEquals(JSON.parse(prompt).previous_bets.length, 1);
-    return Promise.resolve({ verdicts: [{ bet_id: "b1", verdict: "worked", evidence: "views up" }], bets: [{ hypothesis: "h", change: "try x", scope: "social", metric: "posts" }], findings: ["f"], learned: ["l"] });
+    return Promise.resolve({ verdicts: [{ bet_id: "b1", verdict: "worked", evidence: "views up" }], bets: [{ hypothesis: "h", change: "try x", scope: "social", metric: "posts", evidence: "e" }], findings: ["f"], learned: ["l"] });
   };
   const closed = { id: "cy1", plan: { review: { bets: [bet("b1")] } } };
-  const metrics = data(win(30, { views: 500 }), win(30, { views: 400 }));
+  const metrics = data(win(30, { views: 500, posts: 20, leads: 20 }), win(30, { views: 400, posts: 20, leads: 20 }));
 
   assertEquals(await runCycleReview(db({ closed, metrics }), "c1", { period_end: "2026-12-01" }, { callModel }), null);
   assertEquals(calls, 0);
@@ -105,4 +118,20 @@ Deno.test("runCycleReview: off means no model call; on judges the closed cycle's
   assertEquals(r?.lines, ["Keep doing: change b1", "Try this cycle (social): try x", "l"]);
 
   assertEquals(await runCycleReview(db({ settings, closed: null, metrics }), "c1", { period_end: "2026-12-01" }, { callModel }), null); // nothing closed yet
+});
+
+Deno.test("perDay: totals from unequal cycles become comparable rates", () => {
+  const short = perDay(win(8, { posts: 4, opens: 4, seo: 75 }));
+  const long = perDay(win(30, { posts: 15, opens: 12, seo: 83 }));
+  assertEquals([short.posts, short.opens, short.seo_score], [0.5, 0.5, 75]);
+  assertEquals([long.posts, long.opens, long.seo_score], [0.5, 0.4, 83]);
+  assertEquals(perDay(win(8, {})).seo_score, null);
+});
+
+Deno.test("perDay: visits are per day that has website data, not per day of the window", () => {
+  const w = win(8, {});
+  w.website = { visits: 59, days_with_data: 2 };
+  assertEquals(perDay(w).visits, 29.5);
+  w.website = { visits: 0, days_with_data: 0 };
+  assertEquals(perDay(w).visits, null);
 });

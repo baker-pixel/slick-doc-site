@@ -15,7 +15,7 @@ export const METRICS = ["posts", "social_views", "leads", "opens", "clicks", "re
 export type Metric = typeof METRICS[number];
 export type VerdictKind = "worked" | "failed" | "inconclusive";
 
-export interface Bet { id: string; hypothesis: string; change: string; scope: Scope; metric: Metric }
+export interface Bet { id: string; hypothesis: string; change: string; scope: Scope; metric: Metric; evidence: string }
 export interface Verdict { bet_id: string; verdict: VerdictKind; evidence: string }
 export interface Review {
   mode: ReviewMode;
@@ -39,7 +39,7 @@ export interface Window {
   window: { days: number };
   social: { published: number; by_platform: Record<string, { views_total: number }> };
   outreach: { leads: number; opens: number; clicks: number; replies: number };
-  website: { visits: number };
+  website: { visits: number; days_with_data?: number };
   seo: { score_end: number | null };
 }
 export interface CycleMetricsData { cycle: { cycle_no: number }; current: Window; previous: { cycle_no: number; metrics: Window } | null }
@@ -68,6 +68,20 @@ export function sampleOk(d: CycleMetricsData, m: Metric): boolean {
   return d.current.window.days >= MIN_DAYS && p.window.days >= MIN_DAYS && cur + prev >= MIN_EVENTS;
 }
 
+/** Each metric per day of its window, so the model compares rates instead of totals from unequal cycles. */
+export function perDay(w: Window): Record<string, number | null> {
+  const days = Math.max(w.window.days, 1);
+  const out: Record<string, number | null> = {};
+  for (const m of METRICS) {
+    const v = metricValue(w, m);
+    // Website data can cover only part of a window (collection starts when the plugin does), so
+    // visits are per day WITH data, and unknown when there is none.
+    const d = m === "visits" && w.website.days_with_data !== undefined ? w.website.days_with_data : days;
+    out[m] = v === null || d === 0 ? null : m === "seo_score" ? v : Math.round((v / d) * 100) / 100;
+  }
+  return out;
+}
+
 const clip = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const asList = (v: unknown, max: number, n: number) =>
   (Array.isArray(v) ? v : []).map((x) => clip(x, n)).filter(Boolean).slice(0, max);
@@ -90,9 +104,10 @@ export function validateReview(raw: any, prior: Bet[], data: CycleMetricsData, m
   for (const b of Array.isArray(raw?.bets) ? raw.bets : []) {
     if (bets.length >= MAX_BETS) break;
     if ((b?.scope !== "social" && b?.scope !== "prospect") || !METRICS.includes(b?.metric)) continue;
-    const hypothesis = clip(b.hypothesis, 240), change = clip(b.change, 240);
-    if (!hypothesis || !change) continue;
-    bets.push({ id: `c${data.cycle.cycle_no}-b${bets.length + 1}`, hypothesis, change, scope: b.scope, metric: b.metric });
+    const hypothesis = clip(b.hypothesis, 240), change = clip(b.change, 240), evidence = clip(b.evidence, 240);
+    if (!hypothesis || !change || !evidence) continue; // a bet must name the figure it rests on
+    if (bets.some((x) => x.metric === b.metric)) continue; // two bets on one metric cannot be told apart
+    bets.push({ id: `c${data.cycle.cycle_no}-b${bets.length + 1}`, hypothesis, change, scope: b.scope, metric: b.metric, evidence });
   }
   return {
     mode, reviewed_cycle_no: data.cycle.cycle_no, reviewed_at: now.toISOString(), verdicts,
@@ -100,8 +115,18 @@ export function validateReview(raw: any, prior: Bet[], data: CycleMetricsData, m
   };
 }
 
+/**
+ * Is there enough activity in the cycle to steer a planner? Social needs MIN_EVENTS published posts,
+ * prospect needs MIN_EVENTS leads, and the window needs MIN_DAYS. Below that the review is still
+ * stored for people to read, but it adds nothing to `learned`.
+ */
+export function enoughFor(d: CycleMetricsData, scope: Scope): boolean {
+  if (d.current.window.days < MIN_DAYS) return false;
+  return (scope === "social" ? d.current.social.published : d.current.outreach.leads) >= MIN_EVENTS;
+}
+
 /** Lines appended to `learned` in live mode. The planners already read that list. */
-export function reviewLines(r: Omit<Review, "lines">, prior: Bet[]): string[] {
+export function reviewLines(r: Omit<Review, "lines">, prior: Bet[], d: CycleMetricsData): string[] {
   const byId = new Map(prior.map((b) => [b.id, b]));
   const out: string[] = [];
   for (const v of r.verdicts) {
@@ -109,8 +134,8 @@ export function reviewLines(r: Omit<Review, "lines">, prior: Bet[]): string[] {
     if (b && v.verdict === "worked") out.push(`Keep doing: ${b.change}`);
     if (b && v.verdict === "failed") out.push(`Stop: ${b.change}`);
   }
-  for (const b of r.bets) out.push(`Try this cycle (${b.scope}): ${b.change}`);
-  out.push(...r.learned);
+  for (const b of r.bets) if (enoughFor(d, b.scope)) out.push(`Try this cycle (${b.scope}): ${b.change}`);
+  if (enoughFor(d, "social") && enoughFor(d, "prospect")) out.push(...r.learned); // free text: only when both sides have data
   return out.slice(0, 8);
 }
 
@@ -118,13 +143,16 @@ export const REVIEW_SYSTEM = `You review one marketing client's last billing cyc
 You get that cycle's numbers next to the cycle before it, the bets made last time, and the client's goals.
 
 Rules:
-- Use only the numbers given. Never invent a figure, cause or result.
+- Use only the numbers given, quoted exactly. Never invent a figure, cause or result, and never compute a percentage or rate yourself.
+- Check the direction of every comparison before writing it: a number that went from 113 to 160 rose. Say "rose", "fell" or "flat" only after comparing the two values.
 - Samples are usually small and cycles differ in length. If the data cannot show a difference, say so: verdict "inconclusive", and say what is missing. Do not guess a winner.
 - Judge each previous bet against its own metric: "worked", "failed" or "inconclusive".
-- Propose at most ${MAX_BETS} new bets. Change little, so the result can be attributed. A bet changes ONE thing the planners control: a content topic or pillar, platform mix or posting cadence (scope "social"), or a lead-research angle (scope "prospect").
+- Every group carries its count (posts, measured). A platform, pillar or post with fewer than ${MIN_EVENTS} posts is an anecdote: never call it best or worst, never say it "performs" or "should be prioritized". With one post, say nothing about it.
+- Cycles differ in length. Compare the "per_day" figures, never the raw totals, when you say something rose or fell (seo_score is a score, not per day). A total that is lower only because the cycle was shorter is not a drop.
+- Propose at most ${MAX_BETS} new bets, each on a DIFFERENT metric, each with "evidence": the exact figure it rests on. If no figure supports a change, propose no bet. Change little, so the result can be attributed. A bet changes ONE thing the planners control: a content topic or pillar, platform mix or posting cadence (scope "social"), or a lead-research angle (scope "prospect").
 - Never propose publishing, sending, brand or offer changes, or spending.
 - "metric" must be one of: ${METRICS.join(", ")}.
-Reply with JSON only: {"verdicts":[{"bet_id":"","verdict":"","evidence":""}],"findings":[""],"bets":[{"hypothesis":"","change":"","scope":"","metric":""}],"learned":[""]}
+Reply with JSON only: {"verdicts":[{"bet_id":"","verdict":"","evidence":""}],"findings":[""],"bets":[{"hypothesis":"","change":"","scope":"","metric":"","evidence":""}],"learned":[""]}
 "findings" are 3 to 5 plain observations. "learned" are short lines a content planner can follow.`;
 
 export interface ReviewDeps {
@@ -132,7 +160,7 @@ export interface ReviewDeps {
   now?: () => Date;
 }
 const defaultModel: ReviewDeps["callModel"] = (system, prompt, clientId) =>
-  callAIJson({ system, prompt, model: MODELS.default, maxTokens: 1500, temperature: 0.2, source: "cycle-review", clientId, promptId: "cycle-review.v1" });
+  callAIJson({ system, prompt, model: MODELS.creative, maxTokens: 1500, temperature: 0.2, source: "cycle-review", clientId, promptId: "cycle-review.v1" });
 
 export async function reviewMode(supabase: any, clientId: string): Promise<ReviewMode> {
   const { data } = await supabase.from("admin_settings").select("key, value").in("key", ["cycle_review", "cycle_review_clients"]);
@@ -171,9 +199,10 @@ export async function runCycleReview(
   const { data: goals } = await supabase.from("client_goals")
     .select("engine, objective, metric, baseline_value, target_value, due_date").eq("client_account_id", clientId).eq("status", "active");
 
-  const prompt = JSON.stringify({ cycle_metrics: data, previous_bets: prior, goals: goals ?? [] });
+  const rates = { current: perDay(data.current), previous: data.previous ? perDay(data.previous.metrics) : null };
+  const prompt = JSON.stringify({ cycle_metrics: data, per_day: rates, previous_bets: prior, goals: goals ?? [] });
   const raw = await deps.callModel(REVIEW_SYSTEM, prompt, clientId);
   const review = validateReview(raw, prior, data, mode, deps.now?.());
-  review.lines = reviewLines(review, prior);
+  review.lines = reviewLines(review, prior, data);
   return review;
 }
