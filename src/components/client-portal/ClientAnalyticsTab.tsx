@@ -10,7 +10,7 @@ import { buildInsights, fmtNum, pctChange } from "@/lib/analyticsInsights";
 import { generatePerformancePdf } from "@/lib/analyticsPdf";
 import { PageHeader } from "./PortalUI";
 import { KpiCard } from "./analytics/KpiCard";
-import { CycleComparison } from "./analytics/CycleComparison";
+import { CycleOverview } from "./analytics/cycle/CycleOverview";
 import { InsightsStrip } from "./analytics/InsightsStrip";
 import { OutreachTab } from "./analytics/OutreachTab";
 import { RangeToggle, type Range } from "./analytics/RangeToggle";
@@ -100,17 +100,24 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName, onOp
     <div className="space-y-6">
       <PageHeader
         title="Performance Analytics"
-        description={`How your marketing is doing over the last ${days} days`}
+        description="How your marketing is doing, cycle by cycle"
         icon={BarChart3}
         action={
-          <div className="flex flex-wrap items-center gap-3">
-            <RangeToggle value={days} onChange={setDays} />
-            <Button onClick={downloadReport} variant="outline" className="rounded-xl" disabled={!o}>
-              <Download className="h-4 w-4 mr-2" />Download report
-            </Button>
-          </div>
+          <Button onClick={downloadReport} variant="outline" className="rounded-xl" disabled={!o}>
+            <Download className="h-4 w-4 mr-2" />Download report ({days} days)
+          </Button>
         }
       />
+
+      <CycleOverview clientAccountId={clientAccountId} />
+
+      <div className="flex flex-col gap-3 border-t border-border/50 pt-8 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Explore any date range</h2>
+          <p className="text-sm text-muted-foreground">Look at the last {days} days, whatever cycle they fall in. The report download uses this range.</p>
+        </div>
+        <RangeToggle value={days} onChange={setDays} />
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
@@ -143,7 +150,6 @@ export default function ClientAnalyticsTab({ clientAccountId, businessName, onOp
 
       <InsightsStrip insights={insights} />
 
-      <CycleComparison clientAccountId={clientAccountId} />
 
       <Tabs defaultValue="website" className="space-y-6">
         <TabsList>
