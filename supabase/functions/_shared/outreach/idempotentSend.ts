@@ -63,7 +63,6 @@ export interface SendOptions {
   key: string;
   payload: ResendPayload;
   fetchImpl?: typeof fetch;
-  timeoutMs?: number;
 }
 
 /**
@@ -71,7 +70,6 @@ export interface SendOptions {
  * Throws ResendSendError on any non-2xx (the caller's retry/backoff handles it).
  */
 export async function sendWithIdempotency(opts: SendOptions): Promise<{ id: string | null }> {
-  if (!opts.key || opts.key.length > 256) throw new Error("idempotency key must be 1-256 characters");
   const f = opts.fetchImpl ?? fetch;
   const res = await f("https://api.resend.com/emails", {
     method: "POST",
@@ -81,7 +79,7 @@ export async function sendWithIdempotency(opts: SendOptions): Promise<{ id: stri
       "Idempotency-Key": opts.key,
     },
     body: JSON.stringify(opts.payload),
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
+    signal: AbortSignal.timeout(20_000),
   });
   // deno-lint-ignore no-explicit-any
   let body: any = null;

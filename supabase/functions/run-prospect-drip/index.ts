@@ -24,7 +24,6 @@ import {
   angleBlock, angleForStep, type OutreachAngle,
 } from "../_shared/outreach/outreachPrompt.ts";
 import { cachedAngles, deriveOutreachAngle } from "../_shared/outreach/outreachAngle.ts";
-import { isUniqueViolation } from "../_shared/core/claims.ts";
 // logActivity for "email sent" moved to process-email-queue -- that's where
 // the actual send now happens (this function only enrolls/schedules).
 
@@ -691,7 +690,7 @@ serve(async (req) => {
             is_final_step: isFinalStep,
           },
         });
-        if (isUniqueViolation(queueErr)) {
+        if (queueErr?.code === "23505") {
           // An overlapping run (or a manual one) queued this step between our check and our
           // insert; the unique index on (sequence, prospect, step) stopped the duplicate.
           console.log(`Step ${stepNumber} for ${prospect.email} was already queued by another run, skipping`);
