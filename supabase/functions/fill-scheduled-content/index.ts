@@ -244,9 +244,8 @@ serve(async (req) => {
       }
       try {
         // Short lease on this slot so an overlapping run (cron + manual, or a slow run and the
-        // next one) does not draft, and pay for, the same slot twice. "unavailable" = migration
-        // not applied yet: carry on without the lease rather than stop all drafting.
-        if ((await claimSlot(supabase, slot.id)) === "taken") {
+        // next one) does not draft, and pay for, the same slot twice.
+        if (!(await claimSlot(supabase, slot.id))) {
           console.log(`Slot ${slot.id} is being drafted by another run, skipping`);
           results.push({ id: slot.id, success: true, skipped: true });
           continue;
