@@ -433,6 +433,15 @@ serve(async (req) => {
 
     if (!body.client_id) return jsonResponse(await sweep(supabase));
 
+    // Preview the cycle review for the latest closed cycle: one AI call, nothing is saved or planned.
+    if (body.review_only === true) {
+      const { data: latest } = await supabase.from("client_cycles").select("period_end")
+        .eq("client_account_id", body.client_id).order("period_end", { ascending: false }).limit(1).maybeSingle();
+      if (!latest) return jsonResponse({ review: null, note: "client has no cycles" });
+      const review = await runCycleReview(supabase, body.client_id, latest);
+      return jsonResponse({ review, note: review ? undefined : "review is off for this client or no closed cycle" });
+    }
+
     let window: { start: Date; end: Date } | null = null;
     if (body.period_start || body.period_end) {
       const start = new Date(body.period_start), end = new Date(body.period_end);
